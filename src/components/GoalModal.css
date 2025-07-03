@@ -1,0 +1,9 @@
+/* quick fade transition between steps */
+.fade-team, .fade-scorer, .fade-assist {
+    animation: fade 150ms ease-out;
+  }
+  @keyframes fade {
+    from { opacity: 0; transform: translateX(15px); }
+    to   { opacity: 1; transform: translateX(0);    }
+  }
+  

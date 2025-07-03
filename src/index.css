@@ -1,0 +1,10 @@
+:root {
+  --football-font: 'Montserrat', 'Bebas Neue', 'Oswald', 'Impact', 'Arial Black', Arial, sans-serif;
+  --ion-font-family: var(--football-font); 
+}
+
+/* Override Ionic's default font everywhere */
+body, html, .ion-app, .ion-page, .ion-content, .ion-title, .ion-label, .ion-button, .ion-default-font {
+  font-family: var(--football-font) !important;
+  letter-spacing: 1px;
+}

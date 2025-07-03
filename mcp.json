@@ -1,0 +1,41 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/v1.json",
+  "name": "Grassroots-PWA Local MCP",
+  "version": "1.0.0",
+  "description": "Exposes a POST /exec endpoint on localhost for running CLI commands.",
+  "tools": [
+    {
+      "id": "exec",
+      "name": "Command Exec Proxy",
+      "description": "Run any npm/node/tsc/vitest command via the local MCP server. Returns JSON with success, exitCode, stdout, stderr.",
+      "type": "http",
+      "url": "http://localhost:9123/exec",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Shell command to execute (e.g. \"npx tsc src/foo.tsx --noEmit\")."
+          }
+        },
+        "required": ["command"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "exitCode": { "type": "integer" },
+          "stdout": { "type": "string" },
+          "stderr": { "type": "string" }
+        },
+        "required": ["success", "exitCode", "stdout", "stderr"],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+version: "1.0.1"
+services:
+  mcp:
+    build: ./mcp-server
+    ports:
+      - "9123:9123"
+    volumes:
+      - .:/workspace
+    working_dir: /workspace          # keep this so exec() runs in the repo root
+    command: ["node", "/usr/src/app/server.js"]   # <─ add this line
