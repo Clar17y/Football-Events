@@ -139,7 +139,8 @@ If a future task needs a new command, **ask the user first** before attempting t
 | 3 | 3.1 | Advanced Match Features | Medium | ❌ | 5-6 | - | - |
 | 3 | 3.2 | Data Export & Analytics | Medium | ❌ | 3-4 | - | - |
 | 3 | 3.3 | Enhanced UI/UX Components | Medium | ❌ | 4-5 | - | - |
-| 3 | 3.4 | Enhanced Match Console & Live Management | Critical | ❌ | 6-8 | - | - |
+| 1 | 1.6 | Backend API Development (Node.js/TypeScript) | Critical | ❌ | 8-10 | - | - |
+| 3 | 3.4 | Mobile Match Console for U10 | Critical | ❌ | 6-8 | - | - |
 | 4 | 4.1 | Accessibility Improvements | Medium | ❌ | 3-4 | - | - |
 | 4 | 4.2 | Configuration Management | Low | ❌ | 2 | - | - |
 | 4 | 4.3 | Security Enhancements | Medium | ❌ | 2-3 | - | - |
@@ -164,7 +165,7 @@ If a future task needs a new command, **ask the user first** before attempting t
 
 | Phase | Name | Tasks Complete | Total Tasks | Progress |
 |-------|------|----------------|-------------|----------|
-| 1 | Critical Infrastructure & Type Safety | 5 | 5 | 100% |
+| 1 | Critical Infrastructure & Type Safety | 5 | 6 | 83% |
 | 2 | Performance & State Management | 0 | 3 | 0% |
 | 3 | Feature Enhancements | 0 | 4 | 0% |
 | 4 | Quality & Accessibility | 0 | 4 | 0% |
@@ -175,11 +176,11 @@ If a future task needs a new command, **ask the user first** before attempting t
 | 9 | Integration & Synchronization | 0 | 3 | 0% |
 
 ## Overall Progress
-**Total Tasks:** 34  
+**Total Tasks:** 35  
 **Completed:** 5  
 **In Progress:** 0  
-**Not Started:** 29  
-**Overall Completion:** 15%
+**Not Started:** 30  
+**Overall Completion:** 14%
 
 ---
 
@@ -192,8 +193,15 @@ If a future task needs a new command, **ask the user first** before attempting t
 - [Task 1.4 - Testing Infrastructure](documentation/task-1-4-testing.md) ✅
 - [Task 1.5 - TypeScript Error Resolution](documentation/task-1-5-typescript-errors.md) ✅
 
+### Phase 1: Critical Infrastructure (Continued)
+- [Task 1.6 - Backend API Development (Node.js/TypeScript)](documentation/task-1-6-backend-api-development.md) ❌
+
 ### Phase 3: Core Features (Critical)
-- [Task 3.4 - Enhanced Match Console & Live Management](documentation/task-3-4-enhanced-match-console.md) ❌
+- [Task 3.4 - Mobile Match Console for U10](documentation/task-3-4-mobile-match-console-u10.md) ❌
+
+### Architecture Documentation
+- [Repository Restructure Plan](documentation/repository-restructure-plan.md) ✅ **COMPLETE**
+- [API Design Specification](documentation/api-design-specification.md) ✅ **COMPLETE**
 
 ### Phase 5: Team & Player Management
 - [Task 5.1 - Team Management System](documentation/task-5-1-team-management.md) ❌
@@ -242,31 +250,45 @@ External connectivity and data management:
 - **Third-Party Integration**: League systems, social media, calendar apps
 - **Data Exchange**: Import/export, API integrations, migration tools
 
-## Recommended Implementation Order
+## Next Priority Tasks
 
-### **Immediate Priority** (Next 2-3 sprints)
-1. **Complete Phase 1** - Finish database schema and testing infrastructure
-2. **Task 3.4** - Enhanced Match Console (fix the core user experience)
-3. **Task 5.1** - Team Management System (enables all other features)
-4. **Task 5.2** - Player Management & Profiles (core functionality)
+**CRITICAL PATH - Mobile U10 Team Management:**
+Based on 2025-07-04 strategy discussion focusing on mobile iPhone pitch-side use for U10 team:
 
-### **Short Term** (Next 1-2 months)
-5. **Task 6.1** - Match Creation & Scheduling (essential workflow)
-6. **Task 6.2** - Season & Tournament Management (organizational structure)
-7. **Task 7.1** - Basic Player Analytics (value-add feature)
+1. **Task 1.6** - Backend API Development (Node.js/TypeScript + PostgreSQL) - **CRITICAL**
+2. **Task 3.4** - Mobile Match Console for U10 - **CRITICAL** 
+3. **Task 5.1** - Team Management System (foundation for player data)
+4. **Task 6.1** - Match Creation & Scheduling (pre-match setup)
+5. **Task 5.2** - Player Management & Profiles (individual stats tracking)
 
-### **Medium Term** (Next 3-6 months)
-8. **Phase 8** - Multi-user support and collaboration features
-9. **Phase 7** - Advanced analytics and reporting
+**Key Focus Areas:**
+- Mobile-first iPhone interface design
+- Real-time family sharing capabilities  
+- Individual player statistics and fair play time tracking
+- Cloud hosting for remote access
+- U10-specific features (7v7, ball_out events, substitution management)
+
+**Future Enhancements:**
+6. **Phase 2** - Performance & State Management
+7. **Phase 4** - Quality improvements (accessibility, security)
+8. **Phase 7** - Advanced analytics and AI-generated insights
+9. **Phase 8** - Multi-user support and collaboration features
 10. **Phase 9** - Cloud sync and integrations
 
 ## Recent Updates
+- **2025-07-04:** ✅ **Repository Restructure COMPLETE** - Successfully migrated to monorepo with working frontend/backend services
+- **2025-07-04:** 🚀 **Development Environment Ready** - Both services running: frontend (5173), backend (3001), unified npm scripts
+- **2025-07-04:** 🏗️ **Backend Foundation Built** - Node.js/TypeScript/Express/Socket.io server with health checks and middleware
+- **2025-07-04:** 📋 **API Design Complete** - Comprehensive API specification with match history, live sharing, and smart sync strategy
+- **2025-07-04:** 🔄 **Backend Stack Decision** - Switched to Node.js/TypeScript for unified development experience
+- **2025-07-04:** 📡 **Real-time Architecture** - Server-Sent Events for family sharing, IndexedDB-first with intelligent sync
+- **2025-07-04:** 🎯 **Mobile-First Strategy** - Refocused development on mobile iPhone pitch-side use for U10 team management
+- **2025-07-04:** 🔧 **Missing index.html Fixed** - Resolved 404 error by creating missing Vite entry point file
+- **2025-07-04:** ⚽ **U10 Focus Confirmed** - Individual player stats tracking, fair play time, mobile match console priority
 - **2025-07-03:** 🔧 **Error Handling Tests Fixed** - Resolved all 11 failing tests in useErrorHandler.test.tsx, achieving 100% test pass rate (90/90 tests passing)
 - **2025-07-03:** 🛠️ **TypeScript Validation** - Fixed ValidationError constructor calls and verified type safety in error handling components
 - **2025-07-03:** ✅ **Test Suite Health** - Full project test suite running successfully with comprehensive error handling coverage
 - **2025-07-02:** Created MCP server to allow agent to run commands needed like npm / npx with documentation in mpc.json
-- **2025-07-01:** Updated AI workflow - Command execution now requires user actions with output files in `.ai-outputs/`
-- **2025-06-28:** 🎉 **Phase 1 COMPLETE** - All critical infrastructure tasks finished
 - **2025-06-28:** Task 1.4 completed successfully - Testing infrastructure established
 - **2025-06-28:** Task 1.5 completed successfully - All TypeScript compilation errors resolved
 - **2025-06-28:** Added Task 3.4 - Enhanced Match Console (critical UX improvement)
