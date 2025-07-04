@@ -10,17 +10,23 @@ const EXEC_TIMEOUT = 60_000;
 const OUTPUT_DIR = '/workspace/.ai-outputs';
 
 fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+const cdPrefix = String.raw`(?:cd\s+(?:\.?[\w\/\-]+(?:\/[\w\-]+)*)\s+&&\s+)?`;
+const nodeScript = String.raw`${cdPrefix}node\s+\.?\/?(backend|scripts)\/[\w\-]+\.js$`;
+const tsxScript  = String.raw`${cdPrefix}npx\s+tsx\s+\.?\/?(backend|scripts)\/[\w\-]+\.js$`;
 
 /* ---------- allow-list ---------------------------------------------------- */
 const allowList = [
-  /^npx\s+vitest\b/i,
-  /^npx\s+tsc\b.*--noEmit\b/i,
-  /^npm\s+install\b/i,
-  /^npm\s+run\b/i,
-  /^npm\s+list\b/i,
-  /^node\s+-v(?:ersion)?$/i,
-  /^ls\b/i,
-  /^date\b/i
+  new RegExp(`^${cdPrefix}npx\\s+vitest\\b`, 'i'),
+  new RegExp(`^${cdPrefix}npx\\s+tsc\\b.*--noEmit\\b`, 'i'),
+  new RegExp(`^${cdPrefix}npm\\s+install\\b`, 'i'),
+  new RegExp(`^${cdPrefix}npm\\s+run\\b`, 'i'),
+  new RegExp(`^${cdPrefix}npm\\s+list\\b`, 'i'),
+  new RegExp(`^${cdPrefix}node\\s+-v(?:ersion)?$`, 'i'),
+  new RegExp(`^${cdPrefix}ls\\b`, 'i'),
+  new RegExp(`^${cdPrefix}npx\\s+prisma\\s+(generate|format|validate|migrate\\s+(dev|status)|db\\s+pull)\\b`, 'i'),
+  new RegExp(`^${cdPrefix}date\\b`, 'i'),
+  new RegExp(nodeScript, 'i'),
+  new RegExp(tsxScript, 'i')
 ];
 const isAllowed = cmd => allowList.some(re => re.test(cmd.trim()));
 

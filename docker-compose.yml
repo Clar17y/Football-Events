@@ -1,10 +1,36 @@
-version: "1.0.1"
 services:
+  db:
+    image: postgres:16
+    container_name: grassroots-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev"]
+      interval: 10s
+      retries: 5
+      
   mcp:
     build: ./mcp-server
+    container_name: grassroots-pwa-starter-mcp
+    environment:
+      DATABASE_URL: "postgres://postgres:pass@db:5432/postgres"
     ports:
       - "9123:9123"
+    working_dir: /workspace
     volumes:
-      - .:/workspace
-    working_dir: /workspace          # keep this so exec() runs in the repo root
-    command: ["node", "/usr/src/app/server.js"]   # <─ add this line
+      - .:/workspace:cached           # code only
+      - mcp_node_modules:/workspace/node_modules
+    command: ["node", "/usr/src/app/server.js"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
+  mcp_node_modules:

@@ -1,0 +1,221 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  binaryTargets   = ["native", "windows"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["grassroots"]
+}
+
+model Team {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String    @unique
+  home_kit_primary   String?   @db.VarChar(7)
+  home_kit_secondary String?   @db.VarChar(7)
+  away_kit_primary   String?   @db.VarChar(7)
+  away_kit_secondary String?   @db.VarChar(7)
+  logo_url           String?
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime? @db.Timestamptz(6)
+  events             Event[]   @ignore
+  awayMatches        Match[]   @relation("AwayTeam")
+  homeMatches        Match[]   @relation("HomeTeam")
+  players            Player[]
+
+  @@map("teams")
+  @@schema("grassroots")
+}
+
+model Player {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String         @map("full_name")
+  squad_number  Int?
+  preferred_pos String?
+  dob           DateTime?      @db.Date
+  notes         String?
+  current_team  String?        @db.Uuid
+  created_at    DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime?      @db.Timestamptz(6)
+  awards        awards[]
+  lineup        lineup[]
+  match_awards  match_awards[]
+  teams         Team?          @relation(fields: [current_team], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  positions     positions?     @relation(fields: [preferred_pos], references: [pos_code], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([name, current_team], map: "players_fullname_team_unique")
+  @@map("players")
+  @@schema("grassroots")
+}
+
+model Match {
+  match_id       String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  season_id      String         @db.Uuid
+  kickoff_ts     DateTime       @db.Timestamptz(6)
+  competition    String?
+  homeTeamId     String         @map("home_team_id") @db.Uuid
+  awayTeamId     String         @map("away_team_id") @db.Uuid
+  venue          String?
+  duration_mins  Int            @default(50)
+  period_format  String         @default("quarter")
+  our_score      Int            @default(0)
+  opponent_score Int            @default(0)
+  notes          String?
+  created_at     DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime?      @db.Timestamptz(6)
+  lineup         lineup[]
+  match_awards   match_awards[]
+  match_notes    match_notes[]
+  awayTeam       Team           @relation("AwayTeam", fields: [awayTeamId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  homeTeam       Team           @relation("HomeTeam", fields: [homeTeamId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  seasons        seasons        @relation(fields: [season_id], references: [season_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("matches")
+  @@schema("grassroots")
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model Event {
+  id            String     @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  matchId       String     @map("match_id") @db.Uuid
+  season_id     String     @db.Uuid
+  created_at    DateTime   @default(now()) @db.Timestamptz(6)
+  period_number Int?
+  clockMs       Int?       @map("clock_ms")
+  kind          event_kind
+  teamId        String?    @map("team_id") @db.Uuid
+  playerId      String?    @map("player_id") @db.Uuid
+  notes         String?
+  sentiment     Int        @default(0)
+  updated_at    DateTime?  @db.Timestamptz(6)
+  teams         Team?      @relation(fields: [teamId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("events")
+  @@ignore
+  @@schema("grassroots")
+}
+
+model awards {
+  award_id   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  season_id  String    @db.Uuid
+  player_id  String    @db.Uuid
+  category   String
+  notes      String?
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+  players    Player    @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  seasons    seasons   @relation(fields: [season_id], references: [season_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("grassroots")
+}
+
+model event_edits {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_id   String    @db.Uuid
+  editor_uid String
+  field_name String
+  old_value  String?
+  new_value  String?
+  updated_at DateTime? @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@schema("grassroots")
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model event_participants {
+  id         String     @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_id   String     @db.Uuid
+  player_id  String     @db.Uuid
+  kind       event_kind
+  created_at DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at DateTime?  @db.Timestamptz(6)
+
+  @@ignore
+  @@schema("grassroots")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model lineup {
+  match_id   String    @db.Uuid
+  player_id  String    @db.Uuid
+  start_min  Float     @default(0)
+  end_min    Float?
+  position   String
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+  matches    Match     @relation(fields: [match_id], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
+  players    Player    @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  positions  positions @relation(fields: [position], references: [pos_code], onUpdate: NoAction)
+
+  @@id([match_id, player_id, start_min])
+  @@schema("grassroots")
+}
+
+model match_awards {
+  match_award_id String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  match_id       String    @db.Uuid
+  player_id      String    @db.Uuid
+  category       String
+  notes          String?
+  created_at     DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime? @db.Timestamptz(6)
+  matches        Match     @relation(fields: [match_id], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
+  players        Player    @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([match_id, category])
+  @@schema("grassroots")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model match_notes {
+  match_note_id String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  match_id      String    @db.Uuid
+  notes         String
+  period_number Int       @default(0)
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime? @db.Timestamptz(6)
+  matches       Match     @relation(fields: [match_id], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@schema("grassroots")
+}
+
+model positions {
+  pos_code   String    @id
+  long_name  String
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+  lineup     lineup[]
+  players    Player[]
+
+  @@schema("grassroots")
+}
+
+model seasons {
+  season_id  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  label      String    @unique
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+  awards     awards[]
+  matches    Match[]
+
+  @@schema("grassroots")
+}
+
+enum event_kind {
+  goal
+  assist
+  key_pass
+  save
+  interception
+  tackle
+  foul
+  penalty
+  free_kick
+  ball_out
+  own_goal
+
+  @@schema("grassroots")
+}

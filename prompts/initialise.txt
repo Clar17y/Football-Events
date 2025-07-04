@@ -1,3 +1,5 @@
 Read the claude.md file in it's entirety to understand the project and pay attention to the execution environment section. read mcp.json to understand how to run commands then let us check if there are any typescript errors in the project. Stop after you receive the output from the command call to discuss the outcome and next steps with the user.
 
 Read the claude.md file in it's entirety to understand the project and pay attention to the execution environment section. read mcp.json to understand how to run commands then run all tests. Stop after you receive the output from the command call to discuss the outcome and next steps with the user.
+
+Read the claude.md file in it's entirety to understand the project and pay attention to the execution environment section. read mcp.json to understand how to run commands. We are in the middle of a schema alignment making sure the database and the schemas in this project are completely aligned. Read the documentation in the documentation folder to see the progress and suggest the next step. As part of our workflow we will discuss all options and plan the action to take before taking it. 

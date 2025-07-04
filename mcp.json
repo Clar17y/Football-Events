@@ -2,12 +2,12 @@
   "$schema": "https://modelcontextprotocol.io/schema/v1.json",
   "name": "Grassroots-PWA Local MCP",
   "version": "1.0.0",
-  "description": "Exposes a POST /exec endpoint on localhost for running CLI commands.",
+  "description": "Exposes a POST /exec endpoint on localhost for running CLI commands including database scripts.",
   "tools": [
     {
       "id": "exec",
       "name": "Command Exec Proxy",
-      "description": "Run any npm/node/tsc/vitest command via the local MCP server. Returns JSON with success, exitCode, stdout, stderr.",
+      "description": "Run allowed commands via the local MCP server: npm/node/tsc/vitest/prisma/database scripts. Returns JSON with success, exitCode, stdout, stderr.",
       "type": "http",
       "url": "http://localhost:9123/exec",
       "method": "POST",
@@ -19,7 +19,7 @@
         "properties": {
           "command": {
             "type": "string",
-            "description": "Shell command to execute (e.g. \"npx tsc src/foo.tsx --noEmit\")."
+            "description": "Shell command to execute (e.g. \"npx tsc src/foo.tsx --noEmit\", \"cd backend && node scripts/check-schema-alignment.js\")."
           }
         },
         "required": ["command"],
