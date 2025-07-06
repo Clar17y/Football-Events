@@ -56,25 +56,25 @@ import type {
 export const transformPlayer = (prismaPlayer: PrismaPlayer): Player => ({
   id: prismaPlayer.id,
   name: prismaPlayer.name,
-  squadNumber: prismaPlayer.squad_number ?? undefined,
-  preferredPosition: prismaPlayer.preferred_pos ?? undefined,
-  dateOfBirth: prismaPlayer.dob ?? undefined,
-  notes: prismaPlayer.notes ?? undefined,
-  currentTeam: prismaPlayer.current_team ?? undefined,
+  squadNumber: prismaPlayer.squad_number ?? null,
+  preferredPosition: prismaPlayer.preferred_pos ?? null,
+  dateOfBirth: prismaPlayer.dob ?? null,
+  notes: prismaPlayer.notes ?? null,
+  currentTeam: prismaPlayer.current_team ?? null,
   createdAt: prismaPlayer.created_at,
-  updatedAt: prismaPlayer.updated_at ?? undefined,
+  updatedAt: prismaPlayer.updated_at ?? null,
 });
 
 export const transformTeam = (prismaTeam: PrismaTeam): Team => ({
   id: prismaTeam.id,
   name: prismaTeam.name,
-  homeKitPrimary: prismaTeam.home_kit_primary ?? undefined,
-  homeKitSecondary: prismaTeam.home_kit_secondary ?? undefined,
-  awayKitPrimary: prismaTeam.away_kit_primary ?? undefined,
-  awayKitSecondary: prismaTeam.away_kit_secondary ?? undefined,
-  logoUrl: prismaTeam.logo_url ?? undefined,
+  homeKitPrimary: prismaTeam.home_kit_primary ?? null,
+  homeKitSecondary: prismaTeam.home_kit_secondary ?? null,
+  awayKitPrimary: prismaTeam.away_kit_primary ?? null,
+  awayKitSecondary: prismaTeam.away_kit_secondary ?? null,
+  logoUrl: prismaTeam.logo_url ?? null,
   createdAt: prismaTeam.created_at,
-  updatedAt: prismaTeam.updated_at ?? undefined,
+  updatedAt: prismaTeam.updated_at ?? null,
 });
 
 export const transformMatch = (prismaMatch: PrismaMatch): Match => ({
