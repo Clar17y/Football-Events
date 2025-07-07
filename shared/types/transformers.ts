@@ -11,6 +11,8 @@ import type {
   PrismaSeason,
   PrismaPosition,
   PrismaLineup,
+  PrismaAward,
+  PrismaMatchAward,
   PrismaPlayerCreateInput,
   PrismaPlayerUpdateInput,
   PrismaTeamCreateInput,
@@ -24,6 +26,10 @@ import type {
   PrismaPositionUpdateInput,
   PrismaLineupCreateInput,
   PrismaLineupUpdateInput,
+  PrismaAwardCreateInput,
+  PrismaAwardUpdateInput,
+  PrismaMatchAwardCreateInput,
+  PrismaMatchAwardUpdateInput,
 } from './prisma';
 
 import type {
@@ -34,6 +40,8 @@ import type {
   Season,
   Position,
   Lineup,
+  Award,
+  MatchAward,
   PlayerCreateRequest,
   PlayerUpdateRequest,
   TeamCreateRequest,
@@ -47,6 +55,10 @@ import type {
   PositionUpdateRequest,
   LineupCreateRequest,
   LineupUpdateRequest,
+  AwardCreateRequest,
+  AwardUpdateRequest,
+  MatchAwardCreateRequest,
+  MatchAwardUpdateRequest,
 } from './frontend';
 
 // ============================================================================
@@ -56,25 +68,25 @@ import type {
 export const transformPlayer = (prismaPlayer: PrismaPlayer): Player => ({
   id: prismaPlayer.id,
   name: prismaPlayer.name,
-  squadNumber: prismaPlayer.squad_number ?? null,
-  preferredPosition: prismaPlayer.preferred_pos ?? null,
-  dateOfBirth: prismaPlayer.dob ?? null,
-  notes: prismaPlayer.notes ?? null,
-  currentTeam: prismaPlayer.current_team ?? null,
+  squadNumber: prismaPlayer.squad_number ?? undefined,
+  preferredPosition: prismaPlayer.preferred_pos ?? undefined,
+  dateOfBirth: prismaPlayer.dob ?? undefined,
+  notes: prismaPlayer.notes ?? undefined,
+  currentTeam: prismaPlayer.current_team ?? undefined,
   createdAt: prismaPlayer.created_at,
-  updatedAt: prismaPlayer.updated_at ?? null,
+  updatedAt: prismaPlayer.updated_at ?? undefined,
 });
 
 export const transformTeam = (prismaTeam: PrismaTeam): Team => ({
   id: prismaTeam.id,
   name: prismaTeam.name,
-  homeKitPrimary: prismaTeam.home_kit_primary ?? null,
-  homeKitSecondary: prismaTeam.home_kit_secondary ?? null,
-  awayKitPrimary: prismaTeam.away_kit_primary ?? null,
-  awayKitSecondary: prismaTeam.away_kit_secondary ?? null,
-  logoUrl: prismaTeam.logo_url ?? null,
+  homeKitPrimary: prismaTeam.home_kit_primary ?? undefined,
+  homeKitSecondary: prismaTeam.home_kit_secondary ?? undefined,
+  awayKitPrimary: prismaTeam.away_kit_primary ?? undefined,
+  awayKitSecondary: prismaTeam.away_kit_secondary ?? undefined,
+  logoUrl: prismaTeam.logo_url ?? undefined,
   createdAt: prismaTeam.created_at,
-  updatedAt: prismaTeam.updated_at ?? null,
+  updatedAt: prismaTeam.updated_at ?? undefined,
 });
 
 export const transformMatch = (prismaMatch: PrismaMatch): Match => ({
@@ -82,8 +94,8 @@ export const transformMatch = (prismaMatch: PrismaMatch): Match => ({
   seasonId: prismaMatch.season_id,
   kickoffTime: prismaMatch.kickoff_ts,
   competition: prismaMatch.competition ?? undefined,
-  homeTeamId: prismaMatch.homeTeamId,
-  awayTeamId: prismaMatch.awayTeamId,
+  homeTeamId: prismaMatch.home_team_id,
+  awayTeamId: prismaMatch.away_team_id,
   venue: prismaMatch.venue ?? undefined,
   durationMinutes: prismaMatch.duration_mins,
   periodFormat: prismaMatch.period_format,
@@ -96,16 +108,16 @@ export const transformMatch = (prismaMatch: PrismaMatch): Match => ({
 
 export const transformEvent = (prismaEvent: PrismaEvent): Event => ({
   id: prismaEvent.id,
-  matchId: prismaEvent.match_id,
+  matchId: prismaEvent.matchId,
   seasonId: prismaEvent.season_id,
   createdAt: prismaEvent.created_at,
   periodNumber: prismaEvent.period_number ?? undefined,
-  clockMs: prismaEvent.clock_ms ?? undefined,
+  clockMs: prismaEvent.clockMs ?? undefined,
   kind: prismaEvent.kind,
-  teamId: prismaEvent.team_id ?? undefined,
-  playerId: prismaEvent.player_id ?? undefined,
+  teamId: prismaEvent.teamId ?? undefined,
+  playerId: prismaEvent.playerId ?? undefined,
   notes: prismaEvent.notes ?? undefined,
-  sentiment: prismaEvent.sentiment,
+  sentiment: prismaEvent.sentiment ?? 0,
   updatedAt: prismaEvent.updated_at ?? undefined,
 });
 
@@ -195,12 +207,12 @@ export const transformMatchCreateRequest = (
   season_id: request.seasonId,
   kickoff_ts: request.kickoffTime,
   competition: request.competition ?? null,
-  home_team_id: request.homeTeamId,
-  away_team_id: request.awayTeamId,
   venue: request.venue ?? null,
   duration_mins: request.durationMinutes ?? 50,
   period_format: request.periodFormat ?? 'quarter',
   notes: request.notes ?? null,
+  home_team_id: request.homeTeamId,
+  away_team_id: request.awayTeamId
 });
 
 export const transformMatchUpdateRequest = (
@@ -225,14 +237,14 @@ export const transformMatchUpdateRequest = (
 
 export const transformEventCreateRequest = (
   request: EventCreateRequest
-): PrismaEventCreateInput => ({
-  match_id: request.matchId,
+): any => ({
+  matchId: request.matchId,
   season_id: request.seasonId,
   period_number: request.periodNumber ?? null,
-  clock_ms: request.clockMs ?? null,
+  clockMs: request.clockMs ?? null,
   kind: request.kind,
-  team_id: request.teamId ?? null,
-  player_id: request.playerId ?? null,
+  teamId: request.teamId ?? null,
+  playerId: request.playerId ?? null,
   notes: request.notes ?? null,
   sentiment: request.sentiment ?? 0,
 });
@@ -287,6 +299,42 @@ export const transformLineupUpdateRequest = (
   return update;
 };
 
+export const transformAwardCreateRequest = (
+  request: AwardCreateRequest
+): PrismaAwardCreateInput => ({
+  season_id: request.seasonId,
+  player_id: request.playerId,
+  category: request.category,
+  notes: request.notes ?? null,
+});
+
+export const transformAwardUpdateRequest = (
+  request: AwardUpdateRequest
+): PrismaAwardUpdateInput => {
+  const update: PrismaAwardUpdateInput = {};
+  if (request.category !== undefined) update.category = request.category;
+  if (request.notes !== undefined) update.notes = request.notes;
+  return update;
+};
+
+export const transformMatchAwardCreateRequest = (
+  request: MatchAwardCreateRequest
+): PrismaMatchAwardCreateInput => ({
+  match_id: request.matchId,
+  player_id: request.playerId,
+  category: request.category,
+  notes: request.notes ?? null,
+});
+
+export const transformMatchAwardUpdateRequest = (
+  request: MatchAwardUpdateRequest
+): PrismaMatchAwardUpdateInput => {
+  const update: PrismaMatchAwardUpdateInput = {};
+  if (request.category !== undefined) update.category = request.category;
+  if (request.notes !== undefined) update.notes = request.notes;
+  return update;
+};
+
 // ============================================================================
 // ARRAY TRANSFORMERS
 // ============================================================================
@@ -312,6 +360,32 @@ export const transformPositions = (prismaPositions: PrismaPosition[]): Position[
 export const transformLineups = (prismaLineups: PrismaLineup[]): Lineup[] =>
   prismaLineups.map(transformLineup);
 
+export const transformAward = (prismaAward: PrismaAward): Award => ({
+  id: prismaAward.award_id,
+  seasonId: prismaAward.season_id,
+  playerId: prismaAward.player_id,
+  category: prismaAward.category,
+  notes: prismaAward.notes !== null ? prismaAward.notes : undefined,
+  createdAt: prismaAward.created_at,
+  updatedAt: prismaAward.updated_at !== null ? prismaAward.updated_at : undefined,
+});
+
+export const transformMatchAward = (prismaMatchAward: PrismaMatchAward): MatchAward => ({
+  id: prismaMatchAward.match_award_id,
+  matchId: prismaMatchAward.match_id,
+  playerId: prismaMatchAward.player_id,
+  category: prismaMatchAward.category,
+  notes: prismaMatchAward.notes !== null ? prismaMatchAward.notes : undefined,
+  createdAt: prismaMatchAward.created_at,
+  updatedAt: prismaMatchAward.updated_at !== null ? prismaMatchAward.updated_at : undefined,
+});
+
+export const transformAwards = (prismaAwards: PrismaAward[]): Award[] =>
+  prismaAwards.map(transformAward);
+
+export const transformMatchAwards = (prismaMatchAwards: PrismaMatchAward[]): MatchAward[] =>
+  prismaMatchAwards.map(transformMatchAward);
+
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
@@ -336,6 +410,15 @@ export const safeTransformPosition = (prismaPosition: PrismaPosition | null): Po
 
 export const safeTransformLineup = (prismaLineup: PrismaLineup | null): Lineup | null =>
   prismaLineup ? transformLineup(prismaLineup) : null;
+
+export const safeTransformEvent = (prismaEvent: PrismaEvent | null): Event | null =>
+  prismaEvent ? transformEvent(prismaEvent) : null;
+
+export const safeTransformAward = (prismaAward: PrismaAward | null): Award | null =>
+  prismaAward ? transformAward(prismaAward) : null;
+
+export const safeTransformMatchAward = (prismaMatchAward: PrismaMatchAward | null): MatchAward | null =>
+  prismaMatchAward ? transformMatchAward(prismaMatchAward) : null;
 
 /**
  * Transform with error handling

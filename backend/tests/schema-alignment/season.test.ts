@@ -23,11 +23,13 @@ describe('Season Schema Alignment Tests', () => {
   afterEach(async () => {
     // Clean up created seasons after each test
     if (createdSeasonIds.length > 0) {
-      // Use raw query since Season model might not be available in Prisma client
-      await prisma.$executeRaw`
-        DELETE FROM grassroots.seasons 
-        WHERE season_id = ANY(${createdSeasonIds}::uuid[])
-      `;
+      await prisma.seasons.deleteMany({
+        where: {
+          season_id: {
+            in: createdSeasonIds
+          }
+        }
+      });
       createdSeasonIds = [];
     }
   });
@@ -51,14 +53,8 @@ describe('Season Schema Alignment Tests', () => {
         label: '2024-25 Premier League'
       });
 
-      // 4. Create in database using raw query
-      const result = await prisma.$queryRaw<PrismaSeason[]>`
-        INSERT INTO grassroots.seasons (label) 
-        VALUES (${prismaInput.label})
-        RETURNING season_id, label, created_at, updated_at
-      `;
-
-      const createdSeason = result[0];
+      // 4. Create in database using Prisma
+      const createdSeason = await prisma.seasons.create({ data: prismaInput });
 
       // Track for cleanup
       createdSeasonIds.push(createdSeason.season_id);
@@ -89,13 +85,7 @@ describe('Season Schema Alignment Tests', () => {
 
       const prismaInput = transformSeasonCreateRequest(seasonData);
       
-      const result = await prisma.$queryRaw<PrismaSeason[]>`
-        INSERT INTO grassroots.seasons (label) 
-        VALUES (${prismaInput.label})
-        RETURNING season_id, label, created_at, updated_at
-      `;
-
-      const createdSeason = result[0];
+      const createdSeason = await prisma.seasons.create({ data: prismaInput });
       createdSeasonIds.push(createdSeason.season_id);
 
       const transformedSeason = transformSeason(createdSeason);
@@ -141,13 +131,7 @@ describe('Season Schema Alignment Tests', () => {
         label: 'Update Test Season'
       });
 
-      const result = await prisma.$queryRaw<PrismaSeason[]>`
-        INSERT INTO grassroots.seasons (label) 
-        VALUES (${initialData.label})
-        RETURNING season_id, label, created_at, updated_at
-      `;
-
-      const createdSeason = result[0];
+      const createdSeason = await prisma.seasons.create({ data: initialData });
       createdSeasonIds.push(createdSeason.season_id);
 
       // Update using frontend interface
@@ -161,15 +145,11 @@ describe('Season Schema Alignment Tests', () => {
         label: 'Updated Season Name'
       });
 
-      // Apply update using raw query
-      const updateResult = await prisma.$queryRaw<PrismaSeason[]>`
-        UPDATE grassroots.seasons 
-        SET label = ${prismaUpdateInput.label}, updated_at = NOW()
-        WHERE season_id = ${createdSeason.season_id}::uuid
-        RETURNING season_id, label, created_at, updated_at
-      `;
-
-      const updatedSeason = updateResult[0];
+      // Apply update using Prisma
+      const updatedSeason = await prisma.seasons.update({
+        where: { season_id: createdSeason.season_id },
+        data: prismaUpdateInput
+      });
 
       // Transform back and verify
       const transformedUpdated = transformSeason(updatedSeason);
@@ -222,26 +202,18 @@ describe('Season Schema Alignment Tests', () => {
         label: 'Retrieval Test Season 2025'
       });
 
-      const result = await prisma.$queryRaw<PrismaSeason[]>`
-        INSERT INTO grassroots.seasons (label) 
-        VALUES (${testData.label})
-        RETURNING season_id, label, created_at, updated_at
-      `;
-
-      const createdSeason = result[0];
+      const createdSeason = await prisma.seasons.create({ data: testData });
       createdSeasonIds.push(createdSeason.season_id);
 
       // Retrieve season
-      const retrievedResult = await prisma.$queryRaw<PrismaSeason[]>`
-        SELECT season_id, label, created_at, updated_at 
-        FROM grassroots.seasons 
-        WHERE season_id = ${createdSeason.season_id}::uuid
-      `;
+      const retrievedResult = await prisma.seasons.findUnique({
+        where: { season_id: createdSeason.season_id }
+      });
 
-      expect(retrievedResult).toHaveLength(1);
+      expect(retrievedResult).toBeDefined();
 
       // Transform and verify
-      const transformedSeason = transformSeason(retrievedResult[0]);
+      const transformedSeason = transformSeason(retrievedResult!);
 
       expect(transformedSeason.id).toBe(createdSeason.season_id);
       expect(transformedSeason.label).toBe('Retrieval Test Season 2025');

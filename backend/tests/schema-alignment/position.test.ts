@@ -33,28 +33,17 @@ describe('Position Schema Alignment Tests', () => {
     transformUpdate: transformPositionUpdateRequest,
     transformRead: transformPosition,
     createInDb: async (data) => {
-      const result = await prisma.$queryRaw<PrismaPosition[]>`
-        INSERT INTO grassroots.positions (pos_code, long_name) 
-        VALUES (${data.pos_code}, ${data.long_name})
-        RETURNING pos_code, long_name, created_at, updated_at
-      `;
-      return result[0];
+      return await prisma.positions.create({ data });
     },
     findInDb: async (code) => {
-      return await prisma.$queryRaw<PrismaPosition[]>`
-        SELECT pos_code, long_name, created_at, updated_at 
-        FROM grassroots.positions 
-        WHERE pos_code = ${code}
-      `;
+      const position = await prisma.positions.findUnique({ where: { pos_code: code } });
+      return position ? [position] : [];
     },
     updateInDb: async (code, data) => {
-      const updateResult = await prisma.$queryRaw<PrismaPosition[]>`
-        UPDATE grassroots.positions 
-        SET long_name = ${data.long_name}, updated_at = NOW()
-        WHERE pos_code = ${code}
-        RETURNING pos_code, long_name, created_at, updated_at
-      `;
-      return updateResult[0];
+      return await prisma.positions.update({
+        where: { pos_code: code },
+        data: data
+      });
     },
     getIdentifier: (entity) => entity.pos_code,
     getNonExistentIdentifier: () => 'NOTFOUND',
@@ -101,14 +90,8 @@ describe('Position Schema Alignment Tests', () => {
         long_name: 'Attacking Midfielder'
       });
 
-      // 4. Create in database using raw query
-      const result = await prisma.$queryRaw<PrismaPosition[]>`
-        INSERT INTO grassroots.positions (pos_code, long_name) 
-        VALUES (${prismaInput.pos_code}, ${prismaInput.long_name})
-        RETURNING pos_code, long_name, created_at, updated_at
-      `;
-
-      const createdPosition = result[0];
+      // 4. Create in database using Prisma
+      const createdPosition = await prisma.positions.create({ data: prismaInput });
 
       // Track for cleanup
       createdPositionCodes.push(createdPosition.pos_code);
@@ -147,13 +130,7 @@ describe('Position Schema Alignment Tests', () => {
       };
 
       const prismaInput = transformPositionCreateRequest(positionData);
-      const result = await prisma.$queryRaw<PrismaPosition[]>`
-        INSERT INTO grassroots.positions (pos_code, long_name) 
-        VALUES (${prismaInput.pos_code}, ${prismaInput.long_name})
-        RETURNING pos_code, long_name, created_at, updated_at
-      `;
-
-      const createdPosition = result[0];
+      const createdPosition = await prisma.positions.create({ data: prismaInput });
       createdPositionCodes.push(createdPosition.pos_code);
 
       const transformedPosition = transformPosition(createdPosition);
@@ -178,13 +155,7 @@ describe('Position Schema Alignment Tests', () => {
         longName: 'Update Test Position'
       });
 
-      const result = await prisma.$queryRaw<PrismaPosition[]>`
-        INSERT INTO grassroots.positions (pos_code, long_name) 
-        VALUES (${initialData.pos_code}, ${initialData.long_name})
-        RETURNING pos_code, long_name, created_at, updated_at
-      `;
-
-      const createdPosition = result[0];
+      const createdPosition = await prisma.positions.create({ data: initialData });
       createdPositionCodes.push(createdPosition.pos_code);
 
       // Update using frontend interface
@@ -198,15 +169,11 @@ describe('Position Schema Alignment Tests', () => {
         long_name: 'Updated Position Name'
       });
 
-      // Apply update using raw query
-      const updateResult = await prisma.$queryRaw<PrismaPosition[]>`
-        UPDATE grassroots.positions 
-        SET long_name = ${prismaUpdateInput.long_name}, updated_at = NOW()
-        WHERE pos_code = ${createdPosition.pos_code}
-        RETURNING pos_code, long_name, created_at, updated_at
-      `;
-
-      const updatedPosition = updateResult[0];
+      // Apply update using Prisma
+      const updatedPosition = await prisma.positions.update({
+        where: { pos_code: createdPosition.pos_code },
+        data: prismaUpdateInput
+      });
 
       // Transform back and verify
       const transformedUpdated = transformPosition(updatedPosition);
@@ -225,13 +192,7 @@ describe('Position Schema Alignment Tests', () => {
         longName: 'Position Code Update Test'
       });
 
-      const result = await prisma.$queryRaw<PrismaPosition[]>`
-        INSERT INTO grassroots.positions (pos_code, long_name) 
-        VALUES (${initialData.pos_code}, ${initialData.long_name})
-        RETURNING pos_code, long_name, created_at, updated_at
-      `;
-
-      const createdPosition = result[0];
+      const createdPosition = await prisma.positions.create({ data: initialData });
       createdPositionCodes.push(createdPosition.pos_code);
 
       // Update position code
@@ -245,15 +206,11 @@ describe('Position Schema Alignment Tests', () => {
         pos_code: 'NEW'
       });
 
-      // Apply update using raw query
-      const updateResult = await prisma.$queryRaw<PrismaPosition[]>`
-        UPDATE grassroots.positions 
-        SET pos_code = ${prismaUpdateInput.pos_code}, updated_at = NOW()
-        WHERE pos_code = ${createdPosition.pos_code}
-        RETURNING pos_code, long_name, created_at, updated_at
-      `;
-
-      const updatedPosition = updateResult[0];
+      // Apply update using Prisma
+      const updatedPosition = await prisma.positions.update({
+        where: { pos_code: createdPosition.pos_code },
+        data: prismaUpdateInput
+      });
 
       // Update cleanup tracking
       createdPositionCodes = createdPositionCodes.filter(code => code !== 'OLD');
@@ -274,13 +231,7 @@ describe('Position Schema Alignment Tests', () => {
         longName: 'Partial Update Position'
       });
 
-      const result = await prisma.$queryRaw<PrismaPosition[]>`
-        INSERT INTO grassroots.positions (pos_code, long_name) 
-        VALUES (${initialData.pos_code}, ${initialData.long_name})
-        RETURNING pos_code, long_name, created_at, updated_at
-      `;
-
-      const createdPosition = result[0];
+      const createdPosition = await prisma.positions.create({ data: initialData });
       createdPositionCodes.push(createdPosition.pos_code);
 
       // Update with empty update (should not change anything)
@@ -290,13 +241,11 @@ describe('Position Schema Alignment Tests', () => {
       expect(prismaUpdateInput).toEqual({});
 
       // Since no fields to update, position should remain unchanged
-      const retrievedPosition = await prisma.$queryRaw<PrismaPosition[]>`
-        SELECT pos_code, long_name, created_at, updated_at 
-        FROM grassroots.positions 
-        WHERE pos_code = ${createdPosition.pos_code}
-      `;
+      const retrievedPosition = await prisma.positions.findUnique({
+        where: { pos_code: createdPosition.pos_code }
+      });
 
-      const transformedPosition = transformPosition(retrievedPosition[0]);
+      const transformedPosition = transformPosition(retrievedPosition!);
       expect(transformedPosition.code).toBe('PAR'); // Unchanged
       expect(transformedPosition.longName).toBe('Partial Update Position'); // Unchanged
       expect(transformedPosition.updatedAt).toBeUndefined(); // Should still be undefined
@@ -311,26 +260,18 @@ describe('Position Schema Alignment Tests', () => {
         longName: 'Retrieval Test Position'
       });
 
-      const result = await prisma.$queryRaw<PrismaPosition[]>`
-        INSERT INTO grassroots.positions (pos_code, long_name) 
-        VALUES (${testData.pos_code}, ${testData.long_name})
-        RETURNING pos_code, long_name, created_at, updated_at
-      `;
-
-      const createdPosition = result[0];
+      const createdPosition = await prisma.positions.create({ data: testData });
       createdPositionCodes.push(createdPosition.pos_code);
 
       // Retrieve position
-      const retrievedResult = await prisma.$queryRaw<PrismaPosition[]>`
-        SELECT pos_code, long_name, created_at, updated_at 
-        FROM grassroots.positions 
-        WHERE pos_code = ${createdPosition.pos_code}
-      `;
+      const retrievedResult = await prisma.positions.findUnique({
+        where: { pos_code: createdPosition.pos_code }
+      });
 
-      expect(retrievedResult).toHaveLength(1);
+      expect(retrievedResult).toBeDefined();
 
       // Transform and verify
-      const transformedPosition = transformPosition(retrievedResult[0]);
+      const transformedPosition = transformPosition(retrievedResult!);
 
       expect(transformedPosition.code).toBe('RET');
       expect(transformedPosition.longName).toBe('Retrieval Test Position');
@@ -350,21 +291,16 @@ describe('Position Schema Alignment Tests', () => {
       ];
 
       for (const pos of positions) {
-        const result = await prisma.$queryRaw<PrismaPosition[]>`
-          INSERT INTO grassroots.positions (pos_code, long_name) 
-          VALUES (${pos.code}, ${pos.longName})
-          RETURNING pos_code, long_name, created_at, updated_at
-        `;
-        createdPositionCodes.push(result[0].pos_code);
+        const prismaInput = transformPositionCreateRequest(pos);
+        const createdPosition = await prisma.positions.create({ data: prismaInput });
+        createdPositionCodes.push(createdPosition.pos_code);
       }
 
       // Retrieve all created positions
-      const retrievedResult = await prisma.$queryRaw<PrismaPosition[]>`
-        SELECT pos_code, long_name, created_at, updated_at 
-        FROM grassroots.positions 
-        WHERE pos_code = ANY(${createdPositionCodes.slice(-3)}::text[])
-        ORDER BY pos_code
-      `;
+      const retrievedResult = await prisma.positions.findMany({
+        where: { pos_code: { in: createdPositionCodes.slice(-3) } },
+        orderBy: { pos_code: 'asc' }
+      });
 
       expect(retrievedResult).toHaveLength(3);
 
@@ -380,6 +316,7 @@ describe('Position Schema Alignment Tests', () => {
 
       transformedPositions.forEach(position => {
         expect(position.createdAt).toBeInstanceOf(Date);
+        expect(position.updatedAt).toBeUndefined();
       });
     });
   });
@@ -401,13 +338,11 @@ describe('Position Schema Alignment Tests', () => {
 
     it('should correctly map database to frontend fields', async () => {
       // Create position in database
-      const result = await prisma.$queryRaw<PrismaPosition[]>`
-        INSERT INTO grassroots.positions (pos_code, long_name) 
-        VALUES ('DBM', 'Database Mapping Test')
-        RETURNING pos_code, long_name, created_at, updated_at
-      `;
-
-      const createdPosition = result[0];
+      const prismaInput = transformPositionCreateRequest({
+        code: 'DBM',
+        longName: 'Database Mapping Test'
+      });
+      const createdPosition = await prisma.positions.create({ data: prismaInput });
       createdPositionCodes.push(createdPosition.pos_code);
 
       const transformedPosition = transformPosition(createdPosition);
@@ -444,13 +379,7 @@ describe('Position Schema Alignment Tests', () => {
       };
 
       const prismaInput = transformPositionCreateRequest(positionData);
-      const result = await prisma.$queryRaw<PrismaPosition[]>`
-        INSERT INTO grassroots.positions (pos_code, long_name) 
-        VALUES (${prismaInput.pos_code}, ${prismaInput.long_name})
-        RETURNING pos_code, long_name, created_at, updated_at
-      `;
-
-      const createdPosition = result[0];
+      const createdPosition = await prisma.positions.create({ data: prismaInput });
       createdPositionCodes.push(createdPosition.pos_code);
 
       const transformedPosition = transformPosition(createdPosition);
@@ -466,17 +395,15 @@ describe('Position Schema Alignment Tests', () => {
       const playerTestPositions = ['GK', 'CB', 'CM'];
       
       for (const posCode of playerTestPositions) {
-        const result = await prisma.$queryRaw<PrismaPosition[]>`
-          SELECT pos_code, long_name, created_at, updated_at 
-          FROM grassroots.positions 
-          WHERE pos_code = ${posCode}
-        `;
+        const position = await prisma.positions.findUnique({
+          where: { pos_code: posCode }
+        });
         
-        expect(result).toHaveLength(1);
-        expect(result[0].pos_code).toBe(posCode);
+        expect(position).toBeDefined();
+        expect(position!.pos_code).toBe(posCode);
         
         // Transform and verify structure
-        const transformedPosition = transformPosition(result[0]);
+        const transformedPosition = transformPosition(position!);
         expect(transformedPosition.code).toBe(posCode);
         expect(transformedPosition.longName).toBeDefined();
         expect(transformedPosition.createdAt).toBeInstanceOf(Date);

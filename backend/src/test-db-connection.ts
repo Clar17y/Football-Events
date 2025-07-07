@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 async function testConnection() {
   try {
     console.log('🔍 Testing database connection...');
-    console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'Not set');
+    console.log('DATABASE_URL:', process.env['DATABASE_URL'] ? 'Set' : 'Not set');
     
     // Test basic connection
     await prisma.$connect();

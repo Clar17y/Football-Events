@@ -8,6 +8,9 @@ export type {
   Player as PrismaPlayer,
   Team as PrismaTeam,
   Match as PrismaMatch,
+  Event as PrismaEvent,
+  awards as PrismaAward,
+  match_awards as PrismaMatchAward,
 } from '@prisma/client';
 
 // For models that might not be available or have different names, we'll define them manually
@@ -106,22 +109,6 @@ export type PrismaMatchUpdateInput = {
   notes?: string | null;
 };
 
-// Event types (since Event model is ignored, we define manually)
-export type PrismaEvent = {
-  id: string;
-  match_id: string;
-  season_id: string;
-  created_at: Date;
-  period_number?: number | null;
-  clock_ms?: number | null;
-  kind: EventKind;
-  team_id?: string | null;
-  player_id?: string | null;
-  notes?: string | null;
-  sentiment: number;
-  updated_at?: Date | null;
-};
-
 export type PrismaEventCreateInput = {
   match_id: string;
   season_id: string;
@@ -167,4 +154,30 @@ export type PrismaLineupUpdateInput = {
   start_min?: number;
   end_min?: number | null;
   position?: string;
+};
+
+// Award input types
+export type PrismaAwardCreateInput = {
+  season_id: string;
+  player_id: string;
+  category: string;
+  notes?: string | null;
+};
+
+export type PrismaAwardUpdateInput = {
+  category?: string;
+  notes?: string | null;
+};
+
+// Match Award input types
+export type PrismaMatchAwardCreateInput = {
+  match_id: string;
+  player_id: string;
+  category: string;
+  notes?: string | null;
+};
+
+export type PrismaMatchAwardUpdateInput = {
+  category?: string;
+  notes?: string | null;
 };

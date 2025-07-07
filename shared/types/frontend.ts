@@ -213,6 +213,52 @@ export interface LineupUpdateRequest {
   position?: string;
 }
 
+// Award interfaces
+export interface Award {
+  id: string;
+  seasonId: string;
+  playerId: string;
+  category: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
+export interface AwardCreateRequest {
+  seasonId: string;
+  playerId: string;
+  category: string;
+  notes?: string;
+}
+
+export interface AwardUpdateRequest {
+  category?: string;
+  notes?: string;
+}
+
+// Match Award interfaces
+export interface MatchAward {
+  id: string;
+  matchId: string;
+  playerId: string;
+  category: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
+export interface MatchAwardCreateRequest {
+  matchId: string;
+  playerId: string;
+  category: string;
+  notes?: string;
+}
+
+export interface MatchAwardUpdateRequest {
+  category?: string;
+  notes?: string;
+}
+
 // ============================================================================
 // UI-SPECIFIC TYPES
 // ============================================================================

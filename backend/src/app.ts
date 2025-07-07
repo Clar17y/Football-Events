@@ -8,9 +8,13 @@ import { Server } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import 'express-async-errors';
+import { validateEnv, getNumericEnv, isDevelopment } from './config/env';
 
 // Load environment variables
 dotenv.config();
+
+// Validate environment variables at startup
+const env = validateEnv();
 
 const app = express();
 const server = createServer(app);
@@ -19,7 +23,7 @@ const prisma = new PrismaClient();
 // Socket.io setup
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: env.FRONTEND_URL,
     methods: ["GET", "POST"]
   }
 });
@@ -30,14 +34,14 @@ app.use(compression());
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: env.FRONTEND_URL,
   credentials: true
 }));
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
+  windowMs: getNumericEnv(env.RATE_LIMIT_WINDOW_MS, 900000), // 15 minutes
+  max: getNumericEnv(env.RATE_LIMIT_MAX_REQUESTS, 100),
   message: 'Too many requests from this IP, please try again later.'
 });
 app.use('/api/', limiter);
@@ -47,7 +51,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
-app.get('/api/health', async (req, res) => {
+app.get('/api/health', async (_req, res) => {
   try {
     // Test database connection
     await prisma.$queryRaw`SELECT 1`;
@@ -56,7 +60,7 @@ app.get('/api/health', async (req, res) => {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-      environment: process.env.NODE_ENV || 'development',
+      environment: env.NODE_ENV || 'development',
       database: 'connected'
     });
   } catch (error) {
@@ -64,7 +68,7 @@ app.get('/api/health', async (req, res) => {
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-      environment: process.env.NODE_ENV || 'development',
+      environment: env.NODE_ENV || 'development',
       database: 'disconnected',
       error: error instanceof Error ? error.message : 'Unknown error'
     });
@@ -98,12 +102,12 @@ io.on('connection', (socket) => {
 });
 
 // Error handling middleware
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Error:', err);
   
   res.status(500).json({
     error: {
-      message: process.env.NODE_ENV === 'production' 
+      message: !isDevelopment(env)
         ? 'Internal server error' 
         : err.message,
       timestamp: new Date().toISOString()
@@ -122,11 +126,11 @@ app.use('*', (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = getNumericEnv(env.PORT, 3001);
 
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📱 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
+  console.log(`📱 Frontend URL: ${env.FRONTEND_URL}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
 });
 
