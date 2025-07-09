@@ -181,6 +181,18 @@ export interface EventCreateRequest {
   sentiment?: number;
 }
 
+export interface EventUpdateRequest {
+  matchId?: string;
+  seasonId?: string;
+  periodNumber?: number;
+  clockMs?: number;
+  kind?: EventKind;
+  teamId?: string;
+  playerId?: string;
+  notes?: string;
+  sentiment?: number;
+}
+
 export interface SeasonCreateRequest {
   label: string;
 }

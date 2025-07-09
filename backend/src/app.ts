@@ -75,10 +75,9 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
-// API routes will be added here
-// app.use('/api/matches', matchRoutes);
-// app.use('/api/teams', teamRoutes);
-// app.use('/api/players', playerRoutes);
+// API routes
+import v1Routes from './routes/v1';
+app.use('/api/v1', v1Routes);
 
 // Socket.io connection handling
 io.on('connection', (socket) => {

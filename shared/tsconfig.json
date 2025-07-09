@@ -5,7 +5,8 @@
     "declaration": true,
     "outDir": "./dist",
     "rootDir": "./types",
-    "strict": true
+    "strict": true,
+    "composite": true
   },
   "include": ["types/**/*"]
 }

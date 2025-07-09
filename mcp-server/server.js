@@ -1,9 +1,12 @@
-// server.js  — MCP v2
+// server.js  — MCP v2 Enhanced
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
+
+// Import our enhanced functionality
+import mcpFunctions from './lib/index.js';
 
 const PORT = 9123;
 const EXEC_TIMEOUT = 60_000;
@@ -81,6 +84,172 @@ app.post('/exec', (req, res) => {
   );
 });
 
-app.listen(PORT, () =>
-  console.log(`MCP listening on http://localhost:${PORT}/exec  (logs at /logs/*)`)
-);
+/* ---------- Enhanced MCP Functions ------------------------------------ */
+
+// Server Management
+app.post('/startDevServer', async (req, res) => {
+  try {
+    const result = await mcpFunctions.startDevServer(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+app.post('/stopDevServer', async (req, res) => {
+  try {
+    const result = await mcpFunctions.stopDevServer(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+app.post('/getServerStatus', async (req, res) => {
+  try {
+    const result = await mcpFunctions.getServerStatus(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+app.post('/stopAllServers', async (req, res) => {
+  try {
+    const result = await mcpFunctions.stopAllServers();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+app.post('/forceKillPort', async (req, res) => {
+  try {
+    const { port } = req.body;
+    if (!port) {
+      return res.status(400).json({ error: 'PORT_REQUIRED', message: 'Port number is required' });
+    }
+    const result = await mcpFunctions.forceKillPort(port);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+app.post('/listManagedServers', async (req, res) => {
+  try {
+    const result = await mcpFunctions.listManagedServers();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+// API Testing
+app.post('/testApiEndpoint', async (req, res) => {
+  try {
+    const result = await mcpFunctions.testApiEndpoint(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+app.post('/checkPortStatus', async (req, res) => {
+  try {
+    const result = await mcpFunctions.checkPortStatus(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+app.post('/testApiWorkflow', async (req, res) => {
+  try {
+    const result = await mcpFunctions.testApiWorkflow(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+app.post('/testCrudEndpoints', async (req, res) => {
+  try {
+    const result = await mcpFunctions.testCrudEndpoints(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+// Logging
+app.post('/getServerLogs', async (req, res) => {
+  try {
+    const result = await mcpFunctions.getServerLogs(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+app.post('/listLogFiles', async (req, res) => {
+  try {
+    const result = await mcpFunctions.listLogFiles(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+app.post('/getLogFile', async (req, res) => {
+  try {
+    const result = await mcpFunctions.getLogFile(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+// Enhanced status endpoint
+app.get('/status', (req, res) => {
+  res.json({
+    status: 'running',
+    version: '2.0.0',
+    features: {
+      originalExec: true,
+      serverManagement: true,
+      apiTesting: true,
+      logging: true
+    },
+    endpoints: {
+      exec: '/exec',
+      logs: '/logs/*',
+      serverManagement: ['/startDevServer', '/stopDevServer', '/getServerStatus', '/stopAllServers', '/listManagedServers'],
+      apiTesting: ['/testApiEndpoint', '/checkPortStatus', '/testApiWorkflow', '/testCrudEndpoints'],
+      logging: ['/getServerLogs', '/listLogFiles', '/getLogFile']
+    }
+  });
+});
+
+// Cleanup on shutdown
+process.on('SIGINT', async () => {
+  console.log('\nShutting down MCP server...');
+  await mcpFunctions.cleanup();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\nShutting down MCP server...');
+  await mcpFunctions.cleanup();
+  process.exit(0);
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 Enhanced MCP Server v2.0 listening on http://localhost:${PORT}`);
+  console.log(`📋 Original exec endpoint: /exec`);
+  console.log(`🔧 Server management: /startDevServer, /stopDevServer, /getServerStatus`);
+  console.log(`🧪 API testing: /testApiEndpoint, /testApiWorkflow`);
+  console.log(`📝 Logging: /getServerLogs, /listLogFiles`);
+  console.log(`📊 Status: /status`);
+  console.log(`📁 Logs: /logs/*`);
+});

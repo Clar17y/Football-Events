@@ -19,6 +19,7 @@ export type {
   MatchCreateRequest,
   MatchUpdateRequest,
   EventCreateRequest,
+  EventUpdateRequest,
   SeasonCreateRequest,
   SeasonUpdateRequest,
   PositionCreateRequest,
