@@ -38,13 +38,17 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: getNumericEnv(env.RATE_LIMIT_WINDOW_MS, 900000), // 15 minutes
-  max: getNumericEnv(env.RATE_LIMIT_MAX_REQUESTS, 100),
-  message: 'Too many requests from this IP, please try again later.'
-});
-app.use('/api/', limiter);
+// Rate limiting - disabled in test environment, generous for real-time sports
+if (env.NODE_ENV !== 'test') {
+  const limiter = rateLimit({
+    windowMs: getNumericEnv(env.RATE_LIMIT_WINDOW_MS, 60000), // 1 minute window
+    max: getNumericEnv(env.RATE_LIMIT_MAX_REQUESTS, 1000), // 1000 requests per minute
+    message: 'Too many requests from this IP, please try again later.',
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  });
+  app.use('/api/', limiter);
+}
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -95,6 +99,32 @@ io.on('connection', (socket) => {
     console.log(`Client ${socket.id} left match ${matchId}`);
   });
   
+  // Handle real-time match events
+  socket.on('match_event', async (event, callback) => {
+    try {
+      console.log('📡 Received real-time event:', event.id);
+      
+      // Broadcast to all clients in the match room (except sender)
+      socket.to(`match-${event.match_id}`).emit('live_event', event);
+      
+      // Acknowledge successful receipt
+      if (callback) {
+        callback({ success: true });
+      }
+      
+      // Confirm event was processed
+      socket.emit('match_event_confirmed', event.id);
+      
+      console.log(`✅ Event ${event.id} broadcasted to match-${event.match_id}`);
+    } catch (error) {
+      console.error('❌ Error handling real-time event:', error);
+      
+      if (callback) {
+        callback({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    }
+  });
+  
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
   });
@@ -133,4 +163,5 @@ server.listen(PORT, () => {
   console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
 });
 
+// Export io for use in route handlers
 export { app, io };

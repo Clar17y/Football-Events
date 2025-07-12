@@ -10,6 +10,7 @@ import type {
   SeasonCreateRequest, 
   SeasonUpdateRequest 
 } from '@shared/types';
+import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 
 export interface GetSeasonsOptions {
   page: number;
@@ -83,12 +84,14 @@ export class SeasonService {
   }
 
   async createSeason(data: SeasonCreateRequest): Promise<Season> {
-    const prismaInput = transformSeasonCreateRequest(data);
-    const season = await this.prisma.seasons.create({
-      data: prismaInput
-    });
+    return withPrismaErrorHandling(async () => {
+      const prismaInput = transformSeasonCreateRequest(data);
+      const season = await this.prisma.seasons.create({
+        data: prismaInput
+      });
 
-    return transformSeason(season);
+      return transformSeason(season);
+    }, 'Season');
   }
 
   async updateSeason(id: string, data: SeasonUpdateRequest): Promise<Season | null> {

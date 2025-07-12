@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { LineupService } from '../../services/LineupService';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { extractApiError } from '../../utils/prismaErrorHandler';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
 import { 
@@ -32,8 +33,21 @@ router.get('/', asyncHandler(async (req, res) => {
 
 // POST /api/v1/lineups - Create new lineup
 router.post('/', validateRequest(lineupCreateSchema), asyncHandler(async (req, res) => {
-  const lineup = await lineupService.createLineup(req.body);
-  res.status(201).json(lineup);
+  try {
+    const lineup = await lineupService.createLineup(req.body);
+    res.status(201).json(lineup);
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error; // Re-throw if not a handled API error
+  }
 }));
 
 // GET /api/v1/lineups/:matchId/:playerId/:startMinute - Get lineup by composite key

@@ -77,64 +77,82 @@ The sandboxed shell cannot capture stdout/stderr from native commands. However, 
 
 ### **🔧 Enhanced MCP Server Capabilities:**
 
-#### **Server Management Functions:**
+#### **🚀 Server Management Functions:**
 ```javascript
-// Start development servers programmatically with process group management
-POST /startDevServer     - Start backend or frontend dev server (with detached: true)
-POST /stopDevServer      - Stop managed dev server (process group kill with SIGTERM/SIGKILL)
-POST /getServerStatus    - Check server health and status
-POST /stopAllServers     - Emergency cleanup - stop all servers
-POST /listManagedServers - List all managed servers
-POST /forceKillPort      - Force kill processes using specific ports
+// Start development servers with enhanced logging and operation tracking
+POST /startDevServer     - Start backend/frontend with structured logging (detached: true)
+POST /stopDevServer      - Graceful shutdown with process group kill + timing metrics
+POST /getServerStatus    - Health checks, uptime, performance metrics
+POST /stopAllServers     - Emergency cleanup with detailed stop logging
+POST /listManagedServers - List all managed servers with status
 ```
 
-#### **API Testing Functions:**
+#### **📝 Enhanced Logging & Monitoring Functions:**
+```javascript
+// Advanced logging with operation tracking and performance monitoring
+POST /getRecentLogs        - Get recent logs from memory (fast access, level filtering)
+POST /searchLogs           - Search logs with regex patterns (powerful debugging)
+POST /getPerformanceMetrics - Real-time memory usage, operations in progress
+POST /listLogFiles         - List all log files (main, error, debug) with metadata
+POST /getLogFile           - Get log file content with filtering options
+```
+
+#### **🧪 API Testing Functions:**
 ```javascript
 // Test APIs without external tools
-POST /testApiEndpoint    - Make HTTP requests to APIs
-POST /testApiWorkflow    - Test multiple endpoints in sequence
-POST /testCrudEndpoints  - Test complete CRUD workflows
+POST /testApiEndpoint    - Make HTTP requests with detailed response analysis
+POST /testApiWorkflow    - Test multiple endpoints in sequence with context
+POST /testCrudEndpoints  - Test complete CRUD workflows with timing
 POST /checkPortStatus    - Check if port is available
-POST /forceKillPort      - Kill processes using specific ports (Docker-aware)
 ```
 
-#### **Logging & Debugging Functions:**
-```javascript
-// Access server logs and debugging info
-POST /getServerLogs      - Get recent server logs
-POST /listLogFiles       - List available log files
-POST /getLogFile         - Get specific log file content
-```
+### **🎯 Enhanced Development Workflow with Advanced Logging:**
 
-### **🎯 Recommended Development Workflow:**
-
-#### **1. Start Backend Server:**
+#### **1. Start Backend Server with Enhanced Logging:**
 ```powershell
-Invoke-RestMethod -Uri "http://localhost:9123/startDevServer" -Method POST -ContentType "application/json" -Body '{"project": "backend"}'
+Invoke-RestMethod -Uri "http://localhost:9123/startDevServer" -Method POST -ContentType "application/json" -Body '{"project": "backend", "options": {"timeout": 10000}}'
 ```
 
-#### **2. Test API Endpoints:**
+#### **2. Monitor Real-time Performance:**
 ```powershell
-# Test GET endpoint
+# Get performance metrics (memory usage, operations in progress)
+Invoke-RestMethod -Uri "http://localhost:9123/getPerformanceMetrics" -Method POST -ContentType "application/json" -Body '{"project": "backend"}'
+```
+
+#### **3. Get Recent Logs (Fast Memory Access):**
+```powershell
+# Get recent logs with level filtering
+Invoke-RestMethod -Uri "http://localhost:9123/getRecentLogs" -Method POST -ContentType "application/json" -Body '{"project": "backend", "lines": 20, "level": "ERROR"}'
+```
+
+#### **4. Search Logs for Debugging:**
+```powershell
+# Search for specific patterns in logs
+Invoke-RestMethod -Uri "http://localhost:9123/searchLogs" -Method POST -ContentType "application/json" -Body '{"project": "backend", "query": "server.*running", "options": {"limit": 10}}'
+```
+
+#### **5. Test API Endpoints with Enhanced Monitoring:**
+```powershell
+# Test GET endpoint (now includes response timing and detailed analysis)
 Invoke-RestMethod -Uri "http://localhost:9123/testApiEndpoint" -Method POST -ContentType "application/json" -Body '{"method": "GET", "url": "http://localhost:3001/api/v1/teams"}'
 
-# Test POST endpoint
+# Test POST endpoint with structured logging
 Invoke-RestMethod -Uri "http://localhost:9123/testApiEndpoint" -Method POST -ContentType "application/json" -Body '{"method": "POST", "url": "http://localhost:3001/api/v1/teams", "body": {"name": "Test FC", "homePrimary": "#FF0000"}}'
 ```
 
-#### **3. Test Complete CRUD Workflows:**
+#### **6. Monitor Server Status with Health Checks:**
 ```powershell
-Invoke-RestMethod -Uri "http://localhost:9123/testCrudEndpoints" -Method POST -ContentType "application/json" -Body '{"baseUrl": "http://localhost:3001/api/v1/teams", "entityName": "team", "testData": {"create": {"name": "Test FC", "homePrimary": "#FF0000"}, "update": {"name": "Updated FC"}}}'
-```
-
-#### **4. Monitor Server Status:**
-```powershell
+# Get detailed server status (now includes health, uptime, log files)
 Invoke-RestMethod -Uri "http://localhost:9123/getServerStatus" -Method POST -ContentType "application/json" -Body '{"project": "backend"}'
 ```
 
-#### **5. Access Logs for Debugging:**
+#### **7. List and Access Log Files:**
 ```powershell
-Invoke-RestMethod -Uri "http://localhost:9123/getServerLogs" -Method POST -ContentType "application/json" -Body '{"project": "backend", "lines": 20}'
+# List all log files (main, error, debug) with metadata
+Invoke-RestMethod -Uri "http://localhost:9123/listLogFiles" -Method POST -ContentType "application/json" -Body '{"project": "backend"}'
+
+# Get specific log file with filtering
+Invoke-RestMethod -Uri "http://localhost:9123/getLogFile" -Method POST -ContentType "application/json" -Body '{"filename": "backend-2025-07-10-07-35-59-errors.log", "level": "ERROR"}'
 ```
 
 ### **🔄 Legacy Command Execution (Still Available):**
@@ -167,7 +185,7 @@ The response is small and contains:
 ### **📊 Current Infrastructure Status:**
 - ✅ **Backend Testing Suite**: 149+ tests passing (8 entities complete)
 - ✅ **API Framework**: Express.js with v1 versioning, 8 complete APIs operational
-- ✅ **Enhanced MCP Server**: v2.0 with full development workflow integration + process group management
+- ✅ **Enhanced MCP Server**: v2.1 with advanced logging, operation tracking, performance monitoring + process group management
 - ✅ **Database Integration**: Complete Prisma ↔ Frontend transformation layer
 - ✅ **UUID Validation**: Robust middleware preventing route conflicts across all APIs
 - ✅ **Process Management**: Persistent PID tracking with proper cleanup (no more port conflicts)
@@ -269,6 +287,19 @@ POST   /api/v1/lineups/batch              - Batch create/update/delete operation
 - ✅ **Composite Key Support**: Complex primary keys for lineup substitution tracking
 - ✅ **Substitution Management**: Complete player entry/exit history per match
 - ✅ **Performance**: Response times 2-40ms depending on complexity
+- ✅ **Comprehensive Constraint Validation**: Complete foreign key and unique constraint validation across all APIs
+- ✅ **Shared Validation Patterns**: Reusable test framework eliminating code duplication
+- ✅ **Prisma Error Handling**: Converts database errors to meaningful HTTP responses (400 for FK violations, 409 for unique constraints)
+- ✅ **Position API Routing Fixed**: Resolved UUID vs string code routing issues
+
+#### **Constraint Validation Framework:**
+- ✅ **`shared-validation-patterns.ts`**: Reusable test utilities for all constraint types
+- ✅ **`prismaErrorHandler.ts`**: Centralized Prisma error to HTTP response conversion
+- ✅ **Foreign Key Validation**: All APIs return 400 Bad Request for invalid references
+- ✅ **Unique Constraint Validation**: All APIs return 409 Conflict for duplicates
+- ✅ **Complete Coverage**: Players (FK+Unique), Matches (FK), Awards (FK), Lineups (FK)
+- ✅ **Meaningful Error Messages**: Field-specific constraint violation details
+- ✅ **Zero Code Duplication**: Shared patterns across all API test suites
 
 **Database Analysis Commands (Legacy):**
 * Schema introspection: `cd backend && node scripts/check-schema-alignment.js`

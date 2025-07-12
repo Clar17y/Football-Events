@@ -4,7 +4,7 @@ import { promises as fs } from 'fs';
 import net from 'net';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import ServerLogger from './logger.js';
+import EnhancedLogger from './enhancedLogger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -92,11 +92,36 @@ class ProcessManager {
   }
 
   async startServer(project, options = {}) {
+    // Create enhanced logger first for operation tracking
+    const logger = new EnhancedLogger(project, {
+      level: 'DEBUG',
+      enableConsole: true,
+      enableStructured: true,
+      enablePerformance: true,
+      enableDebugFile: true
+    });
+
+    const operationId = logger.startOperation('START_SERVER', { project, options });
+
     try {
+      logger.info('SERVER_MGMT', 'Starting server request', { project, options });
+
       // Check if server is already running
       if (this.servers.has(project)) {
         const existing = this.servers.get(project);
+        logger.debug('SERVER_MGMT', 'Found existing server entry', { 
+          project, 
+          existingPid: existing.pid, 
+          existingPort: existing.port 
+        });
+
         if (this.isProcessRunning(existing.pid)) {
+          logger.warn('SERVER_MGMT', 'Server already running', { 
+            project, 
+            pid: existing.pid, 
+            port: existing.port 
+          });
+          logger.endOperation(operationId, { success: false, reason: 'already_running' });
           return {
             success: false,
             error: 'SERVER_ALREADY_RUNNING',
@@ -106,23 +131,38 @@ class ProcessManager {
           };
         } else {
           // Clean up dead process
+          logger.info('SERVER_MGMT', 'Cleaning up dead server entry', { 
+            project, 
+            deadPid: existing.pid 
+          });
           this.servers.delete(project);
         }
       }
 
       // Get project configuration
+      logger.debug('SERVER_MGMT', 'Getting project configuration', { project });
       const config = this.getProjectConfig(project);
       if (!config) {
+        logger.error('SERVER_MGMT', 'Invalid project configuration', { project });
+        logger.endOperation(operationId, { success: false, reason: 'invalid_project' });
         return {
           success: false,
           error: 'INVALID_PROJECT',
           message: `Unknown project: ${project}. Supported: backend, frontend`
         };
       }
+      logger.debug('SERVER_MGMT', 'Project configuration loaded', { project, config });
 
       // Check port availability
+      logger.debug('SERVER_MGMT', 'Checking port availability', { project, port: config.port });
       const portAvailable = await this.checkPortAvailable(config.port);
       if (!portAvailable) {
+        logger.error('SERVER_MGMT', 'Port conflict detected', { 
+          project, 
+          port: config.port,
+          suggestion: `Stop the existing server or check 'lsof -i :${config.port}'`
+        });
+        logger.endOperation(operationId, { success: false, reason: 'port_conflict' });
         return {
           success: false,
           error: 'PORT_CONFLICT',
@@ -131,15 +171,18 @@ class ProcessManager {
           suggestion: `Stop the existing server or check 'lsof -i :${config.port}'`
         };
       }
-
-      // Create logger
-      const logger = new ServerLogger(project);
+      logger.info('SERVER_MGMT', 'Port is available', { project, port: config.port });
 
       // Spawn the process (either directly or via Docker host execution)
-      const serverProcess = await this.spawnServerProcess(project, config);
+      logger.info('SERVER_MGMT', 'Spawning server process', { project, config });
+      const serverProcess = await this.spawnServerProcess(project, config, logger);
 
-      // Set up logging
-      logger.pipe(serverProcess);
+      // Set up enhanced logging with process monitoring
+      logger.info('SERVER_MGMT', 'Setting up process monitoring', { 
+        project, 
+        pid: serverProcess.pid 
+      });
+      const processId = logger.pipe(serverProcess);
 
       // Store server info
       const serverInfo = {
@@ -150,33 +193,75 @@ class ProcessManager {
         command: ['npm', 'run', 'dev'],
         cwd: path.join(this.workspaceRoot, project),
         logger: logger,
-        process: serverProcess
+        process: serverProcess,
+        processId: processId,
+        operationId: operationId
       };
 
       this.servers.set(project, serverInfo);
+      logger.info('SERVER_MGMT', 'Server info stored', { 
+        project, 
+        pid: serverProcess.pid, 
+        port: config.port,
+        processId 
+      });
 
       // Persist PID to file
+      logger.debug('SERVER_MGMT', 'Persisting PID to file', { project });
       await this.persistPids();
 
-      // Handle process events
+      // Handle process events with enhanced logging
       serverProcess.on('error', (error) => {
-        console.error(`${project} server error:`, error);
+        logger.error('PROCESS_EVENT', 'Server process error', {
+          project,
+          pid: serverProcess.pid,
+          processId,
+          error: error.message,
+          stack: error.stack,
+          code: error.code,
+          errno: error.errno,
+          syscall: error.syscall
+        });
         serverInfo.status = 'error';
         serverInfo.error = error.message;
       });
 
       serverProcess.on('exit', (code, signal) => {
-        console.log(`${project} server exited with code ${code}, signal ${signal}`);
+        logger.info('PROCESS_EVENT', 'Server process exited', {
+          project,
+          pid: serverProcess.pid,
+          processId,
+          exitCode: code,
+          signal: signal,
+          expected: code === 0 || signal === 'SIGTERM',
+          uptime: Date.now() - new Date(serverInfo.startTime).getTime()
+        });
         serverInfo.status = 'stopped';
         serverInfo.exitCode = code;
         serverInfo.exitSignal = signal;
       });
 
       // Wait for server to be ready
+      logger.info('SERVER_MGMT', 'Waiting for server to be ready', { 
+        project, 
+        timeout: config.timeout || 5000 
+      });
       const readyResult = await this.waitForReady(project, config.timeout || 5000);
 
       if (readyResult.success) {
         serverInfo.status = 'running';
+        logger.info('SERVER_MGMT', 'Server started successfully', {
+          project,
+          pid: serverProcess.pid,
+          port: config.port,
+          startTime: serverInfo.startTime,
+          readyTime: Date.now() - new Date(serverInfo.startTime).getTime()
+        });
+        logger.endOperation(operationId, { 
+          success: true, 
+          pid: serverProcess.pid, 
+          port: config.port 
+        });
         return {
           success: true,
           project: project,
@@ -184,34 +269,60 @@ class ProcessManager {
           port: config.port,
           status: 'running',
           message: `${project} server started successfully on port ${config.port}`,
-          startTime: serverInfo.startTime
+          startTime: serverInfo.startTime,
+          logFile: logger.getLogFile()
         };
       } else {
         // Server failed to start properly
-        this.stopServer(project);
+        logger.error('SERVER_MGMT', 'Server failed to start properly', {
+          project,
+          readyResult,
+          logFile: logger.getLogFile()
+        });
+        logger.endOperation(operationId, { success: false, reason: 'start_failed', details: readyResult });
+        await this.stopServer(project);
         return {
           success: false,
           error: 'START_FAILED',
           message: `${project} server failed to start properly`,
           details: readyResult.error,
-          logFile: logger.getLogFile()
+          logFile: logger.getLogFile(),
+          errorLogFile: logger.getErrorLogFile()
         };
       }
 
     } catch (error) {
+      logger.error('SERVER_MGMT', 'Failed to spawn server', {
+        project,
+        error: error.message,
+        stack: error.stack
+      });
+      logger.endOperation(operationId, { success: false, reason: 'spawn_failed', error: error.message });
       return {
         success: false,
         error: 'SPAWN_FAILED',
         message: `Failed to spawn ${project} server`,
-        details: error.message
+        details: error.message,
+        logFile: logger.getLogFile(),
+        errorLogFile: logger.getErrorLogFile()
       };
     }
   }
 
   async stopServer(project) {
+    const serverInfo = this.servers.get(project);
+    const logger = serverInfo?.logger;
+    
+    // If no logger available, create a temporary one
+    const tempLogger = logger || new EnhancedLogger(project, { level: 'INFO' });
+    const operationId = tempLogger.startOperation('STOP_SERVER', { project });
+
     try {
-      const serverInfo = this.servers.get(project);
+      tempLogger.info('SERVER_MGMT', 'Stop server request', { project });
+
       if (!serverInfo) {
+        tempLogger.warn('SERVER_MGMT', 'No managed server found', { project });
+        tempLogger.endOperation(operationId, { success: false, reason: 'not_found' });
         return {
           success: false,
           error: 'SERVER_NOT_FOUND',
@@ -219,58 +330,175 @@ class ProcessManager {
         };
       }
 
-      // Process group kill - works for both Docker and host since we use detached: true
-      console.log(`[ProcessManager] Stopping ${project} process group`);
-      
-      const { pid, process: serverProcess } = serverInfo;
+      const { pid, process: serverProcess, processId, startTime } = serverInfo;
+      const uptime = Date.now() - new Date(startTime).getTime();
+
+      tempLogger.info('SERVER_MGMT', 'Found server to stop', { 
+        project, 
+        pid, 
+        processId, 
+        uptime: `${uptime}ms`,
+        status: serverInfo.status
+      });
 
       if (!this.isProcessRunning(pid)) {
+        tempLogger.info('SERVER_MGMT', 'Server already stopped', { project, pid });
         this.servers.delete(project);
+        tempLogger.endOperation(operationId, { success: true, reason: 'already_stopped' });
         return {
           success: true,
           message: `${project} server was already stopped`
         };
       }
 
+      // Process group kill - works for both Docker and host since we use detached: true
+      tempLogger.info('PROCESS_KILL', 'Starting graceful shutdown', { 
+        project, 
+        pid, 
+        processGroup: `-${pid}` 
+      });
+
       // Send SIGTERM to entire process group (negative PID)
       // This kills npm and all child processes (Vite, etc.)
-      console.log(`[ProcessManager] Sending SIGTERM to process group -${pid}`);
+      tempLogger.debug('PROCESS_KILL', 'Sending SIGTERM to process group', { 
+        project, 
+        pid, 
+        target: `-${pid}` 
+      });
+      
+      let sigtermSuccess = false;
       try {
         process.kill(-pid, 'SIGTERM');
+        sigtermSuccess = true;
+        tempLogger.info('PROCESS_KILL', 'SIGTERM sent to process group', { project, pid });
       } catch (error) {
-        console.log(`[ProcessManager] SIGTERM to group failed: ${error.message}`);
+        tempLogger.warn('PROCESS_KILL', 'SIGTERM to group failed, trying main process', { 
+          project, 
+          pid, 
+          error: error.message 
+        });
         // Fallback to killing just the main process
-        serverProcess.kill('SIGTERM');
+        try {
+          serverProcess.kill('SIGTERM');
+          sigtermSuccess = true;
+          tempLogger.info('PROCESS_KILL', 'SIGTERM sent to main process', { project, pid });
+        } catch (fallbackError) {
+          tempLogger.error('PROCESS_KILL', 'SIGTERM fallback also failed', { 
+            project, 
+            pid, 
+            error: fallbackError.message 
+          });
+        }
       }
 
       // Wait up to 3 seconds for graceful shutdown
-      await this.waitForProcessExit(pid, 3000);
+      tempLogger.debug('PROCESS_KILL', 'Waiting for graceful shutdown', { 
+        project, 
+        pid, 
+        timeout: 3000 
+      });
+      const gracefulExit = await this.waitForProcessExit(pid, 3000);
 
-      // Force kill entire process group if still running
-      if (this.isProcessRunning(pid)) {
-        console.log(`[ProcessManager] Sending SIGKILL to process group -${pid}`);
-        try {
-          process.kill(-pid, 'SIGKILL');
-        } catch (error) {
-          console.log(`[ProcessManager] SIGKILL to group failed: ${error.message}`);
-          // Fallback to killing just the main process
-          serverProcess.kill('SIGKILL');
+      if (gracefulExit) {
+        tempLogger.info('PROCESS_KILL', 'Graceful shutdown successful', { 
+          project, 
+          pid, 
+          sigtermSuccess 
+        });
+      } else {
+        // Force kill entire process group if still running
+        tempLogger.warn('PROCESS_KILL', 'Graceful shutdown failed, force killing', { 
+          project, 
+          pid 
+        });
+        
+        if (this.isProcessRunning(pid)) {
+          tempLogger.debug('PROCESS_KILL', 'Sending SIGKILL to process group', { 
+            project, 
+            pid, 
+            target: `-${pid}` 
+          });
+          
+          try {
+            process.kill(-pid, 'SIGKILL');
+            tempLogger.info('PROCESS_KILL', 'SIGKILL sent to process group', { project, pid });
+          } catch (error) {
+            tempLogger.warn('PROCESS_KILL', 'SIGKILL to group failed, trying main process', { 
+              project, 
+              pid, 
+              error: error.message 
+            });
+            // Fallback to killing just the main process
+            try {
+              serverProcess.kill('SIGKILL');
+              tempLogger.info('PROCESS_KILL', 'SIGKILL sent to main process', { project, pid });
+            } catch (fallbackError) {
+              tempLogger.error('PROCESS_KILL', 'SIGKILL fallback also failed', { 
+                project, 
+                pid, 
+                error: fallbackError.message 
+              });
+            }
+          }
+          await this.waitForProcessExit(pid, 1000);
         }
-        await this.waitForProcessExit(pid, 1000);
+      }
+
+      // Final check
+      const finallyRunning = this.isProcessRunning(pid);
+      if (finallyRunning) {
+        tempLogger.error('PROCESS_KILL', 'Failed to stop process completely', { 
+          project, 
+          pid, 
+          stillRunning: true 
+        });
+      } else {
+        tempLogger.info('PROCESS_KILL', 'Process stopped successfully', { 
+          project, 
+          pid, 
+          graceful: gracefulExit 
+        });
       }
 
       // Clean up
+      tempLogger.debug('SERVER_MGMT', 'Cleaning up server info', { project });
       this.servers.delete(project);
       
       // Update persisted PIDs
+      tempLogger.debug('SERVER_MGMT', 'Updating persisted PIDs', { project });
       await this.persistPids();
+
+      // Cleanup logger if it was the server's logger
+      if (logger) {
+        logger.cleanup();
+      }
+
+      tempLogger.info('SERVER_MGMT', 'Server stop completed', { 
+        project, 
+        pid, 
+        graceful: gracefulExit,
+        uptime: `${uptime}ms`
+      });
+      tempLogger.endOperation(operationId, { 
+        success: true, 
+        graceful: gracefulExit, 
+        uptime 
+      });
 
       return {
         success: true,
-        message: `${project} server stopped successfully`
+        message: `${project} server stopped successfully`,
+        graceful: gracefulExit,
+        uptime: uptime
       };
 
     } catch (error) {
+      tempLogger.error('SERVER_MGMT', 'Failed to stop server', {
+        project,
+        error: error.message,
+        stack: error.stack
+      });
+      tempLogger.endOperation(operationId, { success: false, error: error.message });
       return {
         success: false,
         error: 'STOP_FAILED',
@@ -574,35 +802,93 @@ class ProcessManager {
     });
   }
 
-  async spawnServerProcess(project, config) {
-    if (this.isRunningInDocker) {
-      // Running in Docker - execute npm commands directly in the mounted workspace
-      console.log(`[ProcessManager] Running in Docker, executing ${project} server in mounted workspace`);
-      
-      // Since workspace is mounted, we can run npm directly in the project directory
-      // Use detached: true to create a new process group for proper cleanup
-      return spawn('npm', ['run', 'dev'], {
-        cwd: `/workspace/${project}`,
-        stdio: 'pipe',
-        detached: true,
-        env: { 
+  async spawnServerProcess(project, config, logger) {
+    const spawnOperation = logger.startOperation('SPAWN_PROCESS', { project });
+    
+    try {
+      if (this.isRunningInDocker) {
+        // Running in Docker - execute npm commands directly in the mounted workspace
+        logger.info('SPAWN', 'Running in Docker environment', { 
+          project,
+          workspace: `/workspace/${project}`,
+          dockerContainer: process.env.DOCKER_CONTAINER
+        });
+        
+        const cwd = `/workspace/${project}`;
+        const env = { 
           ...process.env, 
           ...config.env,
           // Ensure npm can find node_modules
           PATH: `/workspace/${project}/node_modules/.bin:${process.env.PATH}`
-        }
+        };
+        
+        logger.debug('SPAWN', 'Docker spawn configuration', {
+          project,
+          command: ['npm', 'run', 'dev'],
+          cwd,
+          detached: true,
+          envOverrides: config.env
+        });
+        
+        // Use detached: true to create a new process group for proper cleanup
+        const childProcess = spawn('npm', ['run', 'dev'], {
+          cwd,
+          stdio: 'pipe',
+          detached: true,
+          env
+        });
+        
+        logger.info('SPAWN', 'Docker process spawned successfully', {
+          project,
+          pid: childProcess.pid,
+          cwd
+        });
+        
+        logger.endOperation(spawnOperation, { success: true, pid: childProcess.pid, environment: 'docker' });
+        return childProcess;
+        
+      } else {
+        // Running on host - execute directly
+        logger.info('SPAWN', 'Running on host environment', { project });
+        
+        const cwd = path.join(this.workspaceRoot, project);
+        const env = { ...process.env, ...config.env };
+        
+        logger.debug('SPAWN', 'Host spawn configuration', {
+          project,
+          command: ['npm', 'run', 'dev'],
+          cwd,
+          detached: true,
+          workspaceRoot: this.workspaceRoot,
+          envOverrides: config.env
+        });
+        
+        // Use detached: true to create a new process group for proper cleanup
+        const childProcess = spawn('npm', ['run', 'dev'], {
+          cwd,
+          stdio: 'pipe',
+          detached: true,
+          env
+        });
+        
+        logger.info('SPAWN', 'Host process spawned successfully', {
+          project,
+          pid: childProcess.pid,
+          cwd
+        });
+        
+        logger.endOperation(spawnOperation, { success: true, pid: childProcess.pid, environment: 'host' });
+        return childProcess;
+      }
+    } catch (error) {
+      logger.error('SPAWN', 'Failed to spawn process', {
+        project,
+        error: error.message,
+        stack: error.stack,
+        code: error.code
       });
-    } else {
-      // Running on host - execute directly
-      console.log(`[ProcessManager] Running on host, executing ${project} server directly`);
-      
-      // Use detached: true to create a new process group for proper cleanup
-      return spawn('npm', ['run', 'dev'], {
-        cwd: path.join(this.workspaceRoot, project),
-        stdio: 'pipe',
-        detached: true,
-        env: { ...process.env, ...config.env }
-      });
+      logger.endOperation(spawnOperation, { success: false, error: error.message });
+      throw error;
     }
   }
 

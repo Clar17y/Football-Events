@@ -30,22 +30,8 @@ router.post('/',
   })
 );
 
-// GET /api/v1/positions/:id - Get position by ID
-router.get('/:id', validateUUID(), asyncHandler(async (req, res) => {
-  const position = await positionService.getPositionById(req.params['id']!);
-  
-  if (!position) {
-    return res.status(404).json({
-      error: 'Position not found',
-      message: `Position with ID ${req.params['id']} does not exist`
-    });
-  }
-  
-  return res.json(position);
-}));
-
-// GET /api/v1/positions/code/:code - Get position by code
-router.get('/code/:code', asyncHandler(async (req, res) => {
+// GET /api/v1/positions/:code - Get position by code (primary route)
+router.get('/:code', asyncHandler(async (req, res) => {
   const position = await positionService.getPositionByCode(req.params['code']!);
   
   if (!position) {
@@ -58,16 +44,17 @@ router.get('/code/:code', asyncHandler(async (req, res) => {
   return res.json(position);
 }));
 
-// PUT /api/v1/positions/:id - Update position
-router.put('/:id',
+
+// PUT /api/v1/positions/:code - Update position
+router.put('/:code',
   validateRequest(positionUpdateSchema),
   asyncHandler(async (req, res) => {
-    const position = await positionService.updatePosition(req.params['id']!, req.body);
+    const position = await positionService.updatePosition(req.params['code']!, req.body);
     
     if (!position) {
       return res.status(404).json({
         error: 'Position not found',
-        message: `Position with ID ${req.params['id']} does not exist`
+        message: `Position with code ${req.params['code']} does not exist`
       });
     }
     
@@ -75,14 +62,14 @@ router.put('/:id',
   })
 );
 
-// DELETE /api/v1/positions/:id - Delete position
-router.delete('/:id', validateUUID(), asyncHandler(async (req, res) => {
-  const success = await positionService.deletePosition(req.params['id']!);
+// DELETE /api/v1/positions/:code - Delete position
+router.delete('/:code', asyncHandler(async (req, res) => {
+  const success = await positionService.deletePosition(req.params['code']!);
   
   if (!success) {
     return res.status(404).json({
       error: 'Position not found',
-      message: `Position with ID ${req.params['id']} does not exist`
+      message: `Position with code ${req.params['code']} does not exist`
     });
   }
   

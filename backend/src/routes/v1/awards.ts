@@ -4,6 +4,7 @@ import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
 import { awardCreateSchema, awardUpdateSchema, matchAwardCreateSchema, matchAwardUpdateSchema } from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { extractApiError } from '../../utils/prismaErrorHandler';
 
 const router = Router();
 const awardsService = new AwardsService();
@@ -14,8 +15,21 @@ const awardsService = new AwardsService();
 router.post('/match-awards',
   validateRequest(matchAwardCreateSchema),
   asyncHandler(async (req, res) => {
-    const matchAward = await awardsService.createMatchAward(req.body);
-    return res.status(201).json(matchAward);
+    try {
+      const matchAward = await awardsService.createMatchAward(req.body);
+      return res.status(201).json(matchAward);
+    } catch (error: any) {
+      const apiError = extractApiError(error);
+      if (apiError) {
+        return res.status(apiError.statusCode).json({
+          error: apiError.error,
+          message: apiError.message,
+          field: apiError.field,
+          constraint: apiError.constraint
+        });
+      }
+      throw error; // Re-throw if not a handled API error
+    }
   })
 );
 
@@ -106,8 +120,21 @@ router.get('/', asyncHandler(async (req, res) => {
 router.post('/', 
   validateRequest(awardCreateSchema),
   asyncHandler(async (req, res) => {
-    const award = await awardsService.createAward(req.body);
-    return res.status(201).json(award);
+    try {
+      const award = await awardsService.createAward(req.body);
+      return res.status(201).json(award);
+    } catch (error: any) {
+      const apiError = extractApiError(error);
+      if (apiError) {
+        return res.status(apiError.statusCode).json({
+          error: apiError.error,
+          message: apiError.message,
+          field: apiError.field,
+          constraint: apiError.constraint
+        });
+      }
+      throw error; // Re-throw if not a handled API error
+    }
   })
 );
 

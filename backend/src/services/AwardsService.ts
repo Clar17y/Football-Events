@@ -17,6 +17,7 @@ import type {
   MatchAwardCreateRequest,
   MatchAwardUpdateRequest
 } from '@shared/types';
+import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 
 export interface GetAwardsOptions {
   page: number;
@@ -133,12 +134,14 @@ export class AwardsService {
   }
 
   async createAward(data: AwardCreateRequest): Promise<Award> {
-    const prismaInput = transformAwardCreateRequest(data);
-    const award = await this.prisma.awards.create({
-      data: prismaInput
-    });
+    return withPrismaErrorHandling(async () => {
+      const prismaInput = transformAwardCreateRequest(data);
+      const award = await this.prisma.awards.create({
+        data: prismaInput
+      });
 
-    return transformAward(award);
+      return transformAward(award);
+    }, 'Award');
   }
 
   async updateAward(id: string, data: AwardUpdateRequest): Promise<Award | null> {
@@ -243,12 +246,14 @@ export class AwardsService {
   }
 
   async createMatchAward(data: MatchAwardCreateRequest): Promise<MatchAward> {
-    const prismaInput = transformMatchAwardCreateRequest(data);
-    const matchAward = await this.prisma.match_awards.create({
-      data: prismaInput
-    });
+    return withPrismaErrorHandling(async () => {
+      const prismaInput = transformMatchAwardCreateRequest(data);
+      const matchAward = await this.prisma.match_awards.create({
+        data: prismaInput
+      });
 
-    return transformMatchAward(matchAward);
+      return transformMatchAward(matchAward);
+    }, 'MatchAward');
   }
 
   async updateMatchAward(id: string, data: MatchAwardUpdateRequest): Promise<MatchAward | null> {

@@ -4,6 +4,7 @@ import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
 import { matchCreateSchema, matchUpdateSchema } from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { extractApiError } from '../../utils/prismaErrorHandler';
 
 const router = Router();
 const matchService = new MatchService();
@@ -28,8 +29,21 @@ router.get('/', asyncHandler(async (req, res) => {
 router.post('/', 
   validateRequest(matchCreateSchema),
   asyncHandler(async (req, res) => {
-    const match = await matchService.createMatch(req.body);
-    return res.status(201).json(match);
+    try {
+      const match = await matchService.createMatch(req.body);
+      return res.status(201).json(match);
+    } catch (error: any) {
+      const apiError = extractApiError(error);
+      if (apiError) {
+        return res.status(apiError.statusCode).json({
+          error: apiError.error,
+          message: apiError.message,
+          field: apiError.field,
+          constraint: apiError.constraint
+        });
+      }
+      throw error; // Re-throw if not a handled API error
+    }
   })
 );
 

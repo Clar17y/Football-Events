@@ -10,6 +10,7 @@ import type {
   PlayerCreateRequest, 
   PlayerUpdateRequest 
 } from '@shared/types';
+import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 
 export interface GetPlayersOptions {
   page: number;
@@ -98,25 +99,29 @@ export class PlayerService {
   }
 
   async createPlayer(data: PlayerCreateRequest): Promise<Player> {
-    const prismaInput = transformPlayerCreateRequest(data);
-    const player = await this.prisma.player.create({
-      data: prismaInput
-    });
-
-    return transformPlayer(player);
-  }
-
-  async updatePlayer(id: string, data: PlayerUpdateRequest): Promise<Player | null> {
-    try {
-      const prismaInput = transformPlayerUpdateRequest(data);
-      const player = await this.prisma.player.update({
-        where: { id },
+    return withPrismaErrorHandling(async () => {
+      const prismaInput = transformPlayerCreateRequest(data);
+      const player = await this.prisma.player.create({
         data: prismaInput
       });
 
       return transformPlayer(player);
+    }, 'Player');
+  }
+
+  async updatePlayer(id: string, data: PlayerUpdateRequest): Promise<Player | null> {
+    try {
+      return await withPrismaErrorHandling(async () => {
+        const prismaInput = transformPlayerUpdateRequest(data);
+        const player = await this.prisma.player.update({
+          where: { id },
+          data: prismaInput
+        });
+
+        return transformPlayer(player);
+      }, 'Player');
     } catch (error: any) {
-      if (error.code === 'P2025') {
+      if (error.statusCode === 404) {
         return null; // Player not found
       }
       throw error;

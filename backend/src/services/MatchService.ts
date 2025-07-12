@@ -10,6 +10,7 @@ import type {
   MatchCreateRequest, 
   MatchUpdateRequest 
 } from '@shared/types';
+import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 
 export interface GetMatchesOptions {
   page: number;
@@ -122,12 +123,14 @@ export class MatchService {
   }
 
   async createMatch(data: MatchCreateRequest): Promise<Match> {
-    const prismaInput = transformMatchCreateRequest(data);
-    const match = await this.prisma.match.create({
-      data: prismaInput
-    });
+    return withPrismaErrorHandling(async () => {
+      const prismaInput = transformMatchCreateRequest(data);
+      const match = await this.prisma.match.create({
+        data: prismaInput
+      });
 
-    return transformMatch(match);
+      return transformMatch(match);
+    }, 'Match');
   }
 
   async updateMatch(id: string, data: MatchUpdateRequest): Promise<Match | null> {

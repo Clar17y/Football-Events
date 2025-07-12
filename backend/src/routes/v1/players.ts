@@ -4,6 +4,7 @@ import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
 import { playerCreateSchema, playerUpdateSchema } from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { extractApiError } from '../../utils/prismaErrorHandler';
 
 const router = Router();
 const playerService = new PlayerService();
@@ -27,8 +28,21 @@ router.get('/', asyncHandler(async (req, res) => {
 router.post('/', 
   validateRequest(playerCreateSchema),
   asyncHandler(async (req, res) => {
-    const player = await playerService.createPlayer(req.body);
-    res.status(201).json(player);
+    try {
+      const player = await playerService.createPlayer(req.body);
+      res.status(201).json(player);
+    } catch (error: any) {
+      const apiError = extractApiError(error);
+      if (apiError) {
+        return res.status(apiError.statusCode).json({
+          error: apiError.error,
+          message: apiError.message,
+          field: apiError.field,
+          constraint: apiError.constraint
+        });
+      }
+      throw error; // Re-throw if not a handled API error
+    }
   })
 );
 

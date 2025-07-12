@@ -10,6 +10,7 @@ import type {
   TeamCreateRequest, 
   TeamUpdateRequest 
 } from '@shared/types';
+import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 
 export interface GetTeamsOptions {
   page: number;
@@ -83,12 +84,14 @@ export class TeamService {
   }
 
   async createTeam(data: TeamCreateRequest): Promise<Team> {
-    const prismaInput = transformTeamCreateRequest(data);
-    const team = await this.prisma.team.create({
-      data: prismaInput
-    });
+    return withPrismaErrorHandling(async () => {
+      const prismaInput = transformTeamCreateRequest(data);
+      const team = await this.prisma.team.create({
+        data: prismaInput
+      });
 
-    return transformTeam(team);
+      return transformTeam(team);
+    }, 'Team');
   }
 
   async updateTeam(id: string, data: TeamUpdateRequest): Promise<Team | null> {

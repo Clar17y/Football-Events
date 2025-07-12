@@ -11,6 +11,7 @@ import type {
   LineupCreateRequest, 
   LineupUpdateRequest 
 } from '@shared/types';
+import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 
 export interface GetLineupsOptions {
   page: number;
@@ -138,12 +139,14 @@ export class LineupService {
   }
 
   async createLineup(data: LineupCreateRequest): Promise<Lineup> {
-    const prismaInput = transformLineupCreateRequest(data);
-    const lineup = await this.prisma.lineup.create({
-      data: prismaInput
-    });
+    return withPrismaErrorHandling(async () => {
+      const prismaInput = transformLineupCreateRequest(data);
+      const lineup = await this.prisma.lineup.create({
+        data: prismaInput
+      });
 
-    return transformLineup(lineup);
+      return transformLineup(lineup);
+    }, 'Lineup');
   }
 
   async updateLineup(matchId: string, playerId: string, startMinute: number, data: LineupUpdateRequest): Promise<Lineup | null> {

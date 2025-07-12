@@ -4,6 +4,7 @@ import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
 import { seasonCreateSchema, seasonUpdateSchema } from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { extractApiError } from '../../utils/prismaErrorHandler';
 
 const router = Router();
 const seasonService = new SeasonService();
@@ -25,8 +26,21 @@ router.get('/', asyncHandler(async (req, res) => {
 router.post('/', 
   validateRequest(seasonCreateSchema),
   asyncHandler(async (req, res) => {
-    const season = await seasonService.createSeason(req.body);
-    res.status(201).json(season);
+    try {
+      const season = await seasonService.createSeason(req.body);
+      res.status(201).json(season);
+    } catch (error: any) {
+      const apiError = extractApiError(error);
+      if (apiError) {
+        return res.status(apiError.statusCode).json({
+          error: apiError.error,
+          message: apiError.message,
+          field: apiError.field,
+          constraint: apiError.constraint
+        });
+      }
+      throw error; // Re-throw if not a handled API error
+    }
   })
 );
 

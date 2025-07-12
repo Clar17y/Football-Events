@@ -210,23 +210,63 @@ app.post('/getLogFile', async (req, res) => {
   }
 });
 
+// Enhanced logging endpoints
+app.post('/searchLogs', async (req, res) => {
+  try {
+    const result = await mcpFunctions.searchLogs(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+app.post('/getPerformanceMetrics', async (req, res) => {
+  try {
+    const result = await mcpFunctions.getPerformanceMetrics(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
+app.post('/getRecentLogs', async (req, res) => {
+  try {
+    const result = await mcpFunctions.getRecentLogs(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
+  }
+});
+
 // Enhanced status endpoint
 app.get('/status', (req, res) => {
   res.json({
     status: 'running',
-    version: '2.0.0',
+    version: '2.1.0',
     features: {
       originalExec: true,
       serverManagement: true,
       apiTesting: true,
-      logging: true
+      enhancedLogging: true,
+      operationTracking: true,
+      performanceMonitoring: true,
+      structuredLogs: true
     },
     endpoints: {
       exec: '/exec',
       logs: '/logs/*',
       serverManagement: ['/startDevServer', '/stopDevServer', '/getServerStatus', '/stopAllServers', '/listManagedServers'],
       apiTesting: ['/testApiEndpoint', '/checkPortStatus', '/testApiWorkflow', '/testCrudEndpoints'],
-      logging: ['/getServerLogs', '/listLogFiles', '/getLogFile']
+      enhancedLogging: ['/getServerLogs', '/listLogFiles', '/getLogFile', '/searchLogs', '/getPerformanceMetrics', '/getRecentLogs']
+    },
+    loggingFeatures: {
+      levels: ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'],
+      structured: true,
+      operationTracking: true,
+      performanceMetrics: true,
+      processMonitoring: true,
+      searchAndFilter: true,
+      multipleLogFiles: ['main', 'error', 'debug']
     }
   });
 });
@@ -245,11 +285,12 @@ process.on('SIGTERM', async () => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Enhanced MCP Server v2.0 listening on http://localhost:${PORT}`);
+  console.log(`🚀 Enhanced MCP Server v2.1 listening on http://localhost:${PORT}`);
   console.log(`📋 Original exec endpoint: /exec`);
   console.log(`🔧 Server management: /startDevServer, /stopDevServer, /getServerStatus`);
   console.log(`🧪 API testing: /testApiEndpoint, /testApiWorkflow`);
-  console.log(`📝 Logging: /getServerLogs, /listLogFiles`);
+  console.log(`📝 Enhanced logging: /getServerLogs, /searchLogs, /getPerformanceMetrics`);
   console.log(`📊 Status: /status`);
   console.log(`📁 Logs: /logs/*`);
+  console.log(`✨ New features: Operation tracking, structured logs, performance monitoring`);
 });
