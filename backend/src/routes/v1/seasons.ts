@@ -9,6 +9,31 @@ import { extractApiError } from '../../utils/prismaErrorHandler';
 const router = Router();
 const seasonService = new SeasonService();
 
+// GET /api/v1/seasons/current - Get current active season
+router.get('/current', asyncHandler(async (req, res) => {
+  try {
+    const currentSeason = await seasonService.getCurrentSeason();
+    
+    if (!currentSeason) {
+      return res.status(404).json({
+        error: 'No current season found',
+        message: 'No active season found for the current date'
+      });
+    }
+    
+    res.json({
+      success: true,
+      season: currentSeason
+    });
+  } catch (error) {
+    console.error('Error fetching current season:', error);
+    res.status(500).json({
+      error: 'Failed to fetch current season',
+      message: 'Unable to retrieve current season information'
+    });
+  }
+}));
+
 // GET /api/v1/seasons - List seasons with pagination and filtering
 router.get('/', asyncHandler(async (req, res) => {
   const { page = 1, limit = 25, search } = req.query;

@@ -53,14 +53,43 @@ export const playerCreateSchema = z.object({
 export const playerUpdateSchema = playerCreateSchema.partial();
 
 // Season validation schemas
-export const seasonCreateSchema = z.object({
+const seasonBaseSchema = z.object({
   label: z.string()
     .min(1, 'Season label is required')
     .max(50, 'Season label must be less than 50 characters')
-    .trim()
+    .trim(),
+  startDate: z.string()
+    .datetime('Start date must be a valid ISO date'),
+  endDate: z.string()
+    .datetime('End date must be a valid ISO date'),
+  isCurrent: z.boolean()
+    .optional()
+    .default(false),
+  description: z.string()
+    .max(500, 'Description must be less than 500 characters')
+    .optional()
 });
 
-export const seasonUpdateSchema = seasonCreateSchema.partial();
+export const seasonCreateSchema = seasonBaseSchema.refine(
+  (data) => new Date(data.startDate) < new Date(data.endDate),
+  {
+    message: 'Start date must be before end date',
+    path: ['endDate']
+  }
+);
+
+export const seasonUpdateSchema = seasonBaseSchema.partial().refine(
+  (data) => {
+    if (data.startDate && data.endDate) {
+      return new Date(data.startDate) < new Date(data.endDate);
+    }
+    return true;
+  },
+  {
+    message: 'Start date must be before end date',
+    path: ['endDate']
+  }
+);
 
 // Position validation schemas
 export const positionCreateSchema = z.object({

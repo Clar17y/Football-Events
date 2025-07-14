@@ -122,8 +122,12 @@ export const transformEvent = (prismaEvent: PrismaEvent): Event => ({
 });
 
 export const transformSeason = (prismaSeason: PrismaSeason): Season => ({
-  id: prismaSeason.season_id,
+  seasonId: prismaSeason.season_id,
   label: prismaSeason.label,
+  startDate: prismaSeason.start_date ? prismaSeason.start_date.toISOString().split('T')[0] : undefined,
+  endDate: prismaSeason.end_date ? prismaSeason.end_date.toISOString().split('T')[0] : undefined,
+  isCurrent: prismaSeason.is_current ?? false,
+  description: prismaSeason.description ?? undefined,
   createdAt: prismaSeason.created_at,
   updatedAt: prismaSeason.updated_at ?? undefined,
 });
@@ -253,6 +257,10 @@ export const transformSeasonCreateRequest = (
   request: SeasonCreateRequest
 ): PrismaSeasonCreateInput => ({
   label: request.label,
+  start_date: new Date(request.startDate),
+  end_date: new Date(request.endDate),
+  is_current: request.isCurrent ?? false,
+  description: request.description ?? null,
 });
 
 export const transformSeasonUpdateRequest = (
@@ -260,6 +268,10 @@ export const transformSeasonUpdateRequest = (
 ): PrismaSeasonUpdateInput => {
   const update: PrismaSeasonUpdateInput = {};
   if (request.label !== undefined) update.label = request.label;
+  if (request.startDate !== undefined) update.start_date = new Date(request.startDate);
+  if (request.endDate !== undefined) update.end_date = new Date(request.endDate);
+  if (request.isCurrent !== undefined) update.is_current = request.isCurrent;
+  if (request.description !== undefined) update.description = request.description;
   return update;
 };
 

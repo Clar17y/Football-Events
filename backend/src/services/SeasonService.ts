@@ -83,6 +83,30 @@ export class SeasonService {
     return season ? transformSeason(season) : null;
   }
 
+  async getCurrentSeason(): Promise<Season | null> {
+    const currentDate = new Date();
+    
+    // First try to find a season explicitly marked as current
+    let currentSeason = await this.prisma.seasons.findFirst({
+      where: { is_current: true }
+    });
+    
+    // If no season is marked current, find by date range
+    if (!currentSeason) {
+      currentSeason = await this.prisma.seasons.findFirst({
+        where: {
+          AND: [
+            { start_date: { lte: currentDate } },
+            { end_date: { gte: currentDate } }
+          ]
+        },
+        orderBy: { start_date: 'desc' }
+      });
+    }
+    
+    return currentSeason ? transformSeason(currentSeason) : null;
+  }
+
   async createSeason(data: SeasonCreateRequest): Promise<Season> {
     return withPrismaErrorHandling(async () => {
       const prismaInput = transformSeasonCreateRequest(data);
