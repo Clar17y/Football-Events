@@ -7,6 +7,7 @@ import matchesRouter from './matches';
 import eventsRouter from './events';
 import lineupsRouter from './lineups';
 import awardsRouter from './awards';
+import statsRouter from './stats';
 // import authRouter from './auth';
 
 const v1Router = Router();
@@ -26,6 +27,7 @@ v1Router.get('/', (_req, res) => {
       events: '/api/v1/events',
       lineups: '/api/v1/lineups',
       awards: '/api/v1/awards',
+      stats: '/api/v1/stats',
       // auth: '/api/v1/auth'
     },
     documentation: 'https://api-docs.grassroots-football.com/v1' // TODO: Add actual docs URL
@@ -41,6 +43,7 @@ v1Router.use('/matches', matchesRouter);
 v1Router.use('/events', eventsRouter);
 v1Router.use('/lineups', lineupsRouter);
 v1Router.use('/awards', awardsRouter);
+v1Router.use('/stats', statsRouter);
 // v1Router.use('/auth', authRouter);
 
 export default v1Router;
