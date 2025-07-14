@@ -194,12 +194,16 @@ model positions {
 }
 
 model seasons {
-  season_id  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  label      String    @unique
-  created_at DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at DateTime? @db.Timestamptz(6)
-  awards     awards[]
-  matches    Match[]
+  season_id   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  label       String    @unique
+  start_date  DateTime  @db.Date
+  end_date    DateTime  @db.Date
+  is_current  Boolean   @default(false)
+  description String?
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @db.Timestamptz(6)
+  awards      awards[]
+  matches     Match[]
 
   @@schema("grassroots")
 }
