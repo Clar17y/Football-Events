@@ -1,0 +1,31 @@
+/* ===== THEME TOGGLE STYLES ===== */
+
+.theme-toggle {
+  --color: var(--grassroots-text-on-dark);
+  --background: transparent;
+  --background-hover: rgba(255, 255, 255, 0.1);
+  --background-activated: rgba(255, 255, 255, 0.2);
+  --border-radius: 8px;
+  --padding-start: 8px;
+  --padding-end: 8px;
+  margin: 0;
+}
+
+.theme-toggle-icon {
+  font-size: 1.25rem;
+  transition: transform 0.3s ease;
+}
+
+.theme-toggle:hover .theme-toggle-icon {
+  transform: scale(1.1);
+}
+
+/* Dark theme adjustments */
+.dark-theme .theme-toggle {
+  --color: var(--grassroots-text-on-dark);
+}
+
+/* Light theme adjustments */
+body:not(.dark-theme) .theme-toggle {
+  --color: var(--grassroots-text-on-dark);
+}

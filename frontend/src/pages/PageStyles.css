@@ -1,0 +1,71 @@
+/* ===== SHARED PAGE STYLES FOR THEME SUPPORT ===== */
+
+/* Apply theme-aware styles to all pages */
+ion-content {
+  --background: var(--grassroots-background);
+  --color: var(--grassroots-text-primary);
+}
+
+ion-card {
+  --background: var(--grassroots-surface);
+  --color: var(--grassroots-text-primary);
+  box-shadow: var(--grassroots-shadow-md);
+  border: 1px solid var(--grassroots-surface-variant);
+}
+
+ion-card-header {
+  --color: var(--grassroots-text-primary);
+}
+
+ion-card-title {
+  color: var(--grassroots-text-primary) !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+ion-card-content {
+  color: var(--grassroots-text-secondary) !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Page content styling */
+.page-content {
+  color: var(--grassroots-text-secondary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.page-title {
+  color: var(--grassroots-text-primary) !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.page-subtitle {
+  color: var(--grassroots-text-secondary) !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* List styling */
+ul {
+  color: var(--grassroots-text-secondary);
+}
+
+li {
+  color: var(--grassroots-text-secondary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Icon styling */
+.page-icon {
+  color: var(--grassroots-text-tertiary);
+}
+
+/* Fab button theming */
+ion-fab-button {
+  --background: var(--grassroots-accent);
+  --background-activated: var(--grassroots-interactive-pressed);
+  --background-hover: var(--grassroots-interactive-hover);
+  --color: var(--grassroots-text-on-accent);
+}

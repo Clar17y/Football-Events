@@ -1,0 +1,361 @@
+/* ===== MATCHMASTER HOME PAGE STYLES ===== */
+
+/* Import Google Fonts for better readability */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* Modern Sports App Color System - Inspired by DraftKings, FanDuel, ESPN */
+:root {
+  /* Primary Brand Colors - Deep Navy & Electric Blue */
+  --grassroots-primary: #1a202c;          /* Deep navy - professional, trustworthy */
+  --grassroots-primary-light: #2d3748;    /* Lighter navy for gradients */
+  --grassroots-accent: #3182ce;           /* Electric blue - action, energy */
+  --grassroots-accent-light: #4299e1;     /* Lighter blue for hover states */
+  
+  /* Success & Action Colors */
+  --grassroots-success: #38a169;          /* Green - wins, positive actions */
+  --grassroots-success-light: #48bb78;    /* Light green for backgrounds */
+  --grassroots-warning: #ed8936;          /* Orange - alerts, live events */
+  --grassroots-danger: #e53e3e;           /* Red - losses, critical actions */
+  
+  /* Surface & Background Colors */
+  --grassroots-surface: #ffffff;          /* Pure white backgrounds */
+  --grassroots-surface-elevated: #f7fafc; /* Slightly elevated surfaces */
+  --grassroots-surface-variant: #edf2f7;  /* Card backgrounds, dividers */
+  --grassroots-background: #f7fafc;       /* Main background */
+  
+  /* Text Colors - High Contrast */
+  --grassroots-text-primary: #1a202c;     /* Primary text - dark navy */
+  --grassroots-text-secondary: #4a5568;   /* Secondary text - readable gray */
+  --grassroots-text-tertiary: #718096;    /* Tertiary text - subtle gray */
+  --grassroots-text-on-dark: #ffffff;     /* White text on dark backgrounds */
+  --grassroots-text-on-accent: #ffffff;   /* White text on accent colors */
+  
+  /* Interactive Colors */
+  --grassroots-interactive: #3182ce;      /* Links, buttons */
+  --grassroots-interactive-hover: #2c5282; /* Hover states */
+  --grassroots-interactive-pressed: #2a4365; /* Pressed states */
+  
+  /* Shadows & Effects */
+  --grassroots-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --grassroots-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --grassroots-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --grassroots-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
+  
+  /* Border Radius */
+  --grassroots-radius-sm: 8px;
+  --grassroots-radius-md: 12px;
+  --grassroots-radius-lg: 16px;
+  --grassroots-radius-xl: 24px;
+  
+  /* Spacing System */
+  --grassroots-space-xs: 4px;
+  --grassroots-space-sm: 8px;
+  --grassroots-space-md: 16px;
+  --grassroots-space-lg: 24px;
+  --grassroots-space-xl: 32px;
+  --grassroots-space-2xl: 48px;
+}
+
+/* ===== HEADER STYLES ===== */
+.home-toolbar {
+  --background: linear-gradient(135deg, var(--grassroots-primary) 0%, var(--grassroots-primary-light) 100%);
+  --color: var(--grassroots-text-on-dark);
+  --border-width: 0;
+  box-shadow: var(--grassroots-shadow-lg);
+}
+
+.home-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: -0.025em;
+}
+
+.title-container {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-spacing-sm);
+}
+
+.title-icon {
+  font-size: 1.5rem;
+  color: var(--grassroots-text-on-dark);
+}
+
+/* ===== CONTENT CONTAINER ===== */
+.home-content {
+  --background: var(--grassroots-background);
+}
+
+/* ===== HERO SECTION ===== */
+.hero-section {
+  padding: var(--grassroots-space-xl) var(--grassroots-space-md);
+  text-align: center;
+  background: linear-gradient(135deg, var(--grassroots-surface) 0%, var(--grassroots-surface-elevated) 100%);
+  margin-bottom: var(--grassroots-space-lg);
+}
+
+.hero-content {
+  margin-bottom: var(--grassroots-space-lg);
+}
+
+.hero-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--grassroots-text-primary);
+  margin: 0 0 var(--grassroots-space-sm) 0;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+.hero-subtitle {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1.1rem;
+  color: var(--grassroots-text-secondary);
+  margin: 0;
+  line-height: 1.5;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  gap: var(--grassroots-space-sm);
+  flex-wrap: wrap;
+}
+
+.stat-chip {
+  --background: var(--grassroots-surface);
+  --color: var(--grassroots-text-primary);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--grassroots-surface-variant);
+  box-shadow: var(--grassroots-shadow-md);
+}
+
+.stat-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+/* ===== NAVIGATION SECTION ===== */
+.navigation-section {
+  padding: 0 var(--grassroots-space-md) var(--grassroots-space-xl);
+}
+
+.section-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--grassroots-text-primary);
+  margin: 0 0 var(--grassroots-space-lg) 0;
+  text-align: center;
+  letter-spacing: -0.025em;
+}
+
+.navigation-grid {
+  padding: 0;
+}
+
+/* ===== NAVIGATION CARDS ===== */
+.nav-card {
+  margin: var(--grassroots-space-sm);
+  border-radius: var(--grassroots-radius-lg);
+  box-shadow: var(--grassroots-shadow-md);
+  border: 1px solid var(--grassroots-surface-variant);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  position: relative;
+  background: var(--grassroots-surface);
+}
+
+.nav-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.nav-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--grassroots-shadow-xl);
+}
+
+.nav-card:hover::before {
+  opacity: 1;
+}
+
+.nav-card-primary::before { background: linear-gradient(90deg, var(--grassroots-accent), var(--grassroots-accent-light)); }
+.nav-card-secondary::before { background: linear-gradient(90deg, var(--grassroots-success), var(--grassroots-success-light)); }
+.nav-card-tertiary::before { background: linear-gradient(90deg, var(--grassroots-interactive), var(--grassroots-interactive-hover)); }
+.nav-card-success::before { background: linear-gradient(90deg, var(--grassroots-success), var(--grassroots-success-light)); }
+.nav-card-warning::before { background: linear-gradient(90deg, var(--grassroots-warning), #f6ad55); }
+.nav-card-medium::before { background: linear-gradient(90deg, var(--grassroots-text-secondary), var(--grassroots-text-tertiary)); }
+
+.nav-card-content {
+  padding: var(--grassroots-space-lg);
+}
+
+.nav-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--grassroots-space-md);
+  margin-bottom: var(--grassroots-space-md);
+}
+
+.nav-card-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.nav-card-text {
+  flex: 1;
+}
+
+.nav-card-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--grassroots-text-primary);
+  margin: 0 0 var(--grassroots-space-xs) 0;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+.nav-card-subtitle {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.9rem;
+  color: var(--grassroots-text-secondary);
+  margin: 0;
+  line-height: 1.3;
+  font-weight: 500;
+}
+
+.nav-card-description {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.9rem;
+  color: var(--grassroots-text-secondary);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.coming-soon-chip {
+  margin-top: var(--grassroots-space-sm);
+  --background: var(--grassroots-surface-variant);
+  --color: var(--grassroots-text-tertiary);
+}
+
+/* ===== ACTIVITY SECTION ===== */
+.activity-section {
+  padding: 0 var(--grassroots-space-md) var(--grassroots-space-xl);
+}
+
+.activity-card {
+  margin: var(--grassroots-space-sm);
+  border-radius: var(--grassroots-radius-lg);
+  box-shadow: var(--grassroots-shadow-md);
+  border: 1px solid var(--grassroots-surface-variant);
+  background: var(--grassroots-surface);
+}
+
+.activity-placeholder {
+  text-align: center;
+  padding: var(--grassroots-space-xl);
+}
+
+.activity-icon {
+  font-size: 3rem;
+  color: var(--grassroots-text-tertiary);
+  margin-bottom: var(--grassroots-space-md);
+}
+
+.activity-placeholder h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--grassroots-text-primary);
+  margin: 0 0 var(--grassroots-space-sm) 0;
+}
+
+.activity-placeholder p {
+  color: var(--grassroots-text-secondary);
+  margin: 0 0 var(--grassroots-space-lg) 0;
+  line-height: 1.5;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+@media (max-width: 768px) {
+  .hero-title {
+    font-size: 1.75rem;
+  }
+  
+  .hero-subtitle {
+    font-size: 1rem;
+  }
+  
+  .nav-card-content {
+    padding: var(--grassroots-space-md);
+  }
+  
+  .nav-card-header {
+    gap: var(--grassroots-space-sm);
+  }
+  
+  .nav-card-icon {
+    font-size: 1.75rem;
+  }
+  
+  .nav-card-title {
+    font-size: 1.1rem;
+  }
+}
+
+/* ===== ACCESSIBILITY & INTERACTIONS ===== */
+.nav-card:focus-visible {
+  outline: 2px solid var(--ion-color-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-card {
+    transition: none;
+  }
+  
+  .nav-card:hover {
+    transform: none;
+  }
+}
+
+/* ===== DARK MODE SUPPORT ===== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --grassroots-surface: #1e293b;
+    --grassroots-surface-variant: #334155;
+    --grassroots-on-surface: #f1f5f9;
+    --grassroots-on-surface-variant: #cbd5e1;
+    --grassroots-shadow: rgba(0, 0, 0, 0.3);
+    --grassroots-shadow-elevated: rgba(0, 0, 0, 0.4);
+  }
+  
+  .home-content {
+    --background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  }
+  
+  .hero-section {
+    background: linear-gradient(135deg, var(--grassroots-surface) 0%, var(--grassroots-surface-variant) 100%);
+  }
+}

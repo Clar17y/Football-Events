@@ -1,10 +1,11 @@
-import React, { createContext, useState, useCallback, useContext } from 'react';
+import React, { createContext, useState, useCallback, useContext, useEffect } from 'react';
 import type { MatchClock, MatchContextState, MatchContextActions, MatchSettings } from '../types/match';
 import type { MatchEvent } from '../types/events';
 import type { Team } from '../types/index';
 import type { Match } from '../types/match';
 import { db } from '../db/indexedDB';
 import { validateOrThrow, MatchEventSchema } from '../schemas/validation';
+import { realTimeService } from '../services/realTimeService';
 
 /**
  * Combined match context type
@@ -42,7 +43,7 @@ const defaultContextValue: MatchContextType = {
   resetClock: () => {},
   startPeriod: () => {},
   endPeriod: () => {},
-  addEvent: async () => {},
+  addEvent: async () => { return {} as MatchEvent; },
   updateEvent: async () => {},
   deleteEvent: async () => {},
   loadMatch: async () => {},
@@ -66,7 +67,7 @@ export const useMatchContext = (): MatchContextType => {
 };
 
 /**
- * Match provider component with comprehensive match management
+ * Match provider component with comprehensive match management and real-time first architecture
  */
 export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // State management
@@ -74,6 +75,54 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [settings, setSettings] = useState(defaultContextValue.settings);
+  const [isConnected, setIsConnected] = useState(false);
+
+  // Setup real-time event listeners
+  useEffect(() => {
+    // Subscribe to live events from other clients
+    const unsubscribeEvents = realTimeService.onEvent((event: MatchEvent) => {
+      console.log('Real-time: Received live event from another client:', event);
+      
+      // Update local state immediately
+      setEvents(prev => {
+        // Check if event already exists (avoid duplicates)
+        const exists = prev.some(e => e.id === event.id);
+        if (exists) {
+          return prev;
+        }
+        
+        // Add new event and sort by timestamp
+        return [...prev, event].sort((a, b) => a.created - b.created);
+      });
+    });
+
+    // Subscribe to connection status changes
+    const unsubscribeConnection = realTimeService.onConnectionChange((connected: boolean) => {
+      setIsConnected(connected);
+      console.log(`Real-time connection: ${connected ? 'connected' : 'disconnected'}`);
+    });
+
+    // Cleanup subscriptions
+    return () => {
+      unsubscribeEvents();
+      unsubscribeConnection();
+    };
+  }, []);
+
+  // Join/leave match rooms when current match changes
+  useEffect(() => {
+    if (currentMatch) {
+      realTimeService.joinMatch(currentMatch.id);
+      console.log(`Joined real-time match room: ${currentMatch.id}`);
+    } else {
+      realTimeService.leaveMatch();
+    }
+
+    // Cleanup on unmount
+    return () => {
+      realTimeService.leaveMatch();
+    };
+  }, [currentMatch]);
 
   // Clock management actions
   const startClock = useCallback(() => {
@@ -98,83 +147,103 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!prevClock.running || !prevClock.start_ts) return prevClock;
       
       const now = Date.now();
+      const elapsed = now - prevClock.start_ts;
+      
       return {
         ...prevClock,
         running: false,
         start_ts: null,
-        offset_ms: prevClock.offset_ms + (now - prevClock.start_ts)
+        offset_ms: prevClock.offset_ms + elapsed
       };
     });
   }, []);
 
   const resetClock = useCallback(() => {
-    setClock({
-      running: false,
-      start_ts: null,
-      offset_ms: 0,
-      current_period: 1,
-      period_starts: {}
-    });
-    setEvents([]);
+    setClock(defaultContextValue.clock);
   }, []);
 
   const startPeriod = useCallback((period: number) => {
     setClock(prevClock => ({
       ...prevClock,
       current_period: period,
-      running: false,
-      start_ts: null,
-      offset_ms: 0
+      offset_ms: 0,
+      period_starts: {
+        ...prevClock.period_starts,
+        [period]: Date.now()
+      }
     }));
   }, []);
 
   const endPeriod = useCallback(() => {
-    pauseClock();
-    // Additional period end logic can be added here
-  }, [pauseClock]);
+    setClock(prevClock => ({
+      ...prevClock,
+      running: false,
+      start_ts: null
+    }));
+  }, []);
 
-  // Event management actions
+  // Real-time first event management
   const addEvent = useCallback(async (eventData: Omit<MatchEvent, 'id' | 'created'>) => {
     try {
-      // Validate event data
-      const eventWithDefaults = {
-        ...eventData,
-        id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        created: Date.now()
+      // Create complete event with ID and timestamp
+      const event: MatchEvent = {
+        id: crypto.randomUUID(),
+        created: Date.now(),
+        kind: eventData.kind,
+        match_id: eventData.match_id,
+        season_id: eventData.season_id,
+        team_id: eventData.team_id,
+        player_id: eventData.player_id,
+        period_number: eventData.period_number,
+        clock_ms: eventData.clock_ms,
+        sentiment: eventData.sentiment || 0,
+        notes: eventData.notes,
+        metadata: eventData.metadata,
+        coordinates: eventData.coordinates
       };
 
-      validateOrThrow(MatchEventSchema, eventWithDefaults, 'MatchEvent');
-
-      // Add to database
-      const result = await db.addEvent({
-        ...eventData,
-        created: Date.now()
-      });
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to save event');
+      // REAL-TIME FIRST APPROACH: Try real-time first, fallback to outbox
+      const result = await realTimeService.publishEvent(event);
+      
+      if (result.success) {
+        // Update local state immediately for instant UI feedback
+        setEvents(prev => [...prev, event].sort((a, b) => a.created - b.created));
+        
+        if (result.method === 'realtime') {
+          console.log('Event sent real-time:', event.id);
+        } else {
+          console.log('Event queued in outbox (will sync when connected):', event.id);
+        }
+      } else {
+        throw new Error('Failed to publish event via real-time or outbox');
       }
 
-      // Update local state
-      setEvents(prevEvents => [eventWithDefaults, ...prevEvents]);
-      
-      console.log('Event added successfully:', eventWithDefaults);
+      return event;
     } catch (error) {
       console.error('Failed to add event:', error);
-      throw error; // Re-throw to allow UI to handle the error
+      throw error;
     }
   }, []);
 
   const updateEvent = useCallback(async (id: string, updates: Partial<MatchEvent>) => {
     try {
-      // Update local state optimistically
-      setEvents(prevEvents => 
-        prevEvents.map(event => 
-          event.id === id ? { ...event, ...updates } : event
-        )
-      );
+      // Update local state
+      setEvents(prev => prev.map(event => 
+        event.id === id ? { ...event, ...updates } : event
+      ));
 
-      // TODO: Update in database when update functionality is implemented
-      console.log('Event updated:', { id, updates });
+      // Store update in IndexedDB for persistence
+      const result = await db.addEnhancedEvent({
+        id,
+        ...updates,
+        updated_at: Date.now()
+      } as any);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update event');
+      }
+
+      console.log('Event updated:', id);
     } catch (error) {
       console.error('Failed to update event:', error);
       throw error;
@@ -184,9 +253,14 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const deleteEvent = useCallback(async (id: string) => {
     try {
       // Remove from local state
-      setEvents(prevEvents => prevEvents.filter(event => event.id !== id));
+      setEvents(prev => prev.filter(event => event.id !== id));
 
-      // TODO: Remove from database when delete functionality is implemented
+      // Delete from IndexedDB
+      const result = await db.deleteEnhancedEvent(id);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to delete event');
+      }
+
       console.log('Event deleted:', id);
     } catch (error) {
       console.error('Failed to delete event:', error);
@@ -194,26 +268,33 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  // Match management actions
   const loadMatch = useCallback(async (match: Match) => {
     try {
       setCurrentMatch(match);
-      setClock(match.clock);
-      setSettings(match.settings);
+      setClock(match.clock || defaultContextValue.clock);
+      setSettings(match.settings || defaultContextValue.settings);
 
-      // Load events for this match
-      const eventsResult = await db.getMatchEvents(match.id);
-      if (eventsResult.success && eventsResult.data) {
-        // Convert outbox events to match events for display
-        const matchEvents: MatchEvent[] = eventsResult.data.map(outboxEvent => ({
-          id: outboxEvent.id?.toString() || '',
-          ...(outboxEvent.payload || outboxEvent.data || {}),
-          metadata: {}
+      // Load events for this match from IndexedDB
+      const result = await db.getEnhancedMatchEvents(match.id);
+      if (result.success && result.data) {
+        const matchEvents: MatchEvent[] = result.data.map(event => ({
+          id: event.id,
+          kind: event.kind,
+          match_id: event.match_id,
+          season_id: match.season_id || event.match_id, // Use match season_id or fallback
+          team_id: event.team_id,
+          player_id: event.player_id,
+          period_number: event.period_number || 1,
+          clock_ms: event.clock_ms || 0,
+          sentiment: event.sentiment || 0,
+          notes: event.notes || '',
+          created: event.created_at
         }));
-        setEvents(matchEvents);
+        
+        setEvents(matchEvents.sort((a, b) => a.created - b.created));
       }
 
-      console.log('Match loaded:', match);
+      console.log('Match loaded:', match.id);
     } catch (error) {
       console.error('Failed to load match:', error);
       throw error;

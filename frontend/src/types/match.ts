@@ -53,7 +53,7 @@ export interface MatchContextActions {
   /** End the current period */
   endPeriod: () => void;
   /** Add an event to the match */
-  addEvent: (event: Omit<MatchEvent, 'id' | 'created'>) => Promise<void>;
+  addEvent: (event: Omit<MatchEvent, 'id' | 'created'>) => Promise<MatchEvent>;
   /** Update an existing event */
   updateEvent: (id: ID, updates: Partial<MatchEvent>) => Promise<void>;
   /** Delete an event */

@@ -1,0 +1,146 @@
+/* ===== GRASSROOTS SPORTS APP COLOR SYSTEM ===== */
+/* Inspired by top sports betting apps: DraftKings, FanDuel, ESPN */
+
+/* Import this file in main.tsx or index.css to use across the entire app */
+
+:root {
+  /* ===== PRIMARY BRAND COLORS ===== */
+  --grassroots-primary: #1a202c;          /* Deep navy - professional, trustworthy */
+  --grassroots-primary-light: #2d3748;    /* Lighter navy for gradients */
+  --grassroots-accent: #3182ce;           /* Electric blue - action, energy */
+  --grassroots-accent-light: #4299e1;     /* Lighter blue for hover states */
+  
+  /* ===== SUCCESS & ACTION COLORS ===== */
+  --grassroots-success: #10b981;          /* Vibrant emerald green - wins, positive actions */
+  --grassroots-success-light: #34d399;    /* Bright light green for backgrounds */
+  --grassroots-warning: #ed8936;          /* Orange - alerts, live events */
+  --grassroots-danger: #e53e3e;           /* Red - losses, critical actions */
+  
+  /* ===== SURFACE & BACKGROUND COLORS ===== */
+  --grassroots-surface: #ffffff;          /* Pure white backgrounds */
+  --grassroots-surface-elevated: #f7fafc; /* Slightly elevated surfaces */
+  --grassroots-surface-variant: #edf2f7;  /* Card backgrounds, dividers */
+  --grassroots-background: #f7fafc;       /* Main background */
+  
+  /* ===== TEXT COLORS - HIGH CONTRAST ===== */
+  --grassroots-text-primary: #1a202c;     /* Primary text - dark navy */
+  --grassroots-text-secondary: #4a5568;   /* Secondary text - readable gray */
+  --grassroots-text-tertiary: #718096;    /* Tertiary text - subtle gray */
+  --grassroots-text-on-dark: #ffffff;     /* White text on dark backgrounds */
+  --grassroots-text-on-accent: #ffffff;   /* White text on accent colors */
+  
+  /* ===== INTERACTIVE COLORS ===== */
+  --grassroots-interactive: #3182ce;      /* Links, buttons */
+  --grassroots-interactive-hover: #2c5282; /* Hover states */
+  --grassroots-interactive-pressed: #2a4365; /* Pressed states */
+  
+  /* ===== SHADOWS & EFFECTS ===== */
+  --grassroots-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --grassroots-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --grassroots-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --grassroots-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
+  
+  /* ===== BORDER RADIUS ===== */
+  --grassroots-radius-sm: 8px;
+  --grassroots-radius-md: 12px;
+  --grassroots-radius-lg: 16px;
+  --grassroots-radius-xl: 24px;
+  
+  /* ===== SPACING SYSTEM ===== */
+  --grassroots-space-xs: 4px;
+  --grassroots-space-sm: 8px;
+  --grassroots-space-md: 16px;
+  --grassroots-space-lg: 24px;
+  --grassroots-space-xl: 32px;
+  --grassroots-space-2xl: 48px;
+  
+  /* ===== IONIC COLOR OVERRIDES ===== */
+  /* Override Ionic's default colors with our sports app palette */
+  --ion-color-primary: var(--grassroots-accent);
+  --ion-color-primary-rgb: 49, 130, 206;
+  --ion-color-primary-contrast: var(--grassroots-text-on-accent);
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: var(--grassroots-interactive-hover);
+  --ion-color-primary-tint: var(--grassroots-accent-light);
+  
+  --ion-color-secondary: var(--grassroots-success);
+  --ion-color-secondary-rgb: 56, 161, 105;
+  --ion-color-secondary-contrast: var(--grassroots-text-on-accent);
+  --ion-color-secondary-contrast-rgb: 255, 255, 255;
+  --ion-color-secondary-shade: #2f855a;
+  --ion-color-secondary-tint: var(--grassroots-success-light);
+  
+  --ion-color-tertiary: var(--grassroots-interactive);
+  --ion-color-tertiary-rgb: 49, 130, 206;
+  --ion-color-tertiary-contrast: var(--grassroots-text-on-accent);
+  --ion-color-tertiary-contrast-rgb: 255, 255, 255;
+  --ion-color-tertiary-shade: var(--grassroots-interactive-hover);
+  --ion-color-tertiary-tint: var(--grassroots-accent-light);
+  
+  --ion-color-success: var(--grassroots-success);
+  --ion-color-success-rgb: 56, 161, 105;
+  --ion-color-success-contrast: var(--grassroots-text-on-accent);
+  --ion-color-success-contrast-rgb: 255, 255, 255;
+  --ion-color-success-shade: #2f855a;
+  --ion-color-success-tint: var(--grassroots-success-light);
+  
+  --ion-color-warning: var(--grassroots-warning);
+  --ion-color-warning-rgb: 237, 137, 54;
+  --ion-color-warning-contrast: var(--grassroots-text-on-accent);
+  --ion-color-warning-contrast-rgb: 255, 255, 255;
+  --ion-color-warning-shade: #d69e2e;
+  --ion-color-warning-tint: #f6ad55;
+  
+  --ion-color-danger: var(--grassroots-danger);
+  --ion-color-danger-rgb: 229, 62, 62;
+  --ion-color-danger-contrast: var(--grassroots-text-on-accent);
+  --ion-color-danger-contrast-rgb: 255, 255, 255;
+  --ion-color-danger-shade: #c53030;
+  --ion-color-danger-tint: #fc8181;
+  
+  --ion-color-medium: var(--grassroots-text-secondary);
+  --ion-color-medium-rgb: 74, 85, 104;
+  --ion-color-medium-contrast: var(--grassroots-text-on-accent);
+  --ion-color-medium-contrast-rgb: 255, 255, 255;
+  --ion-color-medium-shade: var(--grassroots-text-tertiary);
+  --ion-color-medium-tint: #a0aec0;
+}
+
+/* ===== DARK MODE SUPPORT ===== */
+/* Dark mode is opt-in via .dark-theme class for better pitch-side visibility */
+.dark-theme {
+  --grassroots-surface: #1a202c;
+  --grassroots-surface-elevated: #2d3748;
+  --grassroots-surface-variant: #4a5568;
+  --grassroots-background: #1a202c;
+  --grassroots-text-primary: #f7fafc;
+  --grassroots-text-secondary: #e2e8f0;
+  --grassroots-text-tertiary: #cbd5e1;
+  --grassroots-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --grassroots-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+  --grassroots-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.3);
+  --grassroots-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.4);
+}
+
+/* ===== UTILITY CLASSES ===== */
+.text-primary { color: var(--grassroots-text-primary); }
+.text-secondary { color: var(--grassroots-text-secondary); }
+.text-tertiary { color: var(--grassroots-text-tertiary); }
+.text-on-dark { color: var(--grassroots-text-on-dark); }
+.text-on-accent { color: var(--grassroots-text-on-accent); }
+
+.bg-surface { background-color: var(--grassroots-surface); }
+.bg-surface-elevated { background-color: var(--grassroots-surface-elevated); }
+.bg-surface-variant { background-color: var(--grassroots-surface-variant); }
+.bg-primary { background-color: var(--grassroots-primary); }
+.bg-accent { background-color: var(--grassroots-accent); }
+
+.shadow-sm { box-shadow: var(--grassroots-shadow-sm); }
+.shadow-md { box-shadow: var(--grassroots-shadow-md); }
+.shadow-lg { box-shadow: var(--grassroots-shadow-lg); }
+.shadow-xl { box-shadow: var(--grassroots-shadow-xl); }
+
+.rounded-sm { border-radius: var(--grassroots-radius-sm); }
+.rounded-md { border-radius: var(--grassroots-radius-md); }
+.rounded-lg { border-radius: var(--grassroots-radius-lg); }
+.rounded-xl { border-radius: var(--grassroots-radius-xl); }
