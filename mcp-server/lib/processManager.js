@@ -242,11 +242,12 @@ class ProcessManager {
       });
 
       // Wait for server to be ready
+      const effectiveTimeout = options.timeout || config.timeout || 30000;
       logger.info('SERVER_MGMT', 'Waiting for server to be ready', { 
         project, 
-        timeout: config.timeout || 5000 
+        timeout: effectiveTimeout 
       });
-      const readyResult = await this.waitForReady(project, config.timeout || 5000);
+      const readyResult = await this.waitForReady(project, effectiveTimeout);
 
       if (readyResult.success) {
         serverInfo.status = 'running';
@@ -653,14 +654,14 @@ class ProcessManager {
     const configs = {
       backend: {
         port: 3001,
-        timeout: 5000,
+        timeout: 30000,
         readyPattern: /Server running on port (\d+)/,
         healthPath: '/api/health',
         env: {}
       },
       frontend: {
         port: 5173,
-        timeout: 5000,
+        timeout: 30000,
         readyPattern: /Local:\s+http:\/\/localhost:(\d+)\//,
         healthPath: '/',
         env: {}
@@ -670,7 +671,7 @@ class ProcessManager {
     return configs[project] || null;
   }
 
-  async waitForReady(project, timeout = 5000) {
+  async waitForReady(project, timeout = 30000) {
     const config = this.getProjectConfig(project);
     const serverInfo = this.servers.get(project);
     

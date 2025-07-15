@@ -23,6 +23,30 @@ A powerful Model Context Protocol (MCP) server with advanced logging, server man
 
 ## 📋 API Endpoints
 
+### **Quick Reference**
+
+| Category | Endpoint | Method | Description |
+|----------|----------|---------|-------------|
+| **Core** | `/exec` | POST | Execute allowed commands |
+| **Core** | `/logs/:file` | GET | Get raw log file content |
+| **Core** | `/status` | GET | Server status and capabilities |
+| **Server Management** | `/startDevServer` | POST | Start development server |
+| **Server Management** | `/stopDevServer` | POST | Stop development server |
+| **Server Management** | `/getServerStatus` | POST | Get server status |
+| **Server Management** | `/stopAllServers` | POST | Stop all managed servers |
+| **Server Management** | `/listManagedServers` | POST | List all managed servers |
+| **Server Management** | `/forceKillPort` | POST | Force kill process on port |
+| **API Testing** | `/testApiEndpoint` | POST | Test single API endpoint |
+| **API Testing** | `/checkPortStatus` | POST | Check if port is available |
+| **API Testing** | `/testApiWorkflow` | POST | Test multiple endpoints |
+| **API Testing** | `/testCrudEndpoints` | POST | Test CRUD operations |
+| **Enhanced Logging** | `/getRecentLogs` | POST | Get recent log entries |
+| **Enhanced Logging** | `/searchLogs` | POST | Search logs with regex |
+| **Enhanced Logging** | `/getPerformanceMetrics` | POST | Get performance metrics |
+| **Enhanced Logging** | `/listLogFiles` | POST | List available log files |
+| **Enhanced Logging** | `/getLogFile` | POST | Get specific log file content |
+| **Enhanced Logging** | `/getServerLogs` | POST | Get server logs (legacy) |
+
 ### **Server Management**
 
 #### Start Development Server
@@ -33,10 +57,12 @@ Content-Type: application/json
 {
   "project": "backend|frontend",
   "options": {
-    "timeout": 10000
+    "timeout": 30000
   }
 }
 ```
+
+**Note:** The `timeout` option overrides the default project timeout. Default timeouts are 30 seconds for both backend and frontend projects.
 
 **Response:**
 ```json
@@ -94,6 +120,65 @@ Content-Type: application/json
   "uptime": 120,
   "health": "healthy",
   "logFile": "/usr/src/app/logs/backend-2025-07-10-07-35-59.log"
+}
+```
+
+#### Stop All Servers
+```http
+POST /stopAllServers
+Content-Type: application/json
+
+{}
+```
+
+**Response:**
+```json
+{
+  "stopped": ["backend", "frontend"],
+  "errors": []
+}
+```
+
+#### Force Kill Port
+```http
+POST /forceKillPort
+Content-Type: application/json
+
+{
+  "port": 3001
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "pid": "12345",
+  "message": "Killed process 12345 using port 3001"
+}
+```
+
+#### List Managed Servers
+```http
+POST /listManagedServers
+Content-Type: application/json
+
+{}
+```
+
+**Response:**
+```json
+{
+  "servers": {
+    "backend": {
+      "pid": 18,
+      "port": 3001,
+      "status": "running",
+      "startTime": "2025-07-14T13:20:50.824Z",
+      "running": true
+    }
+  },
+  "count": 1
 }
 ```
 
@@ -204,6 +289,53 @@ Content-Type: application/json
 }
 ```
 
+#### Get Log File
+```http
+POST /getLogFile
+Content-Type: application/json
+
+{
+  "filename": "backend-2025-07-14-12-34-32.log",
+  "level": "ERROR",
+  "search": "optional search term"
+}
+```
+
+**Response:**
+```json
+{
+  "filename": "backend-2025-07-14-12-34-32.log",
+  "path": "/usr/src/app/logs/backend-2025-07-14-12-34-32.log",
+  "content": "log file content...",
+  "size": 15735,
+  "created": "2025-07-14T12:34:32.732Z",
+  "modified": "2025-07-14T12:34:37.863Z",
+  "lines": 68,
+  "filtered": false
+}
+```
+
+#### Get Server Logs (Legacy)
+```http
+POST /getServerLogs
+Content-Type: application/json
+
+{
+  "project": "backend|frontend",
+  "lines": 50
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "project": "backend",
+  "logs": "log content...",
+  "lines": 50
+}
+```
+
 ### **API Testing**
 
 #### Test API Endpoint
@@ -230,6 +362,78 @@ Content-Type: application/json
   "responseTime": 45,
   "url": "http://localhost:3001/api/v1/teams",
   "method": "GET"
+}
+```
+
+#### Check Port Status
+```http
+POST /checkPortStatus
+Content-Type: application/json
+
+{
+  "port": 3001
+}
+```
+
+**Response:**
+```json
+{
+  "port": 3001,
+  "available": false,
+  "inUse": true
+}
+```
+
+#### Test API Workflow
+```http
+POST /testApiWorkflow
+Content-Type: application/json
+
+{
+  "baseUrl": "http://localhost:3001/api/v1",
+  "endpoints": ["teams", "players"],
+  "testData": { "optional": "test data" }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "results": [
+    {
+      "endpoint": "teams",
+      "tests": ["GET", "POST", "PUT", "DELETE"],
+      "passed": 4,
+      "failed": 0
+    }
+  ]
+}
+```
+
+#### Test CRUD Endpoints
+```http
+POST /testCrudEndpoints
+Content-Type: application/json
+
+{
+  "baseUrl": "http://localhost:3001/api/v1",
+  "entity": "teams",
+  "testData": { "name": "Test Team" }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "entity": "teams",
+  "operations": {
+    "create": { "success": true, "responseTime": 45 },
+    "read": { "success": true, "responseTime": 12 },
+    "update": { "success": true, "responseTime": 23 },
+    "delete": { "success": true, "responseTime": 18 }
+  }
 }
 ```
 
@@ -415,12 +619,20 @@ Only specific commands are allowed for security:
 - ✅ Graceful shutdown with timing
 - ✅ Enhanced error context
 - ✅ Docker environment detection
+- ✅ **NEW**: Configurable timeout support (default 30s for both projects)
+- ✅ **NEW**: Timeout parameter override in startDevServer options
 
 ### **Advanced Debugging**
 - ✅ Operation flow tracing
 - ✅ Performance bottleneck detection
 - ✅ Detailed error analysis
 - ✅ Real-time monitoring
+
+### **Complete API Coverage**
+- ✅ **NEW**: All endpoints documented with examples
+- ✅ **NEW**: Quick reference table for all 20+ endpoints
+- ✅ **NEW**: Comprehensive parameter documentation
+- ✅ **NEW**: Response format specifications
 
 ## 📞 Support
 
