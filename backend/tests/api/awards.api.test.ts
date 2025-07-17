@@ -11,16 +11,22 @@ import { PrismaClient } from '@prisma/client';
 import { app } from '../../src/app';
 import { randomUUID } from 'crypto';
 import { testForeignKeyConstraints, createForeignKeyTestConfigs } from './shared-validation-patterns';
+import { AuthTestHelper, TestUser } from './auth-helpers';
 
 describe('Awards API Integration', () => {
   let prisma: PrismaClient;
   let apiRequest: request.SuperTest<request.Test>;
+  let authHelper: AuthTestHelper;
+  let testUser: TestUser;
+  let adminUser: TestUser;
+  let otherUser: TestUser;
   let testData: {
     seasonId: string;
     teamId: string;
     playerId: string;
     awardIds: string[];
   };
+  let createdUserIds: string[] = [];
 
   beforeAll(async () => {
     prisma = new PrismaClient({
@@ -33,11 +39,40 @@ describe('Awards API Integration', () => {
     
     await prisma.$connect();
     apiRequest = request(app);
+    authHelper = new AuthTestHelper(app);
     
-    console.log('Awards API Tests: Database connected');
+    // Create test users
+    testUser = await authHelper.createTestUser('USER');
+    otherUser = await authHelper.createTestUser('USER');
+    adminUser = await authHelper.createAdminUser();
+    
+    // Track created users for cleanup
+    createdUserIds.push(testUser.id, otherUser.id, adminUser.id);
+    
+    console.log('Awards API Tests: Database connected and users created');
   });
 
   afterAll(async () => {
+    // Clean up test data in reverse dependency order
+    await prisma.awards.deleteMany({
+      where: { created_by_user_id: { in: createdUserIds } }
+    });
+    await prisma.match_awards.deleteMany({
+      where: { created_by_user_id: { in: createdUserIds } }
+    });
+    await prisma.player.deleteMany({
+      where: { created_by_user_id: { in: createdUserIds } }
+    });
+    await prisma.team.deleteMany({
+      where: { created_by_user_id: { in: createdUserIds } }
+    });
+    await prisma.seasons.deleteMany({
+      where: { created_by_user_id: { in: createdUserIds } }
+    });
+    await prisma.user.deleteMany({
+      where: { id: { in: createdUserIds } }
+    });
+    
     await prisma.$disconnect();
   });
 
@@ -57,7 +92,10 @@ describe('Awards API Integration', () => {
       await prisma.seasons.create({
         data: {
           season_id: testData.seasonId,
-          label: `Test Season ${Date.now()}`
+          label: `Test Season ${Date.now()}`,
+          start_date: new Date('2024-08-01'),
+          end_date: new Date('2025-05-31'),
+          created_by_user_id: testUser.id
         }
       });
       
@@ -66,7 +104,8 @@ describe('Awards API Integration', () => {
         data: {
           id: testData.teamId,
           name: `Test Team ${Date.now()}`,
-          home_kit_primary: '#FF0000'
+          home_kit_primary: '#FF0000',
+          created_by_user_id: testUser.id
         }
       });
       
@@ -75,7 +114,7 @@ describe('Awards API Integration', () => {
         data: {
           id: testData.playerId,
           name: `Test Player ${Date.now()}`,
-          current_team: testData.teamId
+          created_by_user_id: testUser.id
         }
       });
       
@@ -88,6 +127,12 @@ describe('Awards API Integration', () => {
   });
 
   afterEach(async () => {
+    // Skip cleanup for Authorization Tests - they have their own cleanup
+    const currentTest = expect.getState().currentTestName;
+    if (currentTest && currentTest.includes('Authorization Tests')) {
+      return;
+    }
+
     try {
       // Clean up in reverse dependency order
       
@@ -113,6 +158,9 @@ describe('Awards API Integration', () => {
         where: { season_id: testData.seasonId }
       });
       
+      // Reset the awardIds array for next test
+      testData.awardIds = [];
+      
       console.log('Awards test data cleaned up successfully');
       
     } catch (error) {
@@ -131,6 +179,7 @@ describe('Awards API Integration', () => {
       
       const response = await apiRequest
         .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
         .send(awardData)
         .expect(201);
       
@@ -157,6 +206,7 @@ describe('Awards API Integration', () => {
       
       const response = await apiRequest
         .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
         .send(awardData)
         .expect(201);
       
@@ -180,6 +230,7 @@ describe('Awards API Integration', () => {
       
       const response = await apiRequest
         .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
         .send(invalidAwardData)
         .expect(400);
       
@@ -190,7 +241,7 @@ describe('Awards API Integration', () => {
     // ENABLED: Using shared validation patterns for consistency
     it('should validate foreign key constraints', async () => {
       const config = createForeignKeyTestConfigs.awards();
-      await testForeignKeyConstraints(apiRequest, config);
+      await testForeignKeyConstraints(apiRequest, config, testUser.accessToken);
     });
 
     it('should create different award categories', async () => {
@@ -212,6 +263,7 @@ describe('Awards API Integration', () => {
         
         const response = await apiRequest
           .post('/api/v1/awards')
+          .set(authHelper.getAuthHeader(testUser))
           .send(awardData)
           .expect(201);
         
@@ -227,6 +279,7 @@ describe('Awards API Integration', () => {
     it('should return paginated awards', async () => {
       const response = await apiRequest
         .get('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
         .expect(200);
       
       expect(response.body).toMatchObject({
@@ -254,6 +307,7 @@ describe('Awards API Integration', () => {
       
       const createResponse = await apiRequest
         .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
         .send(awardData)
         .expect(201);
       
@@ -262,6 +316,7 @@ describe('Awards API Integration', () => {
       // Filter awards by season
       const response = await apiRequest
         .get(`/api/v1/awards?seasonId=${testData.seasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(200);
       
       // Should find our award
@@ -281,6 +336,7 @@ describe('Awards API Integration', () => {
       
       const createResponse = await apiRequest
         .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
         .send(awardData)
         .expect(201);
       
@@ -289,6 +345,7 @@ describe('Awards API Integration', () => {
       // Filter awards by player
       const response = await apiRequest
         .get(`/api/v1/awards?playerId=${testData.playerId}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(200);
       
       // Should find our award
@@ -308,6 +365,7 @@ describe('Awards API Integration', () => {
       
       const createResponse = await apiRequest
         .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
         .send(awardData)
         .expect(201);
       
@@ -317,6 +375,7 @@ describe('Awards API Integration', () => {
       const searchTerm = 'Golden';
       const response = await apiRequest
         .get(`/api/v1/awards?search=${searchTerm}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(200);
       
       // Should find our award
@@ -339,6 +398,7 @@ describe('Awards API Integration', () => {
       
       const createResponse = await apiRequest
         .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
         .send(awardData)
         .expect(201);
       
@@ -347,6 +407,7 @@ describe('Awards API Integration', () => {
       // Get the specific award
       const response = await apiRequest
         .get(`/api/v1/awards/${createResponse.body.id}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(200);
       
       expect(response.body).toMatchObject({
@@ -365,6 +426,7 @@ describe('Awards API Integration', () => {
       
       const response = await apiRequest
         .get(`/api/v1/awards/${nonExistentId}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(404);
       
       expect(response.body.error || response.body.message).toBeDefined();
@@ -384,6 +446,7 @@ describe('Awards API Integration', () => {
       
       const createResponse = await apiRequest
         .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
         .send(awardData)
         .expect(201);
       
@@ -397,6 +460,7 @@ describe('Awards API Integration', () => {
       
       const response = await apiRequest
         .put(`/api/v1/awards/${createResponse.body.id}`)
+        .set(authHelper.getAuthHeader(testUser))
         .send(updateData)
         .expect(200);
       
@@ -422,6 +486,7 @@ describe('Awards API Integration', () => {
       
       const createResponse = await apiRequest
         .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
         .send(awardData)
         .expect(201);
       
@@ -434,6 +499,7 @@ describe('Awards API Integration', () => {
       
       const response = await apiRequest
         .put(`/api/v1/awards/${createResponse.body.id}`)
+        .set(authHelper.getAuthHeader(testUser))
         .send(updateData)
         .expect(200);
       
@@ -460,17 +526,20 @@ describe('Awards API Integration', () => {
       
       const createResponse = await apiRequest
         .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
         .send(awardData)
         .expect(201);
       
       // Delete the award
       await apiRequest
         .delete(`/api/v1/awards/${createResponse.body.id}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(204);
       
       // Verify deletion - should return 404
       await apiRequest
         .get(`/api/v1/awards/${createResponse.body.id}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(404);
       
       console.log('Award deletion working');
@@ -483,10 +552,81 @@ describe('Awards API Integration', () => {
       
       const response = await apiRequest
         .delete(`/api/v1/awards/${nonExistentId}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(404);
       
       expect(response.body.error || response.body.message).toBeDefined();
       console.log('404 handling working for award deletion');
+    });
+
+    it('should restore soft-deleted award when creating same award again', async () => {
+      // 1. Create an award
+      const awardData = {
+        seasonId: testData.seasonId,
+        playerId: testData.playerId,
+        category: 'Soft Delete Restoration Test',
+        notes: 'Original award notes'
+      };
+
+      const createResponse = await apiRequest
+        .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(awardData)
+        .expect(201);
+
+      const originalAwardId = createResponse.body.id;
+      console.log('Original award created:', originalAwardId);
+
+      // 2. Delete the award (soft delete)
+      await apiRequest
+        .delete(`/api/v1/awards/${originalAwardId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(204);
+
+      // Verify it's soft deleted (should return 404)
+      await apiRequest
+        .get(`/api/v1/awards/${originalAwardId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(404);
+
+      console.log('Award soft deleted successfully');
+
+      // 3. Create the same award again (same unique constraints: playerId + seasonId + category)
+      const restoredAwardData = {
+        seasonId: testData.seasonId,
+        playerId: testData.playerId,
+        category: 'Soft Delete Restoration Test', // Same category
+        notes: 'Restored award with new notes'
+      };
+
+      const restoreResponse = await apiRequest
+        .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(restoredAwardData)
+        .expect(201);
+
+      // 4. Verify it's the same record restored (same ID)
+      expect(restoreResponse.body.id).toBe(originalAwardId);
+      expect(restoreResponse.body.seasonId).toBe(testData.seasonId);
+      expect(restoreResponse.body.playerId).toBe(testData.playerId);
+      expect(restoreResponse.body.category).toBe(restoredAwardData.category);
+      expect(restoreResponse.body.notes).toBe(restoredAwardData.notes); // Updated notes
+
+      console.log('Award restored with same ID:', restoreResponse.body.id);
+
+      // 5. Verify the award is now accessible again
+      const getResponse = await apiRequest
+        .get(`/api/v1/awards/${originalAwardId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(getResponse.body.id).toBe(originalAwardId);
+      expect(getResponse.body.notes).toBe(restoredAwardData.notes);
+
+      console.log('Soft delete restoration working - same award ID restored with updated data');
+
+      // Add to cleanup
+      testData.awardIds.push(originalAwardId);
     });
   });
 
@@ -503,7 +643,8 @@ describe('Awards API Integration', () => {
       const startTime = Date.now();
       
       const promises = awards.map(award =>
-        apiRequest.post('/api/v1/awards').send(award)
+        apiRequest.post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser)).send(award)
       );
       
       const responses = await Promise.all(promises);
@@ -519,6 +660,261 @@ describe('Awards API Integration', () => {
       expect(avgTime).toBeLessThan(200); // Average < 200ms per award
       
       console.log(`${awardCount} awards created: ${totalTime}ms total, ${avgTime.toFixed(1)}ms avg`);
+    });
+  });
+
+  describe('Authorization Tests', () => {
+    let testAwardId: string;
+    let otherUserAwardId: string;
+    let authTestSeasonId: string;
+    let authTestPlayerId: string;
+    let otherUserSeasonId: string;
+    let otherUserPlayerId: string;
+
+    beforeEach(async () => {
+      // Create separate test data for authorization tests
+      authTestSeasonId = randomUUID();
+      authTestPlayerId = randomUUID();
+      otherUserSeasonId = randomUUID();
+      otherUserPlayerId = randomUUID();
+
+      // Create season and player for testUser
+      await prisma.seasons.create({
+        data: {
+          season_id: authTestSeasonId,
+          label: `Auth Test Season ${Date.now()}`,
+          start_date: new Date('2024-08-01'),
+          end_date: new Date('2025-05-31'),
+          created_by_user_id: testUser.id
+        }
+      });
+
+      await prisma.player.create({
+        data: {
+          id: authTestPlayerId,
+          name: `Auth Test Player ${Date.now()}`,
+          created_by_user_id: testUser.id
+        }
+      });
+      // Create an award by testUser
+      const testUserAward = {
+        seasonId: authTestSeasonId,
+        playerId: authTestPlayerId,
+        category: 'Test User Award',
+        notes: 'Award created by test user'
+      };
+
+      const testUserResponse = await apiRequest
+        .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(testUserAward)
+        .expect(201);
+
+      testAwardId = testUserResponse.body.id;
+
+      // Create season and player for otherUser
+      await prisma.seasons.create({
+        data: {
+          season_id: otherUserSeasonId,
+          label: `Other User Season ${Date.now()}`,
+          start_date: new Date('2024-08-01'),
+          end_date: new Date('2025-05-31'),
+          created_by_user_id: otherUser.id
+        }
+      });
+
+      await prisma.player.create({
+        data: {
+          id: otherUserPlayerId,
+          name: `Other User Player ${Date.now()}`,
+          created_by_user_id: otherUser.id
+        }
+      });
+
+      const otherUserAward = {
+        seasonId: otherUserSeasonId,
+        playerId: otherUserPlayerId,
+        category: 'Other User Award',
+        notes: 'Award created by other user'
+      };
+
+      const otherUserResponse = await apiRequest
+        .post('/api/v1/awards')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send(otherUserAward)
+        .expect(201);
+
+      otherUserAwardId = otherUserResponse.body.id;
+    });
+
+    afterEach(async () => {
+      // Clean up authorization test data
+      try {
+        await prisma.awards.deleteMany({
+          where: { 
+            OR: [
+              { award_id: testAwardId },
+              { award_id: otherUserAwardId }
+            ]
+          }
+        });
+        
+        await prisma.player.deleteMany({
+          where: { 
+            id: { in: [authTestPlayerId, otherUserPlayerId] }
+          }
+        });
+        
+        await prisma.seasons.deleteMany({
+          where: { 
+            season_id: { in: [authTestSeasonId, otherUserSeasonId] }
+          }
+        });
+        
+        console.log('Authorization test data cleaned up successfully');
+      } catch (error) {
+        console.warn('Authorization cleanup warning (non-fatal):', error);
+      }
+    });
+
+    describe('User Isolation', () => {
+      it('should not allow users to see other users awards in list', async () => {
+        const response = await apiRequest
+          .get('/api/v1/awards')
+          .set(authHelper.getAuthHeader(testUser))
+          .expect(200);
+
+        // testUser should only see their own awards
+        expect(response.body.data).toBeInstanceOf(Array);
+        
+        // Check that otherUser's award is not in the list
+        const awardIds = response.body.data.map((award: any) => award.id);
+        expect(awardIds).toContain(testAwardId);
+        expect(awardIds).not.toContain(otherUserAwardId);
+
+        console.log('User isolation working for GET /awards');
+      });
+
+      it('should not allow users to access other users awards by ID', async () => {
+        await apiRequest
+          .get(`/api/v1/awards/${otherUserAwardId}`)
+          .set(authHelper.getAuthHeader(testUser))
+          .expect(404); // Should return 404 (not found) for access denied
+
+        console.log('Access denied to other user\'s award');
+      });
+
+      it('should not allow users to update other users awards', async () => {
+        const updateData = {
+          category: 'Hacked Award',
+          notes: 'This should not work'
+        };
+
+        await apiRequest
+          .put(`/api/v1/awards/${otherUserAwardId}`)
+          .set(authHelper.getAuthHeader(testUser))
+          .send(updateData)
+          .expect(404); // Should return 404 (not found) for access denied
+
+        console.log('Update access denied to other user\'s award');
+      });
+
+      it('should not allow users to delete other users awards', async () => {
+        await apiRequest
+          .delete(`/api/v1/awards/${otherUserAwardId}`)
+          .set(authHelper.getAuthHeader(testUser))
+          .expect(404); // Should return 404 (not found) for access denied
+
+        console.log('Delete access denied to other user\'s award');
+      });
+    });
+
+    describe('Admin Privileges', () => {
+      it('should allow admin to see all awards in list', async () => {
+        const response = await apiRequest
+          .get('/api/v1/awards')
+          .set(authHelper.getAuthHeader(adminUser))
+          .expect(200);
+
+        // Admin should see awards from all users
+        expect(response.body.data).toBeInstanceOf(Array);
+        
+        const awardIds = response.body.data.map((award: any) => award.id);
+        expect(awardIds).toContain(testAwardId);
+        expect(awardIds).toContain(otherUserAwardId);
+
+        console.log('Admin can see all awards');
+      });
+
+      it('should allow admin to access any award by ID', async () => {
+        // Admin should be able to access testUser's award
+        const testUserAwardResponse = await apiRequest
+          .get(`/api/v1/awards/${testAwardId}`)
+          .set(authHelper.getAuthHeader(adminUser))
+          .expect(200);
+
+        expect(testUserAwardResponse.body.id).toBe(testAwardId);
+
+        // Admin should be able to access otherUser's award
+        const otherUserAwardResponse = await apiRequest
+          .get(`/api/v1/awards/${otherUserAwardId}`)
+          .set(authHelper.getAuthHeader(adminUser))
+          .expect(200);
+
+        expect(otherUserAwardResponse.body.id).toBe(otherUserAwardId);
+
+        console.log('Admin can access any award');
+      });
+
+      it('should allow admin to update any award', async () => {
+        const updateData = {
+          category: 'Admin Updated Award',
+          notes: 'Updated by admin'
+        };
+
+        const response = await apiRequest
+          .put(`/api/v1/awards/${otherUserAwardId}`)
+          .set(authHelper.getAuthHeader(adminUser))
+          .send(updateData)
+          .expect(200);
+
+        expect(response.body.category).toBe(updateData.category);
+        expect(response.body.notes).toBe(updateData.notes);
+
+        console.log('Admin can update any award');
+      });
+
+      it('should allow admin to delete any award', async () => {
+        // Create a temporary award to delete
+        const tempAward = {
+          seasonId: authTestSeasonId,
+          playerId: authTestPlayerId,
+          category: 'Temp Award for Deletion',
+          notes: 'This will be deleted by admin'
+        };
+
+        const createResponse = await apiRequest
+          .post('/api/v1/awards')
+          .set(authHelper.getAuthHeader(otherUser))
+          .send(tempAward)
+          .expect(201);
+
+        const tempAwardId = createResponse.body.id;
+
+        // Admin should be able to delete it
+        await apiRequest
+          .delete(`/api/v1/awards/${tempAwardId}`)
+          .set(authHelper.getAuthHeader(adminUser))
+          .expect(204);
+
+        // Verify it's soft deleted (should return 404 for regular users)
+        await apiRequest
+          .get(`/api/v1/awards/${tempAwardId}`)
+          .set(authHelper.getAuthHeader(otherUser))
+          .expect(404);
+
+        console.log('Admin can delete any award');
+      });
     });
   });
 });

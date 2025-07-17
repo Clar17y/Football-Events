@@ -41,7 +41,8 @@ export interface ValidationTestConfig {
  */
 export const testForeignKeyConstraints = async (
   apiRequest: SuperTest<Test>,
-  config: ForeignKeyTestConfig
+  config: ForeignKeyTestConfig,
+  authToken?: string
 ) => {
   console.log(`Testing foreign key constraints for ${config.entityName}`);
   
@@ -53,8 +54,14 @@ export const testForeignKeyConstraints = async (
     
     console.log(`  Testing invalid ${fkField.description}: ${testData[fkField.fieldName]}`);
     
-    const response = await apiRequest
-      .post(config.endpoint)
+    let request = apiRequest
+      .post(config.endpoint);
+    
+    if (authToken) {
+      request = request.set('Authorization', `Bearer ${authToken}`);
+    }
+    
+    const response = await request
       .send(testData)
       .expect(400); // Should return 400 Bad Request for invalid foreign keys
     

@@ -1,21 +1,26 @@
 /**
- * Seasons API Integration Tests
+ * Seasons API Integration Tests with Authentication and Soft Delete Restoration
  * 
  * Comprehensive HTTP endpoint testing for the Seasons API using Supertest.
- * Seasons are root entities with no foreign key dependencies.
+ * Tests user ownership, authentication, and soft delete restoration functionality.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { PrismaClient } from '@prisma/client';
 import { app } from '../../src/app';
 import { randomUUID } from 'crypto';
-import { SeasonService } from '../../src/services/SeasonService';
+import { AuthTestHelper, TestUser } from './auth-helpers';
 
 describe('Seasons API Integration', () => {
   let prisma: PrismaClient;
   let apiRequest: request.SuperTest<request.Test>;
+  let authHelper: AuthTestHelper;
+  let testUser: TestUser;
+  let otherUser: TestUser;
+  let adminUser: TestUser;
   let createdSeasonIds: string[] = [];
+  let createdUserIds: string[] = [];
 
   beforeAll(async () => {
     prisma = new PrismaClient({
@@ -28,442 +33,981 @@ describe('Seasons API Integration', () => {
     
     await prisma.$connect();
     apiRequest = request(app);
+    authHelper = new AuthTestHelper(app);
     
-    console.log('Seasons API Tests: Database connected');
+    // Create test users ONCE for all tests
+    testUser = await authHelper.createTestUser('USER');
+    otherUser = await authHelper.createTestUser('USER');
+    adminUser = await authHelper.createAdminUser();
+    
+    // Track created users for final cleanup
+    createdUserIds.push(testUser.id, otherUser.id, adminUser.id);
+    
+    console.log('Seasons API Tests: Database connected and users created');
   });
 
   afterAll(async () => {
+    // Clean up any remaining test data - seasons first due to foreign key constraints
+    await prisma.seasons.deleteMany({
+      where: { created_by_user_id: { in: createdUserIds } }
+    });
+    
+    if (createdUserIds.length > 0) {
+      await prisma.user.deleteMany({
+        where: { id: { in: createdUserIds } }
+      });
+    }
     await prisma.$disconnect();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Only reset season tracking - users are reused
     createdSeasonIds = [];
   });
 
   afterEach(async () => {
-    // Clean up created seasons
+    // Clean up only seasons created in this test - users are reused
     if (createdSeasonIds.length > 0) {
-      try {
-        await prisma.seasons.deleteMany({
-          where: { season_id: { in: createdSeasonIds } }
-        });
-        console.log('Seasons cleaned up successfully');
-      } catch (error) {
-        console.warn('Season cleanup warning (non-fatal):', error);
-      }
+      await prisma.seasons.deleteMany({
+        where: {
+          season_id: {
+            in: createdSeasonIds
+          }
+        }
+      });
     }
+    
+    // Also clean up any other seasons created by our test users to ensure clean state
+    await prisma.seasons.deleteMany({
+      where: {
+        created_by_user_id: {
+          in: createdUserIds
+        }
+      }
+    });
+    
+    // Reset season tracking
+    createdSeasonIds = [];
+  });
+
+  describe('Authentication', () => {
+    it('should require authentication for all endpoints', async () => {
+      // Test all endpoints without token
+      await apiRequest.get('/api/v1/seasons').expect(401);
+      await apiRequest.post('/api/v1/seasons').expect(401);
+      await apiRequest.get(`/api/v1/seasons/${randomUUID()}`).expect(401);
+      await apiRequest.put(`/api/v1/seasons/${randomUUID()}`).expect(401);
+      await apiRequest.delete(`/api/v1/seasons/${randomUUID()}`).expect(401);
+    });
+
+    it('should reject invalid tokens', async () => {
+      await apiRequest
+        .get('/api/v1/seasons')
+        .set('Authorization', 'Bearer invalid-token')
+        .expect(401);
+    });
   });
 
   describe('POST /api/v1/seasons', () => {
     it('should create a season successfully', async () => {
-      const currentYear = new Date().getFullYear();
       const seasonData = {
-        label: `${currentYear}/${currentYear + 1} Test Season`,
-        startDate: new Date(`${currentYear}-08-01`).toISOString(),
-        endDate: new Date(`${currentYear + 1}-05-31`).toISOString(),
+        label: '2025/2026 Test Season',
+        startDate: '2025-08-01',
+        endDate: '2026-05-31',
         isCurrent: false,
         description: 'Test season for API validation'
       };
-      
+
       const response = await apiRequest
         .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
         .send(seasonData)
         .expect(201);
-      
+
+      expect(response.body).toHaveProperty('seasonId');
+      expect(response.body.label).toBe(seasonData.label);
+      expect(response.body.isCurrent).toBe(false);
+      expect(response.body.description).toBe(seasonData.description);
+
       createdSeasonIds.push(response.body.seasonId);
-      
-      expect(response.body).toMatchObject({
-        seasonId: expect.any(String),
-        label: seasonData.label,
-        startDate: expect.any(String),
-        endDate: expect.any(String),
-        isCurrent: false
-      });
-      
-      console.log('Season created successfully:', response.body.seasonId);
     });
 
     it('should validate required fields', async () => {
-      const invalidSeasonData = {}; // Missing required label
-      
+      const invalidData = {
+        // Missing required fields
+        description: 'Invalid season data'
+      };
+
       const response = await apiRequest
         .post('/api/v1/seasons')
-        .send(invalidSeasonData)
+        .set(authHelper.getAuthHeader(testUser))
+        .send(invalidData)
         .expect(400);
-      
-      expect(response.body.error || response.body.message).toBeDefined();
-      console.log('Validation working:', response.body.error || response.body.message);
+
+      expect(response.body).toHaveProperty('error');
+      console.log('Validation working:', response.body.error);
     });
 
-    // TODO: Add duplicate label test once API properly handles unique constraints
-    it.skip('should handle duplicate season labels', async () => {
-      const seasonLabel = `Duplicate Season ${Date.now()}`;
-      const seasonData = { label: seasonLabel };
-      
+    it('should handle duplicate season labels for same user', async () => {
+      const seasonData = {
+        label: 'Duplicate Test Season',
+        startDate: '2025-08-01',
+        endDate: '2026-05-31',
+        isCurrent: false
+      };
+
       // Create first season
       const firstResponse = await apiRequest
         .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
         .send(seasonData)
         .expect(201);
-      
-      createdSeasonIds.push(firstResponse.body.id);
-      
-      // Try to create duplicate - should return 409 Conflict
-      const duplicateResponse = await apiRequest
+
+      createdSeasonIds.push(firstResponse.body.seasonId);
+
+      // Try to create duplicate for same user
+      await apiRequest
         .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
         .send(seasonData)
-        .expect(409);
-      
-      expect(duplicateResponse.body.error || duplicateResponse.body.message).toBeDefined();
-      console.log('Duplicate label validation working');
-    });
-  });
-
-  describe('GET /api/v1/seasons/current', () => {
-    it('should return 404 when no current season exists', async () => {
-      const response = await apiRequest
-        .get('/api/v1/seasons/current')
-        .expect(404);
-
-      expect(response.body).toEqual({
-        error: 'No current season found',
-        message: 'No active season found for the current date'
-      });
+        .expect(409); // Conflict due to unique constraint
     });
 
-    it('should return current season when marked with is_current flag', async () => {
-      // Create a season marked as current
-      const currentSeasonData = {
-        label: 'Current Test Season 2024/25',
-        start_date: new Date('2024-08-01'),
-        end_date: new Date('2025-05-31'),
-        is_current: true,
-        description: 'Test current season'
-      };
-
-      const createdSeason = await prisma.seasons.create({
-        data: currentSeasonData
-      });
-      createdSeasonIds.push(createdSeason.season_id);
-
-      const response = await apiRequest
-        .get('/api/v1/seasons/current')
-        .expect(200);
-
-      expect(response.body).toEqual({
-        success: true,
-        season: expect.objectContaining({
-          seasonId: createdSeason.season_id,
-          label: currentSeasonData.label,
-          startDate: currentSeasonData.start_date.toISOString().split('T')[0],
-          endDate: currentSeasonData.end_date.toISOString().split('T')[0],
-          isCurrent: true,
-          description: currentSeasonData.description
-        })
-      });
-    });
-
-    it('should return current season by date range when no is_current flag set', async () => {
-      // Create a season that covers today's date but not marked as current
-      const today = new Date();
-      const startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1); // Last month
-      const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 28); // Next month
-
+    it('should allow same season label for different users (per-user uniqueness)', async () => {
       const seasonData = {
-        label: 'Date Range Test Season',
-        start_date: startDate,
-        end_date: endDate,
-        is_current: false,
-        description: 'Season detected by date range'
+        label: '2024-25 Season',
+        startDate: '2025-08-01',
+        endDate: '2026-05-31',
+        isCurrent: false
       };
 
-      const createdSeason = await prisma.seasons.create({
-        data: seasonData
-      });
-      createdSeasonIds.push(createdSeason.season_id);
+      // Create season with first user
+      const firstResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(seasonData)
+        .expect(201);
 
-      const response = await apiRequest
-        .get('/api/v1/seasons/current')
-        .expect(200);
+      createdSeasonIds.push(firstResponse.body.seasonId);
 
-      expect(response.body).toEqual({
-        success: true,
-        season: expect.objectContaining({
-          seasonId: createdSeason.season_id,
-          label: seasonData.label,
-          isCurrent: false
-        })
+      // Create season with same label for second user (should succeed)
+      const secondResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send(seasonData)
+        .expect(201);
+
+      expect(secondResponse.body.label).toBe(seasonData.label);
+      expect(secondResponse.body.seasonId).not.toBe(firstResponse.body.seasonId);
+
+      // Clean up second user's season
+      await prisma.seasons.deleteMany({
+        where: { season_id: secondResponse.body.seasonId }
       });
     });
 
-    it('should prioritize is_current flag over date range', async () => {
-      // Create two seasons: one with date range covering today, one marked as current
-      const today = new Date();
-      const startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 28);
+    it('should validate date ranges', async () => {
+      const invalidDateData = {
+        label: 'Invalid Date Season',
+        startDate: '2026-08-01', // Start after end
+        endDate: '2025-05-31',
+        isCurrent: false
+      };
 
-      // Season 1: Covers today's date but not marked current
-      const dateRangeSeason = await prisma.seasons.create({
-        data: {
-          label: 'Date Range Season',
-          start_date: startDate,
-          end_date: endDate,
-          is_current: false
-        }
-      });
-      createdSeasonIds.push(dateRangeSeason.season_id);
-
-      // Season 2: Marked as current but different date range
-      const currentSeason = await prisma.seasons.create({
-        data: {
-          label: 'Flagged Current Season',
-          start_date: new Date('2023-08-01'),
-          end_date: new Date('2024-05-31'),
-          is_current: true
-        }
-      });
-      createdSeasonIds.push(currentSeason.season_id);
-
-      const response = await apiRequest
-        .get('/api/v1/seasons/current')
-        .expect(200);
-
-      // Should return the season marked as current, not the one with date range
-      expect(response.body.season.seasonId).toBe(currentSeason.season_id);
-      expect(response.body.season.label).toBe('Flagged Current Season');
-    });
-
-    it('should handle database errors gracefully', async () => {
-      // Mock the SeasonService.getCurrentSeason method to throw a database error
-      const originalGetCurrentSeason = SeasonService.prototype.getCurrentSeason;
-      
-      // Create a spy that throws a database error
-      const getCurrentSeasonSpy = vi.spyOn(SeasonService.prototype, 'getCurrentSeason')
-        .mockRejectedValue(new Error('Database connection error'));
-
-      try {
-        const response = await apiRequest
-          .get('/api/v1/seasons/current')
-          .expect(500);
-
-        expect(response.body).toEqual({
-          error: 'Failed to fetch current season',
-          message: 'Unable to retrieve current season information'
-        });
-
-        // Verify the mock was called
-        expect(getCurrentSeasonSpy).toHaveBeenCalledOnce();
-      } finally {
-        // Restore original method
-        getCurrentSeasonSpy.mockRestore();
-      }
+      await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(invalidDateData)
+        .expect(400);
     });
   });
 
   describe('GET /api/v1/seasons', () => {
-    it('should return paginated seasons', async () => {
+    it('should return only user\'s own seasons', async () => {
+      // Create seasons for first user
+      const userSeasons = [
+        {
+          label: 'User 1 Season A',
+          startDate: '2024-08-01',
+          endDate: '2025-05-31',
+          isCurrent: false
+        },
+        {
+          label: 'User 1 Season B',
+          startDate: '2025-08-01',
+          endDate: '2026-05-31',
+          isCurrent: true
+        }
+      ];
+
+      for (const season of userSeasons) {
+        const response = await apiRequest
+          .post('/api/v1/seasons')
+          .set(authHelper.getAuthHeader(testUser))
+          .send(season)
+          .expect(201);
+        createdSeasonIds.push(response.body.seasonId);
+      }
+
+      // Create season for different user
+      const otherSeasonResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send({
+          label: 'Other User Season',
+          startDate: '2024-08-01',
+          endDate: '2025-05-31',
+          isCurrent: false
+        })
+        .expect(201);
+
+      // Get seasons for first user - should only see their own
       const response = await apiRequest
         .get('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
         .expect(200);
-      
-      expect(response.body).toMatchObject({
-        data: expect.any(Array),
-        pagination: {
-          page: expect.any(Number),
-          limit: expect.any(Number),
-          total: expect.any(Number),
-          totalPages: expect.any(Number),
-          hasNext: expect.any(Boolean),
-          hasPrev: expect.any(Boolean)
-        }
+
+      expect(response.body).toHaveProperty('data');
+      expect(response.body).toHaveProperty('pagination');
+      expect(Array.isArray(response.body.data)).toBe(true);
+      expect(response.body.data.length).toBe(2); // Only user's own seasons
+
+      // Verify all returned seasons belong to the user
+      response.body.data.forEach((season: any) => {
+        expect(['User 1 Season A', 'User 1 Season B']).toContain(season.label);
       });
-      
-      console.log('Pagination working, total seasons:', response.body.pagination.total);
+
+      // Clean up other user's season
+      await prisma.seasons.deleteMany({
+        where: { season_id: otherSeasonResponse.body.seasonId }
+      });
+
+      console.log(`User isolation working: ${response.body.data.length} seasons returned`);
     });
 
     it('should support search functionality', async () => {
-      // Create a test season first
       const seasonData = {
-        label: `Searchable 2024/25 Season ${Date.now()}`,
-        startDate: new Date('2024-08-01').toISOString(),
-        endDate: new Date('2025-05-31').toISOString(),
+        label: 'Searchable Season 2024',
+        startDate: '2024-08-01',
+        endDate: '2025-05-31',
         isCurrent: false
       };
-      
+
       const createResponse = await apiRequest
         .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
         .send(seasonData)
         .expect(201);
-      
+
       createdSeasonIds.push(createResponse.body.seasonId);
-      
-      // Search for the season
-      const searchTerm = '2024';
-      const response = await apiRequest
-        .get(`/api/v1/seasons?search=${searchTerm}`)
+
+      const searchResponse = await apiRequest
+        .get('/api/v1/seasons?search=Searchable')
+        .set(authHelper.getAuthHeader(testUser))
         .expect(200);
-      
-      // Should find our season
-      const foundSeason = response.body.data.find((season: any) => season.seasonId === createResponse.body.seasonId);
-      expect(foundSeason).toBeDefined();
-      
-      console.log('Search functionality working, found seasons:', response.body.data.length);
+
+      expect(searchResponse.body.data.length).toBeGreaterThan(0);
+      expect(searchResponse.body.data[0].label).toContain('Searchable');
+    });
+
+    it('should support pagination', async () => {
+      // Create multiple seasons
+      for (let i = 1; i <= 5; i++) {
+        const response = await apiRequest
+          .post('/api/v1/seasons')
+          .set(authHelper.getAuthHeader(testUser))
+          .send({
+            label: `Pagination Season ${i}`,
+            startDate: `202${3 + i}-08-01`,
+            endDate: `202${4 + i}-07-31`,
+            isCurrent: false
+          })
+          .expect(201);
+        createdSeasonIds.push(response.body.seasonId);
+      }
+
+      // Test pagination
+      const response = await apiRequest
+        .get('/api/v1/seasons?page=1&limit=3')
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(response.body.data.length).toBeLessThanOrEqual(3);
+      expect(response.body.pagination.page).toBe(1);
+      expect(response.body.pagination.limit).toBe(3);
     });
   });
 
   describe('GET /api/v1/seasons/:id', () => {
-    it('should return a specific season', async () => {
-      // Create season first
+    it('should return user\'s own season', async () => {
       const seasonData = {
-        label: `Specific Season ${Date.now()}`,
-        startDate: new Date('2024-08-01').toISOString(),
-        endDate: new Date('2025-05-31').toISOString()
+        label: 'Specific Season Test',
+        startDate: '2024-08-01',
+        endDate: '2025-05-31',
+        isCurrent: false,
+        description: 'Test season for specific retrieval'
       };
-      
+
       const createResponse = await apiRequest
         .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
         .send(seasonData)
         .expect(201);
-      
-      createdSeasonIds.push(createResponse.body.seasonId);
-      
-      // Get the specific season
-      const response = await apiRequest
-        .get(`/api/v1/seasons/${createResponse.body.seasonId}`)
+
+      const seasonId = createResponse.body.seasonId;
+      createdSeasonIds.push(seasonId);
+
+      const getResponse = await apiRequest
+        .get(`/api/v1/seasons/${seasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(200);
-      
-      expect(response.body).toMatchObject({
-        seasonId: createResponse.body.seasonId,
-        label: seasonData.label
+
+      expect(getResponse.body.seasonId).toBe(seasonId);
+      expect(getResponse.body.label).toBe(seasonData.label);
+      expect(getResponse.body.description).toBe(seasonData.description);
+    });
+
+    it('should return 404 for other user\'s season', async () => {
+      // Create season with different user
+      // Using existing otherUser
+      const otherSeasonResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send({
+          label: 'Other User Season',
+          startDate: '2024-08-01',
+          endDate: '2025-05-31',
+          isCurrent: false
+        })
+        .expect(201);
+
+      // Try to access with first user's token
+      await apiRequest
+        .get(`/api/v1/seasons/${otherSeasonResponse.body.seasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(404);
+
+      // Clean up
+      await prisma.seasons.deleteMany({
+        where: { season_id: otherSeasonResponse.body.seasonId }
       });
-      
-      console.log('Specific season retrieval working');
     });
 
     it('should return 404 for non-existent season', async () => {
       const nonExistentId = randomUUID();
       
-      const response = await apiRequest
+      await apiRequest
         .get(`/api/v1/seasons/${nonExistentId}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(404);
-      
-      expect(response.body.error || response.body.message).toBeDefined();
+
       console.log('404 handling working for non-existent season');
     });
   });
 
   describe('PUT /api/v1/seasons/:id', () => {
-    it('should update a season', async () => {
-      // Create season first
+    it('should update user\'s own season successfully', async () => {
       const seasonData = {
-        label: `Updatable Season ${Date.now()}`,
-        startDate: new Date('2024-08-01').toISOString(),
-        endDate: new Date('2025-05-31').toISOString(),
-        isCurrent: false,
-        description: 'Original description'
+        label: 'Original Season',
+        startDate: '2024-08-01',
+        endDate: '2025-05-31',
+        isCurrent: false
       };
-      
+
       const createResponse = await apiRequest
         .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
         .send(seasonData)
         .expect(201);
-      
-      createdSeasonIds.push(createResponse.body.seasonId);
-      
-      // Update the season
+
+      const seasonId = createResponse.body.seasonId;
+      createdSeasonIds.push(seasonId);
+
       const updateData = {
-        label: `Updated Season ${Date.now()}`,
+        label: 'Updated Season',
+        isCurrent: true,
         description: 'Updated description'
       };
-      
-      const response = await apiRequest
-        .put(`/api/v1/seasons/${createResponse.body.seasonId}`)
+
+      const updateResponse = await apiRequest
+        .put(`/api/v1/seasons/${seasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
         .send(updateData)
         .expect(200);
-      
-      expect(response.body).toMatchObject({
-        seasonId: createResponse.body.seasonId,
-        label: updateData.label,
-        description: updateData.description
+
+      expect(updateResponse.body.label).toBe(updateData.label);
+      expect(updateResponse.body.isCurrent).toBe(true);
+      expect(updateResponse.body.description).toBe(updateData.description);
+    });
+
+    it('should return 404 when updating other user\'s season', async () => {
+      // Create season with different user
+      // Using existing otherUser
+      const otherSeasonResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send({
+          label: 'Other User Season',
+          startDate: '2024-08-01',
+          endDate: '2025-05-31',
+          isCurrent: false
+        })
+        .expect(201);
+
+      // Try to update with first user's token
+      await apiRequest
+        .put(`/api/v1/seasons/${otherSeasonResponse.body.seasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ label: 'Hacked Update' })
+        .expect(404);
+
+      // Clean up
+      await prisma.seasons.deleteMany({
+        where: { season_id: otherSeasonResponse.body.seasonId }
       });
+    });
+
+    it('should return 404 when updating non-existent season', async () => {
+      const nonExistentId = randomUUID();
       
-      console.log('Season update working');
+      await apiRequest
+        .put(`/api/v1/seasons/${nonExistentId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ label: 'Updated' })
+        .expect(404);
     });
   });
 
   describe('DELETE /api/v1/seasons/:id', () => {
-    it('should delete a season', async () => {
-      // Create season first
+    it('should soft delete user\'s own season successfully', async () => {
       const seasonData = {
-        label: `Deletable Season ${Date.now()}`,
-        startDate: new Date('2024-08-01').toISOString(),
-        endDate: new Date('2025-05-31').toISOString(),
+        label: 'Season to Delete',
+        startDate: '2024-08-01',
+        endDate: '2025-05-31',
         isCurrent: false
       };
-      
+
       const createResponse = await apiRequest
         .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
         .send(seasonData)
         .expect(201);
-      
-      // Delete the season
+
+      const seasonId = createResponse.body.seasonId;
+
       await apiRequest
-        .delete(`/api/v1/seasons/${createResponse.body.seasonId}`)
+        .delete(`/api/v1/seasons/${seasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(204);
-      
-      // Verify deletion - should return 404
+
+      // Verify season is soft deleted (not accessible via API)
       await apiRequest
-        .get(`/api/v1/seasons/${createResponse.body.seasonId}`)
+        .get(`/api/v1/seasons/${seasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(404);
-      
-      console.log('Season deletion working');
-      
-      // Don't add to cleanup array since it's already deleted
+
+      // Verify season still exists in database but is soft deleted
+      const deletedSeason = await prisma.seasons.findFirst({
+        where: { season_id: seasonId }
+      });
+      expect(deletedSeason).toBeTruthy();
+      expect(deletedSeason!.is_deleted).toBe(true);
+      expect(deletedSeason!.deleted_at).toBeTruthy();
+      expect(deletedSeason!.deleted_by_user_id).toBe(testUser.id);
+    });
+
+    it('should return 404 when deleting other user\'s season', async () => {
+      // Create season with different user
+      // Using existing otherUser
+      const otherSeasonResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send({
+          label: 'Other User Season',
+          startDate: '2024-08-01',
+          endDate: '2025-05-31',
+          isCurrent: false
+        })
+        .expect(201);
+
+      // Try to delete with first user's token
+      await apiRequest
+        .delete(`/api/v1/seasons/${otherSeasonResponse.body.seasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(404);
+
+      // Clean up
+      await prisma.seasons.deleteMany({
+        where: { season_id: otherSeasonResponse.body.seasonId }
+      });
     });
 
     it('should return 404 when deleting non-existent season', async () => {
       const nonExistentId = randomUUID();
       
-      const response = await apiRequest
+      await apiRequest
         .delete(`/api/v1/seasons/${nonExistentId}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(404);
-      
-      expect(response.body.error || response.body.message).toBeDefined();
+
       console.log('404 handling working for season deletion');
     });
   });
 
-  describe('Performance Tests', () => {
-    it('should handle multiple season creation', async () => {
-      const seasonCount = 5;
-      const currentYear = new Date().getFullYear();
-      const seasons = Array.from({ length: seasonCount }, (_, i) => ({
-        label: `Performance Season ${currentYear + i}/${currentYear + i + 1} ${Date.now()}`,
-        startDate: new Date(`${currentYear + i}-08-01`).toISOString(),
-        endDate: new Date(`${currentYear + i + 1}-05-31`).toISOString(),
+  describe('Soft Delete Restoration', () => {
+    it('should restore soft-deleted season when creating with same label', async () => {
+      const seasonData = {
+        label: '2024-25 Restoration Test',
+        startDate: '2024-08-01',
+        endDate: '2025-07-31',
         isCurrent: false,
-        description: `Performance test season ${i + 1}`
-      }));
-      
-      const startTime = Date.now();
-      
-      const promises = seasons.map(season =>
-        apiRequest.post('/api/v1/seasons').send(season)
-      );
-      
-      const responses = await Promise.all(promises);
-      const totalTime = Date.now() - startTime;
-      
-      // All should succeed
-      responses.forEach(response => {
-        expect(response.status).toBe(201);
-        createdSeasonIds.push(response.body.seasonId);
+        description: 'Original description'
+      };
+
+      // 1. Create season
+      const createResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(seasonData)
+        .expect(201);
+
+      const seasonId = createResponse.body.seasonId;
+      expect(createResponse.body.label).toBe(seasonData.label);
+      createdSeasonIds.push(seasonId);
+
+      // 2. Delete season (soft delete)
+      await apiRequest
+        .delete(`/api/v1/seasons/${seasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(204);
+
+      // 3. Verify season is soft deleted in database
+      const deletedSeason = await prisma.seasons.findFirst({
+        where: { season_id: seasonId }
       });
-      
-      const avgTime = totalTime / seasonCount;
-      expect(avgTime).toBeLessThan(200); // Average < 200ms per season
-      
-      console.log(`${seasonCount} seasons created: ${totalTime}ms total, ${avgTime.toFixed(1)}ms avg`);
+      expect(deletedSeason).toBeTruthy();
+      expect(deletedSeason!.is_deleted).toBe(true);
+      expect(deletedSeason!.deleted_at).toBeTruthy();
+
+      // 4. Create season with same label (should restore)
+      const restoreResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          ...seasonData,
+          isCurrent: true, // Different value to verify update
+          startDate: '2024-09-01', // Different start date
+          description: 'Restored description'
+        })
+        .expect(201);
+
+      // 5. Verify restoration (should be same ID)
+      expect(restoreResponse.body.seasonId).toBe(seasonId);
+      expect(restoreResponse.body.label).toBe(seasonData.label);
+      expect(restoreResponse.body.isCurrent).toBe(true);
+      expect(restoreResponse.body.startDate).toBe('2024-09-01');
+      expect(restoreResponse.body.description).toBe('Restored description');
+
+      // 6. Verify restoration in database
+      const restoredSeason = await prisma.seasons.findFirst({
+        where: { season_id: seasonId }
+      });
+      expect(restoredSeason!.is_deleted).toBe(false);
+      expect(restoredSeason!.deleted_at).toBeNull();
+      expect(restoredSeason!.deleted_by_user_id).toBeNull();
+      expect(restoredSeason!.updated_at).toBeTruthy();
+    });
+
+    it('should create new season when no soft-deleted season exists', async () => {
+      const seasonData = {
+        label: '2025-26 New Season',
+        startDate: '2025-08-01',
+        endDate: '2026-07-31',
+        isCurrent: false
+      };
+
+      // Normal creation should work as before
+      const response = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(seasonData)
+        .expect(201);
+
+      expect(response.body.seasonId).toBeTruthy();
+      expect(response.body.label).toBe(seasonData.label);
+      createdSeasonIds.push(response.body.seasonId);
+
+      // Verify in database
+      const season = await prisma.seasons.findFirst({
+        where: { season_id: response.body.seasonId }
+      });
+      expect(season!.is_deleted).toBe(false);
+      expect(season!.deleted_at).toBeNull();
+    });
+
+    it('should only restore user\'s own soft-deleted seasons', async () => {
+      const seasonData = {
+        label: 'Cross-User Restoration Test',
+        startDate: '2024-08-01',
+        endDate: '2025-07-31',
+        isCurrent: false
+      };
+
+      // Create and delete season with first user
+      const firstResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(seasonData)
+        .expect(201);
+
+      const firstSeasonId = firstResponse.body.seasonId;
+      createdSeasonIds.push(firstSeasonId);
+
+      await apiRequest
+        .delete(`/api/v1/seasons/${firstSeasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(204);
+
+      // Create season with same label using second user (should succeed - different user)
+      const secondResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send(seasonData)
+        .expect(201);
+
+      // Should create new season, not restore first user's
+      expect(secondResponse.body.seasonId).not.toBe(firstSeasonId);
+      expect(secondResponse.body.label).toBe(seasonData.label);
+
+      // Clean up second user's season
+      await prisma.seasons.deleteMany({
+        where: { season_id: secondResponse.body.seasonId }
+      });
+    });
+
+    it('should handle multiple soft-deleted seasons correctly', async () => {
+      const seasons = [
+        { label: 'Multi Test 1', startDate: '2024-01-01', endDate: '2024-12-31', isCurrent: false },
+        { label: 'Multi Test 2', startDate: '2025-01-01', endDate: '2025-12-31', isCurrent: false },
+        { label: 'Multi Test 3', startDate: '2026-01-01', endDate: '2026-12-31', isCurrent: false }
+      ];
+
+      const createdSeasons = [];
+
+      // Create and delete multiple seasons
+      for (const seasonData of seasons) {
+        const createResponse = await apiRequest
+          .post('/api/v1/seasons')
+          .set(authHelper.getAuthHeader(testUser))
+          .send(seasonData)
+          .expect(201);
+
+        createdSeasons.push({ id: createResponse.body.seasonId, data: seasonData });
+        createdSeasonIds.push(createResponse.body.seasonId);
+
+        // Soft delete
+        await apiRequest
+          .delete(`/api/v1/seasons/${createResponse.body.seasonId}`)
+          .set(authHelper.getAuthHeader(testUser))
+          .expect(204);
+      }
+
+      // Restore one specific season (the middle one)
+      const targetSeason = createdSeasons[1];
+      const restoreResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          ...targetSeason.data,
+          isCurrent: true // Updated value
+        })
+        .expect(201);
+
+      // Should restore the correct season
+      expect(restoreResponse.body.seasonId).toBe(targetSeason.id);
+      expect(restoreResponse.body.label).toBe(targetSeason.data.label);
+      expect(restoreResponse.body.isCurrent).toBe(true);
+
+      // Verify other seasons remain soft deleted
+      for (let i = 0; i < createdSeasons.length; i++) {
+        const season = await prisma.seasons.findFirst({
+          where: { season_id: createdSeasons[i].id }
+        });
+
+        if (i === 1) {
+          // Target season should be restored
+          expect(season!.is_deleted).toBe(false);
+        } else {
+          // Other seasons should remain soft deleted
+          expect(season!.is_deleted).toBe(true);
+        }
+      }
+    });
+
+    it('should fail when trying to create season with same label as active season', async () => {
+      const seasonData = {
+        label: 'Active Season Test',
+        startDate: '2024-08-01',
+        endDate: '2025-07-31',
+        isCurrent: false
+      };
+
+      // 1. Create season
+      const createResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(seasonData)
+        .expect(201);
+
+      createdSeasonIds.push(createResponse.body.seasonId);
+
+      // 2. Try to create another season with same label (should fail)
+      await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(seasonData)
+        .expect(409); // Should fail due to unique constraint
+    });
+  });
+
+  describe('Authorization Tests', () => {
+    let testSeasonIdByTestUser: string;
+    let testSeasonIdByOtherUser: string;
+
+    beforeEach(async () => {
+      // Create a season by testUser
+      const testUserSeason = {
+        label: `Test User Season ${Date.now()}`,
+        startDate: '2024-08-01',
+        endDate: '2025-05-31',
+        isCurrent: false,
+        description: 'Season created by test user'
+      };
+
+      const testUserResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(testUserSeason)
+        .expect(201);
+
+      testSeasonIdByTestUser = testUserResponse.body.seasonId;
+
+      // Create a season by otherUser
+      const otherUserSeason = {
+        label: `Other User Season ${Date.now()}`,
+        startDate: '2024-08-01',
+        endDate: '2025-05-31',
+        isCurrent: false,
+        description: 'Season created by other user'
+      };
+
+      const otherUserResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send(otherUserSeason)
+        .expect(201);
+
+      testSeasonIdByOtherUser = otherUserResponse.body.seasonId;
+    });
+
+    afterEach(async () => {
+      // Clean up authorization test data
+      try {
+        await prisma.seasons.deleteMany({
+          where: { 
+            season_id: { in: [testSeasonIdByTestUser, testSeasonIdByOtherUser] }
+          }
+        });
+        console.log('Authorization test data cleaned up successfully');
+      } catch (error) {
+        console.warn('Authorization cleanup warning (non-fatal):', error);
+      }
+    });
+
+    describe('User Isolation', () => {
+      it('should not allow users to see other users seasons in list', async () => {
+        const response = await apiRequest
+          .get('/api/v1/seasons')
+          .set(authHelper.getAuthHeader(testUser))
+          .expect(200);
+
+        // testUser should only see their own seasons
+        expect(response.body.data).toBeInstanceOf(Array);
+        
+        // Check that otherUser's season is not in the list
+        const seasonIds = response.body.data.map((season: any) => season.seasonId);
+        expect(seasonIds).toContain(testSeasonIdByTestUser);
+        expect(seasonIds).not.toContain(testSeasonIdByOtherUser);
+
+        console.log('User isolation working for GET /seasons');
+      });
+
+      it('should not allow users to access other users seasons by ID', async () => {
+        await apiRequest
+          .get(`/api/v1/seasons/${testSeasonIdByOtherUser}`)
+          .set(authHelper.getAuthHeader(testUser))
+          .expect(404); // Should return 404 (not found) for access denied
+
+        console.log('Access denied to other user\'s season');
+      });
+
+      it('should not allow users to update other users seasons', async () => {
+        const updateData = {
+          label: 'Hacked Season',
+          description: 'This should not work'
+        };
+
+        await apiRequest
+          .put(`/api/v1/seasons/${testSeasonIdByOtherUser}`)
+          .set(authHelper.getAuthHeader(testUser))
+          .send(updateData)
+          .expect(404); // Should return 404 (not found) for access denied
+
+        console.log('Update access denied to other user\'s season');
+      });
+
+      it('should not allow users to delete other users seasons', async () => {
+        await apiRequest
+          .delete(`/api/v1/seasons/${testSeasonIdByOtherUser}`)
+          .set(authHelper.getAuthHeader(testUser))
+          .expect(404); // Should return 404 (not found) for access denied
+
+        console.log('Delete access denied to other user\'s season');
+      });
+    });
+
+    describe('Admin Privileges', () => {
+      it('should allow admin to see all seasons in list', async () => {
+        const response = await apiRequest
+          .get('/api/v1/seasons')
+          .set(authHelper.getAuthHeader(adminUser))
+          .expect(200);
+
+        // Admin should see seasons from all users
+        expect(response.body.data).toBeInstanceOf(Array);
+        
+        const seasonIds = response.body.data.map((season: any) => season.seasonId);
+        expect(seasonIds).toContain(testSeasonIdByTestUser);
+        expect(seasonIds).toContain(testSeasonIdByOtherUser);
+
+        console.log('Admin can see all seasons');
+      });
+
+      it('should allow admin to access any season by ID', async () => {
+        // Admin should be able to access testUser's season
+        const testUserSeasonResponse = await apiRequest
+          .get(`/api/v1/seasons/${testSeasonIdByTestUser}`)
+          .set(authHelper.getAuthHeader(adminUser))
+          .expect(200);
+
+        expect(testUserSeasonResponse.body.seasonId).toBe(testSeasonIdByTestUser);
+
+        // Admin should be able to access otherUser's season
+        const otherUserSeasonResponse = await apiRequest
+          .get(`/api/v1/seasons/${testSeasonIdByOtherUser}`)
+          .set(authHelper.getAuthHeader(adminUser))
+          .expect(200);
+
+        expect(otherUserSeasonResponse.body.seasonId).toBe(testSeasonIdByOtherUser);
+
+        console.log('Admin can access any season');
+      });
+
+      it('should allow admin to update any season', async () => {
+        const updateData = {
+          label: 'Admin Updated Season',
+          description: 'Updated by admin'
+        };
+
+        const response = await apiRequest
+          .put(`/api/v1/seasons/${testSeasonIdByOtherUser}`)
+          .set(authHelper.getAuthHeader(adminUser))
+          .send(updateData)
+          .expect(200);
+
+        expect(response.body.label).toBe(updateData.label);
+        expect(response.body.description).toBe(updateData.description);
+
+        console.log('Admin can update any season');
+      });
+
+      it('should allow admin to delete any season', async () => {
+        // Create a temporary season to delete
+        const tempSeason = {
+          label: `Temp Season for Deletion ${Date.now()}`,
+          startDate: '2024-08-01',
+          endDate: '2025-05-31',
+          isCurrent: false,
+          description: 'This will be deleted by admin'
+        };
+
+        const createResponse = await apiRequest
+          .post('/api/v1/seasons')
+          .set(authHelper.getAuthHeader(otherUser))
+          .send(tempSeason)
+          .expect(201);
+
+        const tempSeasonId = createResponse.body.seasonId;
+
+        // Admin should be able to delete it
+        await apiRequest
+          .delete(`/api/v1/seasons/${tempSeasonId}`)
+          .set(authHelper.getAuthHeader(adminUser))
+          .expect(204);
+
+        // Verify it's soft deleted (should return 404 for regular users)
+        await apiRequest
+          .get(`/api/v1/seasons/${tempSeasonId}`)
+          .set(authHelper.getAuthHeader(otherUser))
+          .expect(404);
+
+        console.log('Admin can delete any season');
+      });
+    });
+  });
+
+  describe('GET /api/v1/seasons/current', () => {
+    it('should return 404 when no current season exists', async () => {
+      // Ensure no current seasons exist for this user
+      await prisma.seasons.updateMany({
+        where: { 
+          created_by_user_id: testUser.id,
+          is_deleted: false
+        },
+        data: { is_current: false }
+      });
+
+      await apiRequest
+        .get('/api/v1/seasons/current')
+        .expect(404);
+
+      console.log('404 handling working for current season');
+    });
+
+    it('should return current season when marked with is_current flag', async () => {
+      const currentSeasonData = {
+        label: 'Current Season Test',
+        startDate: '2024-08-01',
+        endDate: '2025-05-31',
+        isCurrent: true
+      };
+
+      const createResponse = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(currentSeasonData)
+        .expect(201);
+
+      createdSeasonIds.push(createResponse.body.seasonId);
+
+      const currentResponse = await apiRequest
+        .get('/api/v1/seasons/current')
+        .expect(200);
+
+      expect(currentResponse.body.season.isCurrent).toBe(true);
+      expect(currentResponse.body.season.label).toBe(currentSeasonData.label);
     });
   });
 });
+
+

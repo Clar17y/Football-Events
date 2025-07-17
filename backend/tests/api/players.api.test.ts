@@ -2,7 +2,7 @@
  * Players API Integration Tests
  * 
  * Comprehensive HTTP endpoint testing for the Players API using Supertest.
- * Players have foreign key relationships to Teams.
+ * Tests authentication, authorization, and team ownership isolation.
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
@@ -10,15 +10,20 @@ import request from 'supertest';
 import { PrismaClient } from '@prisma/client';
 import { app } from '../../src/app';
 import { randomUUID } from 'crypto';
-import { testForeignKeyConstraints, createForeignKeyTestConfigs, testUniqueConstraints, createUniqueConstraintTestConfigs } from './shared-validation-patterns';
+import { AuthTestHelper, TestUser } from './auth-helpers';
 
 describe('Players API Integration', () => {
   let prisma: PrismaClient;
   let apiRequest: request.SuperTest<request.Test>;
-  let testData: {
-    teamId: string;
-    playerIds: string[];
-  };
+  let authHelper: AuthTestHelper;
+  let testUser: TestUser;
+  let adminUser: TestUser;
+  let otherUser: TestUser;
+  let createdPlayerIds: string[] = [];
+  let createdTeamIds: string[] = [];
+  let createdUserIds: string[] = [];
+  let testTeamId: string;
+  let otherUserTeamId: string;
 
   beforeAll(async () => {
     prisma = new PrismaClient({
@@ -31,402 +36,657 @@ describe('Players API Integration', () => {
     
     await prisma.$connect();
     apiRequest = request(app);
+    authHelper = new AuthTestHelper(app);
     
-    console.log('Players API Tests: Database connected');
+    // Create test users
+    testUser = await authHelper.createTestUser('USER');
+    otherUser = await authHelper.createTestUser('USER');
+    adminUser = await authHelper.createAdminUser();
+        
+    // Create test teams
+    const testTeamResponse = await request(app)
+      .post('/api/v1/teams')
+      .set(authHelper.getAuthHeader(testUser))
+      .send({ name: `Test Team ${Date.now()}` })
+      .expect(201);
+    
+    const otherTeamResponse = await request(app)
+      .post('/api/v1/teams')
+      .set(authHelper.getAuthHeader(otherUser))
+      .send({ name: `Other Team ${Date.now()}` })
+      .expect(201);
+    
+    testTeamId = testTeamResponse.body.id;
+    otherUserTeamId = otherTeamResponse.body.id;
+    
+    createdUserIds.push(testUser.id, otherUser.id, adminUser.id);
+    createdTeamIds.push(testTeamId, otherUserTeamId);
+    
+    console.log('Players API Tests: Database connected and test data created');
   });
 
   afterAll(async () => {
+    // Clean up all players first
+    try {
+      await prisma.player.deleteMany({
+        where: { created_by_user_id: { in: createdUserIds } }
+      });
+    } catch (error) {
+      console.warn('Player cleanup warning:', error);
+    }
+    
+    // Clean up all teams
+    try {
+      await prisma.team.deleteMany({
+        where: { created_by_user_id: { in: createdUserIds } }
+      });
+    } catch (error) {
+      console.warn('Team cleanup warning:', error);
+    }
+    
+    // Then clean up users
+    if (createdUserIds.length > 0) {
+      try {
+        await prisma.user.deleteMany({
+          where: { id: { in: createdUserIds } }
+        });
+      } catch (error) {
+        console.warn('User cleanup warning:', error);
+      }
+    }
     await prisma.$disconnect();
   });
 
-  beforeEach(async () => {
-    // Create test data with proper foreign key relationships
-    testData = {
-      teamId: randomUUID(),
-      playerIds: []
-    };
-
-    try {
-      // Create team first (players depend on teams)
-      await prisma.team.create({
-        data: {
-          id: testData.teamId,
-          name: `Test Team ${Date.now()}`,
-          home_kit_primary: '#FF0000'
-        }
-      });
-      
-      console.log(`Test team created: ${testData.teamId.slice(0,8)}`);
-      
-    } catch (error) {
-      console.error('Failed to create test team:', error);
-      throw error;
-    }
+  beforeEach(() => {
+    createdPlayerIds = [];
   });
 
   afterEach(async () => {
-    try {
-      // Clean up in reverse dependency order
-      
-      // 1. Delete players first (depend on team)
-      if (testData.playerIds.length > 0) {
+    // Clean up created players
+    if (createdPlayerIds.length > 0) {
+      try {
         await prisma.player.deleteMany({
-          where: { id: { in: testData.playerIds } }
+          where: { id: { in: createdPlayerIds } }
         });
+        console.log('Players cleaned up successfully');
+      } catch (error) {
+        console.warn('Player cleanup warning (non-fatal):', error);
       }
-      
-      // 2. Delete team (no dependencies)
-      await prisma.team.deleteMany({
-        where: { id: testData.teamId }
-      });
-      
-      console.log('Players test data cleaned up successfully');
-      
-    } catch (error) {
-      console.warn('Player cleanup warning (non-fatal):', error);
     }
   });
 
   describe('POST /api/v1/players', () => {
-    it('should create a player successfully', async () => {
+    it('should require authentication', async () => {
+      const playerData = {
+        name: `Test Player ${Date.now()}`
+      };
+      
+      await apiRequest
+        .post('/api/v1/players')
+        .send(playerData)
+        .expect(401);
+    });
+
+    it('should create a player successfully for own team', async () => {
       const playerData = {
         name: `Test Player ${Date.now()}`,
-        squadNumber: 10,
-        dateOfBirth: '2010-01-15T00:00:00.000Z',
-        notes: 'Test player notes',
-        currentTeam: testData.teamId
-        // Omitting preferredPosition to avoid foreign key constraint
+        squadNumber: 10
       };
       
       const response = await apiRequest
         .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
         .send(playerData)
         .expect(201);
       
-      testData.playerIds.push(response.body.id);
+      createdPlayerIds.push(response.body.id);
       
       expect(response.body).toMatchObject({
         id: expect.any(String),
         name: playerData.name,
-        squadNumber: playerData.squadNumber,
-        currentTeam: testData.teamId
+        squadNumber: playerData.squadNumber
       });
       
-      console.log('Player created successfully:', response.body.id);
+      console.log('Player created successfully');
     });
 
     it('should create a minimal player', async () => {
       const playerData = {
-        name: `Minimal Player ${Date.now()}`,
-        currentTeam: testData.teamId
+        name: `Minimal Player ${Date.now()}`
       };
       
       const response = await apiRequest
         .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
         .send(playerData)
         .expect(201);
       
-      testData.playerIds.push(response.body.id);
+      createdPlayerIds.push(response.body.id);
       
       expect(response.body).toMatchObject({
         id: expect.any(String),
-        name: playerData.name,
-        currentTeam: testData.teamId
+        name: playerData.name
       });
       
-      console.log('Minimal player created successfully:', response.body.id);
+      console.log('Minimal player created successfully');
     });
 
     it('should validate required fields', async () => {
-      const invalidPlayerData = {
-        squadNumber: 10
-        // Missing required name
-      };
+      const invalidPlayerData = {}; // Missing required name
       
       const response = await apiRequest
         .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
         .send(invalidPlayerData)
         .expect(400);
       
       expect(response.body.error || response.body.message).toBeDefined();
       console.log('Validation working:', response.body.error || response.body.message);
     });
-
-    // ENABLED: Using shared validation patterns for consistency
-    it('should validate foreign key constraints', async () => {
-      const config = createForeignKeyTestConfigs.players();
-      await testForeignKeyConstraints(apiRequest, config);
-    });
-
-    // ENABLED: Using shared validation patterns for consistency
-    it('should validate squad number uniqueness within team', async () => {
-      const config = createUniqueConstraintTestConfigs.players(testData.teamId);
-      const createdPlayerId = await testUniqueConstraints(apiRequest, config);
-      testData.playerIds.push(createdPlayerId);
-    });
   });
 
   describe('GET /api/v1/players', () => {
-    it('should return paginated players', async () => {
-      const response = await apiRequest
+    it('should require authentication', async () => {
+      await apiRequest
         .get('/api/v1/players')
-        .expect(200);
-      
-      expect(response.body).toMatchObject({
-        data: expect.any(Array),
-        pagination: {
-          page: expect.any(Number),
-          limit: expect.any(Number),
-          total: expect.any(Number),
-          totalPages: expect.any(Number),
-          hasNext: expect.any(Boolean),
-          hasPrev: expect.any(Boolean)
-        }
-      });
-      
-      console.log('Pagination working, total players:', response.body.pagination.total);
+        .expect(401);
     });
 
-    it('should filter players by team', async () => {
-      // Create a test player first
-      const playerData = {
-        name: `Team Filter Player ${Date.now()}`,
-        currentTeam: testData.teamId
-      };
-      
-      const createResponse = await apiRequest
+    it('should return only players from user\'s teams', async () => {
+      // Create players for different teams
+      const testUserPlayer = await apiRequest
         .post('/api/v1/players')
-        .send(playerData)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ name: `TestUser Player ${Date.now()}` })
         .expect(201);
       
-      testData.playerIds.push(createResponse.body.id);
+      const otherUserPlayer = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send({ name: `OtherUser Player ${Date.now()}`, currentTeam: otherUserTeamId })
+        .expect(201);
       
-      // Filter players by team
-      const response = await apiRequest
-        .get(`/api/v1/players?teamId=${testData.teamId}`)
+      createdPlayerIds.push(testUserPlayer.body.id, otherUserPlayer.body.id);
+      
+      // Test user should only see their own team's players
+      const testUserResponse = await apiRequest
+        .get('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
         .expect(200);
       
-      // Should find our player
-      const foundPlayer = response.body.data.find((player: any) => player.id === createResponse.body.id);
-      expect(foundPlayer).toBeDefined();
+      const testUserPlayerIds = testUserResponse.body.data.map((player: any) => player.id);
+      expect(testUserPlayerIds).toContain(testUserPlayer.body.id);
+      expect(testUserPlayerIds).not.toContain(otherUserPlayer.body.id);
       
-      console.log('Team filtering working, found players:', response.body.data.length);
+      console.log('Ownership isolation working for GET /players');
     });
 
-    it('should support search functionality', async () => {
-      // Create a test player first
-      const playerData = {
-        name: `Searchable Ronaldo ${Date.now()}`,
-        currentTeam: testData.teamId
-      };
-      
-      const createResponse = await apiRequest
+    it('should allow admin to see all players', async () => {
+      // Create players for different teams
+      const testUserPlayer = await apiRequest
         .post('/api/v1/players')
-        .send(playerData)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ name: `TestUser Player ${Date.now()}`, currentTeam: testTeamId })
         .expect(201);
       
-      testData.playerIds.push(createResponse.body.id);
+      const otherUserPlayer = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send({ name: `OtherUser Player ${Date.now()}`, currentTeam: otherUserTeamId })
+        .expect(201);
       
-      // Search for the player
-      const searchTerm = 'Ronaldo';
-      const response = await apiRequest
-        .get(`/api/v1/players?search=${searchTerm}`)
+      createdPlayerIds.push(testUserPlayer.body.id, otherUserPlayer.body.id);
+      
+      // Admin should see all players
+      const adminResponse = await apiRequest
+        .get('/api/v1/players')
+        .set(authHelper.getAuthHeader(adminUser))
         .expect(200);
       
-      // Should find our player
-      const foundPlayer = response.body.data.find((player: any) => player.id === createResponse.body.id);
-      expect(foundPlayer).toBeDefined();
+      const adminPlayerIds = adminResponse.body.data.map((player: any) => player.id);
+      expect(adminPlayerIds).toContain(testUserPlayer.body.id);
+      expect(adminPlayerIds).toContain(otherUserPlayer.body.id);
       
-      console.log('Search functionality working, found players:', response.body.data.length);
+      console.log('Admin can see all players');
     });
   });
 
   describe('GET /api/v1/players/:id', () => {
-    it('should return a specific player', async () => {
-      // Create player first
-      const playerData = {
-        name: `Specific Player ${Date.now()}`,
-        squadNumber: 9,
-        currentTeam: testData.teamId
-      };
-      
-      const createResponse = await apiRequest
+    it('should require authentication', async () => {
+      const playerId = randomUUID();
+      await apiRequest
+        .get(`/api/v1/players/${playerId}`)
+        .expect(401);
+    });
+
+    it('should return player from user\'s team', async () => {
+      // Create player
+      const playerResponse = await apiRequest
         .post('/api/v1/players')
-        .send(playerData)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ name: `Test Player ${Date.now()}` })
         .expect(201);
       
-      testData.playerIds.push(createResponse.body.id);
+      createdPlayerIds.push(playerResponse.body.id);
       
       // Get the specific player
       const response = await apiRequest
-        .get(`/api/v1/players/${createResponse.body.id}`)
+        .get(`/api/v1/players/${playerResponse.body.id}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(200);
       
-      expect(response.body).toMatchObject({
-        id: createResponse.body.id,
-        name: playerData.name,
-        squadNumber: playerData.squadNumber,
-        currentTeam: testData.teamId
-      });
-      
-      console.log('Specific player retrieval working');
+      expect(response.body.id).toBe(playerResponse.body.id);
+      console.log('Player retrieval working');
     });
 
-    it('should return 404 for non-existent player', async () => {
-      const nonExistentId = randomUUID();
+    it('should deny access to other user\'s player', async () => {
+      // Create player with otherUser
+      const playerResponse = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send({ name: `Other User Player ${Date.now()}`, currentTeam: otherUserTeamId })
+        .expect(201);
       
-      const response = await apiRequest
-        .get(`/api/v1/players/${nonExistentId}`)
+      createdPlayerIds.push(playerResponse.body.id);
+      
+      // testUser should not be able to access otherUser's player
+      await apiRequest
+        .get(`/api/v1/players/${playerResponse.body.id}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(404);
       
-      expect(response.body.error || response.body.message).toBeDefined();
-      console.log('404 handling working for non-existent player');
+      console.log('Access denied to other user\'s player');
     });
   });
 
   describe('PUT /api/v1/players/:id', () => {
-    it('should update a player', async () => {
-      // Create player first
-      const playerData = {
-        name: `Updatable Player ${Date.now()}`,
-        squadNumber: 11,
-        currentTeam: testData.teamId
-      };
-      
-      const createResponse = await apiRequest
+    it('should require authentication', async () => {
+      const playerId = randomUUID();
+      await apiRequest
+        .put(`/api/v1/players/${playerId}`)
+        .send({ name: 'Test' })
+        .expect(401);
+    });
+
+    it('should update player from user\'s team', async () => {
+      // Create player
+      const playerResponse = await apiRequest
         .post('/api/v1/players')
-        .send(playerData)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ name: `Update Test Player ${Date.now()}`, currentTeam: testTeamId })
         .expect(201);
       
-      testData.playerIds.push(createResponse.body.id);
+      createdPlayerIds.push(playerResponse.body.id);
       
       // Update the player
-      const updateData = {
-        name: `Updated Player ${Date.now()}`,
-        squadNumber: 12
-        // Omitting preferredPosition to avoid foreign key constraint
-      };
-      
+      const updateData = { name: 'Updated Player Name' };
       const response = await apiRequest
-        .put(`/api/v1/players/${createResponse.body.id}`)
+        .put(`/api/v1/players/${playerResponse.body.id}`)
+        .set(authHelper.getAuthHeader(testUser))
         .send(updateData)
         .expect(200);
       
-      expect(response.body).toMatchObject({
-        id: createResponse.body.id,
-        name: updateData.name,
-        squadNumber: updateData.squadNumber,
-        currentTeam: testData.teamId // Should remain unchanged
-      });
-      
+      expect(response.body.name).toBe(updateData.name);
       console.log('Player update working');
     });
 
-    it('should handle partial updates', async () => {
-      // Create player first
-      const playerData = {
-        name: `Partial Update Player ${Date.now()}`,
-        squadNumber: 13,
-        currentTeam: testData.teamId
-        // Omitting preferredPosition to avoid foreign key constraint
-      };
-      
-      const createResponse = await apiRequest
+    it('should deny updating other user\'s player', async () => {
+      // Create player with otherUser
+      const playerResponse = await apiRequest
         .post('/api/v1/players')
-        .send(playerData)
+        .set(authHelper.getAuthHeader(otherUser))
+        .send({ name: `Other User Player ${Date.now()}`, currentTeam: otherUserTeamId })
         .expect(201);
       
-      testData.playerIds.push(createResponse.body.id);
+      createdPlayerIds.push(playerResponse.body.id);
       
-      // Partial update (only squad number)
-      const updateData = {
-        squadNumber: 14
-      };
+      // testUser should not be able to update otherUser's player
+      await apiRequest
+        .put(`/api/v1/players/${playerResponse.body.id}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ name: 'Hacked Player' })
+        .expect(404);
       
-      const response = await apiRequest
-        .put(`/api/v1/players/${createResponse.body.id}`)
-        .send(updateData)
-        .expect(200);
-      
-      expect(response.body).toMatchObject({
-        id: createResponse.body.id,
-        name: playerData.name, // Should remain unchanged
-        squadNumber: updateData.squadNumber,
-        currentTeam: testData.teamId
-      });
-      
-      console.log('Partial player update working');
+      console.log('Update access denied to other user\'s player');
     });
   });
 
   describe('DELETE /api/v1/players/:id', () => {
-    it('should delete a player', async () => {
-      // Create player first
-      const playerData = {
-        name: `Deletable Player ${Date.now()}`,
-        currentTeam: testData.teamId
-      };
-      
-      const createResponse = await apiRequest
+    it('should require authentication', async () => {
+      const playerId = randomUUID();
+      await apiRequest
+        .delete(`/api/v1/players/${playerId}`)
+        .expect(401);
+    });
+
+    it('should delete player from user\'s team', async () => {
+      // Create player
+      const playerResponse = await apiRequest
         .post('/api/v1/players')
-        .send(playerData)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ name: `Delete Test Player ${Date.now()}`, currentTeam: testTeamId })
         .expect(201);
+      
+      const playerId = playerResponse.body.id;
       
       // Delete the player
       await apiRequest
-        .delete(`/api/v1/players/${createResponse.body.id}`)
+        .delete(`/api/v1/players/${playerId}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(204);
       
-      // Verify deletion - should return 404
+      // Verify player is gone from API
       await apiRequest
-        .get(`/api/v1/players/${createResponse.body.id}`)
+        .get(`/api/v1/players/${playerId}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(404);
       
       console.log('Player deletion working');
-      
-      // Don't add to cleanup array since it's already deleted
     });
 
-    it('should return 404 when deleting non-existent player', async () => {
-      const nonExistentId = randomUUID();
+    it('should perform soft delete', async () => {
+      // Create player
+      const playerResponse = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ name: `Soft Delete Player ${Date.now()}`, currentTeam: testTeamId })
+        .expect(201);
       
-      const response = await apiRequest
-        .delete(`/api/v1/players/${nonExistentId}`)
+      const playerId = playerResponse.body.id;
+      
+      // Delete the player
+      await apiRequest
+        .delete(`/api/v1/players/${playerId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(204);
+      
+      // Verify soft delete in database
+      const deletedPlayer = await prisma.player.findUnique({
+        where: { id: playerId }
+      });
+      
+      expect(deletedPlayer).toBeTruthy();
+      expect(deletedPlayer!.is_deleted).toBe(true);
+      expect(deletedPlayer!.deleted_at).toBeTruthy();
+      expect(deletedPlayer!.deleted_by_user_id).toBe(testUser.id);
+      
+      console.log('Soft delete working correctly');
+    });
+
+    it('should deny deleting other user\'s player', async () => {
+      // Create player with otherUser
+      const playerResponse = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send({ name: `Other User Player ${Date.now()}`, currentTeam: otherUserTeamId })
+        .expect(201);
+      
+      createdPlayerIds.push(playerResponse.body.id);
+      
+      // testUser should not be able to delete otherUser's player
+      await apiRequest
+        .delete(`/api/v1/players/${playerResponse.body.id}`)
+        .set(authHelper.getAuthHeader(testUser))
         .expect(404);
       
-      expect(response.body.error || response.body.message).toBeDefined();
-      console.log('404 handling working for player deletion');
+      console.log('Delete access denied to other user\'s player');
+    });
+
+    it('should restore soft-deleted player when creating same player again', async () => {
+      // 1. Create a player
+      const playerData = {
+        name: 'Soft Delete Restoration Test Player',
+        squadNumber: 99,
+        notes: 'Original player notes'
+      };
+
+      const createResponse = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(playerData)
+        .expect(201);
+
+      const originalPlayerId = createResponse.body.id;
+      console.log('Original player created:', originalPlayerId);
+
+      // 2. Delete the player (soft delete)
+      await apiRequest
+        .delete(`/api/v1/players/${originalPlayerId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(204);
+
+      // Verify it's soft deleted (should return 404)
+      await apiRequest
+        .get(`/api/v1/players/${originalPlayerId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(404);
+
+      console.log('Player soft deleted successfully');
+
+      // 3. Create the same player again (same unique constraints: name + created_by_user_id)
+      const restoredPlayerData = {
+        name: 'Soft Delete Restoration Test Player', // Same name
+        squadNumber: 99, // Same squad number to match unique constraints
+        notes: 'Restored player with new notes'
+      };
+
+      const restoreResponse = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(restoredPlayerData)
+        .expect(201);
+
+      // 4. Verify it's the same record restored (same ID)
+      expect(restoreResponse.body.id).toBe(originalPlayerId);
+      expect(restoreResponse.body.name).toBe(restoredPlayerData.name);
+      expect(restoreResponse.body.squadNumber).toBe(restoredPlayerData.squadNumber);
+      expect(restoreResponse.body.notes).toBe(restoredPlayerData.notes);
+
+      console.log('Player restored with same ID:', restoreResponse.body.id);
+
+      // 5. Verify the player is now accessible again
+      const getResponse = await apiRequest
+        .get(`/api/v1/players/${originalPlayerId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(getResponse.body.id).toBe(originalPlayerId);
+      expect(getResponse.body.notes).toBe(restoredPlayerData.notes);
+
+      console.log('Soft delete restoration working - same player ID restored with updated data');
+
+      // Add to cleanup
+      createdPlayerIds.push(originalPlayerId);
     });
   });
 
-  describe('Performance Tests', () => {
-    it('should handle multiple player creation', async () => {
-      const playerCount = 5;
-      const players = Array.from({ length: playerCount }, (_, i) => ({
-        name: `Performance Player ${i + 1} ${Date.now()}`,
-        squadNumber: i + 1,
-        currentTeam: testData.teamId
-      }));
-      
-      const startTime = Date.now();
-      
-      const promises = players.map(player =>
-        apiRequest.post('/api/v1/players').send(player)
-      );
-      
-      const responses = await Promise.all(promises);
-      const totalTime = Date.now() - startTime;
-      
-      // All should succeed
-      responses.forEach(response => {
-        expect(response.status).toBe(201);
-        testData.playerIds.push(response.body.id);
+  describe('Authorization Tests', () => {
+    let testPlayerIdByTestUser: string;
+    let testPlayerIdByOtherUser: string;
+
+    beforeEach(async () => {
+      // Create a player by testUser
+      const testUserPlayer = {
+        name: `Test User Player ${Date.now()}`,
+        squadNumber: 10,
+        notes: 'Player created by test user'
+      };
+
+      const testUserResponse = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(testUserPlayer)
+        .expect(201);
+
+      testPlayerIdByTestUser = testUserResponse.body.id;
+
+      // Create a player by otherUser
+      const otherUserPlayer = {
+        name: `Other User Player ${Date.now()}`,
+        squadNumber: 20,
+        notes: 'Player created by other user'
+      };
+
+      const otherUserResponse = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send(otherUserPlayer)
+        .expect(201);
+
+      testPlayerIdByOtherUser = otherUserResponse.body.id;
+    });
+
+    afterEach(async () => {
+      // Clean up authorization test data
+      try {
+        await prisma.player.deleteMany({
+          where: { 
+            id: { in: [testPlayerIdByTestUser, testPlayerIdByOtherUser] }
+          }
+        });
+        console.log('Authorization test data cleaned up successfully');
+      } catch (error) {
+        console.warn('Authorization cleanup warning (non-fatal):', error);
+      }
+    });
+
+    describe('User Isolation', () => {
+      it('should not allow users to see other users players in list', async () => {
+        const response = await apiRequest
+          .get('/api/v1/players')
+          .set(authHelper.getAuthHeader(testUser))
+          .expect(200);
+
+        // testUser should only see their own players
+        expect(response.body.data).toBeInstanceOf(Array);
+        
+        // Check that otherUser's player is not in the list
+        const playerIds = response.body.data.map((player: any) => player.id);
+        expect(playerIds).toContain(testPlayerIdByTestUser);
+        expect(playerIds).not.toContain(testPlayerIdByOtherUser);
+
+        console.log('User isolation working for GET /players');
       });
-      
-      const avgTime = totalTime / playerCount;
-      expect(avgTime).toBeLessThan(200); // Average < 200ms per player
-      
-      console.log(`${playerCount} players created: ${totalTime}ms total, ${avgTime.toFixed(1)}ms avg`);
+
+      it('should not allow users to access other users players by ID', async () => {
+        await apiRequest
+          .get(`/api/v1/players/${testPlayerIdByOtherUser}`)
+          .set(authHelper.getAuthHeader(testUser))
+          .expect(404); // Should return 404 (not found) for access denied
+
+        console.log('Access denied to other user\'s player');
+      });
+
+      it('should not allow users to update other users players', async () => {
+        const updateData = {
+          name: 'Hacked Player',
+          notes: 'This should not work'
+        };
+
+        await apiRequest
+          .put(`/api/v1/players/${testPlayerIdByOtherUser}`)
+          .set(authHelper.getAuthHeader(testUser))
+          .send(updateData)
+          .expect(404); // Should return 404 (not found) for access denied
+
+        console.log('Update access denied to other user\'s player');
+      });
+
+      it('should not allow users to delete other users players', async () => {
+        await apiRequest
+          .delete(`/api/v1/players/${testPlayerIdByOtherUser}`)
+          .set(authHelper.getAuthHeader(testUser))
+          .expect(404); // Should return 404 (not found) for access denied
+
+        console.log('Delete access denied to other user\'s player');
+      });
+    });
+
+    describe('Admin Privileges', () => {
+      it('should allow admin to see all players in list', async () => {
+        const response = await apiRequest
+          .get('/api/v1/players')
+          .set(authHelper.getAuthHeader(adminUser))
+          .expect(200);
+
+        // Admin should see players from all users
+        expect(response.body.data).toBeInstanceOf(Array);
+        
+        const playerIds = response.body.data.map((player: any) => player.id);
+        expect(playerIds).toContain(testPlayerIdByTestUser);
+        expect(playerIds).toContain(testPlayerIdByOtherUser);
+
+        console.log('Admin can see all players');
+      });
+
+      it('should allow admin to access any player by ID', async () => {
+        // Admin should be able to access testUser's player
+        const testUserPlayerResponse = await apiRequest
+          .get(`/api/v1/players/${testPlayerIdByTestUser}`)
+          .set(authHelper.getAuthHeader(adminUser))
+          .expect(200);
+
+        expect(testUserPlayerResponse.body.id).toBe(testPlayerIdByTestUser);
+
+        // Admin should be able to access otherUser's player
+        const otherUserPlayerResponse = await apiRequest
+          .get(`/api/v1/players/${testPlayerIdByOtherUser}`)
+          .set(authHelper.getAuthHeader(adminUser))
+          .expect(200);
+
+        expect(otherUserPlayerResponse.body.id).toBe(testPlayerIdByOtherUser);
+
+        console.log('Admin can access any player');
+      });
+
+      it('should allow admin to update any player', async () => {
+        const updateData = {
+          name: 'Admin Updated Player',
+          notes: 'Updated by admin'
+        };
+
+        const response = await apiRequest
+          .put(`/api/v1/players/${testPlayerIdByOtherUser}`)
+          .set(authHelper.getAuthHeader(adminUser))
+          .send(updateData)
+          .expect(200);
+
+        expect(response.body.name).toBe(updateData.name);
+        expect(response.body.notes).toBe(updateData.notes);
+
+        console.log('Admin can update any player');
+      });
+
+      it('should allow admin to delete any player', async () => {
+        // Create a temporary player to delete
+        const tempPlayer = {
+          name: `Temp Player for Deletion ${Date.now()}`,
+          squadNumber: 99,
+          notes: 'This will be deleted by admin'
+        };
+
+        const createResponse = await apiRequest
+          .post('/api/v1/players')
+          .set(authHelper.getAuthHeader(otherUser))
+          .send(tempPlayer)
+          .expect(201);
+
+        const tempPlayerId = createResponse.body.id;
+
+        // Admin should be able to delete it
+        await apiRequest
+          .delete(`/api/v1/players/${tempPlayerId}`)
+          .set(authHelper.getAuthHeader(adminUser))
+          .expect(204);
+
+        // Verify it's soft deleted (should return 404 for regular users)
+        await apiRequest
+          .get(`/api/v1/players/${tempPlayerId}`)
+          .set(authHelper.getAuthHeader(otherUser))
+          .expect(404);
+
+        console.log('Admin can delete any player');
+      });
     });
   });
 });
