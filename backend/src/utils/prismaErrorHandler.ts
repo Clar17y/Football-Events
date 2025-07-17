@@ -133,6 +133,21 @@ export const withPrismaErrorHandling = async <T>(
       customError.apiError = apiError;
       throw customError;
     }
+    
+    // Handle custom errors with statusCode
+    if (error.statusCode && error.code) {
+      const apiError: ApiError = {
+        statusCode: error.statusCode,
+        error: error.code.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+        message: error.message,
+        constraint: error.code.toLowerCase()
+      };
+      const customError = new Error(apiError.message) as any;
+      customError.statusCode = apiError.statusCode;
+      customError.apiError = apiError;
+      throw customError;
+    }
+    
     throw error;
   }
 };

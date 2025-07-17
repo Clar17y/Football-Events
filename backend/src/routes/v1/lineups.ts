@@ -4,6 +4,7 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { extractApiError } from '../../utils/prismaErrorHandler';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
+import { authenticateToken } from '../../middleware/auth';
 import { 
   lineupCreateSchema, 
   lineupUpdateSchema, 
@@ -14,7 +15,7 @@ const router = Router();
 const lineupService = new LineupService();
 
 // GET /api/v1/lineups - List lineups with pagination and filtering
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   const { page, limit, search } = req.query;
   const { matchId, playerId, position } = req.query;
 
@@ -27,14 +28,14 @@ router.get('/', asyncHandler(async (req, res) => {
     position: position as string
   };
 
-  const result = await lineupService.getLineups(options);
+  const result = await lineupService.getLineups(req.user!.id, req.user!.role, options);
   res.json(result);
 }));
 
 // POST /api/v1/lineups - Create new lineup
-router.post('/', validateRequest(lineupCreateSchema), asyncHandler(async (req, res) => {
+router.post('/', authenticateToken, validateRequest(lineupCreateSchema), asyncHandler(async (req, res) => {
   try {
-    const lineup = await lineupService.createLineup(req.body);
+    const lineup = await lineupService.createLineup(req.body, req.user!.id, req.user!.role);
     res.status(201).json(lineup);
   } catch (error: any) {
     const apiError = extractApiError(error);
@@ -52,6 +53,7 @@ router.post('/', validateRequest(lineupCreateSchema), asyncHandler(async (req, r
 
 // GET /api/v1/lineups/:matchId/:playerId/:startMinute - Get lineup by composite key
 router.get('/:matchId/:playerId/:startMinute', 
+  authenticateToken,
   asyncHandler(async (req, res) => {
     const matchId = req.params['matchId']!;
     const playerId = req.params['playerId']!;
@@ -65,7 +67,7 @@ router.get('/:matchId/:playerId/:startMinute',
       });
     }
 
-    const lineup = await lineupService.getLineupByKey(matchId, playerId, startMin);
+    const lineup = await lineupService.getLineupByKey(matchId, playerId, startMin, req.user!.id, req.user!.role);
     
     if (!lineup) {
       return res.status(404).json({
@@ -80,6 +82,7 @@ router.get('/:matchId/:playerId/:startMinute',
 
 // PUT /api/v1/lineups/:matchId/:playerId/:startMinute - Update lineup (with upsert capability)
 router.put('/:matchId/:playerId/:startMinute', 
+  authenticateToken,
   validateRequest(lineupUpdateSchema), 
   asyncHandler(async (req, res) => {
     const matchId = req.params['matchId']!;
@@ -94,7 +97,7 @@ router.put('/:matchId/:playerId/:startMinute',
       });
     }
 
-    const lineup = await lineupService.updateLineup(matchId, playerId, startMin, req.body);
+    const lineup = await lineupService.updateLineup(matchId, playerId, startMin, req.body, req.user!.id, req.user!.role);
     
     if (!lineup) {
       return res.status(404).json({
@@ -109,6 +112,7 @@ router.put('/:matchId/:playerId/:startMinute',
 
 // DELETE /api/v1/lineups/:matchId/:playerId/:startMinute - Delete lineup
 router.delete('/:matchId/:playerId/:startMinute', 
+  authenticateToken,
   asyncHandler(async (req, res) => {
     const matchId = req.params['matchId']!;
     const playerId = req.params['playerId']!;
@@ -122,7 +126,7 @@ router.delete('/:matchId/:playerId/:startMinute',
       });
     }
 
-    const deleted = await lineupService.deleteLineup(matchId, playerId, startMin);
+    const deleted = await lineupService.deleteLineup(matchId, playerId, startMin, req.user!.id, req.user!.role);
     
     if (!deleted) {
       return res.status(404).json({
@@ -136,26 +140,26 @@ router.delete('/:matchId/:playerId/:startMinute',
 );
 
 // GET /api/v1/lineups/match/:matchId - Get lineups for specific match
-router.get('/match/:matchId', validateUUID(), asyncHandler(async (req, res) => {
-  const lineups = await lineupService.getLineupsByMatch(req.params['matchId']!);
+router.get('/match/:matchId', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const lineups = await lineupService.getLineupsByMatch(req.params['matchId']!, req.user!.id, req.user!.role);
   return res.json(lineups);
 }));
 
 // GET /api/v1/lineups/player/:playerId - Get lineups for specific player
-router.get('/player/:playerId', validateUUID(), asyncHandler(async (req, res) => {
-  const lineups = await lineupService.getLineupsByPlayer(req.params['playerId']!);
+router.get('/player/:playerId', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const lineups = await lineupService.getLineupsByPlayer(req.params['playerId']!, req.user!.id, req.user!.role);
   return res.json(lineups);
 }));
 
 // GET /api/v1/lineups/position/:position - Get lineups for specific position
-router.get('/position/:position', asyncHandler(async (req, res) => {
-  const lineups = await lineupService.getLineupsByPosition(req.params['position']!);
+router.get('/position/:position', authenticateToken, asyncHandler(async (req, res) => {
+  const lineups = await lineupService.getLineupsByPosition(req.params['position']!, req.user!.id, req.user!.role);
   return res.json(lineups);
 }));
 
 // POST /api/v1/lineups/batch - Batch operations for lineups
-router.post('/batch', validateRequest(lineupBatchSchema), asyncHandler(async (req, res) => {
-  const result = await lineupService.batchLineups(req.body);
+router.post('/batch', authenticateToken, validateRequest(lineupBatchSchema), asyncHandler(async (req, res) => {
+  const result = await lineupService.batchLineups(req.body, req.user!.id, req.user!.role);
   
   // Determine appropriate status code based on results
   const hasFailures = result.created.failed > 0 || result.updated.failed > 0 || result.deleted.failed > 0;

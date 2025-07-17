@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { AwardsService } from '../../services/AwardsService';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
+import { authenticateToken } from '../../middleware/auth';
 import { awardCreateSchema, awardUpdateSchema, matchAwardCreateSchema, matchAwardUpdateSchema } from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { extractApiError } from '../../utils/prismaErrorHandler';
@@ -13,10 +14,11 @@ const awardsService = new AwardsService();
 
 // POST /api/v1/awards/match-awards - Create new match award
 router.post('/match-awards',
+  authenticateToken,
   validateRequest(matchAwardCreateSchema),
   asyncHandler(async (req, res) => {
     try {
-      const matchAward = await awardsService.createMatchAward(req.body);
+      const matchAward = await awardsService.createMatchAward(req.body, req.user!.id);
       return res.status(201).json(matchAward);
     } catch (error: any) {
       const apiError = extractApiError(error);
@@ -34,34 +36,46 @@ router.post('/match-awards',
 );
 
 // GET /api/v1/awards/match-awards - List match awards with pagination and filtering
-router.get('/match-awards', asyncHandler(async (req, res) => {
+router.get('/match-awards', authenticateToken, asyncHandler(async (req, res) => {
   const { page = 1, limit = 25, search, playerId, category } = req.query;
   
-  const result = await awardsService.getMatchAwards({
-    page: Number(page),
-    limit: Number(limit),
-    search: search as string,
-    playerId: playerId as string,
-    category: category as string
-  });
+  const result = await awardsService.getMatchAwards(
+    req.user!.id,
+    req.user!.role,
+    {
+      page: Number(page),
+      limit: Number(limit),
+      search: search as string,
+      playerId: playerId as string,
+      category: category as string
+    }
+  );
   
   return res.json(result);
 }));
 
 // GET /api/v1/awards/match-awards/:matchId/list - Get all awards for a specific match
-router.get('/match-awards/:matchId/list', validateUUID('matchId'), asyncHandler(async (req, res) => {
-  const matchAwards = await awardsService.getMatchAwardsByMatch(req.params['matchId']!);
+router.get('/match-awards/:matchId/list', authenticateToken, validateUUID('matchId'), asyncHandler(async (req, res) => {
+  const matchAwards = await awardsService.getMatchAwardsByMatch(
+    req.params['matchId']!,
+    req.user!.id,
+    req.user!.role
+  );
   return res.json(matchAwards);
 }));
 
 // GET /api/v1/awards/match-awards/:id - Get match award by ID
-router.get('/match-awards/:id', validateUUID(), asyncHandler(async (req, res) => {
-  const matchAward = await awardsService.getMatchAwardById(req.params['id']!);
+router.get('/match-awards/:id', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const matchAward = await awardsService.getMatchAwardById(
+    req.params['id']!,
+    req.user!.id,
+    req.user!.role
+  );
   
   if (!matchAward) {
     return res.status(404).json({
       error: 'Match award not found',
-      message: `Match award with ID ${req.params['id']} does not exist`
+      message: `Match award with ID ${req.params['id']} does not exist or access denied`
     });
   }
   
@@ -70,14 +84,21 @@ router.get('/match-awards/:id', validateUUID(), asyncHandler(async (req, res) =>
 
 // PUT /api/v1/awards/match-awards/:id - Update match award
 router.put('/match-awards/:id',
+  authenticateToken,
+  validateUUID(),
   validateRequest(matchAwardUpdateSchema),
   asyncHandler(async (req, res) => {
-  const matchAward = await awardsService.updateMatchAward(req.params['id']!, req.body);
+  const matchAward = await awardsService.updateMatchAward(
+    req.params['id']!,
+    req.body,
+    req.user!.id,
+    req.user!.role
+  );
   
   if (!matchAward) {
     return res.status(404).json({
       error: 'Match award not found',
-      message: `Match award with ID ${req.params['id']} does not exist`
+      message: `Match award with ID ${req.params['id']} does not exist or access denied`
     });
   }
   
@@ -85,13 +106,17 @@ router.put('/match-awards/:id',
 }));
 
 // DELETE /api/v1/awards/match-awards/:id - Delete match award
-router.delete('/match-awards/:id', validateUUID(), asyncHandler(async (req, res) => {
-  const success = await awardsService.deleteMatchAward(req.params['id']!);
+router.delete('/match-awards/:id', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const success = await awardsService.deleteMatchAward(
+    req.params['id']!,
+    req.user!.id,
+    req.user!.role
+  );
   
   if (!success) {
     return res.status(404).json({
       error: 'Match award not found',
-      message: `Match award with ID ${req.params['id']} does not exist`
+      message: `Match award with ID ${req.params['id']} does not exist or access denied`
     });
   }
   
@@ -101,27 +126,32 @@ router.delete('/match-awards/:id', validateUUID(), asyncHandler(async (req, res)
 // Season Awards Routes
 
 // GET /api/v1/awards - List season awards with pagination and filtering
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   const { page = 1, limit = 25, search, seasonId, playerId, category } = req.query;
   
-  const result = await awardsService.getAwards({
-    page: Number(page),
-    limit: Number(limit),
-    search: search as string,
-    seasonId: seasonId as string,
-    playerId: playerId as string,
-    category: category as string
-  });
+  const result = await awardsService.getAwards(
+    req.user!.id,
+    req.user!.role,
+    {
+      page: Number(page),
+      limit: Number(limit),
+      search: search as string,
+      seasonId: seasonId as string,
+      playerId: playerId as string,
+      category: category as string
+    }
+  );
   
   return res.json(result);
 }));
 
 // POST /api/v1/awards - Create new season award
 router.post('/', 
+  authenticateToken,
   validateRequest(awardCreateSchema),
   asyncHandler(async (req, res) => {
     try {
-      const award = await awardsService.createAward(req.body);
+      const award = await awardsService.createAward(req.body, req.user!.id);
       return res.status(201).json(award);
     } catch (error: any) {
       const apiError = extractApiError(error);
@@ -139,13 +169,17 @@ router.post('/',
 );
 
 // GET /api/v1/awards/:id - Get season award by ID
-router.get('/:id', validateUUID(), asyncHandler(async (req, res) => {
-  const award = await awardsService.getAwardById(req.params['id']!);
+router.get('/:id', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const award = await awardsService.getAwardById(
+    req.params['id']!,
+    req.user!.id,
+    req.user!.role
+  );
   
   if (!award) {
     return res.status(404).json({
       error: 'Award not found',
-      message: `Award with ID ${req.params['id']} does not exist`
+      message: `Award with ID ${req.params['id']} does not exist or access denied`
     });
   }
   
@@ -154,14 +188,21 @@ router.get('/:id', validateUUID(), asyncHandler(async (req, res) => {
 
 // PUT /api/v1/awards/:id - Update season award
 router.put('/:id',
+  authenticateToken,
+  validateUUID(),
   validateRequest(awardUpdateSchema),
   asyncHandler(async (req, res) => {
-  const award = await awardsService.updateAward(req.params['id']!, req.body);
+  const award = await awardsService.updateAward(
+    req.params['id']!,
+    req.body,
+    req.user!.id,
+    req.user!.role
+  );
   
   if (!award) {
     return res.status(404).json({
       error: 'Award not found',
-      message: `Award with ID ${req.params['id']} does not exist`
+      message: `Award with ID ${req.params['id']} does not exist or access denied`
     });
   }
   
@@ -169,13 +210,17 @@ router.put('/:id',
 }));
 
 // DELETE /api/v1/awards/:id - Delete season award
-router.delete('/:id', validateUUID(), asyncHandler(async (req, res) => {
-  const success = await awardsService.deleteAward(req.params['id']!);
+router.delete('/:id', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const success = await awardsService.deleteAward(
+    req.params['id']!,
+    req.user!.id,
+    req.user!.role
+  );
   
   if (!success) {
     return res.status(404).json({
       error: 'Award not found',
-      message: `Award with ID ${req.params['id']} does not exist`
+      message: `Award with ID ${req.params['id']} does not exist or access denied`
     });
   }
   
@@ -185,10 +230,10 @@ router.delete('/:id', validateUUID(), asyncHandler(async (req, res) => {
 // Helper Routes
 
 // GET /api/v1/awards/player/:playerId - Get all awards for a specific player
-router.get('/player/:playerId', validateUUID('playerId'), asyncHandler(async (req, res) => {
+router.get('/player/:playerId', authenticateToken, validateUUID('playerId'), asyncHandler(async (req, res) => {
   const [seasonAwards, matchAwards] = await Promise.all([
-    awardsService.getAwardsByPlayer(req.params['playerId']!),
-    awardsService.getMatchAwardsByPlayer(req.params['playerId']!)
+    awardsService.getAwardsByPlayer(req.params['playerId']!, req.user!.id, req.user!.role),
+    awardsService.getMatchAwardsByPlayer(req.params['playerId']!, req.user!.id, req.user!.role)
   ]);
   
   return res.json({
@@ -198,8 +243,8 @@ router.get('/player/:playerId', validateUUID('playerId'), asyncHandler(async (re
 }));
 
 // GET /api/v1/awards/season/:seasonId - Get all awards for a specific season
-router.get('/season/:seasonId', validateUUID('seasonId'), asyncHandler(async (req, res) => {
-  const awards = await awardsService.getAwardsBySeason(req.params['seasonId']!);
+router.get('/season/:seasonId', authenticateToken, validateUUID('seasonId'), asyncHandler(async (req, res) => {
+  const awards = await awardsService.getAwardsBySeason(req.params['seasonId']!, req.user!.id, req.user!.role);
   return res.json(awards);
 }));
 

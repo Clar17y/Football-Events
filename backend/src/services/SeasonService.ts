@@ -11,6 +11,7 @@ import type {
   SeasonUpdateRequest 
 } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
+import { createOrRestoreSoftDeleted, UniqueConstraintBuilders } from '../utils/softDeleteUtils';
 
 export interface GetSeasonsOptions {
   page: number;
@@ -37,17 +38,26 @@ export class SeasonService {
     this.prisma = new PrismaClient();
   }
 
-  async getSeasons(options: GetSeasonsOptions): Promise<PaginatedSeasons> {
+  async getSeasons(userId: string, userRole: string, options: GetSeasonsOptions): Promise<PaginatedSeasons> {
     const { page, limit, search } = options;
     const skip = (page - 1) * limit;
 
-    // Build where clause for search
-    const where = search ? {
-      label: {
+    // Build where clause for search and ownership
+    const where: any = {
+      is_deleted: false // Exclude soft-deleted seasons
+    };
+
+    // Non-admin users can only see their own seasons
+    if (userRole !== 'ADMIN') {
+      where.created_by_user_id = userId;
+    }
+
+    if (search) {
+      where.label = {
         contains: search,
         mode: 'insensitive' as const
-      }
-    } : {};
+      };
+    }
 
     // Get seasons and total count
     const [seasons, total] = await Promise.all([
@@ -55,7 +65,17 @@ export class SeasonService {
         where,
         skip,
         take: limit,
-        orderBy: { label: 'desc' } // Most recent seasons first
+        orderBy: { label: 'desc' }, // Most recent seasons first
+        include: {
+          created_by: {
+            select: {
+              id: true,
+              email: true,
+              first_name: true,
+              last_name: true
+            }
+          }
+        }
       }),
       this.prisma.seasons.count({ where })
     ]);
@@ -75,9 +95,29 @@ export class SeasonService {
     };
   }
 
-  async getSeasonById(id: string): Promise<Season | null> {
-    const season = await this.prisma.seasons.findUnique({
-      where: { season_id: id }
+  async getSeasonById(id: string, userId: string, userRole: string): Promise<Season | null> {
+    const where: any = { 
+      season_id: id,
+      is_deleted: false 
+    };
+
+    // Non-admin users can only see their own seasons
+    if (userRole !== 'ADMIN') {
+      where.created_by_user_id = userId;
+    }
+
+    const season = await this.prisma.seasons.findFirst({
+      where,
+      include: {
+        created_by: {
+          select: {
+            id: true,
+            email: true,
+            first_name: true,
+            last_name: true
+          }
+        }
+      }
     });
 
     return season ? transformSeason(season) : null;
@@ -107,23 +147,58 @@ export class SeasonService {
     return currentSeason ? transformSeason(currentSeason) : null;
   }
 
-  async createSeason(data: SeasonCreateRequest): Promise<Season> {
+  async createSeason(data: SeasonCreateRequest, userId: string): Promise<Season> {
     return withPrismaErrorHandling(async () => {
-      const prismaInput = transformSeasonCreateRequest(data);
-      const season = await this.prisma.seasons.create({
-        data: prismaInput
+      const season = await createOrRestoreSoftDeleted({
+        prisma: this.prisma,
+        model: 'seasons',
+        uniqueConstraints: UniqueConstraintBuilders.userScoped('label', data.label, userId),
+        createData: transformSeasonCreateRequest(data),
+        userId,
+        transformer: transformSeason,
+        primaryKeyField: 'season_id'
       });
 
-      return transformSeason(season);
+      return season;
     }, 'Season');
   }
 
-  async updateSeason(id: string, data: SeasonUpdateRequest): Promise<Season | null> {
+  async updateSeason(id: string, data: SeasonUpdateRequest, userId: string, userRole: string): Promise<Season | null> {
     try {
+      // First check if season exists and user has permission
+      const where: any = { 
+        season_id: id,
+        is_deleted: false 
+      };
+
+      // Non-admin users can only update their own seasons
+      if (userRole !== 'ADMIN') {
+        where.created_by_user_id = userId;
+      }
+
+      // Check if season exists and user has access
+      const existingSeason = await this.prisma.seasons.findFirst({ where });
+      if (!existingSeason) {
+        return null; // Season not found or no permission
+      }
+
       const prismaInput = transformSeasonUpdateRequest(data);
       const season = await this.prisma.seasons.update({
         where: { season_id: id },
-        data: prismaInput
+        data: {
+          ...prismaInput,
+          updated_at: new Date()
+        },
+        include: {
+          created_by: {
+            select: {
+              id: true,
+              email: true,
+              first_name: true,
+              last_name: true
+            }
+          }
+        }
       });
 
       return transformSeason(season);
@@ -135,10 +210,33 @@ export class SeasonService {
     }
   }
 
-  async deleteSeason(id: string): Promise<boolean> {
+  async deleteSeason(id: string, userId: string, userRole: string): Promise<boolean> {
     try {
-      await this.prisma.seasons.delete({
-        where: { season_id: id }
+      // First check if season exists and user has permission
+      const where: any = { 
+        season_id: id,
+        is_deleted: false 
+      };
+
+      // Non-admin users can only delete their own seasons
+      if (userRole !== 'ADMIN') {
+        where.created_by_user_id = userId;
+      }
+
+      // Check if season exists and user has access
+      const existingSeason = await this.prisma.seasons.findFirst({ where });
+      if (!existingSeason) {
+        return false; // Season not found or no permission
+      }
+
+      // Soft delete the season
+      await this.prisma.seasons.update({
+        where: { season_id: id },
+        data: {
+          is_deleted: true,
+          deleted_at: new Date(),
+          deleted_by_user_id: userId
+        }
       });
       return true;
     } catch (error: any) {

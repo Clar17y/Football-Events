@@ -3,6 +3,7 @@ import { EventService } from '../../services/EventService';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
+import { authenticateToken } from '../../middleware/auth';
 import { 
   eventCreateSchema, 
   eventUpdateSchema, 
@@ -13,7 +14,7 @@ const router = Router();
 const eventService = new EventService();
 
 // GET /api/v1/events - List events with pagination and filtering
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   const { page, limit, search } = req.query;
   const { matchId, seasonId, playerId, teamId, kind } = req.query;
 
@@ -28,24 +29,24 @@ router.get('/', asyncHandler(async (req, res) => {
     kind: kind as string
   };
 
-  const result = await eventService.getEvents(options);
+  const result = await eventService.getEvents(req.user!.id, req.user!.role, options);
   res.json(result);
 }));
 
 // POST /api/v1/events - Create new event
-router.post('/', validateRequest(eventCreateSchema), asyncHandler(async (req, res) => {
-  const event = await eventService.createEvent(req.body);
+router.post('/', authenticateToken, validateRequest(eventCreateSchema), asyncHandler(async (req, res) => {
+  const event = await eventService.createEvent(req.body, req.user!.id, req.user!.role);
   res.status(201).json(event);
 }));
 
 // GET /api/v1/events/:id - Get event by ID
-router.get('/:id', validateUUID(), asyncHandler(async (req, res) => {
-  const event = await eventService.getEventById(req.params['id']!);
+router.get('/:id', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const event = await eventService.getEventById(req.params['id']!, req.user!.id, req.user!.role);
   
   if (!event) {
     return res.status(404).json({
       error: 'Event not found',
-      message: `No event found with ID: ${req.params['id']}`
+      message: `No event found with ID: ${req.params['id']} or access denied`
     });
   }
   
@@ -53,27 +54,27 @@ router.get('/:id', validateUUID(), asyncHandler(async (req, res) => {
 }));
 
 // PUT /api/v1/events/:id - Update event (with upsert capability)
-router.put('/:id', validateUUID(), validateRequest(eventUpdateSchema), asyncHandler(async (req, res) => {
-  const event = await eventService.updateEvent(req.params['id']!, req.body);
+router.put('/:id', authenticateToken, validateUUID(), validateRequest(eventUpdateSchema), asyncHandler(async (req, res) => {
+  const event = await eventService.updateEvent(req.params['id']!, req.body, req.user!.id, req.user!.role);
   
   if (!event) {
     return res.status(404).json({
       error: 'Event not found',
-      message: `No event found with ID: ${req.params['id']}, and insufficient data provided for creation`
+      message: `No event found with ID: ${req.params['id']}, access denied, or insufficient data provided for creation`
     });
   }
   
   return res.json(event);
 }));
 
-// DELETE /api/v1/events/:id - Delete event
-router.delete('/:id', validateUUID(), asyncHandler(async (req, res) => {
-  const deleted = await eventService.deleteEvent(req.params['id']!);
+// DELETE /api/v1/events/:id - Delete event (soft delete)
+router.delete('/:id', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const deleted = await eventService.deleteEvent(req.params['id']!, req.user!.id, req.user!.role);
   
   if (!deleted) {
     return res.status(404).json({
       error: 'Event not found',
-      message: `No event found with ID: ${req.params['id']}`
+      message: `No event found with ID: ${req.params['id']} or access denied`
     });
   }
   
@@ -81,26 +82,26 @@ router.delete('/:id', validateUUID(), asyncHandler(async (req, res) => {
 }));
 
 // GET /api/v1/events/match/:matchId - Get events for specific match
-router.get('/match/:matchId', validateUUID(), asyncHandler(async (req, res) => {
-  const events = await eventService.getEventsByMatch(req.params['matchId']!);
+router.get('/match/:matchId', authenticateToken, validateUUID('matchId'), asyncHandler(async (req, res) => {
+  const events = await eventService.getEventsByMatch(req.params['matchId']!, req.user!.id, req.user!.role);
   return res.json(events);
 }));
 
 // GET /api/v1/events/season/:seasonId - Get events for specific season
-router.get('/season/:seasonId', validateUUID(), asyncHandler(async (req, res) => {
-  const events = await eventService.getEventsBySeason(req.params['seasonId']!);
+router.get('/season/:seasonId', authenticateToken, validateUUID('seasonId'), asyncHandler(async (req, res) => {
+  const events = await eventService.getEventsBySeason(req.params['seasonId']!, req.user!.id, req.user!.role);
   return res.json(events);
 }));
 
 // GET /api/v1/events/player/:playerId - Get events for specific player
-router.get('/player/:playerId', validateUUID(), asyncHandler(async (req, res) => {
-  const events = await eventService.getEventsByPlayer(req.params['playerId']!);
+router.get('/player/:playerId', authenticateToken, validateUUID('playerId'), asyncHandler(async (req, res) => {
+  const events = await eventService.getEventsByPlayer(req.params['playerId']!, req.user!.id, req.user!.role);
   return res.json(events);
 }));
 
 // POST /api/v1/events/batch - Batch operations for events
-router.post('/batch', validateRequest(eventBatchSchema), asyncHandler(async (req, res) => {
-  const result = await eventService.batchEvents(req.body);
+router.post('/batch', authenticateToken, validateRequest(eventBatchSchema), asyncHandler(async (req, res) => {
+  const result = await eventService.batchEvents(req.body, req.user!.id, req.user!.role);
   
   // Determine appropriate status code based on results
   const hasFailures = result.created.failed > 0 || result.updated.failed > 0 || result.deleted.failed > 0;

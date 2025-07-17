@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { SeasonService } from '../../services/SeasonService';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
+import { authenticateToken } from '../../middleware/auth';
 import { seasonCreateSchema, seasonUpdateSchema } from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { extractApiError } from '../../utils/prismaErrorHandler';
@@ -35,24 +36,29 @@ router.get('/current', asyncHandler(async (req, res) => {
 }));
 
 // GET /api/v1/seasons - List seasons with pagination and filtering
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   const { page = 1, limit = 25, search } = req.query;
   
-  const result = await seasonService.getSeasons({
-    page: Number(page),
-    limit: Number(limit),
-    search: search as string
-  });
+  const result = await seasonService.getSeasons(
+    req.user!.id,
+    req.user!.role,
+    {
+      page: Number(page),
+      limit: Number(limit),
+      search: search as string
+    }
+  );
   
   res.json(result);
 }));
 
 // POST /api/v1/seasons - Create new season
 router.post('/', 
+  authenticateToken,
   validateRequest(seasonCreateSchema),
   asyncHandler(async (req, res) => {
     try {
-      const season = await seasonService.createSeason(req.body);
+      const season = await seasonService.createSeason(req.body, req.user!.id);
       res.status(201).json(season);
     } catch (error: any) {
       const apiError = extractApiError(error);
@@ -70,13 +76,17 @@ router.post('/',
 );
 
 // GET /api/v1/seasons/:id - Get season by ID
-router.get('/:id', validateUUID(), asyncHandler(async (req, res) => {
-  const season = await seasonService.getSeasonById(req.params['id']!);
+router.get('/:id', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const season = await seasonService.getSeasonById(
+    req.params['id']!,
+    req.user!.id,
+    req.user!.role
+  );
   
   if (!season) {
     return res.status(404).json({
       error: 'Season not found',
-      message: `Season with ID ${req.params['id']} does not exist`
+      message: `Season with ID ${req.params['id']} does not exist or access denied`
     });
   }
   
@@ -85,14 +95,21 @@ router.get('/:id', validateUUID(), asyncHandler(async (req, res) => {
 
 // PUT /api/v1/seasons/:id - Update season
 router.put('/:id',
+  authenticateToken,
+  validateUUID(),
   validateRequest(seasonUpdateSchema),
   asyncHandler(async (req, res) => {
-    const season = await seasonService.updateSeason(req.params['id']!, req.body);
+    const season = await seasonService.updateSeason(
+      req.params['id']!,
+      req.body,
+      req.user!.id,
+      req.user!.role
+    );
     
     if (!season) {
       return res.status(404).json({
         error: 'Season not found',
-        message: `Season with ID ${req.params['id']} does not exist`
+        message: `Season with ID ${req.params['id']} does not exist or access denied`
       });
     }
     
@@ -100,14 +117,18 @@ router.put('/:id',
   })
 );
 
-// DELETE /api/v1/seasons/:id - Delete season
-router.delete('/:id', validateUUID(), asyncHandler(async (req, res) => {
-  const success = await seasonService.deleteSeason(req.params['id']!);
+// DELETE /api/v1/seasons/:id - Delete season (soft delete)
+router.delete('/:id', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const success = await seasonService.deleteSeason(
+    req.params['id']!,
+    req.user!.id,
+    req.user!.role
+  );
   
   if (!success) {
     return res.status(404).json({
       error: 'Season not found',
-      message: `Season with ID ${req.params['id']} does not exist`
+      message: `Season with ID ${req.params['id']} does not exist or access denied`
     });
   }
   

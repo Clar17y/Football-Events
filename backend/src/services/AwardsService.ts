@@ -18,6 +18,7 @@ import type {
   MatchAwardUpdateRequest
 } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
+import { createOrRestoreSoftDeleted, SoftDeletePatterns } from '../utils/softDeleteUtils';
 
 export interface GetAwardsOptions {
   page: number;
@@ -60,12 +61,19 @@ export class AwardsService {
   }
 
   // Season Awards (awards table)
-  async getAwards(options: GetAwardsOptions): Promise<PaginatedAwards> {
+  async getAwards(userId: string, userRole: string, options: GetAwardsOptions): Promise<PaginatedAwards> {
     const { page, limit, search, seasonId, playerId, category } = options;
     const skip = (page - 1) * limit;
 
-    // Build where clause for filtering
-    const where: any = {};
+    // Build where clause for filtering and ownership
+    const where: any = {
+      is_deleted: false // Exclude soft-deleted awards
+    };
+
+    // Non-admin users can only see awards they created
+    if (userRole !== 'ADMIN') {
+      where.created_by_user_id = userId;
+    }
     
     if (search) {
       where.OR = [
@@ -125,31 +133,65 @@ export class AwardsService {
     };
   }
 
-  async getAwardById(id: string): Promise<Award | null> {
-    const award = await this.prisma.awards.findUnique({
-      where: { award_id: id }
+  async getAwardById(id: string, userId: string, userRole: string): Promise<Award | null> {
+    const where: any = { 
+      award_id: id,
+      is_deleted: false 
+    };
+
+    // Non-admin users can only see awards they created
+    if (userRole !== 'ADMIN') {
+      where.created_by_user_id = userId;
+    }
+
+    const award = await this.prisma.awards.findFirst({
+      where
     });
 
     return award ? transformAward(award) : null;
   }
 
-  async createAward(data: AwardCreateRequest): Promise<Award> {
+  async createAward(data: AwardCreateRequest, userId: string): Promise<Award> {
     return withPrismaErrorHandling(async () => {
-      const prismaInput = transformAwardCreateRequest(data);
-      const award = await this.prisma.awards.create({
-        data: prismaInput
+      const award = await createOrRestoreSoftDeleted({
+        prisma: this.prisma,
+        model: 'awards',
+        uniqueConstraints: SoftDeletePatterns.awardConstraint(data.playerId, data.seasonId, data.category),
+        createData: transformAwardCreateRequest(data),
+        userId,
+        transformer: transformAward,
+        primaryKeyField: 'award_id'
       });
-
-      return transformAward(award);
+      return award;
     }, 'Award');
   }
 
-  async updateAward(id: string, data: AwardUpdateRequest): Promise<Award | null> {
+  async updateAward(id: string, data: AwardUpdateRequest, userId: string, userRole: string): Promise<Award | null> {
     try {
+      // First check if award exists and user has permission
+      const where: any = { 
+        award_id: id,
+        is_deleted: false 
+      };
+
+      // Non-admin users can only update awards they created
+      if (userRole !== 'ADMIN') {
+        where.created_by_user_id = userId;
+      }
+
+      // Check if award exists and user has access
+      const existingAward = await this.prisma.awards.findFirst({ where });
+      if (!existingAward) {
+        return null; // Award not found or no permission
+      }
+
       const prismaInput = transformAwardUpdateRequest(data);
       const award = await this.prisma.awards.update({
         where: { award_id: id },
-        data: prismaInput
+        data: {
+          ...prismaInput,
+          updated_at: new Date()
+        }
       });
 
       return transformAward(award);
@@ -161,11 +203,35 @@ export class AwardsService {
     }
   }
 
-  async deleteAward(id: string): Promise<boolean> {
+  async deleteAward(id: string, userId: string, userRole: string): Promise<boolean> {
     try {
-      await this.prisma.awards.delete({
-        where: { award_id: id }
+      // First check if award exists and user has permission
+      const where: any = { 
+        award_id: id,
+        is_deleted: false 
+      };
+
+      // Non-admin users can only delete awards they created
+      if (userRole !== 'ADMIN') {
+        where.created_by_user_id = userId;
+      }
+
+      // Check if award exists and user has access
+      const existingAward = await this.prisma.awards.findFirst({ where });
+      if (!existingAward) {
+        return false; // Award not found or no permission
+      }
+
+      // Soft delete the award
+      await this.prisma.awards.update({
+        where: { award_id: id },
+        data: {
+          is_deleted: true,
+          deleted_at: new Date(),
+          deleted_by_user_id: userId
+        }
       });
+
       return true;
     } catch (error: any) {
       if (error.code === 'P2025') {
@@ -176,12 +242,19 @@ export class AwardsService {
   }
 
   // Match Awards (match_awards table)
-  async getMatchAwards(options: GetAwardsOptions): Promise<PaginatedMatchAwards> {
+  async getMatchAwards(userId: string, userRole: string, options: GetAwardsOptions): Promise<PaginatedMatchAwards> {
     const { page, limit, search, playerId, category } = options;
     const skip = (page - 1) * limit;
 
-    // Build where clause for filtering
-    const where: any = {};
+    // Build where clause for filtering and ownership
+    const where: any = {
+      is_deleted: false // Exclude soft-deleted match awards
+    };
+
+    // Non-admin users can only see match awards they created
+    if (userRole !== 'ADMIN') {
+      where.created_by_user_id = userId;
+    }
     
     if (search) {
       where.OR = [
@@ -237,31 +310,65 @@ export class AwardsService {
     };
   }
 
-  async getMatchAwardById(id: string): Promise<MatchAward | null> {
-    const matchAward = await this.prisma.match_awards.findUnique({
-      where: { match_award_id: id }
+  async getMatchAwardById(id: string, userId: string, userRole: string): Promise<MatchAward | null> {
+    const where: any = { 
+      match_award_id: id,
+      is_deleted: false 
+    };
+
+    // Non-admin users can only see match awards they created
+    if (userRole !== 'ADMIN') {
+      where.created_by_user_id = userId;
+    }
+
+    const matchAward = await this.prisma.match_awards.findFirst({
+      where
     });
 
     return matchAward ? transformMatchAward(matchAward) : null;
   }
 
-  async createMatchAward(data: MatchAwardCreateRequest): Promise<MatchAward> {
+  async createMatchAward(data: MatchAwardCreateRequest, userId: string): Promise<MatchAward> {
     return withPrismaErrorHandling(async () => {
-      const prismaInput = transformMatchAwardCreateRequest(data);
-      const matchAward = await this.prisma.match_awards.create({
-        data: prismaInput
+      const matchAward = await createOrRestoreSoftDeleted({
+        prisma: this.prisma,
+        model: 'match_awards',
+        uniqueConstraints: SoftDeletePatterns.matchAwardConstraint(data.playerId, data.matchId, data.category),
+        createData: transformMatchAwardCreateRequest(data),
+        userId,
+        transformer: transformMatchAward,
+        primaryKeyField: 'match_award_id'
       });
-
-      return transformMatchAward(matchAward);
+      return matchAward;
     }, 'MatchAward');
   }
 
-  async updateMatchAward(id: string, data: MatchAwardUpdateRequest): Promise<MatchAward | null> {
+  async updateMatchAward(id: string, data: MatchAwardUpdateRequest, userId: string, userRole: string): Promise<MatchAward | null> {
     try {
+      // First check if match award exists and user has permission
+      const where: any = { 
+        match_award_id: id,
+        is_deleted: false 
+      };
+
+      // Non-admin users can only update match awards they created
+      if (userRole !== 'ADMIN') {
+        where.created_by_user_id = userId;
+      }
+
+      // Check if match award exists and user has access
+      const existingMatchAward = await this.prisma.match_awards.findFirst({ where });
+      if (!existingMatchAward) {
+        return null; // Match award not found or no permission
+      }
+
       const prismaInput = transformMatchAwardUpdateRequest(data);
       const matchAward = await this.prisma.match_awards.update({
         where: { match_award_id: id },
-        data: prismaInput
+        data: {
+          ...prismaInput,
+          updated_at: new Date()
+        }
       });
 
       return transformMatchAward(matchAward);
@@ -273,11 +380,35 @@ export class AwardsService {
     }
   }
 
-  async deleteMatchAward(id: string): Promise<boolean> {
+  async deleteMatchAward(id: string, userId: string, userRole: string): Promise<boolean> {
     try {
-      await this.prisma.match_awards.delete({
-        where: { match_award_id: id }
+      // First check if match award exists and user has permission
+      const where: any = { 
+        match_award_id: id,
+        is_deleted: false 
+      };
+
+      // Non-admin users can only delete match awards they created
+      if (userRole !== 'ADMIN') {
+        where.created_by_user_id = userId;
+      }
+
+      // Check if match award exists and user has access
+      const existingMatchAward = await this.prisma.match_awards.findFirst({ where });
+      if (!existingMatchAward) {
+        return false; // Match award not found or no permission
+      }
+
+      // Soft delete the match award
+      await this.prisma.match_awards.update({
+        where: { match_award_id: id },
+        data: {
+          is_deleted: true,
+          deleted_at: new Date(),
+          deleted_by_user_id: userId
+        }
       });
+
       return true;
     } catch (error: any) {
       if (error.code === 'P2025') {
@@ -287,36 +418,76 @@ export class AwardsService {
     }
   }
 
-  async getAwardsByPlayer(playerId: string): Promise<Award[]> {
+  async getAwardsByPlayer(playerId: string, userId: string, userRole: string): Promise<Award[]> {
+    const where: any = { 
+      player_id: playerId,
+      is_deleted: false 
+    };
+
+    // Non-admin users can only see awards they created
+    if (userRole !== 'ADMIN') {
+      where.created_by_user_id = userId;
+    }
+
     const awards = await this.prisma.awards.findMany({
-      where: { player_id: playerId },
+      where,
       orderBy: { created_at: 'desc' }
     });
 
     return transformAwards(awards);
   }
 
-  async getMatchAwardsByPlayer(playerId: string): Promise<MatchAward[]> {
+  async getMatchAwardsByPlayer(playerId: string, userId: string, userRole: string): Promise<MatchAward[]> {
+    const where: any = { 
+      player_id: playerId,
+      is_deleted: false 
+    };
+
+    // Non-admin users can only see match awards they created
+    if (userRole !== 'ADMIN') {
+      where.created_by_user_id = userId;
+    }
+
     const matchAwards = await this.prisma.match_awards.findMany({
-      where: { player_id: playerId },
+      where,
       orderBy: { created_at: 'desc' }
     });
 
     return transformMatchAwards(matchAwards);
   }
 
-  async getAwardsBySeason(seasonId: string): Promise<Award[]> {
+  async getAwardsBySeason(seasonId: string, userId: string, userRole: string): Promise<Award[]> {
+    const where: any = { 
+      season_id: seasonId,
+      is_deleted: false 
+    };
+
+    // Non-admin users can only see awards they created
+    if (userRole !== 'ADMIN') {
+      where.created_by_user_id = userId;
+    }
+
     const awards = await this.prisma.awards.findMany({
-      where: { season_id: seasonId },
+      where,
       orderBy: { created_at: 'desc' }
     });
 
     return transformAwards(awards);
   }
 
-  async getMatchAwardsByMatch(matchId: string): Promise<MatchAward[]> {
+  async getMatchAwardsByMatch(matchId: string, userId: string, userRole: string): Promise<MatchAward[]> {
+    const where: any = { 
+      match_id: matchId,
+      is_deleted: false 
+    };
+
+    // Non-admin users can only see match awards they created
+    if (userRole !== 'ADMIN') {
+      where.created_by_user_id = userId;
+    }
+
     const matchAwards = await this.prisma.match_awards.findMany({
-      where: { match_id: matchId },
+      where,
       orderBy: { created_at: 'desc' }
     });
 

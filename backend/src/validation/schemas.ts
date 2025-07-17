@@ -40,13 +40,10 @@ export const playerCreateSchema = z.object({
     .max(10, 'Position code must be less than 10 characters')
     .optional(),
   dateOfBirth: z.string()
-    .datetime('Date of birth must be a valid ISO date')
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be in YYYY-MM-DD format')
     .optional(),
   notes: z.string()
     .max(1000, 'Notes must be less than 1000 characters')
-    .optional(),
-  currentTeam: z.string()
-    .uuid('Current team must be a valid UUID')
     .optional()
 });
 
@@ -59,9 +56,9 @@ const seasonBaseSchema = z.object({
     .max(50, 'Season label must be less than 50 characters')
     .trim(),
   startDate: z.string()
-    .datetime('Start date must be a valid ISO date'),
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be in YYYY-MM-DD format'),
   endDate: z.string()
-    .datetime('End date must be a valid ISO date'),
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must be in YYYY-MM-DD format'),
   isCurrent: z.boolean()
     .optional()
     .default(false),
@@ -71,7 +68,7 @@ const seasonBaseSchema = z.object({
 });
 
 export const seasonCreateSchema = seasonBaseSchema.refine(
-  (data) => new Date(data.startDate) < new Date(data.endDate),
+  (data) => new Date(data.startDate + 'T00:00:00.000Z') < new Date(data.endDate + 'T00:00:00.000Z'),
   {
     message: 'Start date must be before end date',
     path: ['endDate']
@@ -81,7 +78,7 @@ export const seasonCreateSchema = seasonBaseSchema.refine(
 export const seasonUpdateSchema = seasonBaseSchema.partial().refine(
   (data) => {
     if (data.startDate && data.endDate) {
-      return new Date(data.startDate) < new Date(data.endDate);
+      return new Date(data.startDate + 'T00:00:00.000Z') < new Date(data.endDate + 'T00:00:00.000Z');
     }
     return true;
   },
@@ -90,33 +87,6 @@ export const seasonUpdateSchema = seasonBaseSchema.partial().refine(
     path: ['endDate']
   }
 );
-
-// Position validation schemas
-export const positionCreateSchema = z.object({
-  code: z.string()
-    .min(1, 'Position code is required')
-    .max(10, 'Position code must be less than 10 characters')
-    .trim()
-    .toUpperCase(),
-  longName: z.string()
-    .min(1, 'Position name is required')
-    .max(50, 'Position name must be less than 50 characters')
-    .trim()
-});
-
-export const positionUpdateSchema = z.object({
-  code: z.string()
-    .min(1, 'Position code is required')
-    .max(10, 'Position code must be less than 10 characters')
-    .trim()
-    .toUpperCase()
-    .optional(),
-  longName: z.string()
-    .min(1, 'Position name is required')
-    .max(50, 'Position name must be less than 50 characters')
-    .trim()
-    .optional()
-});
 
 // Match validation schemas
 export const matchCreateSchema = z.object({
@@ -151,8 +121,6 @@ export const matchUpdateSchema = z.object({
 export const eventCreateSchema = z.object({
   matchId: z.string()
     .uuid('Match ID must be a valid UUID'),
-  seasonId: z.string()
-    .uuid('Season ID must be a valid UUID'),
   kind: z.enum([
     'goal', 'assist', 'key_pass', 'save', 'interception', 
     'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal'
@@ -291,4 +259,23 @@ export const lineupBatchSchema = z.object({
     playerId: z.string().uuid('Player ID must be a valid UUID'),
     startMinute: z.number().min(0).max(300)
   })).optional().default([])
+});
+
+// Player Teams validation schemas
+export const playerTeamCreateSchema = z.object({
+  playerId: z.string().uuid('Player ID must be a valid UUID'),
+  teamId: z.string().uuid('Team ID must be a valid UUID'),
+  startDate: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be in YYYY-MM-DD format'),
+  endDate: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must be in YYYY-MM-DD format')
+    .optional(),
+  isActive: z.boolean().optional().default(true)
+});
+
+export const playerTeamUpdateSchema = z.object({
+  endDate: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must be in YYYY-MM-DD format')
+    .optional(),
+  isActive: z.boolean().optional()
 });

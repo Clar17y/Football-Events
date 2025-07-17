@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { TeamService } from '../../services/TeamService';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
+import { authenticateToken } from '../../middleware/auth';
 import { teamCreateSchema, teamUpdateSchema } from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { extractApiError } from '../../utils/prismaErrorHandler';
@@ -10,24 +11,29 @@ const router = Router();
 const teamService = new TeamService();
 
 // GET /api/v1/teams - List teams with pagination and filtering
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   const { page = 1, limit = 25, search } = req.query;
   
-  const result = await teamService.getTeams({
-    page: Number(page),
-    limit: Number(limit),
-    search: search as string
-  });
+  const result = await teamService.getTeams(
+    req.user!.id,
+    req.user!.role,
+    {
+      page: Number(page),
+      limit: Number(limit),
+      search: search as string
+    }
+  );
   
   res.json(result);
 }));
 
 // POST /api/v1/teams - Create new team
 router.post('/', 
+  authenticateToken,
   validateRequest(teamCreateSchema),
   asyncHandler(async (req, res) => {
     try {
-      const team = await teamService.createTeam(req.body);
+      const team = await teamService.createTeam(req.body, req.user!.id);
       res.status(201).json(team);
     } catch (error: any) {
       const apiError = extractApiError(error);
@@ -45,13 +51,17 @@ router.post('/',
 );
 
 // GET /api/v1/teams/:id - Get team by ID
-router.get('/:id', validateUUID(), asyncHandler(async (req, res) => {
-  const team = await teamService.getTeamById(req.params['id']!);
+router.get('/:id', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const team = await teamService.getTeamById(
+    req.params['id']!,
+    req.user!.id,
+    req.user!.role
+  );
   
   if (!team) {
     return res.status(404).json({
       error: 'Team not found',
-      message: `Team with ID ${req.params['id']} does not exist`
+      message: `Team with ID ${req.params['id']} does not exist or access denied`
     });
   }
   
@@ -60,15 +70,21 @@ router.get('/:id', validateUUID(), asyncHandler(async (req, res) => {
 
 // PUT /api/v1/teams/:id - Update team
 router.put('/:id',
+  authenticateToken,
   validateUUID(),
   validateRequest(teamUpdateSchema),
   asyncHandler(async (req, res) => {
-    const team = await teamService.updateTeam(req.params['id']!, req.body);
+    const team = await teamService.updateTeam(
+      req.params['id']!,
+      req.body,
+      req.user!.id,
+      req.user!.role
+    );
     
     if (!team) {
       return res.status(404).json({
         error: 'Team not found',
-        message: `Team with ID ${req.params['id']} does not exist`
+        message: `Team with ID ${req.params['id']} does not exist or access denied`
       });
     }
     
@@ -76,14 +92,18 @@ router.put('/:id',
   })
 );
 
-// DELETE /api/v1/teams/:id - Delete team
-router.delete('/:id', validateUUID(), asyncHandler(async (req, res) => {
-  const success = await teamService.deleteTeam(req.params['id']!);
+// DELETE /api/v1/teams/:id - Delete team (soft delete)
+router.delete('/:id', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const success = await teamService.deleteTeam(
+    req.params['id']!,
+    req.user!.id,
+    req.user!.role
+  );
   
   if (!success) {
     return res.status(404).json({
       error: 'Team not found',
-      message: `Team with ID ${req.params['id']} does not exist`
+      message: `Team with ID ${req.params['id']} does not exist or access denied`
     });
   }
   
@@ -91,9 +111,23 @@ router.delete('/:id', validateUUID(), asyncHandler(async (req, res) => {
 }));
 
 // GET /api/v1/teams/:id/players - Get team roster
-router.get('/:id/players', validateUUID(), asyncHandler(async (req, res) => {
-  const players = await teamService.getTeamPlayers(req.params['id']!);
-  return res.json(players);
+router.get('/:id/players', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  try {
+    const players = await teamService.getTeamPlayers(
+      req.params['id']!,
+      req.user!.id,
+      req.user!.role
+    );
+    return res.json(players);
+  } catch (error: any) {
+    if (error.message === 'Team not found or access denied') {
+      return res.status(404).json({
+        error: 'Team not found',
+        message: `Team with ID ${req.params['id']} does not exist or access denied`
+      });
+    }
+    throw error;
+  }
 }));
 
 export default router;
