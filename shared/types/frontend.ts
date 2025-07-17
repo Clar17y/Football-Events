@@ -19,6 +19,11 @@ export interface Player {
   currentTeam?: string;           // mapped from current_team
   createdAt: Date;                // mapped from created_at
   updatedAt?: Date;               // mapped from updated_at
+  // Authentication and soft delete fields
+  created_by_user_id: string;
+  deleted_at?: Date;
+  deleted_by_user_id?: string;
+  is_deleted: boolean;
 }
 
 export interface Team {
@@ -31,6 +36,11 @@ export interface Team {
   logoUrl?: string;               // mapped from logo_url
   createdAt: Date;
   updatedAt?: Date;
+  // Authentication and soft delete fields
+  created_by_user_id: string;
+  deleted_at?: Date;
+  deleted_by_user_id?: string;
+  is_deleted: boolean;
 }
 
 export interface Match {
@@ -48,12 +58,16 @@ export interface Match {
   notes?: string;
   createdAt: Date;
   updatedAt?: Date;
+  // Authentication and soft delete fields
+  created_by_user_id: string;
+  deleted_at?: Date;
+  deleted_by_user_id?: string;
+  is_deleted: boolean;
 }
 
 export interface Event {
   id: string;
   matchId: string;                // mapped from match_id
-  seasonId: string;               // mapped from season_id
   createdAt: Date;                // mapped from created_at
   periodNumber?: number;          // mapped from period_number
   clockMs?: number;               // mapped from clock_ms
@@ -63,27 +77,28 @@ export interface Event {
   notes?: string;
   sentiment: number;
   updatedAt?: Date;
+  // Authentication and soft delete fields
+  created_by_user_id: string;
+  deleted_at?: Date;
+  deleted_by_user_id?: string;
+  is_deleted: boolean;
 }
 
 export interface Season {
-  id: string;                     // mapped from season_id
+  id: string;                     // mapped from season_id (for compatibility)
+  seasonId: string;               // mapped from season_id
   label: string;
+  startDate?: string;             // mapped from start_date
+  endDate?: string;               // mapped from end_date
+  isCurrent: boolean;             // mapped from is_current
+  description?: string;           // mapped from description
   createdAt: Date;
   updatedAt?: Date;
-}
-
-export interface Position {
-  code: string;                   // mapped from pos_code
-  longName: string;               // mapped from long_name
-  createdAt: Date;
-  updatedAt?: Date;
-}
-
-export interface Season {
-  id: string;                     // mapped from season_id
-  label: string;
-  createdAt: Date;                // mapped from created_at
-  updatedAt?: Date;               // mapped from updated_at
+  // Authentication and soft delete fields
+  created_by_user_id: string;
+  deleted_at?: Date;
+  deleted_by_user_id?: string;
+  is_deleted: boolean;
 }
 
 export interface Position {
@@ -101,6 +116,11 @@ export interface Lineup {
   position: string;               // position code reference
   createdAt: Date;                // mapped from created_at
   updatedAt?: Date;               // mapped from updated_at
+  // Authentication and soft delete fields
+  created_by_user_id: string;
+  deleted_at?: Date;
+  deleted_by_user_id?: string;
+  is_deleted: boolean;
 }
 
 // ============================================================================
@@ -171,7 +191,6 @@ export interface MatchUpdateRequest {
 
 export interface EventCreateRequest {
   matchId: string;
-  seasonId: string;
   periodNumber?: number;
   clockMs?: number;
   kind: EventKind;
@@ -183,7 +202,6 @@ export interface EventCreateRequest {
 
 export interface EventUpdateRequest {
   matchId?: string;
-  seasonId?: string;
   periodNumber?: number;
   clockMs?: number;
   kind?: EventKind;
@@ -195,6 +213,10 @@ export interface EventUpdateRequest {
 
 export interface SeasonCreateRequest {
   label: string;
+  startDate: string;
+  endDate: string;
+  isCurrent?: boolean;
+  description?: string;
 }
 
 export interface SeasonUpdateRequest {
@@ -234,6 +256,11 @@ export interface Award {
   notes?: string;
   createdAt: Date;
   updatedAt?: Date;
+  // Authentication and soft delete fields
+  created_by_user_id: string;
+  deleted_at?: Date;
+  deleted_by_user_id?: string;
+  is_deleted: boolean;
 }
 
 export interface AwardCreateRequest {
@@ -257,6 +284,11 @@ export interface MatchAward {
   notes?: string;
   createdAt: Date;
   updatedAt?: Date;
+  // Authentication and soft delete fields
+  created_by_user_id: string;
+  deleted_at?: Date;
+  deleted_by_user_id?: string;
+  is_deleted: boolean;
 }
 
 export interface MatchAwardCreateRequest {

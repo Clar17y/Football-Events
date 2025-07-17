@@ -1,9 +1,12 @@
 /**
  * Prisma-generated types for database entities
  * This file exports types from @prisma/client for use across the application
+ * 
+ * AUTO-GENERATED - DO NOT EDIT MANUALLY
+ * Run `npx prisma generate` in backend to update these types
  */
 
-// Re-export Prisma types for shared use
+// Re-export actual Prisma types for shared use
 export type {
   Player as PrismaPlayer,
   Team as PrismaTeam,
@@ -11,29 +14,14 @@ export type {
   Event as PrismaEvent,
   awards as PrismaAward,
   match_awards as PrismaMatchAward,
+  seasons as PrismaSeason,
+  lineup as PrismaLineup,
 } from '@prisma/client';
 
-// For models that might not be available or have different names, we'll define them manually
-export type PrismaSeason = {
-  season_id: string;
-  label: string;
-  created_at: Date;
-  updated_at?: Date | null;
-};
-
+// Position type (not in main schema)
 export type PrismaPosition = {
   pos_code: string;
   long_name: string;
-  created_at: Date;
-  updated_at?: Date | null;
-};
-
-export type PrismaLineup = {
-  match_id: string;
-  player_id: string;
-  start_min: number;
-  end_min?: number | null;
-  position: string;
   created_at: Date;
   updated_at?: Date | null;
 };
@@ -51,7 +39,7 @@ export type PrismaPlayerCreateInput = {
   preferred_pos?: string | null;
   dob?: Date | null;
   notes?: string | null;
-  current_team?: string | null;
+  created_by_user_id: string;
 };
 
 export type PrismaPlayerUpdateInput = {
@@ -70,6 +58,7 @@ export type PrismaTeamCreateInput = {
   away_kit_primary?: string | null;
   away_kit_secondary?: string | null;
   logo_url?: string | null;
+  created_by_user_id: string;
 };
 
 export type PrismaTeamUpdateInput = {
@@ -93,6 +82,7 @@ export type PrismaMatchCreateInput = {
   our_score?: number;
   opponent_score?: number;
   notes?: string | null;
+  created_by_user_id: string;
 };
 
 export type PrismaMatchUpdateInput = {
@@ -111,7 +101,6 @@ export type PrismaMatchUpdateInput = {
 
 export type PrismaEventCreateInput = {
   match_id: string;
-  season_id: string;
   period_number?: number | null;
   clock_ms?: number | null;
   kind: EventKind;
@@ -119,11 +108,17 @@ export type PrismaEventCreateInput = {
   player_id?: string | null;
   notes?: string | null;
   sentiment?: number;
+  created_by_user_id: string;
 };
 
 // Season input types
 export type PrismaSeasonCreateInput = {
   label: string;
+  start_date: Date;
+  end_date: Date;
+  is_current?: boolean;
+  description?: string | null;
+  created_by_user_id: string;
 };
 
 export type PrismaSeasonUpdateInput = {
@@ -148,6 +143,7 @@ export type PrismaLineupCreateInput = {
   start_min?: number;
   end_min?: number | null;
   position: string;
+  created_by_user_id: string;
 };
 
 export type PrismaLineupUpdateInput = {
@@ -162,6 +158,7 @@ export type PrismaAwardCreateInput = {
   player_id: string;
   category: string;
   notes?: string | null;
+  created_by_user_id: string;
 };
 
 export type PrismaAwardUpdateInput = {
@@ -175,6 +172,7 @@ export type PrismaMatchAwardCreateInput = {
   player_id: string;
   category: string;
   notes?: string | null;
+  created_by_user_id: string;
 };
 
 export type PrismaMatchAwardUpdateInput = {

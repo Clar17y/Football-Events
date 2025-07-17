@@ -8,6 +8,7 @@ import {
   transformEvents,
   safeTransformEvent
 } from '@shared/types';
+import { SchemaTestUserHelper } from './test-user-helper';
 
 // Helper function for timestamp validation
 const expectValidTimestamp = (timestamp: Date | undefined) => {
@@ -17,11 +18,12 @@ const expectValidTimestamp = (timestamp: Date | undefined) => {
 
 describe('Event Entity Schema Alignment', () => {
   let prisma: PrismaClient;
-  let testSeasonId: string;
   let testHomeTeamId: string;
   let testAwayTeamId: string;
   let testMatchId: string;
   let testPlayerId: string;
+  let testUserId: string;
+  let userHelper: SchemaTestUserHelper;
 
   async function clearTestData(prisma: PrismaClient) {
     // Delete in order of dependencies (children first)
@@ -29,7 +31,6 @@ describe('Event Entity Schema Alignment', () => {
     await prisma.match.deleteMany({});
     await prisma.player.deleteMany({});
     await prisma.team.deleteMany({});
-    await prisma.seasons.deleteMany({ where: { label: 'Event Test Season 2024' } });
   }
 
   beforeAll(async () => {
@@ -37,20 +38,20 @@ describe('Event Entity Schema Alignment', () => {
     prisma = new PrismaClient();
     await prisma.$connect();
 
+    // Initialize user helper and create test user
+    userHelper = new SchemaTestUserHelper(prisma);
+    testUserId = await userHelper.createTestUser('USER');
+
     // Create test dependencies
-    // Create test season
     await clearTestData(prisma);
-    const season = await prisma.seasons.create({
-      data: { label: 'Event Test Season 2024' }
-    });
-    testSeasonId = season.season_id;
 
     // Create test teams
     const homeTeam = await prisma.team.create({
       data: {
         name: 'Event Home Team FC',
         home_kit_primary: '#FF0000',
-        away_kit_primary: '#0000FF'
+        away_kit_primary: '#0000FF',
+        created_by_user_id: testUserId
       }
     });
     testHomeTeamId = homeTeam.id;
@@ -59,20 +60,33 @@ describe('Event Entity Schema Alignment', () => {
       data: {
         name: 'Event Away Team FC',
         home_kit_primary: '#00FF00',
-        away_kit_primary: '#FFFF00'
+        away_kit_primary: '#FFFF00',
+        created_by_user_id: testUserId
       }
     });
     testAwayTeamId = awayTeam.id;
 
+    // Create minimal test season for match dependency
+    const season = await prisma.seasons.create({
+      data: { 
+        label: 'Event Test Season 2024',
+        start_date: new Date('2024-01-01'),
+        end_date: new Date('2024-12-31'),
+        is_current: false,
+        created_by_user_id: testUserId
+      }
+    });
+
     // Create test match
     const match = await prisma.match.create({
       data: {
-        season_id: testSeasonId,
+        season_id: season.season_id,
         kickoff_ts: new Date('2024-07-06T15:00:00Z'),
         home_team_id: testHomeTeamId,
         away_team_id: testAwayTeamId,
         competition: 'Test League',
-        venue: 'Test Stadium'
+        venue: 'Test Stadium',
+        created_by_user_id: testUserId
       }
     });
     testMatchId = match.match_id;
@@ -81,8 +95,8 @@ describe('Event Entity Schema Alignment', () => {
     const player = await prisma.player.create({
       data: {
         name: 'Event Test Player',
-        current_team: testHomeTeamId,
-        squad_number: 10
+        squad_number: 10,
+        created_by_user_id: testUserId
       }
     });
     testPlayerId = player.id;
@@ -91,7 +105,7 @@ describe('Event Entity Schema Alignment', () => {
   afterEach(async () => {
     // Clean up event entries after each test
     await prisma.event.deleteMany({
-      where: { matchId: testMatchId }
+      where: { match_id: testMatchId }
     });
   });
 
@@ -103,6 +117,7 @@ describe('Event Entity Schema Alignment', () => {
     await prisma.team.deleteMany({});
     await prisma.seasons.deleteMany({});
     
+    await userHelper.cleanup();
     await prisma.$disconnect();
   });
 
@@ -111,13 +126,13 @@ describe('Event Entity Schema Alignment', () => {
       // Create test event with minimal data first to avoid foreign key issues
       const prismaEvent = await prisma.event.create({
         data: {
-          matchId: testMatchId,
-          season_id: testSeasonId,
+          match_id: testMatchId,
           kind: 'ball_out', // Use ball_out which doesn't require team/player
           period_number: 1,
-          clockMs: 45000,
+          clock_ms: 45000,
           notes: 'Test event',
-          sentiment: 0
+          sentiment: 0,
+          created_by_user_id: testUserId
         }
       });
 
@@ -128,7 +143,6 @@ describe('Event Entity Schema Alignment', () => {
       expect(frontendEvent).toEqual({
         id: expect.any(String),
         matchId: testMatchId,
-        seasonId: testSeasonId,
         kind: 'ball_out',
         teamId: undefined,
         playerId: undefined,
@@ -137,7 +151,12 @@ describe('Event Entity Schema Alignment', () => {
         notes: 'Test event',
         sentiment: 0,
         createdAt: expect.any(Date),
-        updatedAt: undefined
+        updatedAt: undefined,
+        // Authorization and soft delete fields
+        created_by_user_id: testUserId,
+        deleted_at: undefined,
+        deleted_by_user_id: undefined,
+        is_deleted: false
       });
 
       expectValidTimestamp(frontendEvent.createdAt);
@@ -146,9 +165,9 @@ describe('Event Entity Schema Alignment', () => {
     it('should handle null optional fields correctly', async () => {
       const prismaEvent = await prisma.event.create({
         data: {
-          matchId: testMatchId,
-          season_id: testSeasonId,
-          kind: 'ball_out'
+          match_id: testMatchId,
+          kind: 'ball_out',
+          created_by_user_id: testUserId
           // All other fields are optional/nullable
         }
       });
@@ -168,7 +187,6 @@ describe('Event Entity Schema Alignment', () => {
     it('should transform EventCreateRequest correctly', () => {
       const createRequest: EventCreateRequest = {
         matchId: testMatchId,
-        seasonId: testSeasonId,
         kind: 'goal',
         teamId: testHomeTeamId,
         playerId: testPlayerId,
@@ -178,36 +196,36 @@ describe('Event Entity Schema Alignment', () => {
         sentiment: 2
       };
 
-      const prismaInput = transformEventCreateRequest(createRequest);
+      const prismaInput = transformEventCreateRequest(createRequest, testUserId);
 
       expect(prismaInput).toEqual({
-        matchId: testMatchId,
-        season_id: testSeasonId,
+        match_id: testMatchId,
         kind: 'goal',
-        teamId: testHomeTeamId,
-        playerId: testPlayerId,
+        team_id: testHomeTeamId,
+        player_id: testPlayerId,
         period_number: 2,
-        clockMs: 120000,
+        clock_ms: 120000,
         notes: 'Amazing strike!',
-        sentiment: 2
+        sentiment: 2,
+        created_by_user_id: testUserId
       });
     });
 
     it('should handle optional fields with defaults', () => {
       const createRequest: EventCreateRequest = {
         matchId: testMatchId,
-        seasonId: testSeasonId,
         kind: 'foul'
       };
 
-      const prismaInput = transformEventCreateRequest(createRequest);
+      const prismaInput = transformEventCreateRequest(createRequest, testUserId);
 
-      expect(prismaInput.teamId).toBeNull();
-      expect(prismaInput.playerId).toBeNull();
+      expect(prismaInput.team_id).toBeNull();
+      expect(prismaInput.player_id).toBeNull();
       expect(prismaInput.period_number).toBeNull();
-      expect(prismaInput.clockMs).toBeNull();
+      expect(prismaInput.clock_ms).toBeNull();
       expect(prismaInput.notes).toBeNull();
       expect(prismaInput.sentiment).toBe(0);
+      expect(prismaInput.created_by_user_id).toBe(testUserId);
     });
   });
 
@@ -221,9 +239,9 @@ describe('Event Entity Schema Alignment', () => {
       it(`should create event with kind: ${kind}`, async () => {
         const event = await prisma.event.create({
           data: {
-            matchId: testMatchId,
-            season_id: testSeasonId,
-            kind: kind as any
+            match_id: testMatchId,
+            kind: kind as any,
+            created_by_user_id: testUserId
           }
         });
 
@@ -235,9 +253,9 @@ describe('Event Entity Schema Alignment', () => {
       await expect(
         prisma.event.create({
           data: {
-            matchId: testMatchId,
-            season_id: testSeasonId,
-            kind: 'invalid_kind' as any
+            match_id: testMatchId,
+            kind: 'invalid_kind' as any,
+            created_by_user_id: testUserId
           }
         })
       ).rejects.toThrow();
@@ -251,9 +269,9 @@ describe('Event Entity Schema Alignment', () => {
       await expect(
         prisma.event.create({
           data: {
-            matchId: invalidMatchId,
-            season_id: testSeasonId,
-            kind: 'goal'
+            match_id: invalidMatchId,
+            kind: 'goal',
+            created_by_user_id: testUserId
           }
         })
       ).rejects.toThrow();
@@ -262,16 +280,16 @@ describe('Event Entity Schema Alignment', () => {
     it('should allow null team and player IDs', async () => {
       const event = await prisma.event.create({
         data: {
-          matchId: testMatchId,
-          season_id: testSeasonId,
+          match_id: testMatchId,
           kind: 'ball_out',
-          teamId: null,
-          playerId: null
+          team_id: null,
+          player_id: null,
+          created_by_user_id: testUserId
         }
       });
 
-      expect(event.teamId).toBeNull();
-      expect(event.playerId).toBeNull();
+      expect(event.team_id).toBeNull();
+      expect(event.player_id).toBeNull();
     });
   });
 
@@ -280,16 +298,16 @@ describe('Event Entity Schema Alignment', () => {
       // Create multiple events
       const eventData = [
         {
-          matchId: testMatchId,
-          season_id: testSeasonId,
+          match_id: testMatchId,
           kind: 'goal' as const,
-          teamId: testHomeTeamId
+          team_id: testHomeTeamId,
+          created_by_user_id: testUserId
         },
         {
-          matchId: testMatchId,
-          season_id: testSeasonId,
+          match_id: testMatchId,
           kind: 'assist' as const,
-          playerId: testPlayerId
+          player_id: testPlayerId,
+          created_by_user_id: testUserId
         }
       ];
 
@@ -312,9 +330,9 @@ describe('Event Entity Schema Alignment', () => {
     it('should safely transform valid event', async () => {
       const prismaEvent = await prisma.event.create({
         data: {
-          matchId: testMatchId,
-          season_id: testSeasonId,
-          kind: 'save'
+          match_id: testMatchId,
+          kind: 'save',
+          created_by_user_id: testUserId
         }
       });
 
@@ -330,26 +348,26 @@ describe('Event Entity Schema Alignment', () => {
     it('should find events by match', async () => {
       await prisma.event.create({
         data: {
-          matchId: testMatchId,
-          season_id: testSeasonId,
-          kind: 'goal'
+          match_id: testMatchId,
+          kind: 'goal',
+          created_by_user_id: testUserId
         }
       });
 
       const events = await prisma.event.findMany({
-        where: { matchId: testMatchId }
+        where: { match_id: testMatchId }
       });
 
       expect(events).toHaveLength(1);
-      expect(events[0].matchId).toBe(testMatchId);
+      expect(events[0].match_id).toBe(testMatchId);
     });
 
     it('should find events by kind', async () => {
       await prisma.event.create({
         data: {
-          matchId: testMatchId,
-          season_id: testSeasonId,
-          kind: 'penalty'
+          match_id: testMatchId,
+          kind: 'penalty',
+          created_by_user_id: testUserId
         }
       });
 
@@ -365,9 +383,9 @@ describe('Event Entity Schema Alignment', () => {
       // Create events with slight delay
       const event1 = await prisma.event.create({
         data: {
-          matchId: testMatchId,
-          season_id: testSeasonId,
-          kind: 'goal'
+          match_id: testMatchId,
+          kind: 'goal',
+          created_by_user_id: testUserId
         }
       });
 
@@ -376,14 +394,14 @@ describe('Event Entity Schema Alignment', () => {
 
       const event2 = await prisma.event.create({
         data: {
-          matchId: testMatchId,
-          season_id: testSeasonId,
-          kind: 'assist'
+          match_id: testMatchId,
+          kind: 'assist',
+          created_by_user_id: testUserId
         }
       });
 
       const events = await prisma.event.findMany({
-        where: { matchId: testMatchId },
+        where: { match_id: testMatchId },
         orderBy: { created_at: 'asc' }
       });
 

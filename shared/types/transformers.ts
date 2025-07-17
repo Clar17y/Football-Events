@@ -72,9 +72,13 @@ export const transformPlayer = (prismaPlayer: PrismaPlayer): Player => ({
   preferredPosition: prismaPlayer.preferred_pos ?? undefined,
   dateOfBirth: prismaPlayer.dob ?? undefined,
   notes: prismaPlayer.notes ?? undefined,
-  currentTeam: prismaPlayer.current_team ?? undefined,
   createdAt: prismaPlayer.created_at,
   updatedAt: prismaPlayer.updated_at ?? undefined,
+  // Authentication and soft delete fields
+  created_by_user_id: prismaPlayer.created_by_user_id,
+  deleted_at: prismaPlayer.deleted_at ?? undefined,
+  deleted_by_user_id: prismaPlayer.deleted_by_user_id ?? undefined,
+  is_deleted: prismaPlayer.is_deleted,
 });
 
 export const transformTeam = (prismaTeam: PrismaTeam): Team => ({
@@ -87,6 +91,11 @@ export const transformTeam = (prismaTeam: PrismaTeam): Team => ({
   logoUrl: prismaTeam.logo_url ?? undefined,
   createdAt: prismaTeam.created_at,
   updatedAt: prismaTeam.updated_at ?? undefined,
+  // Authentication and soft delete fields
+  created_by_user_id: prismaTeam.created_by_user_id,
+  deleted_at: prismaTeam.deleted_at ?? undefined,
+  deleted_by_user_id: prismaTeam.deleted_by_user_id ?? undefined,
+  is_deleted: prismaTeam.is_deleted,
 });
 
 export const transformMatch = (prismaMatch: PrismaMatch): Match => ({
@@ -104,24 +113,34 @@ export const transformMatch = (prismaMatch: PrismaMatch): Match => ({
   notes: prismaMatch.notes ?? undefined,
   createdAt: prismaMatch.created_at,
   updatedAt: prismaMatch.updated_at ?? undefined,
+  // Authentication and soft delete fields
+  created_by_user_id: prismaMatch.created_by_user_id,
+  deleted_at: prismaMatch.deleted_at ?? undefined,
+  deleted_by_user_id: prismaMatch.deleted_by_user_id ?? undefined,
+  is_deleted: prismaMatch.is_deleted,
 });
 
 export const transformEvent = (prismaEvent: PrismaEvent): Event => ({
   id: prismaEvent.id,
-  matchId: prismaEvent.matchId,
-  seasonId: prismaEvent.season_id,
+  matchId: prismaEvent.match_id,
   createdAt: prismaEvent.created_at,
   periodNumber: prismaEvent.period_number ?? undefined,
-  clockMs: prismaEvent.clockMs ?? undefined,
+  clockMs: prismaEvent.clock_ms ?? undefined,
   kind: prismaEvent.kind,
-  teamId: prismaEvent.teamId ?? undefined,
-  playerId: prismaEvent.playerId ?? undefined,
+  teamId: prismaEvent.team_id ?? undefined,
+  playerId: prismaEvent.player_id ?? undefined,
   notes: prismaEvent.notes ?? undefined,
   sentiment: prismaEvent.sentiment ?? 0,
   updatedAt: prismaEvent.updated_at ?? undefined,
+  // Authentication and soft delete fields
+  created_by_user_id: prismaEvent.created_by_user_id,
+  deleted_at: prismaEvent.deleted_at ?? undefined,
+  deleted_by_user_id: prismaEvent.deleted_by_user_id ?? undefined,
+  is_deleted: prismaEvent.is_deleted,
 });
 
 export const transformSeason = (prismaSeason: PrismaSeason): Season => ({
+  id: prismaSeason.season_id,        // For compatibility
   seasonId: prismaSeason.season_id,
   label: prismaSeason.label,
   startDate: prismaSeason.start_date ? prismaSeason.start_date.toISOString().split('T')[0] : undefined,
@@ -130,6 +149,11 @@ export const transformSeason = (prismaSeason: PrismaSeason): Season => ({
   description: prismaSeason.description ?? undefined,
   createdAt: prismaSeason.created_at,
   updatedAt: prismaSeason.updated_at ?? undefined,
+  // Authentication and soft delete fields
+  created_by_user_id: prismaSeason.created_by_user_id,
+  deleted_at: prismaSeason.deleted_at ?? undefined,
+  deleted_by_user_id: prismaSeason.deleted_by_user_id ?? undefined,
+  is_deleted: prismaSeason.is_deleted,
 });
 
 export const transformPosition = (prismaPosition: PrismaPosition): Position => ({
@@ -147,6 +171,11 @@ export const transformLineup = (prismaLineup: PrismaLineup): Lineup => ({
   position: prismaLineup.position,
   createdAt: prismaLineup.created_at,
   updatedAt: prismaLineup.updated_at ?? undefined,
+  // Authentication and soft delete fields
+  created_by_user_id: prismaLineup.created_by_user_id,
+  deleted_at: prismaLineup.deleted_at ?? undefined,
+  deleted_by_user_id: prismaLineup.deleted_by_user_id ?? undefined,
+  is_deleted: prismaLineup.is_deleted,
 });
 
 // ============================================================================
@@ -154,14 +183,15 @@ export const transformLineup = (prismaLineup: PrismaLineup): Lineup => ({
 // ============================================================================
 
 export const transformPlayerCreateRequest = (
-  request: PlayerCreateRequest
+  request: PlayerCreateRequest,
+  created_by_user_id: string
 ): PrismaPlayerCreateInput => ({
   name: request.name,
   squad_number: request.squadNumber ?? null,
   preferred_pos: request.preferredPosition ?? null,
   dob: request.dateOfBirth ?? null,
   notes: request.notes ?? null,
-  current_team: request.currentTeam ?? null,
+  created_by_user_id,
 });
 
 export const transformPlayerUpdateRequest = (
@@ -174,13 +204,13 @@ export const transformPlayerUpdateRequest = (
   if (request.preferredPosition !== undefined) update.preferred_pos = request.preferredPosition;
   if (request.dateOfBirth !== undefined) update.dob = request.dateOfBirth;
   if (request.notes !== undefined) update.notes = request.notes;
-  if (request.currentTeam !== undefined) update.current_team = request.currentTeam;
   
   return update;
 };
 
 export const transformTeamCreateRequest = (
-  request: TeamCreateRequest
+  request: TeamCreateRequest,
+  created_by_user_id: string
 ): PrismaTeamCreateInput => ({
   name: request.name,
   home_kit_primary: request.homeKitPrimary ?? null,
@@ -188,6 +218,7 @@ export const transformTeamCreateRequest = (
   away_kit_primary: request.awayKitPrimary ?? null,
   away_kit_secondary: request.awayKitSecondary ?? null,
   logo_url: request.logoUrl ?? null,
+  created_by_user_id,
 });
 
 export const transformTeamUpdateRequest = (
@@ -206,7 +237,8 @@ export const transformTeamUpdateRequest = (
 };
 
 export const transformMatchCreateRequest = (
-  request: MatchCreateRequest
+  request: MatchCreateRequest,
+  created_by_user_id: string
 ): PrismaMatchCreateInput => ({
   season_id: request.seasonId,
   kickoff_ts: request.kickoffTime,
@@ -216,7 +248,8 @@ export const transformMatchCreateRequest = (
   period_format: request.periodFormat ?? 'quarter',
   notes: request.notes ?? null,
   home_team_id: request.homeTeamId,
-  away_team_id: request.awayTeamId
+  away_team_id: request.awayTeamId,
+  created_by_user_id,
 });
 
 export const transformMatchUpdateRequest = (
@@ -240,27 +273,30 @@ export const transformMatchUpdateRequest = (
 };
 
 export const transformEventCreateRequest = (
-  request: EventCreateRequest
-): any => ({
-  matchId: request.matchId,
-  season_id: request.seasonId,
+  request: EventCreateRequest,
+  created_by_user_id: string
+): PrismaEventCreateInput => ({
+  match_id: request.matchId,
   period_number: request.periodNumber ?? null,
-  clockMs: request.clockMs ?? null,
+  clock_ms: request.clockMs ?? null,
   kind: request.kind,
-  teamId: request.teamId ?? null,
-  playerId: request.playerId ?? null,
+  team_id: request.teamId ?? null,
+  player_id: request.playerId ?? null,
   notes: request.notes ?? null,
   sentiment: request.sentiment ?? 0,
+  created_by_user_id,
 });
 
 export const transformSeasonCreateRequest = (
-  request: SeasonCreateRequest
+  request: SeasonCreateRequest,
+  created_by_user_id: string
 ): PrismaSeasonCreateInput => ({
   label: request.label,
   start_date: new Date(request.startDate),
   end_date: new Date(request.endDate),
   is_current: request.isCurrent ?? false,
   description: request.description ?? null,
+  created_by_user_id,
 });
 
 export const transformSeasonUpdateRequest = (
@@ -292,13 +328,15 @@ export const transformPositionUpdateRequest = (
 };
 
 export const transformLineupCreateRequest = (
-  request: LineupCreateRequest
+  request: LineupCreateRequest,
+  created_by_user_id: string
 ): PrismaLineupCreateInput => ({
   match_id: request.matchId,
   player_id: request.playerId,
   start_min: request.startMinute ?? 0,
   end_min: request.endMinute ?? null,
   position: request.position,
+  created_by_user_id,
 });
 
 export const transformLineupUpdateRequest = (
@@ -312,12 +350,14 @@ export const transformLineupUpdateRequest = (
 };
 
 export const transformAwardCreateRequest = (
-  request: AwardCreateRequest
+  request: AwardCreateRequest,
+  created_by_user_id: string
 ): PrismaAwardCreateInput => ({
   season_id: request.seasonId,
   player_id: request.playerId,
   category: request.category,
   notes: request.notes ?? null,
+  created_by_user_id,
 });
 
 export const transformAwardUpdateRequest = (
@@ -330,12 +370,14 @@ export const transformAwardUpdateRequest = (
 };
 
 export const transformMatchAwardCreateRequest = (
-  request: MatchAwardCreateRequest
+  request: MatchAwardCreateRequest,
+  created_by_user_id: string
 ): PrismaMatchAwardCreateInput => ({
   match_id: request.matchId,
   player_id: request.playerId,
   category: request.category,
   notes: request.notes ?? null,
+  created_by_user_id,
 });
 
 export const transformMatchAwardUpdateRequest = (
@@ -380,6 +422,11 @@ export const transformAward = (prismaAward: PrismaAward): Award => ({
   notes: prismaAward.notes !== null ? prismaAward.notes : undefined,
   createdAt: prismaAward.created_at,
   updatedAt: prismaAward.updated_at !== null ? prismaAward.updated_at : undefined,
+  // Authentication and soft delete fields
+  created_by_user_id: prismaAward.created_by_user_id,
+  deleted_at: prismaAward.deleted_at ?? undefined,
+  deleted_by_user_id: prismaAward.deleted_by_user_id ?? undefined,
+  is_deleted: prismaAward.is_deleted,
 });
 
 export const transformMatchAward = (prismaMatchAward: PrismaMatchAward): MatchAward => ({
@@ -390,6 +437,11 @@ export const transformMatchAward = (prismaMatchAward: PrismaMatchAward): MatchAw
   notes: prismaMatchAward.notes !== null ? prismaMatchAward.notes : undefined,
   createdAt: prismaMatchAward.created_at,
   updatedAt: prismaMatchAward.updated_at !== null ? prismaMatchAward.updated_at : undefined,
+  // Authentication and soft delete fields
+  created_by_user_id: prismaMatchAward.created_by_user_id,
+  deleted_at: prismaMatchAward.deleted_at ?? undefined,
+  deleted_by_user_id: prismaMatchAward.deleted_by_user_id ?? undefined,
+  is_deleted: prismaMatchAward.is_deleted,
 });
 
 export const transformAwards = (prismaAwards: PrismaAward[]): Award[] =>

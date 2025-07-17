@@ -11,6 +11,7 @@ import {
   safeTransformLineup,
   PrismaLineup
 } from '@shared/types';
+import { SchemaTestUserHelper } from './test-user-helper';
 
 // Helper function for timestamp validation
 const expectValidTimestamp = (timestamp: Date | undefined) => {
@@ -26,16 +27,28 @@ describe('Lineup Entity Schema Alignment', () => {
   let testMatchId: string;
   let testPlayerId: string;
   let testPositionCode: string;
+  let testUserId: string;
+  let userHelper: SchemaTestUserHelper;
 
   beforeAll(async () => {
     // Initialize Prisma client directly for tests
     prisma = new PrismaClient();
     await prisma.$connect();
 
+    // Initialize user helper and create test user
+    userHelper = new SchemaTestUserHelper(prisma);
+    testUserId = await userHelper.createTestUser('USER');
+
     // Create test dependencies
     // Create test season
     const season = await prisma.seasons.create({
-      data: { label: 'Lineup Test Season 2024' }
+      data: { 
+        label: 'Lineup Test Season 2024',
+        start_date: new Date('2024-01-01'),
+        end_date: new Date('2024-12-31'),
+        is_current: false,
+        created_by_user_id: testUserId
+      }
     });
     testSeasonId = season.season_id;
 
@@ -44,7 +57,8 @@ describe('Lineup Entity Schema Alignment', () => {
       data: {
         name: 'Lineup Home Team FC',
         home_kit_primary: '#FF0000',
-        away_kit_primary: '#0000FF'
+        away_kit_primary: '#0000FF',
+        created_by_user_id: testUserId
       }
     });
     testHomeTeamId = homeTeam.id;
@@ -53,7 +67,8 @@ describe('Lineup Entity Schema Alignment', () => {
       data: {
         name: 'Lineup Away Team FC',
         home_kit_primary: '#00FF00',
-        away_kit_primary: '#FFFF00'
+        away_kit_primary: '#FFFF00',
+        created_by_user_id: testUserId
       }
     });
     testAwayTeamId = awayTeam.id;
@@ -66,7 +81,8 @@ describe('Lineup Entity Schema Alignment', () => {
         home_team_id: testHomeTeamId,
         away_team_id: testAwayTeamId,
         competition: 'Test League',
-        venue: 'Test Stadium'
+        venue: 'Test Stadium',
+        created_by_user_id: testUserId
       }
     });
     testMatchId = match.match_id;
@@ -75,8 +91,8 @@ describe('Lineup Entity Schema Alignment', () => {
     const player = await prisma.player.create({
       data: {
         name: 'Test Player',
-        current_team: testHomeTeamId,
-        squad_number: 10
+        squad_number: 10,
+        created_by_user_id: testUserId
       }
     });
     testPlayerId = player.id;
@@ -117,6 +133,7 @@ describe('Lineup Entity Schema Alignment', () => {
     await prisma.team.deleteMany({});
     await prisma.seasons.deleteMany({});
     
+    await userHelper.cleanup();
     await prisma.$disconnect();
   });
 
@@ -129,7 +146,8 @@ describe('Lineup Entity Schema Alignment', () => {
           player_id: testPlayerId,
           start_min: 0,
           end_min: 45,
-          position: testPositionCode
+          position: testPositionCode,
+          created_by_user_id: testUserId
         }
       });
 
@@ -155,7 +173,8 @@ describe('Lineup Entity Schema Alignment', () => {
           player_id: testPlayerId,
           start_min: 0,
           end_min: null,
-          position: testPositionCode
+          position: testPositionCode,
+          created_by_user_id: testUserId
         }
       });
 
@@ -203,14 +222,15 @@ describe('Lineup Entity Schema Alignment', () => {
         position: testPositionCode
       };
 
-      const prismaInput = transformLineupCreateRequest(createRequest);
+      const prismaInput = transformLineupCreateRequest(createRequest, testUserId);
 
       expect(prismaInput).toEqual({
         match_id: testMatchId,
         player_id: testPlayerId,
         start_min: 0,
         end_min: 90,
-        position: testPositionCode
+        position: testPositionCode,
+        created_by_user_id: testUserId
       });
     });
 
@@ -221,10 +241,11 @@ describe('Lineup Entity Schema Alignment', () => {
         position: testPositionCode
       };
 
-      const prismaInput = transformLineupCreateRequest(createRequest);
+      const prismaInput = transformLineupCreateRequest(createRequest, testUserId);
 
       expect(prismaInput.start_min).toBe(0);
       expect(prismaInput.end_min).toBeNull();
+      expect(prismaInput.created_by_user_id).toBe(testUserId);
     });
 
     it('should transform LineupUpdateRequest correctly', () => {
