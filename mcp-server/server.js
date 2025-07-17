@@ -28,6 +28,14 @@ const allowList = [
   new RegExp(`^${cdPrefix}ls\\b`, 'i'),
   new RegExp(`^${cdPrefix}npx\\s+prisma\\s+(generate|format|validate|migrate\\s+(dev|status)|db\\s+pull)\\b`, 'i'),
   new RegExp(`^${cdPrefix}date\\b`, 'i'),
+  new RegExp(`^${cdPrefix}grep\\b.*`, 'i'),
+  new RegExp(`^${cdPrefix}cat\\b.*`, 'i'),
+  new RegExp(`^${cdPrefix}pwd\\b`, 'i'),
+  new RegExp(`^${cdPrefix}echo\\b.*`, 'i'),
+  new RegExp(`^${cdPrefix}head\\b.*`, 'i'),
+  new RegExp(`^${cdPrefix}tail\\b.*`, 'i'),
+  new RegExp(`^${cdPrefix}which\\b.*`, 'i'),
+  new RegExp(`^${cdPrefix}whoami\\b`, 'i'),
   new RegExp(nodeScript, 'i'),
   new RegExp(tsxScript, 'i')
 ];
