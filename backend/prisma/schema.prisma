@@ -10,200 +10,299 @@ datasource db {
   schemas  = ["grassroots"]
 }
 
-model Team {
+model User {
   id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name               String    @unique
-  home_kit_primary   String?   @db.VarChar(7)
-  home_kit_secondary String?   @db.VarChar(7)
-  away_kit_primary   String?   @db.VarChar(7)
-  away_kit_secondary String?   @db.VarChar(7)
+  email              String    @unique
+  password_hash      String
+  first_name         String?
+  last_name          String?
+  role               UserRole  @default(USER)
+  email_verified     Boolean   @default(false)
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+  is_deleted         Boolean   @default(false)
+  deleted_at         DateTime?
+  deleted_by_user_id String?   @db.Uuid
+  awards_created       awards[]       @relation("AwardCreatedBy")
+  awards_deleted       awards[]       @relation("AwardDeletedBy")
+  events_created       Event[]        @relation("EventCreatedBy")
+  events_deleted       Event[]        @relation("EventDeletedBy")
+  lineups_created      lineup[]       @relation("LineupCreatedBy")
+  lineups_deleted      lineup[]       @relation("LineupDeletedBy")
+  match_awards_created match_awards[]  @relation("MatchAwardCreatedBy")
+  match_awards_deleted match_awards[]  @relation("MatchAwardDeletedBy")
+  matches_created      Match[]         @relation("MatchCreatedBy")
+  matches_deleted      Match[]         @relation("MatchDeletedBy")
+  player_teams_created player_teams[]  @relation("PlayerTeamCreatedBy")
+  player_teams_deleted player_teams[]  @relation("PlayerTeamDeletedBy")
+  players_created      Player[]        @relation("PlayerCreatedBy")
+  players_deleted      Player[]        @relation("PlayerDeletedBy")
+  seasons_created      seasons[]       @relation("SeasonCreatedBy")
+  seasons_deleted      seasons[]       @relation("SeasonDeletedBy")
+  teams_created        Team[]          @relation("TeamCreatedBy")
+  teams_deleted        Team[]          @relation("TeamDeletedBy")
+
+  @@map("users")
+  @@schema("grassroots")
+}
+
+model Team {
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String         @unique
+  home_kit_primary   String?        @db.VarChar(7)
+  home_kit_secondary String?        @db.VarChar(7)
+  away_kit_primary   String?        @db.VarChar(7)
+  away_kit_secondary String?        @db.VarChar(7)
   logo_url           String?
-  created_at         DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at         DateTime? @db.Timestamptz(6)
+  created_at         DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime?      @db.Timestamptz(6)
+  created_by_user_id String         @db.Uuid
+  deleted_at         DateTime?
+  deleted_by_user_id String?        @db.Uuid
+  is_deleted         Boolean        @default(false)
   events             Event[]
-  awayMatches        Match[]   @relation("AwayTeam")
-  homeMatches        Match[]   @relation("HomeTeam")
-  players            Player[]
+  awayMatches        Match[]        @relation("AwayTeam")
+  homeMatches        Match[]        @relation("HomeTeam")
+  player_teams       player_teams[]
+  created_by         User           @relation("TeamCreatedBy", fields: [created_by_user_id], references: [id])
+  deleted_by         User?          @relation("TeamDeletedBy", fields: [deleted_by_user_id], references: [id])
 
   @@map("teams")
   @@schema("grassroots")
 }
 
 model Player {
-  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name          String         @map("full_name")
-  squad_number  Int?
-  preferred_pos String?
-  dob           DateTime?      @db.Date
-  notes         String?
-  current_team  String?        @db.Uuid
-  created_at    DateTime       @default(now()) @db.Timestamptz(6)
-  updated_at    DateTime?      @db.Timestamptz(6)
-  awards        awards[]
-  lineup        lineup[]
-  match_awards  match_awards[]
-  teams         Team?          @relation(fields: [current_team], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  positions     positions?     @relation(fields: [preferred_pos], references: [pos_code], onDelete: NoAction, onUpdate: NoAction)
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String         @map("full_name")
+  squad_number       Int?
+  dob                DateTime?      @db.Date
+  notes              String?
+  created_at         DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime?      @db.Timestamptz(6)
+  created_by_user_id String         @db.Uuid
+  deleted_at         DateTime?
+  deleted_by_user_id String?        @db.Uuid
+  is_deleted         Boolean        @default(false)
+  preferred_pos      position_code?
+  awards             awards[]
+  lineup             lineup[]
+  match_awards       match_awards[]
+  player_teams       player_teams[]
+  created_by         User           @relation("PlayerCreatedBy", fields: [created_by_user_id], references: [id])
+  deleted_by         User?          @relation("PlayerDeletedBy", fields: [deleted_by_user_id], references: [id])
 
-  @@unique([name, current_team], map: "players_fullname_team_unique")
   @@map("players")
   @@schema("grassroots")
 }
 
 model Match {
-  match_id       String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  season_id      String         @db.Uuid
-  kickoff_ts     DateTime       @db.Timestamptz(6)
-  competition    String?
-  home_team_id   String         @db.Uuid
-  away_team_id   String         @db.Uuid
-  venue          String?
-  duration_mins  Int            @default(50)
-  period_format  String         @default("quarter")
-  our_score      Int            @default(0)
-  opponent_score Int            @default(0)
-  notes          String?
-  created_at     DateTime       @default(now()) @db.Timestamptz(6)
-  updated_at     DateTime?      @db.Timestamptz(6)
-  events         Event[]
-  lineup         lineup[]
-  match_awards   match_awards[]
-  match_notes    match_notes[]
-  awayTeam       Team           @relation("AwayTeam", fields: [away_team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  homeTeam       Team           @relation("HomeTeam", fields: [home_team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  seasons        seasons        @relation(fields: [season_id], references: [season_id], onDelete: Cascade, onUpdate: NoAction)
+  match_id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  season_id          String         @db.Uuid
+  kickoff_ts         DateTime       @db.Timestamptz(6)
+  competition        String?
+  home_team_id       String         @db.Uuid
+  away_team_id       String         @db.Uuid
+  venue              String?
+  duration_mins      Int            @default(50)
+  period_format      String         @default("quarter")
+  our_score          Int            @default(0)
+  opponent_score     Int            @default(0)
+  notes              String?
+  created_at         DateTime       @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime?      @db.Timestamptz(6)
+  created_by_user_id String         @db.Uuid
+  deleted_at         DateTime?
+  deleted_by_user_id String?        @db.Uuid
+  is_deleted         Boolean        @default(false)
+  events             Event[]
+  lineup             lineup[]
+  match_awards       match_awards[]
+  awayTeam           Team           @relation("AwayTeam", fields: [away_team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  created_by         User           @relation("MatchCreatedBy", fields: [created_by_user_id], references: [id])
+  deleted_by         User?          @relation("MatchDeletedBy", fields: [deleted_by_user_id], references: [id])
+  homeTeam           Team           @relation("HomeTeam", fields: [home_team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  seasons            seasons        @relation(fields: [season_id], references: [season_id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("matches")
   @@schema("grassroots")
 }
 
 model Event {
-  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  matchId       String     @map("match_id") @db.Uuid
-  season_id     String     @db.Uuid
-  created_at    DateTime   @default(now()) @db.Timestamptz(6)
-  period_number Int?
-  clockMs       Int?       @map("clock_ms")
-  kind          event_kind
-  teamId        String?    @map("team_id") @db.Uuid
-  playerId      String?    @map("player_id") @db.Uuid
-  notes         String?
-  sentiment     Int        @default(0)
-  updated_at    DateTime?  @db.Timestamptz(6)
-  matches       Match      @relation(fields: [matchId], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
-  teams         Team?      @relation(fields: [teamId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id                 String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  match_id           String     @db.Uuid
+  created_at         DateTime   @default(now()) @db.Timestamptz(6)
+  period_number      Int?
+  clock_ms           Int?
+  kind               event_kind
+  team_id            String?    @db.Uuid
+  player_id          String?    @db.Uuid
+  notes              String?
+  sentiment          Int        @default(0)
+  updated_at         DateTime?  @db.Timestamptz(6)
+  created_by_user_id String     @db.Uuid
+  deleted_at         DateTime?
+  deleted_by_user_id String?    @db.Uuid
+  is_deleted         Boolean    @default(false)
+  created_by         User       @relation("EventCreatedBy", fields: [created_by_user_id], references: [id])
+  deleted_by         User?      @relation("EventDeletedBy", fields: [deleted_by_user_id], references: [id])
+  matches            Match      @relation(fields: [match_id], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
+  teams              Team?      @relation(fields: [team_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("events")
   @@schema("grassroots")
 }
 
 model awards {
-  award_id   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  season_id  String    @db.Uuid
-  player_id  String    @db.Uuid
-  category   String
-  notes      String?
-  created_at DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at DateTime? @db.Timestamptz(6)
-  players    Player    @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  seasons    seasons   @relation(fields: [season_id], references: [season_id], onDelete: Cascade, onUpdate: NoAction)
+  award_id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  season_id          String    @db.Uuid
+  player_id          String    @db.Uuid
+  category           String
+  notes              String?
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime? @db.Timestamptz(6)
+  created_by_user_id String    @db.Uuid
+  deleted_at         DateTime?
+  deleted_by_user_id String?   @db.Uuid
+  is_deleted         Boolean   @default(false)
+  created_by         User      @relation("AwardCreatedBy", fields: [created_by_user_id], references: [id])
+  deleted_by         User?     @relation("AwardDeletedBy", fields: [deleted_by_user_id], references: [id])
+  players            Player    @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  seasons            seasons   @relation(fields: [season_id], references: [season_id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@schema("grassroots")
-}
-
-model event_edits {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  event_id   String    @db.Uuid
-  editor_uid String
-  field_name String
-  old_value  String?
-  new_value  String?
-  updated_at DateTime? @db.Timestamptz(6)
-  created_at DateTime  @default(now()) @db.Timestamptz(6)
-
-  @@schema("grassroots")
-}
-
-/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
-model event_participants {
-  id         String     @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  event_id   String     @db.Uuid
-  player_id  String     @db.Uuid
-  kind       event_kind
-  created_at DateTime   @default(now()) @db.Timestamptz(6)
-  updated_at DateTime?  @db.Timestamptz(6)
-
-  @@ignore
   @@schema("grassroots")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model lineup {
-  match_id   String    @db.Uuid
-  player_id  String    @db.Uuid
-  start_min  Float     @default(0)
-  end_min    Float?
-  position   String
-  created_at DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at DateTime? @db.Timestamptz(6)
-  matches    Match     @relation(fields: [match_id], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
-  players    Player    @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  positions  positions @relation(fields: [position], references: [pos_code], onUpdate: NoAction)
+  match_id           String        @db.Uuid
+  player_id          String        @db.Uuid
+  start_min          Float         @default(0)
+  end_min            Float?
+  created_at         DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime?     @db.Timestamptz(6)
+  created_by_user_id String        @db.Uuid
+  deleted_at         DateTime?
+  deleted_by_user_id String?       @db.Uuid
+  is_deleted         Boolean       @default(false)
+  position           position_code
+  created_by         User          @relation("LineupCreatedBy", fields: [created_by_user_id], references: [id])
+  deleted_by         User?         @relation("LineupDeletedBy", fields: [deleted_by_user_id], references: [id])
+  matches            Match         @relation(fields: [match_id], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
+  players            Player        @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@id([match_id, player_id, start_min])
   @@schema("grassroots")
 }
 
 model match_awards {
-  match_award_id String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  match_id       String    @db.Uuid
-  player_id      String    @db.Uuid
-  category       String
-  notes          String?
-  created_at     DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at     DateTime? @db.Timestamptz(6)
-  matches        Match     @relation(fields: [match_id], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
-  players        Player    @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  match_award_id     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  match_id           String    @db.Uuid
+  player_id          String    @db.Uuid
+  category           String
+  notes              String?
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime? @db.Timestamptz(6)
+  created_by_user_id String    @db.Uuid
+  deleted_at         DateTime?
+  deleted_by_user_id String?   @db.Uuid
+  is_deleted         Boolean   @default(false)
+  created_by         User      @relation("MatchAwardCreatedBy", fields: [created_by_user_id], references: [id])
+  deleted_by         User?     @relation("MatchAwardDeletedBy", fields: [deleted_by_user_id], references: [id])
+  matches            Match     @relation(fields: [match_id], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
+  players            Player    @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([match_id, category])
   @@schema("grassroots")
 }
 
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-model match_notes {
-  match_note_id String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  match_id      String    @db.Uuid
-  notes         String
-  period_number Int       @default(0)
-  created_at    DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at    DateTime? @db.Timestamptz(6)
-  matches       Match     @relation(fields: [match_id], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@schema("grassroots")
-}
-
-model positions {
-  pos_code   String    @id
-  long_name  String
-  created_at DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at DateTime? @db.Timestamptz(6)
-  lineup     lineup[]
-  players    Player[]
-
-  @@schema("grassroots")
-}
-
 model seasons {
-  season_id   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  label       String    @unique
-  start_date  DateTime  @db.Date
-  end_date    DateTime  @db.Date
-  is_current  Boolean   @default(false)
-  description String?
-  created_at  DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at  DateTime? @db.Timestamptz(6)
-  awards      awards[]
-  matches     Match[]
+  season_id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  label              String
+  start_date         DateTime  @db.Date
+  end_date           DateTime  @db.Date
+  is_current         Boolean   @default(false)
+  description        String?
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime? @db.Timestamptz(6)
+  created_by_user_id String    @db.Uuid
+  deleted_at         DateTime?
+  deleted_by_user_id String?   @db.Uuid
+  is_deleted         Boolean   @default(false)
+  awards             awards[]
+  matches            Match[]
+  created_by         User      @relation("SeasonCreatedBy", fields: [created_by_user_id], references: [id])
+  deleted_by         User?     @relation("SeasonDeletedBy", fields: [deleted_by_user_id], references: [id])
+
+  @@unique([label, created_by_user_id])
+  @@schema("grassroots")
+}
+
+model player_teams {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  player_id          String    @db.Uuid
+  team_id            String    @db.Uuid
+  start_date         DateTime  @db.Date
+  end_date           DateTime? @db.Date
+  is_active          Boolean   @default(true)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime? @db.Timestamptz(6)
+  created_by_user_id String    @db.Uuid
+  deleted_at         DateTime?
+  deleted_by_user_id String?   @db.Uuid
+  is_deleted         Boolean   @default(false)
+  
+  player             Player    @relation(fields: [player_id], references: [id], onDelete: Cascade)
+  team               Team      @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  created_by         User      @relation("PlayerTeamCreatedBy", fields: [created_by_user_id], references: [id])
+  deleted_by         User?     @relation("PlayerTeamDeletedBy", fields: [deleted_by_user_id], references: [id])
+  
+  @@unique([player_id, team_id, start_date])
+  @@schema("grassroots")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+
+  @@map("user_role")
+  @@schema("grassroots")
+}
+
+enum position_code {
+  GK
+  CB
+  RCB
+  LCB
+  SW
+  RB
+  LB
+  RWB
+  LWB
+  CDM
+  RDM
+  LDM
+  CM
+  RCM
+  LCM
+  CAM
+  RAM
+  LAM
+  RM
+  LM
+  RW
+  LW
+  RF
+  LF
+  CF
+  ST
+  SS
+  AM
+  DM
+  WM
+  WB
+  FB
+  SUB
+  BENCH
 
   @@schema("grassroots")
 }
