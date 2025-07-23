@@ -13,6 +13,7 @@ import type {
   PrismaLineup,
   PrismaAward,
   PrismaMatchAward,
+  PrismaPlayerTeam,
   PrismaPlayerCreateInput,
   PrismaPlayerUpdateInput,
   PrismaTeamCreateInput,
@@ -30,6 +31,8 @@ import type {
   PrismaAwardUpdateInput,
   PrismaMatchAwardCreateInput,
   PrismaMatchAwardUpdateInput,
+  PrismaPlayerTeamCreateInput,
+  PrismaPlayerTeamUpdateInput,
 } from './prisma';
 
 import type {
@@ -42,6 +45,7 @@ import type {
   Lineup,
   Award,
   MatchAward,
+  PlayerTeam,
   PlayerCreateRequest,
   PlayerUpdateRequest,
   TeamCreateRequest,
@@ -59,6 +63,8 @@ import type {
   AwardUpdateRequest,
   MatchAwardCreateRequest,
   MatchAwardUpdateRequest,
+  PlayerTeamCreateRequest,
+  PlayerTeamUpdateRequest,
 } from './frontend';
 
 // ============================================================================
@@ -164,6 +170,7 @@ export const transformPosition = (prismaPosition: PrismaPosition): Position => (
 });
 
 export const transformLineup = (prismaLineup: PrismaLineup): Lineup => ({
+  id: prismaLineup.id,
   matchId: prismaLineup.match_id,
   playerId: prismaLineup.player_id,
   startMinute: prismaLineup.start_min,
@@ -176,6 +183,21 @@ export const transformLineup = (prismaLineup: PrismaLineup): Lineup => ({
   deleted_at: prismaLineup.deleted_at ?? undefined,
   deleted_by_user_id: prismaLineup.deleted_by_user_id ?? undefined,
   is_deleted: prismaLineup.is_deleted,
+});
+
+export const transformPlayerTeam = (prismaPlayerTeam: PrismaPlayerTeam): PlayerTeam => ({
+  id: prismaPlayerTeam.id,
+  playerId: prismaPlayerTeam.player_id,
+  teamId: prismaPlayerTeam.team_id,
+  startDate: prismaPlayerTeam.start_date, // Convert to YYYY-MM-DD format
+  endDate: prismaPlayerTeam.end_date ? prismaPlayerTeam.end_date : undefined,
+  createdAt: prismaPlayerTeam.created_at,
+  updatedAt: prismaPlayerTeam.updated_at ?? undefined,
+  // Authentication and soft delete fields
+  created_by_user_id: prismaPlayerTeam.created_by_user_id,
+  deleted_at: prismaPlayerTeam.deleted_at ?? undefined,
+  deleted_by_user_id: prismaPlayerTeam.deleted_by_user_id ?? undefined,
+  is_deleted: prismaPlayerTeam.is_deleted,
 });
 
 // ============================================================================
@@ -389,6 +411,28 @@ export const transformMatchAwardUpdateRequest = (
   return update;
 };
 
+export const transformPlayerTeamCreateRequest = (
+  request: PlayerTeamCreateRequest,
+  created_by_user_id: string
+): PrismaPlayerTeamCreateInput => ({
+  player_id: request.playerId,
+  team_id: request.teamId,
+  start_date: new Date(request.startDate),
+  end_date: request.endDate ? new Date(request.endDate) : null,
+  created_by_user_id,
+});
+
+export const transformPlayerTeamUpdateRequest = (
+  request: PlayerTeamUpdateRequest
+): PrismaPlayerTeamUpdateInput => {
+  const update: PrismaPlayerTeamUpdateInput = {};
+  if (request.playerId !== undefined) update.player_id = request.playerId;
+  if (request.teamId !== undefined) update.team_id = request.teamId;
+  if (request.startDate !== undefined) update.start_date = new Date(request.startDate);
+  if (request.endDate !== undefined) update.end_date = request.endDate ? new Date(request.endDate) : null;
+  return update;
+};
+
 // ============================================================================
 // ARRAY TRANSFORMERS
 // ============================================================================
@@ -450,6 +494,9 @@ export const transformAwards = (prismaAwards: PrismaAward[]): Award[] =>
 export const transformMatchAwards = (prismaMatchAwards: PrismaMatchAward[]): MatchAward[] =>
   prismaMatchAwards.map(transformMatchAward);
 
+export const transformPlayerTeams = (prismaPlayerTeams: PrismaPlayerTeam[]): PlayerTeam[] =>
+  prismaPlayerTeams.map(transformPlayerTeam);
+
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
@@ -483,6 +530,9 @@ export const safeTransformAward = (prismaAward: PrismaAward | null): Award | nul
 
 export const safeTransformMatchAward = (prismaMatchAward: PrismaMatchAward | null): MatchAward | null =>
   prismaMatchAward ? transformMatchAward(prismaMatchAward) : null;
+
+export const safeTransformPlayerTeam = (prismaPlayerTeam: PrismaPlayerTeam | null): PlayerTeam | null =>
+  prismaPlayerTeam ? transformPlayerTeam(prismaPlayerTeam) : null;
 
 /**
  * Transform with error handling

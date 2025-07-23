@@ -16,6 +16,7 @@ export type {
   match_awards as PrismaMatchAward,
   seasons as PrismaSeason,
   lineup as PrismaLineup,
+  player_teams as PrismaPlayerTeam,
 } from '@prisma/client';
 
 // Position type (not in main schema)
@@ -123,6 +124,10 @@ export type PrismaSeasonCreateInput = {
 
 export type PrismaSeasonUpdateInput = {
   label?: string;
+  start_date?: Date;
+  end_date?: Date;
+  is_current?: boolean;
+  description?: string | null;
 };
 
 // Position input types
@@ -178,4 +183,23 @@ export type PrismaMatchAwardCreateInput = {
 export type PrismaMatchAwardUpdateInput = {
   category?: string;
   notes?: string | null;
+};
+
+// Player Team input types
+export type PrismaPlayerTeamCreateInput = {
+  player_id: string;
+  team_id: string;
+  start_date: Date;
+  end_date?: Date | null;
+  created_by_user_id: string;
+};
+
+export type PrismaPlayerTeamUpdateInput = {
+  player_id?: string;
+  team_id?: string;
+  start_date?: Date;
+  end_date?: Date | null;
+  deleted_at?: Date | null;
+  deleted_by_user_id?: string | null;
+  is_deleted?: boolean;
 };

@@ -109,6 +109,7 @@ export interface Position {
 }
 
 export interface Lineup {
+  id: string;                     // UUID primary key
   matchId: string;                // mapped from match_id
   playerId: string;               // mapped from player_id
   startMinute: number;            // mapped from start_min
@@ -221,6 +222,10 @@ export interface SeasonCreateRequest {
 
 export interface SeasonUpdateRequest {
   label?: string;
+  startDate?: string;
+  endDate?: string;
+  isCurrent?: boolean;
+  description?: string;
 }
 
 export interface PositionCreateRequest {
@@ -301,6 +306,36 @@ export interface MatchAwardCreateRequest {
 export interface MatchAwardUpdateRequest {
   category?: string;
   notes?: string;
+}
+
+// Player Team interfaces
+export interface PlayerTeam {
+  id: string;
+  playerId: string;
+  teamId: string;
+  startDate: Date;
+  endDate?: Date;
+  createdAt: Date;
+  updatedAt?: Date;
+  // Authentication and soft delete fields
+  created_by_user_id: string;
+  deleted_at?: Date;
+  deleted_by_user_id?: string;
+  is_deleted: boolean;
+}
+
+export interface PlayerTeamCreateRequest {
+  playerId: string;
+  teamId: string;
+  startDate: Date;
+  endDate?: Date;
+}
+
+export interface PlayerTeamUpdateRequest {
+  playerId?: string;
+  teamId?: string;
+  startDate?: Date;
+  endDate?: Date;
 }
 
 // ============================================================================
