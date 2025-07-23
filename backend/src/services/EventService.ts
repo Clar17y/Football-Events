@@ -183,7 +183,9 @@ export class EventService {
     if (userRole !== 'ADMIN') {
       const canCreateEvents = await this.canUserModifyMatch(data.matchId, userId);
       if (!canCreateEvents) {
-        throw new Error('Access denied: You can only create events for matches you created');
+        const error = new Error('Access denied: You can only create events for matches you created') as any;
+        error.statusCode = 403;
+        throw error;
       }
     }
 

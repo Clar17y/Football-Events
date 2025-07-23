@@ -84,7 +84,9 @@ export class AuthService {
 
     // If user exists and is not deleted, throw error
     if (existingUser && !existingUser.is_deleted) {
-      throw new Error('User with this email already exists');
+      const error = new Error('User with this email already exists') as any;
+      error.statusCode = 409;
+      throw error;
     }
 
     // Hash password
@@ -135,13 +137,17 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error('Invalid email or password');
+      const error = new Error('Invalid email or password') as any;
+      error.statusCode = 401;
+      throw error;
     }
 
     // Check password
     const isValidPassword = await comparePassword(data.password, user.password_hash);
     if (!isValidPassword) {
-      throw new Error('Invalid email or password');
+      const error = new Error('Invalid email or password') as any;
+      error.statusCode = 401;
+      throw error;
     }
 
     // Generate tokens
@@ -173,7 +179,9 @@ export class AuthService {
 
       // Ensure it's a refresh token
       if (decoded.type !== 'refresh') {
-        throw new Error('Invalid token type');
+        const error = new Error('Invalid token type') as any;
+        error.statusCode = 401;
+        throw error;
       }
 
       // Verify user still exists and is active
@@ -185,7 +193,9 @@ export class AuthService {
       });
 
       if (!user) {
-        throw new Error('User not found');
+        const error = new Error('User not found') as any;
+        error.statusCode = 404;
+        throw error;
       }
 
       // Generate new tokens
@@ -197,7 +207,9 @@ export class AuthService {
         refresh_token: new_refresh_token
       };
     } catch (error) {
-      throw new Error('Invalid refresh token');
+      const authError = new Error('Invalid refresh token') as any;
+      authError.statusCode = 401;
+      throw authError;
     }
   }
 
@@ -223,7 +235,9 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error('User not found');
+      const error = new Error('User not found') as any;
+      error.statusCode = 404;
+      throw error;
     }
 
     return user;
@@ -246,7 +260,9 @@ export class AuthService {
       });
 
       if (existingUser) {
-        throw new Error('Email already in use');
+        const error = new Error('Email already in use') as any;
+        error.statusCode = 409;
+        throw error;
       }
     }
 
