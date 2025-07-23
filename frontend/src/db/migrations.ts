@@ -24,7 +24,7 @@ interface Migration {
 /**
  * Current database version
  */
-export const CURRENT_VERSION = 3;
+export const CURRENT_VERSION = 4;
 
 /**
  * All database migrations
@@ -117,7 +117,13 @@ async function migrateEventsToEnhanced(db: GrassrootsDB): Promise<void> {
       // Add new fields
       linked_events: undefined, // Will be populated by retroactive linking
       auto_linked_at: undefined,
-      updated_at: event.updated_at || event.created_at || now
+      updated_at: event.updated_at || event.created_at || now,
+      
+      // Authentication and soft delete fields
+      created_by_user_id: 'migration-system',
+      deleted_at: undefined,
+      deleted_by_user_id: undefined,
+      is_deleted: false
     };
     
     await db.events.update(event.id, enhancedEvent);
@@ -165,7 +171,13 @@ async function migrateMatchesToEnhanced(db: GrassrootsDB): Promise<void> {
       period_format: settings.period_format || 'quarter',
       our_score: 0, // Will be calculated from events
       opponent_score: 0, // Will be calculated from events
-      updated_at: oldMatch.updated_at || oldMatch.created_at || now
+      updated_at: oldMatch.updated_at || oldMatch.created_at || now,
+      
+      // Authentication and soft delete fields
+      created_by_user_id: 'migration-system',
+      deleted_at: undefined,
+      deleted_by_user_id: undefined,
+      is_deleted: false
     };
     
     // Update with new structure
@@ -191,7 +203,13 @@ async function migrateTeamsToEnhanced(db: GrassrootsDB): Promise<void> {
     const enhancedTeam: Partial<EnhancedTeam> = {
       team_id: oldTeam.id,
       name: oldTeam.name,
-      updated_at: oldTeam.updated_at || oldTeam.created_at || now
+      updated_at: oldTeam.updated_at || oldTeam.created_at || now,
+      
+      // Authentication and soft delete fields
+      created_by_user_id: 'migration-system',
+      deleted_at: undefined,
+      deleted_by_user_id: undefined,
+      is_deleted: false
     };
     
     await db.teams.update(oldTeam.id, enhancedTeam);
@@ -218,7 +236,13 @@ async function migratePlayersToEnhanced(db: GrassrootsDB): Promise<void> {
       full_name: oldPlayer.full_name,
       squad_number: oldPlayer.jersey_number,
       current_team: oldPlayer.team_id,
-      updated_at: oldPlayer.updated_at || oldPlayer.created_at || now
+      updated_at: oldPlayer.updated_at || oldPlayer.created_at || now,
+      
+      // Authentication and soft delete fields
+      created_by_user_id: 'migration-system',
+      deleted_at: undefined,
+      deleted_by_user_id: undefined,
+      is_deleted: false
     };
     
     await db.players.update(oldPlayer.id, enhancedPlayer);
@@ -237,11 +261,21 @@ async function createDefaultSeason(db: GrassrootsDB): Promise<void> {
     const existingSeasons = await db.seasons.count();
     if (existingSeasons === 0) {
       const currentYear = new Date().getFullYear();
-      const defaultSeason: EnhancedSeason = {
+      const defaultSeason = {
+        id: 'default-season', // For compatibility
         season_id: 'default-season',
         label: `${currentYear} Season`,
+        start_date: undefined,
+        end_date: undefined,
+        is_current: true,
+        description: undefined,
         created_at: Date.now(),
-        updated_at: Date.now()
+        updated_at: Date.now(),
+        // Authentication and soft delete fields
+        created_by_user_id: 'migration-system',
+        deleted_at: undefined,
+        deleted_by_user_id: undefined,
+        is_deleted: false
       };
       
       // Use put instead of add to handle potential duplicates

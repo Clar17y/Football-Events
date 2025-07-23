@@ -15,6 +15,7 @@ import type {
   EnhancedSeason,
   EnhancedOutboxEvent 
 } from './schema';
+import type { OutboxEvent } from './indexedDB';
 import type { ID, Timestamp } from '../types/index';
 import { db } from './indexedDB';
 import { autoLinkEvents } from './eventLinking';
@@ -336,17 +337,19 @@ export async function addToOutbox(
   tableName: string,
   recordId: ID,
   operation: 'INSERT' | 'UPDATE' | 'DELETE',
-  data?: any
+  data?: any,
+  created_by_user_id?: string
 ): Promise<void> {
   try {
-    const outboxEvent: EnhancedOutboxEvent = {
+    const outboxEvent: OutboxEvent = {
       table_name: tableName,
       record_id: recordId,
       operation,
       data,
-      synced: false,
+      synced: 0,
       created_at: Date.now(),
-      retry_count: 0
+      retry_count: 0,
+      created_by_user_id: created_by_user_id || 'temp-user-id'
     };
     
     await db.outbox.add(outboxEvent);
@@ -360,7 +363,7 @@ export async function addToOutbox(
 /**
  * Get unsynced items from outbox
  */
-export async function getUnsyncedItems(limit: number = 50): Promise<EnhancedOutboxEvent[]> {
+export async function getUnsyncedItems(limit: number = 50): Promise<OutboxEvent[]> {
   try {
     const items = await db.outbox
       .where('synced')
@@ -382,7 +385,7 @@ export async function getUnsyncedItems(limit: number = 50): Promise<EnhancedOutb
 export async function markAsSynced(outboxId: number): Promise<void> {
   try {
     await db.outbox.update(outboxId, {
-      synced: true,
+      synced: 1,
       last_sync_attempt: Date.now()
     });
   } catch (error) {

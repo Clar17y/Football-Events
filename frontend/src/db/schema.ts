@@ -42,6 +42,11 @@ export interface EnhancedEvent {
   created_at: Timestamp;
   /** Client timestamp when event was last updated */
   updated_at: Timestamp;
+  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
+  created_by_user_id: ID;
+  deleted_at?: Timestamp;
+  deleted_by_user_id?: ID;
+  is_deleted: boolean;
 }
 
 /**
@@ -77,6 +82,11 @@ export interface EnhancedMatch {
   /** Client timestamps */
   created_at: Timestamp;
   updated_at: Timestamp;
+  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
+  created_by_user_id: ID;
+  deleted_at?: Timestamp;
+  deleted_by_user_id?: ID;
+  is_deleted: boolean;
 }
 
 /**
@@ -96,6 +106,11 @@ export interface EnhancedTeam {
   /** Client timestamps */
   created_at: Timestamp;
   updated_at: Timestamp;
+  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
+  created_by_user_id: ID;
+  deleted_at?: Timestamp;
+  deleted_by_user_id?: ID;
+  is_deleted: boolean;
 }
 
 /**
@@ -119,6 +134,11 @@ export interface EnhancedPlayer {
   /** Client timestamps */
   created_at: Timestamp;
   updated_at: Timestamp;
+  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
+  created_by_user_id: ID;
+  deleted_at?: Timestamp;
+  deleted_by_user_id?: ID;
+  is_deleted: boolean;
 }
 
 /**
@@ -132,6 +152,11 @@ export interface EnhancedSeason {
   /** Client timestamps */
   created_at: Timestamp;
   updated_at: Timestamp;
+  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
+  created_by_user_id: ID;
+  deleted_at?: Timestamp;
+  deleted_by_user_id?: ID;
+  is_deleted: boolean;
 }
 
 /**
@@ -153,6 +178,11 @@ export interface EnhancedLineup {
   /** Client timestamps */
   created_at: Timestamp;
   updated_at: Timestamp;
+  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
+  created_by_user_id: ID;
+  deleted_at?: Timestamp;
+  deleted_by_user_id?: ID;
+  is_deleted: boolean;
 }
 
 /**
@@ -170,6 +200,11 @@ export interface EnhancedMatchNote {
   /** Client timestamps */
   created_at: Timestamp;
   updated_at: Timestamp;
+  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
+  created_by_user_id: ID;
+  deleted_at?: Timestamp;
+  deleted_by_user_id?: ID;
+  is_deleted: boolean;
 }
 
 /**
@@ -363,8 +398,8 @@ export const EVENT_RELATIONSHIPS = {
   'save': [],
   
   'own_goal': [],
-  'ball_won': [],
-  'ball_lost': [],
+  'interception': ['tackle'], // Add missing interception
+  'tackle': ['interception'], // Add missing tackle
   'corner': [],
   'ball_out': []
 } as const;

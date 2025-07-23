@@ -41,7 +41,8 @@ describe('Database Operations', () => {
       team_id: 'test-team-1',
       player_id: 'test-player-1',
       sentiment: 3,
-      notes: 'Test goal'
+      notes: 'Test goal',
+      created_by_user_id: 'test-user'
     };
 
     it('should add event successfully', async () => {

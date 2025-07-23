@@ -5,6 +5,8 @@
  * Shows community activity while maintaining privacy.
  */
 
+import { apiClient } from './api/baseApi';
+
 export interface GlobalStats {
   total_teams: number;
   active_teams: number;
@@ -26,7 +28,6 @@ export interface StatsResult {
 class StatsService {
   private readonly CACHE_KEY = 'matchmaster-global-stats';
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-  private readonly API_URL = 'http://localhost:3001/api/v1/stats/global';
   
   private isRefreshing = false;
 
@@ -41,6 +42,7 @@ class StatsService {
       if (cached && !this.isCacheStale(cached)) {
         // Cache is fresh, use it and maybe refresh in background
         this.maybeRefreshInBackground(cached);
+        console.log('Using fresh cached stats');
         return {
           success: true,
           data: cached,
@@ -48,18 +50,8 @@ class StatsService {
         };
       }
 
-      // Cache is stale or missing, fetch fresh data
-      if (cached && this.isCacheStale(cached)) {
-        // Return stale cache immediately, refresh in background
-        this.refreshInBackground();
-        return {
-          success: true,
-          data: cached,
-          fromCache: true
-        };
-      }
-
-      // No cache, fetch fresh data synchronously
+      // No cache or cache is stale, fetch fresh data synchronously
+      console.log('Cache is stale or missing, fetching fresh data...');
       return await this.fetchFreshStats();
 
     } catch (error) {
@@ -106,8 +98,16 @@ class StatsService {
    * Check if cached stats are stale
    */
   private isCacheStale(stats: GlobalStats): boolean {
-    const cacheAge = Date.now() - new Date(stats.last_updated).getTime();
-    return cacheAge > this.CACHE_DURATION;
+    try {
+      const cached = localStorage.getItem(this.CACHE_KEY);
+      if (!cached) return true;
+
+      const { timestamp } = JSON.parse(cached);
+      const age = Date.now() - timestamp;
+      return age > this.CACHE_DURATION;
+    } catch {
+      return true;
+    }
   }
 
   /**
@@ -115,36 +115,64 @@ class StatsService {
    */
   private async fetchFreshStats(): Promise<StatsResult> {
     try {
-      const response = await fetch(this.API_URL, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      console.log('Fetching fresh stats from API...');
+      const response = await apiClient.get<GlobalStats>('/stats/global');
+      
+      if (response.success && response.data) {
+        const freshStats = response.data;
+        
+        // Cache the fresh data
+        this.setCachedStats(freshStats);
+        
+        // Emit update event
+        this.emitStatsUpdate(freshStats);
+        
+        console.log('Fresh stats loaded successfully:', freshStats);
+        
+        return {
+          success: true,
+          data: freshStats,
+          fromCache: false
+        };
+      } else {
+        throw new Error(response.message || 'API request failed');
       }
-
-      const data: GlobalStats = await response.json();
-      
-      // Cache the fresh data
-      this.cacheStats(data);
-      
-      // Emit update event
-      this.emitStatsUpdated(data);
-
-      return {
-        success: true,
-        data,
-        fromCache: false
-      };
     } catch (error) {
-      console.error('Error fetching fresh stats:', error);
+      console.error('Error fetching fresh stats from API:', error);
+      
+      // Fallback to cached data if available
+      const cachedStats = this.getCachedStats();
+      if (cachedStats) {
+        console.log('Using cached stats as fallback');
+        return {
+          success: true,
+          data: cachedStats,
+          fromCache: true,
+          error: `Using cached data: ${error instanceof Error ? error.message : 'API unavailable'}`
+        };
+      }
+      
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Network error'
+        error: error instanceof Error ? error.message : 'Failed to load stats',
+        fromCache: false
       };
+    }
+  }
+
+  /**
+   * Cache stats in localStorage
+   */
+  private setCachedStats(stats: GlobalStats): void {
+    try {
+      const cacheData = {
+        data: stats,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(this.CACHE_KEY, JSON.stringify(cacheData));
+      console.log('Stats cached successfully');
+    } catch (error) {
+      console.warn('Error caching stats:', error);
     }
   }
 
@@ -152,11 +180,19 @@ class StatsService {
    * Maybe refresh stats in background if cache is getting old
    */
   private maybeRefreshInBackground(stats: GlobalStats): void {
-    const cacheAge = Date.now() - new Date(stats.last_updated).getTime();
-    const shouldRefresh = cacheAge > (this.CACHE_DURATION * 0.8); // Refresh when 80% stale
-    
-    if (shouldRefresh && !this.isRefreshing) {
-      this.refreshInBackground();
+    try {
+      const cached = localStorage.getItem(this.CACHE_KEY);
+      if (!cached) return;
+
+      const { timestamp } = JSON.parse(cached);
+      const age = Date.now() - timestamp;
+      
+      // Refresh in background if cache is 80% of max age
+      if (age > (this.CACHE_DURATION * 0.8)) {
+        this.refreshInBackground();
+      }
+    } catch (error) {
+      console.warn('Error checking cache age:', error);
     }
   }
 
@@ -167,40 +203,24 @@ class StatsService {
     if (this.isRefreshing) return;
     
     this.isRefreshing = true;
-    
     try {
       console.log('Refreshing global stats in background...');
       const result = await this.fetchFreshStats();
       
-      if (result.success) {
-        console.log('Global stats refreshed successfully');
+      if (result.success && result.data) {
+        this.emitStatsUpdate(result.data);
       }
     } catch (error) {
-      console.warn('Background stats refresh failed:', error);
+      console.warn('Background refresh failed:', error);
     } finally {
       this.isRefreshing = false;
     }
   }
 
   /**
-   * Cache stats to localStorage
+   * Emit stats update event
    */
-  private cacheStats(stats: GlobalStats): void {
-    try {
-      const cacheData = {
-        data: stats,
-        timestamp: Date.now()
-      };
-      localStorage.setItem(this.CACHE_KEY, JSON.stringify(cacheData));
-    } catch (error) {
-      console.warn('Error caching stats:', error);
-    }
-  }
-
-  /**
-   * Emit stats updated event for reactive components
-   */
-  private emitStatsUpdated(stats: GlobalStats): void {
+  private emitStatsUpdate(stats: GlobalStats): void {
     const event = new CustomEvent('globalStatsUpdated', { detail: stats });
     window.dispatchEvent(event);
   }

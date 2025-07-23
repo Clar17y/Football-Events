@@ -23,22 +23,8 @@ import {
 /**
  * All possible event types in a football match
  */
-export type EventKind = 
-  // Positive events
-  | 'goal'
-  | 'assist'
-  | 'key_pass'
-  | 'save'
-  | 'ball_won'
-  // Neutral events
-  | 'corner'
-  | 'free_kick'
-  | 'penalty'
-  // Negative events
-  | 'foul'
-  | 'ball_lost'
-  | 'own_goal'
-  | 'ball_out';
+// Import EventKind from shared types to ensure consistency
+export type { EventKind } from '@shared/types';
 
 /**
  * Event categories for UI grouping
@@ -61,7 +47,8 @@ export interface EventMetadata {
 /**
  * Default event configurations
  */
-export const EVENT_METADATA: Record<EventKind, EventMetadata> = {
+// Update EVENT_METADATA to include all EventKind values from shared types
+export const EVENT_METADATA: Partial<Record<EventKind, EventMetadata>> = {
   // Positive events
   goal: {
     kind: 'goal',
@@ -95,13 +82,21 @@ export const EVENT_METADATA: Record<EventKind, EventMetadata> = {
     color: 'success',
     description: 'Goalkeeper prevents a goal'
   },
-  ball_won: {
-    kind: 'ball_won',
-    label: 'Ball Won',
+  interception: {
+    kind: 'interception',
+    label: 'Interception',
     category: 'positive',
     icon: checkmarkCircle,
     color: 'success',
-    description: 'Player regains possession'
+    description: 'Player intercepts opponent pass'
+  },
+  tackle: {
+    kind: 'tackle',
+    label: 'Tackle',
+    category: 'positive',
+    icon: shieldCheckmark,
+    color: 'success',
+    description: 'Player wins ball through tackle'
   },
   // Neutral events
   corner: {
@@ -137,13 +132,13 @@ export const EVENT_METADATA: Record<EventKind, EventMetadata> = {
     color: 'warning',
     description: 'Foul committed'
   },
-  ball_lost: {
-    kind: 'ball_lost',
-    label: 'Ball Lost',
+  ball_out: {
+    kind: 'ball_out',
+    label: 'Ball Out',
     category: 'negative',
-    icon: closeCircle,
-    color: 'danger',
-    description: 'Player loses possession'
+    icon: removeCircle,
+    color: 'medium',
+    description: 'Ball goes out of play'
   },
   own_goal: {
     kind: 'own_goal',
@@ -152,58 +147,11 @@ export const EVENT_METADATA: Record<EventKind, EventMetadata> = {
     icon: sad,
     color: 'danger',
     description: 'Player scores in own goal'
-  },
-  ball_out: {
-    kind: 'ball_out',
-    label: 'Ball Out',
-    category: 'negative',
-    icon: removeCircle,
-    color: 'medium',
-    description: 'Ball goes out of play'
   }
 };
 
-/**
- * Core match event structure
- */
-export interface MatchEvent {
-  /** Unique identifier for the event */
-  id: ID;
-  /** Type of event */
-  kind: EventKind;
-  /** Match this event belongs to */
-  match_id: ID;
-  /** Season this event belongs to */
-  season_id: ID;
-  /** Team involved in the event */
-  team_id: ID;
-  /** Player involved in the event */
-  player_id: ID;
-  /** Match period when event occurred */
-  period_number: number;
-  /** Time in match when event occurred (milliseconds) */
-  clock_ms: number;
-  /** Sentiment rating for the event (-4 to 4) */
-  sentiment: number;
-  /** Optional notes about the event */
-  notes?: string;
-  /** When the event was created (Unix timestamp) */
-  created: Timestamp;
-  /** Field coordinates where event occurred (optional) */
-  coordinates?: {
-    x: number; // 0-100 (percentage of field width)
-    y: number; // 0-100 (percentage of field height)
-  };
-  /** Additional metadata */
-  metadata?: {
-    /** Whether this event was auto-detected */
-    auto_detected?: boolean;
-    /** Confidence score for auto-detected events */
-    confidence?: number;
-    /** Related events (e.g., assist for a goal) */
-    related_events?: ID[];
-  };
-}
+// Import Event from shared types for consistency
+export type { Event as MatchEvent } from '@shared/types';
 
 /**
  * Event payload for database storage

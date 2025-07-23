@@ -46,7 +46,7 @@ export const useGlobalStats = (): UseGlobalStatsResult => {
       
       if (result.success && result.data) {
         setStats(result.data);
-        setFromCache(false);
+        setFromCache(result.fromCache || false);
       } else {
         setError(result.error || 'Failed to refresh stats');
       }

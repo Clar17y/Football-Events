@@ -223,7 +223,7 @@ export const useErrorHandler = (config: ErrorHandlerConfig = {}) => {
     const errorInfo = categorizeError(error);
     
     // Log the error
-    logError(errorInfo, typeof error === 'object' ? error : undefined);
+    logError(errorInfo, typeof error === 'object' && error !== null ? error : undefined);
     
     // Show toast notification
     showToastNotification(errorInfo, retryHandler);

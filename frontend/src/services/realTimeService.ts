@@ -6,7 +6,7 @@
  */
 
 import { io, Socket } from 'socket.io-client';
-import { db } from '../db/indexedDB';
+// Database import removed - will use dynamic import to avoid blocking
 import type { MatchEvent } from '../types/events';
 import type { EnhancedOutboxEvent } from '../db/schema';
 
@@ -144,20 +144,26 @@ export class RealTimeService {
    * Add event to outbox as fallback
    */
   private async addToOutbox(event: MatchEvent): Promise<void> {
-    const result = await db.addEvent({
-      kind: event.kind,
-      match_id: event.match_id,
-      team_id: event.team_id || null,
-      player_id: event.player_id || null,
-      minute: Math.floor(event.clock_ms / 60000), // Convert ms to minutes
-      second: Math.floor((event.clock_ms % 60000) / 1000), // Convert remainder to seconds
-      period: event.period_number,
-      data: event.notes ? { notes: event.notes } : {},
-      created: event.created
-    });
+    try {
+      const { db } = await import('../db/indexedDB');
+      const result = await db.addEvent({
+        kind: event.kind,
+        match_id: event.matchId,
+        team_id: event.teamId || null,
+        player_id: event.playerId || null,
+        minute: Math.floor((event.clockMs || 0) / 60000), // Convert ms to minutes
+        second: Math.floor(((event.clockMs || 0) % 60000) / 1000), // Convert remainder to seconds
+        period: event.periodNumber,
+        data: event.notes ? { notes: event.notes } : {},
+        created: event.createdAt.getTime()
+      });
 
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to add to outbox');
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to add to outbox');
+      }
+    } catch (dbError) {
+      console.warn('Database not available for outbox:', dbError);
+      throw new Error('Database not available');
     }
   }
 
@@ -197,6 +203,7 @@ export class RealTimeService {
     console.log('🔄 Syncing outbox events...');
 
     try {
+      const { db } = await import('../db/indexedDB');
       const result = await db.getUnsyncedEvents();
       if (!result.success || !result.data) {
         console.log('No unsynced events to process');
@@ -211,14 +218,17 @@ export class RealTimeService {
           // Check if outboxEvent has the expected structure
           if (!outboxEvent || typeof outboxEvent !== 'object') {
             console.warn('Invalid outbox event structure:', outboxEvent);
-            await db.markEventSyncFailed(outboxEvent?.id || 0, 'Invalid event structure');
+            try {
+              const { db: dbInstance } = await import('../db/indexedDB');
+              await dbInstance.markEventSyncFailed(outboxEvent?.id ?? 0, 'Invalid event structure');
+            } catch (e) { /* ignore db errors during cleanup */ }
             continue;
           }
 
           // Handle different outbox event structures
           let payload;
-          if (outboxEvent.payload) {
-            payload = outboxEvent.payload;
+          if (outboxEvent.data) {
+            payload = outboxEvent.data;
           } else {
             // Direct event structure (fallback)
             payload = outboxEvent;
@@ -226,7 +236,10 @@ export class RealTimeService {
 
           if (!payload.kind || !payload.match_id) {
             console.warn('Missing required fields in outbox event:', payload);
-            await db.markEventSyncFailed(outboxEvent.id, 'Missing required fields');
+            try {
+              const { db: dbInstance } = await import('../db/indexedDB');
+              await dbInstance.markEventSyncFailed(outboxEvent.id ?? 0, 'Missing required fields');
+            } catch (e) { /* ignore db errors during cleanup */ }
             continue;
           }
 
@@ -234,28 +247,38 @@ export class RealTimeService {
           const matchEvent: MatchEvent = {
             id: crypto.randomUUID(), // Generate new ID for real-time transmission
             kind: payload.kind,
-            match_id: payload.match_id,
-            season_id: payload.match_id, // Use match_id as fallback for season_id
-            team_id: payload.team_id,
-            player_id: payload.player_id,
-            period_number: payload.period || 1,
-            clock_ms: ((payload.minute || 0) * 60000) + ((payload.second || 0) * 1000),
+            matchId: payload.match_id,
+            teamId: payload.team_id,
+            playerId: payload.player_id,
+            periodNumber: payload.period || 1,
+            clockMs: ((payload.minute || 0) * 60000) + ((payload.second || 0) * 1000),
             sentiment: 0, // Default sentiment
             notes: payload.data?.notes || payload.notes || '',
-            created: payload.created || Date.now()
+            createdAt: new Date(payload.created || Date.now()),
+            created_by_user_id: payload.created_by_user_id || 'system',
+            is_deleted: false
           };
 
           const success = await this.tryRealTimePublish(matchEvent);
           
           if (success) {
-            await db.markEventSynced(outboxEvent.id);
+            try {
+              const { db: dbInstance } = await import('../db/indexedDB');
+              await dbInstance.markEventSynced(outboxEvent.id ?? 0);
+            } catch (e) { /* ignore db errors */ }
             console.log(`✅ Synced event: ${matchEvent.id}`);
           } else {
-            await db.markEventSyncFailed(outboxEvent.id, 'Real-time sync failed');
+            try {
+              const { db: dbInstance } = await import('../db/indexedDB');
+              await dbInstance.markEventSyncFailed(outboxEvent.id ?? 0, 'Real-time sync failed');
+            } catch (e) { /* ignore db errors */ }
             console.log(`❌ Failed to sync event: ${matchEvent.id}`);
           }
         } catch (error) {
-          await db.markEventSyncFailed(outboxEvent.id, error instanceof Error ? error.message : 'Unknown error');
+          try {
+            const { db: dbInstance } = await import('../db/indexedDB');
+            await dbInstance.markEventSyncFailed(outboxEvent.id ?? 0, error instanceof Error ? error.message : 'Unknown error');
+          } catch (e) { /* ignore db errors */ }
           console.error(`❌ Error syncing event ${outboxEvent.id}:`, error);
         }
       }
@@ -273,11 +296,12 @@ export class RealTimeService {
    */
   private async markEventSynced(eventId: string): Promise<void> {
     try {
+      const { db } = await import('../db/indexedDB');
       // Find the outbox event by payload ID
       const outboxEvents = await db.outbox.where('synced').equals(0).toArray();
-      const outboxEvent = outboxEvents.find(e => e.payload.id === eventId);
+      const outboxEvent = outboxEvents.find(e => e.data?.id === eventId);
       
-      if (outboxEvent) {
+      if (outboxEvent && outboxEvent.id !== undefined) {
         await db.markEventSynced(outboxEvent.id);
       }
     } catch (error) {
@@ -373,7 +397,19 @@ export class RealTimeService {
 
 // Create singleton instance
 export const realTimeService = new RealTimeService({
-  serverUrl: (typeof window !== 'undefined' && (window as any).VITE_API_URL) || 'http://localhost:3001',
+  serverUrl: (() => {
+    // Smart server URL detection
+    if (import.meta.env.VITE_API_URL) {
+      return import.meta.env.VITE_API_URL.replace('/api/v1', '');
+    }
+    
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:3001';
+    } else {
+      return `http://${hostname}:3001`;
+    }
+  })(),
   reconnectionAttempts: Infinity, // Keep trying forever
   reconnectionDelay: 2000, // Try every 2 seconds
   timeout: 5000
