@@ -53,6 +53,30 @@ export interface PaginatedMatchAwards {
   };
 }
 
+export interface BatchAwardRequest {
+  create?: AwardCreateRequest[];
+  update?: { id: string; data: AwardUpdateRequest }[];
+  delete?: string[];
+}
+
+export interface BatchAwardResult {
+  created: { success: number; failed: number; errors: Array<{ data: AwardCreateRequest; error: string }> };
+  updated: { success: number; failed: number; errors: Array<{ id: string; error: string }> };
+  deleted: { success: number; failed: number; errors: Array<{ id: string; error: string }> };
+}
+
+export interface BatchMatchAwardRequest {
+  create?: MatchAwardCreateRequest[];
+  update?: { id: string; data: MatchAwardUpdateRequest }[];
+  delete?: string[];
+}
+
+export interface BatchMatchAwardResult {
+  created: { success: number; failed: number; errors: Array<{ data: MatchAwardCreateRequest; error: string }> };
+  updated: { success: number; failed: number; errors: Array<{ id: string; error: string }> };
+  deleted: { success: number; failed: number; errors: Array<{ id: string; error: string }> };
+}
+
 export class AwardsService {
   private prisma: PrismaClient;
 
@@ -492,6 +516,156 @@ export class AwardsService {
     });
 
     return transformMatchAwards(matchAwards);
+  }
+
+  // Batch operations for Awards
+  async batchAwards(operations: BatchAwardRequest, userId: string, userRole: string): Promise<BatchAwardResult> {
+    const result: BatchAwardResult = {
+      created: { success: 0, failed: 0, errors: [] },
+      updated: { success: 0, failed: 0, errors: [] },
+      deleted: { success: 0, failed: 0, errors: [] }
+    };
+
+    // Process creates
+    if (operations.create && operations.create.length > 0) {
+      for (const createData of operations.create) {
+        try {
+          await this.createAward(createData, userId);
+          result.created.success++;
+        } catch (error: any) {
+          result.created.failed++;
+          result.created.errors.push({
+            data: createData,
+            error: error.message || 'Unknown error during creation'
+          });
+        }
+      }
+    }
+
+    // Process updates
+    if (operations.update && operations.update.length > 0) {
+      for (const updateOp of operations.update) {
+        try {
+          const updated = await this.updateAward(updateOp.id, updateOp.data, userId, userRole);
+          if (updated) {
+            result.updated.success++;
+          } else {
+            result.updated.failed++;
+            result.updated.errors.push({
+              id: updateOp.id,
+              error: 'Award not found or access denied'
+            });
+          }
+        } catch (error: any) {
+          result.updated.failed++;
+          result.updated.errors.push({
+            id: updateOp.id,
+            error: error.message || 'Unknown error during update'
+          });
+        }
+      }
+    }
+
+    // Process deletes
+    if (operations.delete && operations.delete.length > 0) {
+      for (const deleteId of operations.delete) {
+        try {
+          const deleted = await this.deleteAward(deleteId, userId, userRole);
+          if (deleted) {
+            result.deleted.success++;
+          } else {
+            result.deleted.failed++;
+            result.deleted.errors.push({
+              id: deleteId,
+              error: 'Award not found or access denied'
+            });
+          }
+        } catch (error: any) {
+          result.deleted.failed++;
+          result.deleted.errors.push({
+            id: deleteId,
+            error: error.message || 'Unknown error during deletion'
+          });
+        }
+      }
+    }
+
+    return result;
+  }
+
+  // Batch operations for Match Awards
+  async batchMatchAwards(operations: BatchMatchAwardRequest, userId: string, userRole: string): Promise<BatchMatchAwardResult> {
+    const result: BatchMatchAwardResult = {
+      created: { success: 0, failed: 0, errors: [] },
+      updated: { success: 0, failed: 0, errors: [] },
+      deleted: { success: 0, failed: 0, errors: [] }
+    };
+
+    // Process creates
+    if (operations.create && operations.create.length > 0) {
+      for (const createData of operations.create) {
+        try {
+          await this.createMatchAward(createData, userId);
+          result.created.success++;
+        } catch (error: any) {
+          result.created.failed++;
+          result.created.errors.push({
+            data: createData,
+            error: error.message || 'Unknown error during creation'
+          });
+        }
+      }
+    }
+
+    // Process updates
+    if (operations.update && operations.update.length > 0) {
+      for (const updateOp of operations.update) {
+        try {
+          const updated = await this.updateMatchAward(updateOp.id, updateOp.data, userId, userRole);
+          if (updated) {
+            result.updated.success++;
+          } else {
+            result.updated.failed++;
+            result.updated.errors.push({
+              id: updateOp.id,
+              error: 'Match award not found or access denied'
+            });
+          }
+        } catch (error: any) {
+          result.updated.failed++;
+          result.updated.errors.push({
+            id: updateOp.id,
+            error: error.message || 'Unknown error during update'
+          });
+        }
+      }
+    }
+
+    // Process deletes
+    if (operations.delete && operations.delete.length > 0) {
+      for (const deleteId of operations.delete) {
+        try {
+          const deleted = await this.deleteMatchAward(deleteId, userId, userRole);
+          if (deleted) {
+            result.deleted.success++;
+          } else {
+            result.deleted.failed++;
+            result.deleted.errors.push({
+              id: deleteId,
+              error: 'Match award not found or access denied'
+            });
+          }
+        } catch (error: any) {
+          result.deleted.failed++;
+          result.deleted.errors.push({
+            id: deleteId,
+            error: error.message || 'Unknown error during deletion'
+          });
+        }
+      }
+    }
+
+    return result;
   }
 
   async disconnect(): Promise<void> {

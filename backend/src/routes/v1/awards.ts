@@ -3,7 +3,7 @@ import { AwardsService } from '../../services/AwardsService';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
 import { authenticateToken } from '../../middleware/auth';
-import { awardCreateSchema, awardUpdateSchema, matchAwardCreateSchema, matchAwardUpdateSchema } from '../../validation/schemas';
+import { awardCreateSchema, awardUpdateSchema, matchAwardCreateSchema, matchAwardUpdateSchema, awardBatchSchema, matchAwardBatchSchema } from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { extractApiError } from '../../utils/prismaErrorHandler';
 
@@ -123,6 +123,33 @@ router.delete('/match-awards/:id', authenticateToken, validateUUID(), asyncHandl
   return res.status(204).send();
 }));
 
+// POST /api/v1/awards/match-awards/batch - Batch operations for match awards
+router.post('/match-awards/batch', authenticateToken, validateRequest(matchAwardBatchSchema), asyncHandler(async (req, res) => {
+  const result = await awardsService.batchMatchAwards(req.body, req.user!.id, req.user!.role);
+  
+  // Determine appropriate status code based on results
+  const hasFailures = result.created.failed > 0 || result.updated.failed > 0 || result.deleted.failed > 0;
+  const hasSuccesses = result.created.success > 0 || result.updated.success > 0 || result.deleted.success > 0;
+  
+  let statusCode = 200;
+  if (!hasSuccesses && hasFailures) {
+    statusCode = 400; // All operations failed
+  } else if (hasSuccesses && hasFailures) {
+    statusCode = 207; // Partial success (Multi-Status)
+  } else if (hasSuccesses && !hasFailures) {
+    statusCode = 200; // All operations succeeded
+  }
+  
+  res.status(statusCode).json({
+    results: result,
+    summary: {
+      totalOperations: (req.body.create?.length || 0) + (req.body.update?.length || 0) + (req.body.delete?.length || 0),
+      totalSuccess: result.created.success + result.updated.success + result.deleted.success,
+      totalFailed: result.created.failed + result.updated.failed + result.deleted.failed
+    }
+  });
+}));
+
 // Season Awards Routes
 
 // GET /api/v1/awards - List season awards with pagination and filtering
@@ -225,6 +252,33 @@ router.delete('/:id', authenticateToken, validateUUID(), asyncHandler(async (req
   }
   
   return res.status(204).send();
+}));
+
+// POST /api/v1/awards/batch - Batch operations for season awards
+router.post('/batch', authenticateToken, validateRequest(awardBatchSchema), asyncHandler(async (req, res) => {
+  const result = await awardsService.batchAwards(req.body, req.user!.id, req.user!.role);
+  
+  // Determine appropriate status code based on results
+  const hasFailures = result.created.failed > 0 || result.updated.failed > 0 || result.deleted.failed > 0;
+  const hasSuccesses = result.created.success > 0 || result.updated.success > 0 || result.deleted.success > 0;
+  
+  let statusCode = 200;
+  if (!hasSuccesses && hasFailures) {
+    statusCode = 400; // All operations failed
+  } else if (hasSuccesses && hasFailures) {
+    statusCode = 207; // Partial success (Multi-Status)
+  } else if (hasSuccesses && !hasFailures) {
+    statusCode = 200; // All operations succeeded
+  }
+  
+  res.status(statusCode).json({
+    results: result,
+    summary: {
+      totalOperations: (req.body.create?.length || 0) + (req.body.update?.length || 0) + (req.body.delete?.length || 0),
+      totalSuccess: result.created.success + result.updated.success + result.deleted.success,
+      totalFailed: result.created.failed + result.updated.failed + result.deleted.failed
+    }
+  });
 }));
 
 // Helper Routes
