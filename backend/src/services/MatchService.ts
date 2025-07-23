@@ -190,7 +190,9 @@ export class MatchService {
         const ownsAwayTeam = userTeamIds.includes(data.awayTeamId);
         
         if (!ownsHomeTeam && !ownsAwayTeam) {
-          throw new Error('Access denied: You must own at least one team to create a match');
+          const error = new Error('Access denied: You must own at least one team to create a match') as any;
+          error.statusCode = 403;
+          throw error;
         }
       }
 
@@ -379,6 +381,312 @@ export class MatchService {
     });
 
     return transformMatches(matches);
+  }
+
+  async getUpcomingMatches(userId: string, userRole: string, options: { limit: number; teamId?: string }): Promise<Match[]> {
+    const { limit, teamId } = options;
+    const now = new Date();
+
+    const where: any = {
+      is_deleted: false,
+      kickoff_ts: { gte: now }
+    };
+
+    if (teamId) {
+      where.OR = [
+        { home_team_id: teamId },
+        { away_team_id: teamId }
+      ];
+    }
+
+    // Non-admin users can only see matches they created or involving their teams
+    if (userRole !== 'ADMIN') {
+      const userTeamIds = await this.getUserTeamIds(userId);
+      const ownershipFilter = {
+        OR: [
+          { created_by_user_id: userId },
+          { home_team_id: { in: userTeamIds } },
+          { away_team_id: { in: userTeamIds } }
+        ]
+      };
+
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, ownershipFilter];
+        delete where.OR;
+      } else {
+        Object.assign(where, ownershipFilter);
+      }
+    }
+
+    const matches = await this.prisma.match.findMany({
+      where,
+      take: limit,
+      orderBy: { kickoff_ts: 'asc' },
+      include: {
+        created_by: {
+          select: {
+            id: true,
+            email: true,
+            first_name: true,
+            last_name: true
+          }
+        }
+      }
+    });
+
+    return transformMatches(matches);
+  }
+
+  async getRecentMatches(userId: string, userRole: string, options: { limit: number; teamId?: string }): Promise<Match[]> {
+    const { limit, teamId } = options;
+    const now = new Date();
+
+    const where: any = {
+      is_deleted: false,
+      kickoff_ts: { lt: now }
+    };
+
+    if (teamId) {
+      where.OR = [
+        { home_team_id: teamId },
+        { away_team_id: teamId }
+      ];
+    }
+
+    // Non-admin users can only see matches they created or involving their teams
+    if (userRole !== 'ADMIN') {
+      const userTeamIds = await this.getUserTeamIds(userId);
+      const ownershipFilter = {
+        OR: [
+          { created_by_user_id: userId },
+          { home_team_id: { in: userTeamIds } },
+          { away_team_id: { in: userTeamIds } }
+        ]
+      };
+
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, ownershipFilter];
+        delete where.OR;
+      } else {
+        Object.assign(where, ownershipFilter);
+      }
+    }
+
+    const matches = await this.prisma.match.findMany({
+      where,
+      take: limit,
+      orderBy: { kickoff_ts: 'desc' },
+      include: {
+        created_by: {
+          select: {
+            id: true,
+            email: true,
+            first_name: true,
+            last_name: true
+          }
+        }
+      }
+    });
+
+    return transformMatches(matches);
+  }
+
+  async getMatchFullDetails(id: string, userId: string, userRole: string): Promise<any | null> {
+    const match = await this.getMatchById(id, userId, userRole);
+    if (!match) return null;
+
+    // Get all related data in parallel
+    const [events, lineups, homeTeam, awayTeam] = await Promise.all([
+      this.prisma.event.findMany({
+        where: { match_id: id, is_deleted: false },
+        orderBy: [{ clock_ms: 'asc' }, { created_at: 'asc' }]
+      }),
+      this.prisma.lineup.findMany({
+        where: { match_id: id, is_deleted: false },
+        include: {
+          players: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
+      }),
+      this.prisma.team.findUnique({
+        where: { id: match.homeTeamId },
+        select: {
+          id: true,
+          name: true,
+          home_kit_primary: true,
+          home_kit_secondary: true,
+          logo_url: true
+        }
+      }),
+      this.prisma.team.findUnique({
+        where: { id: match.awayTeamId },
+        select: {
+          id: true,
+          name: true,
+          away_kit_primary: true,
+          away_kit_secondary: true,
+          logo_url: true
+        }
+      })
+    ]);
+
+    return {
+      match,
+      events: events.map(e => ({
+        id: e.id,
+        kind: e.kind,
+        teamId: e.team_id,
+        playerId: e.player_id,
+        periodNumber: e.period_number,
+        clockMs: e.clock_ms,
+        notes: e.notes,
+        sentiment: e.sentiment,
+        createdAt: e.created_at
+      })),
+      lineups: lineups.map(l => ({
+        id: l.id,
+        playerId: l.player_id,
+        position: l.position
+      })),
+      teams: {
+        home: homeTeam,
+        away: awayTeam
+      }
+    };
+  }
+
+  async getMatchTimeline(id: string, userId: string, userRole: string): Promise<any | null> {
+    const match = await this.getMatchById(id, userId, userRole);
+    if (!match) return null;
+
+    const events = await this.prisma.event.findMany({
+      where: { match_id: id, is_deleted: false },
+      orderBy: [{ clock_ms: 'asc' }, { created_at: 'asc' }]
+    });
+
+    return {
+      matchId: id,
+      timeline: events.map(e => ({
+        id: e.id,
+        kind: e.kind,
+        periodNumber: e.period_number,
+        clockMs: e.clock_ms,
+        notes: e.notes,
+        playerId: e.player_id,
+        sentiment: e.sentiment,
+        timestamp: e.created_at
+      }))
+    };
+  }
+
+  async getMatchLiveState(id: string, userId: string, userRole: string): Promise<any | null> {
+    const match = await this.getMatchById(id, userId, userRole);
+    if (!match) return null;
+
+    // Get current lineups and recent events
+    const [lineups, recentEvents] = await Promise.all([
+      this.prisma.lineup.findMany({
+        where: { match_id: id, is_deleted: false },
+        include: {
+          players: {
+            select: {
+              id: true,
+              name: true,
+              player_teams: {
+                select: {
+                  team_id: true
+                },
+                where: {
+                  is_deleted: false,
+                  team: {
+                    is_deleted: false
+                  }
+                }
+            }
+          }
+        }
+      }}),
+      this.prisma.event.findMany({
+        where: { match_id: id, is_deleted: false },
+        orderBy: [{ clock_ms: 'desc' }, { created_at: 'desc' }],
+        take: 10
+      })
+    ]);
+
+    // Calculate basic match stats
+    const goals = await this.prisma.event.count({
+      where: { match_id: id, kind: 'goal', is_deleted: false }
+    });
+
+    return {
+      match,
+      currentLineups: lineups.map(l => ({
+        playerId: l.player_id,
+        teamId: l.players.player_teams[0]?.team_id || null,
+        position: l.position
+      })),
+      recentEvents: recentEvents.map(e => ({
+        id: e.id,
+        kind: e.kind,
+        teamId: e.team_id,
+        playerId: e.player_id,
+        clockMs: e.clock_ms,
+        notes: e.notes,
+        timestamp: e.created_at
+      })),
+      stats: {
+        totalGoals: goals,
+        lastUpdated: new Date()
+      }
+    };
+  }
+
+  async createQuickEvent(matchId: string, eventData: any, userId: string, userRole: string): Promise<any | null> {
+    // Verify user can modify this match
+    const match = await this.getMatchById(matchId, userId, userRole);
+    if (!match) return null;
+
+    if (userRole !== 'ADMIN') {
+      const canModify = await this.prisma.match.findFirst({
+        where: {
+          match_id: matchId,
+          created_by_user_id: userId,
+          is_deleted: false
+        }
+      });
+      if (!canModify) return null;
+    }
+
+    // Create the event
+    const event = await this.prisma.event.create({
+      data: {
+        match_id: matchId,
+        kind: eventData.kind,
+        team_id: eventData.teamId,
+        player_id: eventData.playerId,
+        period_number: eventData.periodNumber || 1,
+        clock_ms: eventData.clockMs || 0,
+        notes: eventData.notes,
+        sentiment: eventData.sentiment || 0,
+        created_by_user_id: userId
+      }
+    });
+
+    return {
+      id: event.id,
+      kind: event.kind,
+      teamId: event.team_id,
+      playerId: event.player_id,
+      periodNumber: event.period_number,
+      clockMs: event.clock_ms,
+      notes: event.notes,
+      sentiment: event.sentiment,
+      createdAt: event.created_at
+    };
   }
 
   /**

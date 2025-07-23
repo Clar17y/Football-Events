@@ -126,4 +126,61 @@ router.post('/batch', authenticateToken, validateRequest(eventBatchSchema), asyn
   });
 }));
 
+// POST /api/v1/events/batch-by-match - Match-scoped batch operations for events
+router.post('/batch-by-match', authenticateToken, asyncHandler(async (req, res) => {
+  const { matchId } = req.body;
+  
+  if (!matchId) {
+    return res.status(400).json({
+      error: 'Validation Error',
+      message: 'matchId is required for match-scoped batch operations'
+    });
+  }
+
+  // Validate that all operations are for the specified match
+  const operations = req.body;
+  const invalidOperations: string[] = [];
+  
+  if (operations.create) {
+    operations.create.forEach((event: any, index: number) => {
+      if (event.matchId !== matchId) {
+        invalidOperations.push(`create[${index}]: matchId mismatch`);
+      }
+    });
+  }
+  
+  if (invalidOperations.length > 0) {
+    return res.status(400).json({
+      error: 'Validation Error',
+      message: 'All operations must be for the specified match',
+      details: invalidOperations
+    });
+  }
+
+  const result = await eventService.batchEvents(operations, req.user!.id, req.user!.role);
+  
+  // Determine appropriate status code based on results
+  const hasFailures = result.created.failed > 0 || result.updated.failed > 0 || result.deleted.failed > 0;
+  const hasSuccesses = result.created.success > 0 || result.updated.success > 0 || result.deleted.success > 0;
+  
+  let statusCode = 200;
+  if (!hasSuccesses && hasFailures) {
+    statusCode = 400; // All operations failed
+  } else if (hasSuccesses && hasFailures) {
+    statusCode = 207; // Partial success (Multi-Status)
+  } else if (hasSuccesses && !hasFailures) {
+    statusCode = 200; // All operations succeeded
+  }
+  
+  return res.status(statusCode).json({
+    results: result,
+    summary: {
+      totalOperations: (operations.create?.length || 0) + (operations.update?.length || 0) + (operations.delete?.length || 0),
+      totalSuccess: result.created.success + result.updated.success + result.deleted.success,
+      totalFailed: result.created.failed + result.updated.failed + result.deleted.failed,
+      matchId
+    }
+  });
+}));
+
 export default router;

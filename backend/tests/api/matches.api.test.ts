@@ -28,6 +28,7 @@ describe('Matches API Integration', () => {
   let otherUserTeamId: string;
   let thirdUserTeamId: string;
   let testSeasonId: string;
+  let testPlayerId: string;
 
   beforeAll(async () => {
     prisma = new PrismaClient({
@@ -71,6 +72,18 @@ describe('Matches API Integration', () => {
     otherUserTeamId = otherTeamResponse.body.id;
     thirdUserTeamId = thirdTeamResponse.body.id;
     
+    // Create test player
+    const playerData = {
+      name: `Minimal Player ${Date.now()}`
+    };
+    
+    const response = await apiRequest
+      .post('/api/v1/players')
+      .set(authHelper.getAuthHeader(testUser))
+      .send(playerData)
+      .expect(201);
+    testPlayerId = response.body.id;
+
     // Create test season
     const seasonResponse = await prisma.seasons.create({
       data: {
@@ -117,6 +130,15 @@ describe('Matches API Integration', () => {
       });
     } catch (error) {
       console.warn('Team cleanup warning:', error);
+    }
+
+    // Clean up players
+    try {
+      await prisma.player.deleteMany({
+        where: { created_by_user_id: { in: createdUserIds } }
+      });
+    } catch (error) {
+      console.warn('Player cleanup warning:', error);
     }
     
     // Then clean up users
@@ -626,7 +648,7 @@ describe('Matches API Integration', () => {
           .post('/api/v1/matches')
           .set(authHelper.getAuthHeader(testUser))
           .send(matchData)
-          .expect(500);
+          .expect(403); // Access denied should return 403 Forbidden
         
         console.log('Access denied for creating match with unowned teams - test passed');
       });
@@ -795,4 +817,526 @@ describe('Matches API Integration', () => {
       });
     });
   });
+
+  // ============================================================================
+  // FRONTEND CONVENIENCE API TESTS
+  // ============================================================================
+
+  describe('GET /api/v1/matches/upcoming - Upcoming Matches', () => {
+    let futureMatch: any;
+
+    beforeEach(async () => {
+      // Create a future match for testing
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 7); // 7 days from now
+
+      futureMatch = await apiRequest
+        .post('/api/v1/matches')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          homeTeamId: testTeamId,
+          awayTeamId: thirdUserTeamId,
+          seasonId: testSeasonId,
+          kickoffTime: futureDate.toISOString(),
+          competition: 'Test League',
+          venue: 'Test Stadium'
+        })
+        .expect(201);
+    });
+
+    it('should return upcoming matches', async () => {
+      const response = await apiRequest
+        .get('/api/v1/matches/upcoming')
+        .set(authHelper.getAuthHeader(testUser));
+        //.expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.length).toBeGreaterThan(0);
+      
+      // Verify all matches are in the future
+      response.body.forEach((match: any) => {
+        expect(new Date(match.kickoffTime).getTime()).toBeGreaterThan(Date.now());
+      });
+    });
+
+    it('should limit upcoming matches when limit parameter is provided', async () => {
+      const response = await apiRequest
+        .get('/api/v1/matches/upcoming?limit=1')
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.length).toBeLessThanOrEqual(1);
+    });
+
+    it('should filter upcoming matches by team', async () => {
+      const response = await apiRequest
+        .get(`/api/v1/matches/upcoming?teamId=${testTeamId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
+      response.body.forEach((match: any) => {
+        expect(match.homeTeamId === testTeamId || match.awayTeamId === testTeamId).toBe(true);
+      });
+    });
+
+    it('should require authentication', async () => {
+      await apiRequest
+        .get('/api/v1/matches/upcoming')
+        .expect(401);
+    });
+  });
+
+  describe('GET /api/v1/matches/recent - Recent Matches', () => {
+    let pastMatch: any;
+
+    beforeEach(async () => {
+      // Create a past match for testing
+      const pastDate = new Date();
+      pastDate.setDate(pastDate.getDate() - 7); // 7 days ago
+
+      pastMatch = await apiRequest
+        .post('/api/v1/matches')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          homeTeamId: testTeamId,
+          awayTeamId: thirdUserTeamId,
+          seasonId: testSeasonId,
+          kickoffTime: pastDate.toISOString(),
+          competition: 'Test League',
+          venue: 'Test Stadium'
+        })
+        .expect(201);
+    });
+
+    it('should return recent matches', async () => {
+      const response = await apiRequest
+        .get('/api/v1/matches/recent')
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.length).toBeGreaterThan(0);
+      
+      // Verify all matches are in the past
+      response.body.forEach((match: any) => {
+        expect(new Date(match.kickoffTime).getTime()).toBeLessThan(Date.now());
+      });
+    });
+
+    it('should limit recent matches when limit parameter is provided', async () => {
+      const response = await apiRequest
+        .get('/api/v1/matches/recent?limit=1')
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.length).toBeLessThanOrEqual(1);
+    });
+
+    it('should filter recent matches by team', async () => {
+      const response = await apiRequest
+        .get(`/api/v1/matches/recent?teamId=${testTeamId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
+      response.body.forEach((match: any) => {
+        expect(match.homeTeamId === testTeamId || match.awayTeamId === testTeamId).toBe(true);
+      });
+    });
+
+    it('should require authentication', async () => {
+      await apiRequest
+        .get('/api/v1/matches/recent')
+        .expect(401);
+    });
+  });
+
+  describe('GET /api/v1/matches/:id/full-details - Match Full Details', () => {
+    let testMatch: any;
+    let testEvent: any;
+    let testLineup: any;
+
+    beforeAll(async () => {
+      // Create a test match
+      testMatch = await apiRequest
+        .post('/api/v1/matches')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          homeTeamId: testTeamId,
+          awayTeamId: thirdUserTeamId,
+          seasonId: testSeasonId,
+          kickoffTime: new Date().toISOString(),
+          competition: 'Test League',
+          venue: 'Test Stadium'
+        })
+        .expect(201);
+
+      // Create a test event
+      testEvent = await apiRequest
+        .post('/api/v1/events')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          matchId: testMatch.body.id,
+          kind: 'goal',
+          teamId: testTeamId,
+          playerId: testPlayerId,
+          periodNumber: 1,
+          clockMs: 300000,
+          notes: 'Test goal'
+        })
+        .expect(201);
+
+      // Create a test lineup
+      testLineup = await apiRequest
+        .post('/api/v1/lineups')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          matchId: testMatch.body.id,
+          playerId: testPlayerId,
+          teamId: testTeamId,
+          position: 'ST',
+          startMinute: 0
+        })
+        .expect(201);
+    });
+
+    it('should return complete match details with events, lineups, and teams', async () => {
+      const response = await apiRequest
+        .get(`/api/v1/matches/${testMatch.body.id}/full-details`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(response.body).toHaveProperty('match');
+      expect(response.body).toHaveProperty('events');
+      expect(response.body).toHaveProperty('lineups');
+      expect(response.body).toHaveProperty('teams');
+
+      // Verify match data
+      expect(response.body.match.id).toBe(testMatch.body.id);
+
+      // Verify events
+      expect(Array.isArray(response.body.events)).toBe(true);
+      expect(response.body.events.length).toBeGreaterThan(0);
+      expect(response.body.events[0]).toHaveProperty('kind');
+      expect(response.body.events[0]).toHaveProperty('clockMs');
+
+      // Verify lineups
+      expect(Array.isArray(response.body.lineups)).toBe(true);
+      expect(response.body.lineups.length).toBeGreaterThan(0);
+      expect(response.body.lineups[0]).toHaveProperty('position');
+      expect(response.body.lineups[0]).toHaveProperty('playerId');
+
+      // Verify teams
+      expect(response.body.teams).toHaveProperty('home');
+      expect(response.body.teams).toHaveProperty('away');
+      expect(response.body.teams.home).toHaveProperty('name');
+      expect(response.body.teams.away).toHaveProperty('name');
+    });
+
+    it('should return 404 for non-existent match', async () => {
+      const nonExistentId = '12345678-1234-1234-1234-123456789012';
+      await apiRequest
+        .get(`/api/v1/matches/${nonExistentId}/full-details`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(404);
+    });
+
+    it('should require authentication', async () => {
+      await apiRequest
+        .get(`/api/v1/matches/${testMatch.body.id}/full-details`)
+        .expect(401);
+    });
+
+    it('should deny access to other users matches', async () => {
+      await apiRequest
+        .get(`/api/v1/matches/${testMatch.body.id}/full-details`)
+        .set(authHelper.getAuthHeader(otherUser))
+        .expect(404);
+    });
+  });
+
+  describe('GET /api/v1/matches/:id/timeline - Match Timeline', () => {
+    let testMatch: any;
+    let testEvents: any[];
+
+    beforeEach(async () => {
+      // Create a test match
+      testMatch = await apiRequest
+        .post('/api/v1/matches')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          homeTeamId: testTeamId,
+          awayTeamId: testTeamId,
+          seasonId: testSeasonId,
+          kickoffTime: new Date().toISOString(),
+          competition: 'Test League',
+          venue: 'Test Stadium'
+        })
+        .expect(201);
+
+      // Create multiple events for timeline
+      testEvents = [];
+      for (let i = 0; i < 3; i++) {
+        const event = await apiRequest
+          .post('/api/v1/events')
+          .set(authHelper.getAuthHeader(testUser))
+          .send({
+            matchId: testMatch.body.id,
+            kind: i === 0 ? 'goal' : i === 1 ? 'assist' : 'foul',
+            teamId: testTeamId,
+            playerId: testPlayerId,
+            periodNumber: 1,
+            clockMs: (i + 1) * 300000, // Different times
+            notes: `Test event ${i + 1}`
+          })
+          .expect(201);
+        testEvents.push(event.body);
+      }
+    });
+
+    it('should return chronological timeline of match events', async () => {
+      const response = await apiRequest
+        .get(`/api/v1/matches/${testMatch.body.id}/timeline`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(response.body).toHaveProperty('matchId');
+      expect(response.body).toHaveProperty('timeline');
+      expect(response.body.matchId).toBe(testMatch.body.id);
+
+      // Verify timeline structure
+      expect(Array.isArray(response.body.timeline)).toBe(true);
+      expect(response.body.timeline.length).toBe(3);
+
+      // Verify chronological order (ascending by clockMs)
+      for (let i = 1; i < response.body.timeline.length; i++) {
+        expect(response.body.timeline[i].clockMs).toBeGreaterThanOrEqual(
+          response.body.timeline[i - 1].clockMs
+        );
+      }
+
+      // Verify event structure includes player and team info
+      response.body.timeline.forEach((event: any) => {
+        expect(event).toHaveProperty('kind');
+        expect(event).toHaveProperty('clockMs');
+        expect(event).toHaveProperty('playerId');
+      });
+    });
+
+    it('should return 404 for non-existent match', async () => {
+      const nonExistentId = '12345678-1234-1234-1234-123456789012';
+      await apiRequest
+        .get(`/api/v1/matches/${nonExistentId}/timeline`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(404);
+    });
+
+    it('should require authentication', async () => {
+      await apiRequest
+        .get(`/api/v1/matches/${testMatch.body.id}/timeline`)
+        .expect(401);
+    });
+  });
+
+  describe('GET /api/v1/matches/:id/live-state - Live Match State', () => {
+    let testMatch: any;
+    let testLineup: any;
+    let testEvent: any;
+
+    beforeEach(async () => {
+      // Create a test match
+      testMatch = await apiRequest
+        .post('/api/v1/matches')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          homeTeamId: testTeamId,
+          awayTeamId: testTeamId,
+          seasonId: testSeasonId,
+          kickoffTime: new Date().toISOString(),
+          competition: 'Test League',
+          venue: 'Test Stadium'
+        })
+        .expect(201);
+
+      // Create lineup and events for live state
+      testLineup = await apiRequest
+        .post('/api/v1/lineups')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          matchId: testMatch.body.id,
+          playerId: testPlayerId,
+          teamId: testTeamId,
+          position: 'ST',
+          startMinute: 0
+        })
+        .expect(201);
+
+      testEvent = await apiRequest
+        .post('/api/v1/events')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          matchId: testMatch.body.id,
+          kind: 'goal',
+          teamId: testTeamId,
+          playerId: testPlayerId,
+          periodNumber: 1,
+          clockMs: 300000,
+          notes: 'Test goal'
+        })
+        .expect(201);
+    });
+
+    it('should return live match state with lineups, recent events, and stats', async () => {
+      const response = await apiRequest
+        .get(`/api/v1/matches/${testMatch.body.id}/live-state`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(response.body).toHaveProperty('match');
+      expect(response.body).toHaveProperty('currentLineups');
+      expect(response.body).toHaveProperty('recentEvents');
+      expect(response.body).toHaveProperty('stats');
+
+      // Verify match data
+      expect(response.body.match.id).toBe(testMatch.body.id);
+
+      // Verify current lineups
+      expect(Array.isArray(response.body.currentLineups)).toBe(true);
+      expect(response.body.currentLineups.length).toBeGreaterThan(0);
+      expect(response.body.currentLineups[0]).toHaveProperty('position');
+
+      // Verify recent events (limited to 10)
+      expect(Array.isArray(response.body.recentEvents)).toBe(true);
+      expect(response.body.recentEvents.length).toBeLessThanOrEqual(10);
+
+      // Verify stats
+      expect(response.body.stats).toHaveProperty('totalGoals');
+      expect(response.body.stats).toHaveProperty('lastUpdated');
+      expect(typeof response.body.stats.totalGoals).toBe('number');
+    });
+
+    it('should return 404 for non-existent match', async () => {
+      const nonExistentId = '12345678-1234-1234-1234-123456789012';
+      await apiRequest
+        .get(`/api/v1/matches/${nonExistentId}/live-state`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(404);
+    });
+
+    it('should require authentication', async () => {
+      await apiRequest
+        .get(`/api/v1/matches/${testMatch.body.id}/live-state`)
+        .expect(401);
+    });
+  });
+
+  describe('POST /api/v1/matches/:id/quick-event - Quick Event Creation', () => {
+    let testMatch: any;
+
+    beforeEach(async () => {
+      // Create a test match
+      testMatch = await apiRequest
+        .post('/api/v1/matches')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          homeTeamId: testTeamId,
+          awayTeamId: testTeamId,
+          seasonId: testSeasonId,
+          kickoffTime: new Date().toISOString(),
+          competition: 'Test League',
+          venue: 'Test Stadium'
+        })
+        .expect(201);
+    });
+
+    it('should create a quick event for live match', async () => {
+      const eventData = {
+        kind: 'goal',
+        teamId: testTeamId,
+        playerId: testPlayerId,
+        periodNumber: 1,
+        clockMs: 450000,
+        notes: 'Quick goal from live match',
+        sentiment: 5 // integer
+      };
+
+      const response = await apiRequest
+        .post(`/api/v1/matches/${testMatch.body.id}/quick-event`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send(eventData)
+        .expect(201);
+
+      expect(response.body).toHaveProperty('id');
+      expect(response.body.kind).toBe(eventData.kind);
+      expect(response.body.teamId).toBe(eventData.teamId);
+      expect(response.body.playerId).toBe(eventData.playerId);
+      expect(response.body.clockMs).toBe(eventData.clockMs);
+      expect(response.body.notes).toBe(eventData.notes);
+      expect(response.body.sentiment).toBe(eventData.sentiment);
+    });
+
+    it('should use default values for optional fields', async () => {
+      const eventData = {
+        kind: 'foul',
+        teamId: testTeamId,
+        playerId: testPlayerId
+      };
+
+      const response = await apiRequest
+        .post(`/api/v1/matches/${testMatch.body.id}/quick-event`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send(eventData)
+        .expect(201);
+
+      expect(response.body.periodNumber).toBe(1); // Default
+      expect(response.body.clockMs).toBe(0); // Default
+      expect(response.body.sentiment).toBe(0); // Default
+    });
+
+    it('should return 404 for non-existent match', async () => {
+      const nonExistentId = '12345678-1234-1234-1234-123456789012';
+      const eventData = {
+        kind: 'goal',
+        teamId: testTeamId,
+        playerId: testPlayerId
+      };
+
+      await apiRequest
+        .post(`/api/v1/matches/${nonExistentId}/quick-event`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send(eventData)
+        .expect(404);
+    });
+
+    it('should deny access to other users matches', async () => {
+      const eventData = {
+        kind: 'goal',
+        teamId: testTeamId,
+        playerId: testPlayerId
+      };
+
+      await apiRequest
+        .post(`/api/v1/matches/${testMatch.body.id}/quick-event`)
+        .set(authHelper.getAuthHeader(otherUser))
+        .send(eventData)
+        .expect(404);
+    });
+
+    it('should require authentication', async () => {
+      const eventData = {
+        kind: 'goal',
+        teamId: testTeamId,
+        playerId: testPlayerId
+      };
+
+      await apiRequest
+        .post(`/api/v1/matches/${testMatch.body.id}/quick-event`)
+        .send(eventData)
+        .expect(401);
+    });
+  });
+
 });

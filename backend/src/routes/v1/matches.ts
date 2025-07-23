@@ -53,6 +53,34 @@ router.post('/',
   })
 );
 
+// GET /api/v1/matches/upcoming - Get upcoming matches
+router.get('/upcoming', authenticateToken, asyncHandler(async (req, res) => {
+  const { limit = 10, teamId } = req.query;
+  const matches = await matchService.getUpcomingMatches(
+    req.user!.id,
+    req.user!.role,
+    {
+      limit: parseInt(limit as string),
+      teamId: teamId as string
+    }
+  );
+  return res.json(matches);
+}));
+
+// GET /api/v1/matches/recent - Get recent matches
+router.get('/recent', authenticateToken, asyncHandler(async (req, res) => {
+  const { limit = 10, teamId } = req.query;
+  const matches = await matchService.getRecentMatches(
+    req.user!.id,
+    req.user!.role,
+    {
+      limit: parseInt(limit as string),
+      teamId: teamId as string
+    }
+  );
+  return res.json(matches);
+}));
+
 // GET /api/v1/matches/:id - Get match by ID
 router.get('/:id', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
   const match = await matchService.getMatchById(
@@ -131,6 +159,79 @@ router.get('/season/:seasonId', authenticateToken, validateUUID('seasonId'), asy
     req.user!.role
   );
   return res.json(matches);
+}));
+
+// GET /api/v1/matches/:id/full-details - Get match with all related data
+router.get('/:id/full-details', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const matchDetails = await matchService.getMatchFullDetails(
+    req.params['id']!,
+    req.user!.id,
+    req.user!.role
+  );
+  
+  if (!matchDetails) {
+    return res.status(404).json({
+      error: 'Match not found',
+      message: `Match with ID ${req.params['id']} does not exist or access denied`
+    });
+  }
+  
+  return res.json(matchDetails);
+}));
+
+// GET /api/v1/matches/:id/timeline - Get match timeline with events
+router.get('/:id/timeline', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const timeline = await matchService.getMatchTimeline(
+    req.params['id']!,
+    req.user!.id,
+    req.user!.role
+  );
+  
+  if (!timeline) {
+    return res.status(404).json({
+      error: 'Match not found',
+      message: `Match with ID ${req.params['id']} does not exist or access denied`
+    });
+  }
+  
+  return res.json(timeline);
+}));
+
+// GET /api/v1/matches/:id/live-state - Get live match state for real-time console
+router.get('/:id/live-state', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const liveState = await matchService.getMatchLiveState(
+    req.params['id']!,
+    req.user!.id,
+    req.user!.role
+  );
+  
+  if (!liveState) {
+    return res.status(404).json({
+      error: 'Match not found',
+      message: `Match with ID ${req.params['id']} does not exist or access denied`
+    });
+  }
+  
+  return res.json(liveState);
+}));
+
+// POST /api/v1/matches/:id/quick-event - Quick event creation for live matches
+router.post('/:id/quick-event', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const event = await matchService.createQuickEvent(
+    req.params['id']!,
+    req.body,
+    req.user!.id,
+    req.user!.role
+  );
+  
+  if (!event) {
+    return res.status(404).json({
+      error: 'Match not found',
+      message: `Match with ID ${req.params['id']} does not exist or access denied`
+    });
+  }
+  
+  return res.status(201).json(event);
 }));
 
 export default router;

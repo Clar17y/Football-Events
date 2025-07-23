@@ -236,7 +236,9 @@ export class TeamService {
 
     const team = await this.prisma.team.findFirst({ where: teamWhere });
     if (!team) {
-      throw new Error('Team not found or access denied');
+      const error = new Error('Team not found or access denied') as any;
+      error.statusCode = 404;
+      throw error;
     }
 
     const players = await this.prisma.player.findMany({
@@ -262,6 +264,155 @@ export class TeamService {
 
     // TODO: Transform players when PlayerService is implemented
     return players;
+  }
+
+  async getTeamSquad(teamId: string, userId: string, userRole: string, seasonId?: string): Promise<any | null> {
+    // First check if user has access to this team
+    const teamWhere: any = { 
+      id: teamId,
+      is_deleted: false 
+    };
+
+    // Non-admin users can only access their own teams
+    if (userRole !== 'ADMIN') {
+      teamWhere.created_by_user_id = userId;
+    }
+
+    const team = await this.prisma.team.findFirst({ 
+      where: teamWhere,
+      include: {
+        created_by: {
+          select: {
+            id: true,
+            email: true,
+            first_name: true,
+            last_name: true
+          }
+        }
+      }
+    });
+    
+    if (!team) {
+      return null; // Team not found or access denied
+    }
+
+    // Get active players for this team
+    const playerTeamsWhere: any = {
+      team_id: teamId,
+      is_active: true,
+      is_deleted: false
+    };
+
+    // If seasonId is provided, filter by season through matches
+    if (seasonId) {
+      playerTeamsWhere.OR = [
+        {
+          // Players who played in matches for this season
+          player: {
+            lineups: {
+              some: {
+                matches: {
+                  season_id: seasonId
+                },
+                is_deleted: false
+              }
+            }
+          }
+        },
+        {
+          // Or players who are currently active (fallback)
+          is_active: true
+        }
+      ];
+    }
+
+    const playerTeams = await this.prisma.player_team.findMany({
+      where: playerTeamsWhere,
+      include: {
+        player: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            jersey_number: true,
+            preferred_pos: true,
+            date_of_birth: true,
+            created_at: true
+          }
+        }
+      },
+      orderBy: [
+        { player: { jersey_number: 'asc' } },
+        { player: { first_name: 'asc' } }
+      ]
+    });
+
+    // Get match statistics for the season if provided
+    let seasonStats = null;
+    if (seasonId) {
+      const matches = await this.prisma.match.findMany({
+        where: {
+          season_id: seasonId,
+          OR: [
+            { home_team_id: teamId },
+            { away_team_id: teamId }
+          ],
+          is_deleted: false
+        },
+        select: { match_id: true }
+      });
+
+      const matchIds = matches.map(m => m.match_id);
+      
+      if (matchIds.length > 0) {
+        const [totalGoals, totalEvents, totalLineups] = await Promise.all([
+          this.prisma.event.count({
+            where: {
+              match_id: { in: matchIds },
+              team_id: teamId,
+              kind: 'goal',
+              is_deleted: false
+            }
+          }),
+          this.prisma.event.count({
+            where: {
+              match_id: { in: matchIds },
+              team_id: teamId,
+              is_deleted: false
+            }
+          }),
+          this.prisma.lineup.count({
+            where: {
+              match_id: { in: matchIds },
+              team_id: teamId,
+              is_deleted: false
+            }
+          })
+        ]);
+
+        seasonStats = {
+          matchesPlayed: matches.length,
+          totalGoals,
+          totalEvents,
+          totalLineups
+        };
+      }
+    }
+
+    return {
+      team: transformTeam(team),
+      players: playerTeams.map(pt => ({
+        playerId: pt.player_id,
+        teamId: pt.team_id,
+        position: pt.position,
+        joinedAt: pt.joined_at,
+        isActive: pt.is_active,
+        player: pt.player
+      })),
+      seasonStats,
+      totalPlayers: playerTeams.length,
+      seasonId
+    };
   }
 
   async disconnect(): Promise<void> {

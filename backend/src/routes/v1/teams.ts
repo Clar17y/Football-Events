@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { TeamService } from '../../services/TeamService';
+import { PlayerTeamService } from '../../services/PlayerTeamService';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
 import { authenticateToken } from '../../middleware/auth';
@@ -9,6 +10,7 @@ import { extractApiError } from '../../utils/prismaErrorHandler';
 
 const router = Router();
 const teamService = new TeamService();
+const playerTeamService = new PlayerTeamService();
 
 // GET /api/v1/teams - List teams with pagination and filtering
 router.get('/', authenticateToken, asyncHandler(async (req, res) => {
@@ -128,6 +130,32 @@ router.get('/:id/players', authenticateToken, validateUUID(), asyncHandler(async
     }
     throw error;
   }
+}));
+
+// GET /api/v1/teams/:id/active-players - Get active players for a specific team (convenience endpoint)
+router.get('/:id/active-players', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const activePlayers = await playerTeamService.getActiveTeamPlayers(req.params['id']!, req.user!.id, req.user!.role);
+  return res.json(activePlayers);
+}));
+
+// GET /api/v1/teams/:id/squad - Get team squad with active players
+router.get('/:id/squad', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const { seasonId } = req.query;
+  const squad = await teamService.getTeamSquad(
+    req.params['id']!,
+    req.user!.id,
+    req.user!.role,
+    seasonId as string
+  );
+  
+  if (!squad) {
+    return res.status(404).json({
+      error: 'Team not found',
+      message: `Team with ID ${req.params['id']} does not exist or access denied`
+    });
+  }
+  
+  return res.json(squad);
 }));
 
 export default router;

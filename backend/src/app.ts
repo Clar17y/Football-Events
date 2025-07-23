@@ -83,6 +83,10 @@ app.get('/api/health', async (_req, res) => {
 import v1Routes from './routes/v1';
 app.use('/api/v1', v1Routes);
 
+// Import error handling middleware
+import { errorHandler } from './middleware/errorHandler';
+import { notFoundHandler } from './middleware/notFoundHandler';
+
 // Socket.io connection handling
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
@@ -130,30 +134,9 @@ io.on('connection', (socket) => {
   });
 });
 
-// Error handling middleware
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Error:', err);
-  
-  res.status(500).json({
-    error: {
-      message: !isDevelopment(env)
-        ? 'Internal server error' 
-        : err.message,
-      timestamp: new Date().toISOString()
-    }
-  });
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    error: {
-      message: 'Route not found',
-      path: req.originalUrl,
-      timestamp: new Date().toISOString()
-    }
-  });
-});
+// Error handling middleware (must be last)
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 const PORT = getNumericEnv(env.PORT, 3001);
 

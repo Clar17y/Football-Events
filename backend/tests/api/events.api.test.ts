@@ -676,7 +676,7 @@ describe('Events API Integration', () => {
           .post('/api/v1/events')
           .set(authHelper.getAuthHeader(testUser))
           .send(eventData)
-          .expect(500); // Access denied error gets wrapped as 500
+          .expect(403); // Access denied should return 403 Forbidden
         
         console.log('Access denied for creating event in unowned match');
       });
@@ -842,4 +842,319 @@ describe('Events API Integration', () => {
       });
     });
   });
+
+  // ============================================================================
+  // MATCH-SCOPED BATCH OPERATIONS TESTS
+  // ============================================================================
+
+  describe('POST /api/v1/events/batch-by-match - Match-Scoped Batch Operations', () => {
+    let testMatch: any;
+    let batchTestTeam: any;
+    let batchTestPlayer: any;
+    let batchTestSeason: any;
+
+    beforeEach(async () => {
+      // Create test data for batch operations
+      batchTestTeam = await apiRequest
+        .post('/api/v1/teams')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Batch Test Team ${Date.now()}`,
+          shortName: 'BTT'
+        })
+        .expect(201);
+
+      batchTestPlayer = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Batch Test Player ${Date.now()}`,
+          squadNumber: 99
+        })
+        .expect(201);
+
+      batchTestSeason = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          label: `Batch Test Season ${Date.now()}`,
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        })
+        .expect(201);
+
+      // Create a test match for batch operations
+      testMatch = await apiRequest
+        .post('/api/v1/matches')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          homeTeamId: batchTestTeam.body.id,
+          awayTeamId: batchTestTeam.body.id,
+          seasonId: batchTestSeason.body.id,
+          kickoffTime: new Date().toISOString(),
+          competition: 'Test League',
+          venue: 'Test Stadium'
+        })
+        .expect(201);
+    });
+
+    it('should create multiple events for a specific match', async () => {
+      const batchData = {
+        matchId: testMatch.body.id,
+        create: [
+          {
+            matchId: testMatch.body.id,
+            kind: 'goal',
+            teamId: batchTestTeam.body.id,
+            playerId: batchTestPlayer.body.id,
+            periodNumber: 1,
+            clockMs: 300000,
+            notes: 'First goal'
+          },
+          {
+            matchId: testMatch.body.id,
+            kind: 'assist',
+            teamId: batchTestTeam.body.id,
+            playerId: batchTestPlayer.body.id,
+            periodNumber: 1,
+            clockMs: 450000,
+            notes: 'Assist'
+          },
+          {
+            matchId: testMatch.body.id,
+            kind: 'foul',
+            teamId: batchTestTeam.body.id,
+            playerId: batchTestPlayer.body.id,
+            periodNumber: 2,
+            clockMs: 600000,
+            notes: 'Player substitution'
+          }
+        ]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/events/batch-by-match')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.results.created.success).toBe(3);
+      expect(response.body.results.created.failed).toBe(0);
+      expect(response.body.summary.totalSuccess).toBe(3);
+      expect(response.body.summary.totalFailed).toBe(0);
+      expect(response.body.summary.matchId).toBe(testMatch.body.id);
+    });
+
+    it('should handle mixed batch operations for a specific match', async () => {
+      // First create an event to update and delete
+      const existingEvent = await apiRequest
+        .post('/api/v1/events')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          matchId: testMatch.body.id,
+          kind: 'goal',
+          teamId: batchTestTeam.body.id,
+          playerId: batchTestPlayer.body.id,
+          periodNumber: 1,
+          clockMs: 300000,
+          notes: 'Goal to update'
+        })
+        .expect(201);
+
+      const deleteEvent = await apiRequest
+        .post('/api/v1/events')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          matchId: testMatch.body.id,
+          kind: 'foul',
+          teamId: batchTestTeam.body.id,
+          playerId: batchTestPlayer.body.id,
+          periodNumber: 1,
+          clockMs: 400000,
+          notes: 'Card to delete'
+        })
+        .expect(201);
+
+      const batchData = {
+        matchId: testMatch.body.id,
+        create: [
+          {
+            matchId: testMatch.body.id,
+            kind: 'assist',
+            teamId: batchTestTeam.body.id,
+            playerId: batchTestPlayer.body.id,
+            periodNumber: 1,
+            clockMs: 350000,
+            notes: 'New assist'
+          }
+        ],
+        update: [
+          {
+            id: existingEvent.body.id,
+            data: {
+              notes: 'Updated goal notes',
+              clockMs: 320000
+            }
+          }
+        ],
+        delete: [deleteEvent.body.id]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/events/batch-by-match')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.results.created.success).toBe(1);
+      expect(response.body.results.updated.success).toBe(1);
+      expect(response.body.results.deleted.success).toBe(1);
+      expect(response.body.summary.totalSuccess).toBe(3);
+      expect(response.body.summary.totalFailed).toBe(0);
+      expect(response.body.summary.matchId).toBe(testMatch.body.id);
+    });
+
+    it('should reject operations with mismatched matchId', async () => {
+      // Create another match
+      const otherMatch = await apiRequest
+        .post('/api/v1/matches')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          homeTeamId: batchTestTeam.body.id,
+          awayTeamId: otherUserTeamId,
+          seasonId: testSeasonId,
+          kickoffTime: new Date().toISOString(),
+          competition: 'Other League',
+          venue: 'Other Stadium'
+        })
+        .expect(201);
+
+      const batchData = {
+        matchId: testMatch.body.id,
+        create: [
+          {
+            matchId: testMatch.body.id,
+            kind: 'goal',
+            teamId: batchTestTeam.body.id,
+            playerId: batchTestPlayer.body.id,
+            periodNumber: 1,
+            clockMs: 300000,
+            notes: 'Valid goal'
+          },
+          {
+            matchId: otherMatch.body.id, // Wrong match ID
+            kind: 'foul',
+            teamId: batchTestTeam.body.id,
+            playerId: batchTestPlayer.body.id,
+            periodNumber: 1,
+            clockMs: 450000,
+            notes: 'Invalid card'
+          }
+        ]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/events/batch-by-match')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.message).toBe('All operations must be for the specified match');
+      expect(response.body.details).toContain('create[1]: matchId mismatch');
+    });
+
+    it('should require matchId in request body', async () => {
+      const batchData = {
+        create: [
+          {
+            matchId: testMatch.body.id,
+            kind: 'goal',
+            teamId: batchTestTeam.body.id,
+            playerId: batchTestPlayer.body.id,
+            periodNumber: 1,
+            clockMs: 300000,
+            notes: 'Goal without matchId in body'
+          }
+        ]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/events/batch-by-match')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.message).toBe('matchId is required for match-scoped batch operations');
+    });
+
+    it('should require authentication', async () => {
+      const batchData = {
+        matchId: testMatch.body.id,
+        create: [
+          {
+            matchId: testMatch.body.id,
+            kind: 'goal',
+            teamId: batchTestTeam.body.id,
+            playerId: batchTestPlayer.body.id,
+            periodNumber: 1,
+            clockMs: 300000,
+            notes: 'Unauthorized goal'
+          }
+        ]
+      };
+
+      await apiRequest
+        .post('/api/v1/events/batch-by-match')
+        .send(batchData)
+        .expect(401);
+    });
+
+    it('should deny access to other users matches', async () => {
+      const batchData = {
+        matchId: testMatch.body.id,
+        create: [
+          {
+            matchId: testMatch.body.id,
+            kind: 'goal',
+            teamId: batchTestTeam.body.id,
+            playerId: batchTestPlayer.body.id,
+            periodNumber: 1,
+            clockMs: 300000,
+            notes: 'Unauthorized goal'
+          }
+        ]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/events/batch-by-match')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send(batchData)
+        .expect(400);
+
+      expect(response.body.results.created.failed).toBe(1);
+      expect(response.body.results.created.errors[0].error).toContain('Access denied');
+    });
+
+    it('should handle empty batch operations', async () => {
+      const batchData = {
+        matchId: testMatch.body.id
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/events/batch-by-match')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.results.created.success).toBe(0);
+      expect(response.body.results.updated.success).toBe(0);
+      expect(response.body.results.deleted.success).toBe(0);
+      expect(response.body.summary.totalSuccess).toBe(0);
+      expect(response.body.summary.totalFailed).toBe(0);
+      expect(response.body.summary.matchId).toBe(testMatch.body.id);
+    });
+  });
+
 });
