@@ -1,11 +1,7 @@
 import React from 'react';
 import { 
   IonPage, 
-  IonHeader, 
-  IonToolbar, 
-  IonTitle, 
   IonContent,
-  IonButton,
   IonIcon,
   IonCard,
   IonCardContent,
@@ -14,32 +10,31 @@ import {
   IonFab,
   IonFabButton
 } from '@ionic/react';
-import { arrowBack, add, person } from 'ionicons/icons';
-import { useHistory } from 'react-router-dom';
-import ThemeToggle from '../components/ThemeToggle';
+import PageHeader from '../components/PageHeader';
+import { add, person } from 'ionicons/icons';
 import './PageStyles.css';
 
-const PlayersPage: React.FC = () => {
-  const history = useHistory();
+interface PlayersPageProps {
+  onNavigate?: (page: string) => void;
+}
+
+const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate }) => {
+  const navigate = (page: string) => {
+    if (onNavigate) {
+      onNavigate(page);
+    }
+  };
 
   return (
     <IonPage>
-      <IonHeader>
-        <IonToolbar color="tertiary">
-          <IonButton 
-            fill="clear" 
-            slot="start" 
-            onClick={() => history.goBack()}
-            style={{ color: 'white' }}
-          >
-            <IonIcon icon={arrowBack} />
-          </IonButton>
-          <IonTitle>Players</IonTitle>
-          <ThemeToggle slot="end" />
-        </IonToolbar>
-      </IonHeader>
+      <PageHeader onNavigate={navigate} />
       
       <IonContent className="ion-padding">
+        <div className="page-header-section">
+          <div className="page-header-with-color" style={{ backgroundColor: 'var(--ion-color-indigo)' }}>
+            <h1 className="page-main-title">Players</h1>
+          </div>
+        </div>
         <div style={{ textAlign: 'center', padding: '2rem' }}>
           <IonIcon 
             icon={person} 
@@ -70,7 +65,7 @@ const PlayersPage: React.FC = () => {
         </div>
 
         <IonFab vertical="bottom" horizontal="end" slot="fixed">
-          <IonFabButton color="tertiary">
+          <IonFabButton color="indigo">
             <IonIcon icon={add} />
           </IonFabButton>
         </IonFab>

@@ -1,0 +1,350 @@
+/* ===== CREATE TEAM MODAL STYLES ===== */
+/* Beautiful form styling following the grassroots design system */
+
+.create-team-modal {
+  --width: 100%;
+  --max-width: 600px;
+  --height: 100%;
+  --max-height: 90vh;
+  --border-radius: var(--grassroots-radius-lg);
+}
+
+.create-team-content {
+  --background: var(--grassroots-background);
+  --padding-top: 0;
+  --padding-bottom: 0;
+  --padding-start: 0;
+  --padding-end: 0;
+}
+
+/* Form Container */
+.form-container {
+  padding: var(--grassroots-space-sm);
+  max-width: 100%;
+}
+
+/* Form Sections */
+.form-section {
+  margin-bottom: var(--grassroots-space-sm);
+  border-radius: var(--grassroots-radius-md);
+  box-shadow: var(--grassroots-shadow-sm);
+  border: 1px solid var(--grassroots-surface-variant);
+  background: var(--grassroots-surface);
+}
+
+.form-section ion-card-header {
+  padding-bottom: var(--grassroots-space-xs);
+}
+
+.form-section ion-card-content {
+  padding-top: var(--grassroots-space-xs);
+}
+
+/* Move labels to very top of their containers */
+.form-item ion-label {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--grassroots-text-primary);
+  margin: 0 0 var(--grassroots-space-sm) 0 !important;
+  padding: 0 0 0 var(--grassroots-space-xs) !important;
+  --padding-top: 0;
+  --padding-bottom: 0;
+  --margin-top: 0;
+}
+
+.form-section ion-card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-sm);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--grassroots-text-primary);
+}
+
+.section-icon {
+  font-size: 1.25rem;
+  color: var(--grassroots-accent);
+}
+
+/* Form Items */
+.form-item {
+  --background: transparent;
+  --border-color: var(--grassroots-surface-variant);
+  --border-radius: var(--grassroots-radius-sm);
+  --padding-start: 0;
+  --padding-end: 0;
+  margin-bottom: 0;
+}
+
+.form-item.error {
+  --border-color: var(--grassroots-danger);
+}
+
+/* Remove top space from ion-item elements */
+.form-item {
+  --padding-top: 0 !important;
+  --padding-bottom: 0 !important;
+  --min-height: auto !important;
+  --inner-border-width: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+/* Override line-height for tighter text spacing */
+.form-item ion-label,
+.form-item ion-input,
+.form-section ion-card-title,
+.color-preview-label,
+.error-text {
+  line-height: 1 !important;
+}
+
+.form-item ion-label {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--grassroots-text-primary);
+  margin-bottom: var(--grassroots-space-sm);
+  display: block;
+}
+
+.form-item ion-input {
+  --background: var(--grassroots-surface);
+  --color: var(--grassroots-text-primary);
+  --placeholder-color: var(--grassroots-text-tertiary);
+  --padding-start: var(--grassroots-space-sm);
+  --padding-end: var(--grassroots-space-sm);
+  --padding-top: var(--grassroots-space-xs);
+  --padding-bottom: var(--grassroots-space-xs);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.875rem;
+  border: 1px solid var(--grassroots-surface-variant);
+  border-radius: var(--grassroots-radius-sm);
+  transition: border-color 0.2s ease;
+  min-height: 40px;
+}
+
+.form-item ion-input:focus-within {
+  --border-color: var(--grassroots-accent);
+  box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+}
+
+.form-item.error ion-input {
+  --border-color: var(--grassroots-danger);
+}
+
+/* Error Text */
+.error-text {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-top: var(--grassroots-space-xs);
+  margin-left: var(--grassroots-space-sm);
+  display: block;
+}
+
+/* Color Input Row - Input and Picker Side by Side */
+.color-input-row {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-sm);
+  width: 100%;
+}
+
+.color-input {
+  flex: 1;
+}
+
+/* Color Preview */
+.color-preview-container {
+  display: inline-flex;
+  gap: var(--grassroots-space-md);
+  margin-top: 0;
+  padding: var(--grassroots-space-sm);
+  background: var(--grassroots-surface-elevated);
+  border-radius: var(--grassroots-radius-sm);
+  border: 1px solid var(--grassroots-surface-variant);
+}
+
+.color-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--grassroots-space-xs);
+  flex-shrink: 0;
+}
+
+.color-preview-dot {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  box-shadow: var(--grassroots-shadow-sm);
+  transition: transform 0.2s ease;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.color-preview-dot:hover {
+  transform: scale(1.1);
+  box-shadow: var(--grassroots-shadow-md);
+}
+
+.color-preview-dot::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.color-preview-dot:hover::after {
+  opacity: 1;
+}
+
+.color-preview-label {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--grassroots-text-secondary);
+  text-align: center;
+}
+
+/* Logo Preview */
+.logo-preview {
+  margin-top: var(--grassroots-space-sm);
+  text-align: center;
+  padding: var(--grassroots-space-sm);
+  background: var(--grassroots-surface-elevated);
+  border-radius: var(--grassroots-radius-sm);
+  border: 1px solid var(--grassroots-surface-variant);
+}
+
+.logo-preview img {
+  max-width: 64px;
+  max-height: 64px;
+  border-radius: var(--grassroots-radius-sm);
+  box-shadow: var(--grassroots-shadow-sm);
+}
+
+/* Form Actions */
+.form-actions {
+  display: flex;
+  gap: var(--grassroots-space-sm);
+  margin-top: var(--grassroots-space-lg);
+  padding-top: var(--grassroots-space-md);
+  border-top: 1px solid var(--grassroots-surface-variant);
+}
+
+.cancel-button {
+  --color: var(--grassroots-text-secondary);
+  --border-color: var(--grassroots-surface-variant);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  flex: 1;
+}
+
+.submit-button {
+  --border-radius: var(--grassroots-radius-md);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  flex: 2;
+}
+
+.submit-button[disabled] {
+  --opacity: 0.6;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .create-team-modal {
+    --max-height: 100vh;
+    --border-radius: 0;
+  }
+  
+  .form-container {
+    padding: var(--grassroots-space-sm);
+  }
+  
+  .form-section {
+    margin-bottom: var(--grassroots-space-sm);
+  }
+  
+  .color-preview-container {
+    flex-direction: column;
+    align-items: center;
+    gap: var(--grassroots-space-sm);
+  }
+  
+  .form-actions {
+    flex-direction: column;
+  }
+  
+  .cancel-button,
+  .submit-button {
+    flex: none;
+  }
+}
+
+/* Dark Theme Support */
+.dark-theme .form-section {
+  background: var(--grassroots-surface);
+  border-color: var(--grassroots-surface-variant);
+}
+
+.dark-theme .form-item ion-input {
+  --background: var(--grassroots-surface-elevated);
+  border-color: var(--grassroots-surface-variant);
+}
+
+.dark-theme .color-preview-container {
+  background: var(--grassroots-surface-elevated);
+  border-color: var(--grassroots-surface-variant);
+}
+
+.dark-theme .logo-preview {
+  background: var(--grassroots-surface-elevated);
+  border-color: var(--grassroots-surface-variant);
+}
+
+/* Ensure headers use proper text colors in dark mode */
+.dark-theme .form-section ion-card-title {
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .form-item ion-label {
+  color: var(--grassroots-text-primary);
+}
+
+/* Fix modal header title color in dark mode */
+.dark-theme ion-header ion-title {
+  color: var(--grassroots-text-on-dark);
+}
+
+/* Loading State */
+.submit-button ion-spinner {
+  width: 16px;
+  height: 16px;
+}
+
+/* Focus States for Accessibility */
+.form-item ion-input:focus-within {
+  outline: 2px solid var(--grassroots-accent);
+  outline-offset: 2px;
+}
+
+.color-preview-dot:focus {
+  outline: 2px solid var(--grassroots-accent);
+  outline-offset: 2px;
+}

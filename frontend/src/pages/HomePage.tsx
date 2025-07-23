@@ -1,4 +1,5 @@
 import React from 'react';
+import { DatabaseStatus } from '../components/DatabaseStatus';
 import { 
   IonPage, 
   IonContent, 
@@ -13,7 +14,8 @@ import {
   IonRow,
   IonCol,
   IonChip,
-  IonLabel
+  IonLabel,
+  IonButtons
 } from '@ionic/react';
 import { 
   trophy, 
@@ -25,14 +27,26 @@ import {
   ribbon,
   football
 } from 'ionicons/icons';
-import { useHistory } from 'react-router-dom';
+// useHistory removed - using state-based navigation
 import ThemeToggle from '../components/ThemeToggle';
 import { useGlobalStats } from '../hooks/useGlobalStats';
+import { useAuth } from '../contexts/AuthContext';
+import UserProfile from '../components/UserProfile';
 import './HomePage.css';
 
-const HomePage: React.FC = () => {
-  const history = useHistory();
+interface HomePageProps {
+  onNavigate?: (page: string) => void;
+}
+
+const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
+  const { user } = useAuth();
   const { stats, loading, error, fromCache } = useGlobalStats();
+  
+  const navigate = (page: string) => {
+    if (onNavigate) {
+      onNavigate(page);
+    }
+  };
 
   const navigationCards = [
     {
@@ -47,7 +61,7 @@ const HomePage: React.FC = () => {
       title: 'Teams',
       subtitle: 'Team management',
       icon: people,
-      color: 'secondary',
+      color: 'teal',
       route: '/teams',
       description: 'Manage your teams and rosters'
     },
@@ -55,7 +69,7 @@ const HomePage: React.FC = () => {
       title: 'Players',
       subtitle: 'Player profiles',
       icon: person,
-      color: 'tertiary',
+      color: 'indigo',
       route: '/players',
       description: 'Track individual player progress'
     },
@@ -63,23 +77,23 @@ const HomePage: React.FC = () => {
       title: 'Awards',
       subtitle: 'Recognition system',
       icon: ribbon,
-      color: 'success',
+      color: 'rose',
       route: '/awards',
       description: 'Celebrate achievements and milestones'
     },
     {
       title: 'Live Match',
-      subtitle: 'Real-time tracking',
+      subtitle: 'Coming soon',
       icon: play,
-      color: 'warning',
-      route: '/match',
-      description: 'Live match console with real-time updates'
+      color: 'amber',
+      route: '#',
+      description: 'Live match console - being redesigned'
     },
     {
       title: 'Statistics',
       subtitle: 'Performance insights',
       icon: statsChart,
-      color: 'medium',
+      color: 'purple',
       route: '/statistics',
       description: 'Coming soon - detailed analytics'
     }
@@ -119,7 +133,10 @@ const HomePage: React.FC = () => {
               <span>MatchMaster</span>
             </div>
           </IonTitle>
-          <ThemeToggle slot="end" />
+          <IonButtons slot="end">
+            <ThemeToggle />
+            <UserProfile />
+          </IonButtons>
         </IonToolbar>
       </IonHeader>
       
@@ -127,9 +144,14 @@ const HomePage: React.FC = () => {
         {/* Hero Section */}
         <div className="hero-section">
           <div className="hero-content">
-            <h1 className="hero-title">Welcome to Your Football Hub</h1>
+            <h1 className="hero-title">
+              {user ? `Welcome back, ${user.first_name || 'Coach'}!` : 'Welcome to MatchMaster!'}
+            </h1>
             <p className="hero-subtitle">
-              Manage your teams, track player progress, and create memorable moments
+              {user 
+                ? 'Manage your teams, track player progress, and create memorable moments'
+                : 'The ultimate grassroots football management platform. Sign in to unlock full team management features!'
+              }
             </p>
           </div>
           <div className="hero-stats">
@@ -142,6 +164,28 @@ const HomePage: React.FC = () => {
               </IonChip>
             ))}
           </div>
+          
+          {/* Call to action for non-authenticated users */}
+          {!user && (
+            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+              <IonButton 
+                color="primary" 
+                size="default"
+                onClick={() => navigate('login')}
+              >
+                Sign In to Get Started
+              </IonButton>
+              <div style={{ marginTop: '0.5rem' }}>
+                <IonButton 
+                  fill="clear" 
+                  size="small"
+                  onClick={() => navigate('register')}
+                >
+                  New here? Create an account
+                </IonButton>
+              </div>
+            </div>
+          )}
           
           {/* Show cache/error status for debugging */}
           {fromCache && (
@@ -165,8 +209,22 @@ const HomePage: React.FC = () => {
                 <IonCol size="12" sizeMd="6" sizeLg="4" key={index}>
                   <IonCard 
                     className={`nav-card nav-card-${card.color}`}
-                    button
-                    onClick={() => history.push(card.route)}
+                    button={card.route !== '#'}
+                    onClick={() => {
+                      if (card.route === '#') return;
+                      
+                      // Convert route to page name
+                      const pageName = card.route.replace('/', '');
+                      
+                      // Check if route requires authentication
+                      const protectedRoutes = ['seasons', 'teams', 'players', 'awards'];
+                      if (protectedRoutes.includes(pageName) && !user) {
+                        // Redirect to login for protected routes
+                        navigate('login');
+                      } else {
+                        navigate(pageName);
+                      }
+                    }}
                   >
                     <IonCardContent className="nav-card-content">
                       <div className="nav-card-header">
@@ -181,9 +239,14 @@ const HomePage: React.FC = () => {
                         </div>
                       </div>
                       <p className="nav-card-description">{card.description}</p>
-                      {card.title === 'Statistics' && (
+                      {(card.title === 'Statistics' || card.title === 'Live Match') && (
                         <IonChip color="medium" className="coming-soon-chip">
                           <IonLabel>Coming Soon</IonLabel>
+                        </IonChip>
+                      )}
+                      {!user && ['Seasons', 'Teams', 'Players', 'Awards'].includes(card.title) && (
+                        <IonChip color="primary" className="login-required-chip">
+                          <IonLabel>Sign In Required</IonLabel>
                         </IonChip>
                       )}
                     </IonCardContent>
@@ -206,7 +269,7 @@ const HomePage: React.FC = () => {
                 <IonButton 
                   fill="outline" 
                   color="primary"
-                  onClick={() => history.push('/seasons')}
+                  onClick={() => navigate('seasons')}
                 >
                   Get Started
                 </IonButton>

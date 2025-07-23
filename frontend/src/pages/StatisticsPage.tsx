@@ -1,46 +1,31 @@
 import React from 'react';
 import { 
   IonPage, 
-  IonHeader, 
-  IonToolbar, 
-  IonTitle, 
   IonContent,
-  IonButton,
   IonIcon,
   IonCard,
   IonCardContent,
   IonCardHeader,
   IonCardTitle,
-  IonChip,
-  IonLabel
 } from '@ionic/react';
-import { arrowBack, statsChart, trendingUp, trophy, time } from 'ionicons/icons';
-import { useHistory } from 'react-router-dom';
-import ThemeToggle from '../components/ThemeToggle';
+import PageHeader from '../components/PageHeader';
+import { statsChart, trendingUp, trophy, time } from 'ionicons/icons'
 import './PageStyles.css';
 
-const StatisticsPage: React.FC = () => {
-  const history = useHistory();
+interface StatisticsPageProps {
+  onNavigate?: (page: string) => void;
+}
+
+const StatisticsPage: React.FC<StatisticsPageProps> = ({ onNavigate }) => {
+  const navigate = (page: string) => {
+    if (onNavigate) {
+      onNavigate(page);
+    }
+  };
 
   return (
     <IonPage>
-      <IonHeader>
-        <IonToolbar color="medium">
-          <IonButton 
-            fill="clear" 
-            slot="start" 
-            onClick={() => history.goBack()}
-            style={{ color: 'white' }}
-          >
-            <IonIcon icon={arrowBack} />
-          </IonButton>
-          <IonTitle>Statistics</IonTitle>
-          <ThemeToggle slot="end" />
-          <IonChip slot="end" color="warning">
-            <IonLabel>Coming Soon</IonLabel>
-          </IonChip>
-        </IonToolbar>
-      </IonHeader>
+      <PageHeader onNavigate={navigate} />
       
       <IonContent className="ion-padding">
         <div style={{ textAlign: 'center', padding: '2rem' }}>

@@ -13,6 +13,11 @@ import { useToast } from '../contexts/ToastContext';
 import { useLoading, InlineLoading } from './ui/LoadingSpinner';
 import { InlineError } from './ui/ErrorMessage';
 import type { Player, Team } from '../types/index';
+
+// Temporary interface for components that expect players array
+interface TeamWithPlayers extends Team {
+  players: Player[];
+}
 import type { EventKind } from '../types/events';
 import { SENTIMENT_OPTIONS } from '../types/index';
 
@@ -20,7 +25,7 @@ interface EventModalProps {
   isOpen: boolean;
   onDidDismiss: () => void;
   eventKind: EventKind;
-  team: Team;
+  team: TeamWithPlayers;
   matchId: string;
   seasonId: string;
   period: number;

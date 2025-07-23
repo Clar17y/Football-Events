@@ -3,9 +3,10 @@ import type { MatchClock, MatchContextState, MatchContextActions, MatchSettings 
 import type { MatchEvent } from '../types/events';
 import type { Team } from '../types/index';
 import type { Match } from '../types/match';
-import { db } from '../db/indexedDB';
+// Database import removed - will be accessed via DatabaseContext
 import { validateOrThrow, MatchEventSchema } from '../schemas/validation';
 import { realTimeService } from '../services/realTimeService';
+import { useDatabase } from './DatabaseContext';
 
 /**
  * Combined match context type
@@ -76,6 +77,9 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [settings, setSettings] = useState(defaultContextValue.settings);
   const [isConnected, setIsConnected] = useState(false);
+  
+  // Database context for non-blocking database access
+  const { isReady: isDatabaseReady } = useDatabase();
 
   // Setup real-time event listeners
   useEffect(() => {
@@ -92,7 +96,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
         
         // Add new event and sort by timestamp
-        return [...prev, event].sort((a, b) => a.created - b.created);
+        return [...prev, event].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       });
     });
 
@@ -183,23 +187,23 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   // Real-time first event management
-  const addEvent = useCallback(async (eventData: Omit<MatchEvent, 'id' | 'created'>) => {
+  const addEvent = useCallback(async (eventData: Omit<MatchEvent, 'id' | 'createdAt'>) => {
     try {
       // Create complete event with ID and timestamp
       const event: MatchEvent = {
         id: crypto.randomUUID(),
-        created: Date.now(),
+        createdAt: new Date(),
         kind: eventData.kind,
-        match_id: eventData.match_id,
-        season_id: eventData.season_id,
-        team_id: eventData.team_id,
-        player_id: eventData.player_id,
-        period_number: eventData.period_number,
-        clock_ms: eventData.clock_ms,
+        matchId: eventData.matchId,
+        periodNumber: eventData.periodNumber,
+        clockMs: eventData.clockMs,
+        teamId: eventData.teamId,
+        playerId: eventData.playerId,
         sentiment: eventData.sentiment || 0,
         notes: eventData.notes,
-        metadata: eventData.metadata,
-        coordinates: eventData.coordinates
+        // Auth fields
+        created_by_user_id: eventData.created_by_user_id,
+        is_deleted: false
       };
 
       // REAL-TIME FIRST APPROACH: Try real-time first, fallback to outbox
@@ -207,7 +211,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       
       if (result.success) {
         // Update local state immediately for instant UI feedback
-        setEvents(prev => [...prev, event].sort((a, b) => a.created - b.created));
+        setEvents(prev => [...prev, event].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
         
         if (result.method === 'realtime') {
           console.log('Event sent real-time:', event.id);
@@ -232,16 +236,9 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         event.id === id ? { ...event, ...updates } : event
       ));
 
-      // Store update in IndexedDB for persistence
-      const result = await db.addEnhancedEvent({
-        id,
-        ...updates,
-        updated_at: Date.now()
-      } as any);
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to update event');
-      }
+      // TODO: Implement proper event update method in database
+      // For now, we'll skip database persistence for updates
+      console.log('Event update stored in memory only (database update not implemented)');
 
       console.log('Event updated:', id);
     } catch (error) {
@@ -252,13 +249,20 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const deleteEvent = useCallback(async (id: string) => {
     try {
-      // Remove from local state
+      // Remove from local state immediately
       setEvents(prev => prev.filter(event => event.id !== id));
 
-      // Delete from IndexedDB
-      const result = await db.deleteEnhancedEvent(id);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to delete event');
+      // Delete from IndexedDB only if database is ready
+      if (isDatabaseReady) {
+        try {
+          const { db } = await import('../db/indexedDB');
+          const result = await db.deleteEnhancedEvent(id);
+          if (!result.success) {
+            console.warn('Failed to delete event from database:', result.error);
+          }
+        } catch (dbError) {
+          console.warn('Database not available for event deletion:', dbError);
+        }
       }
 
       console.log('Event deleted:', id);
@@ -266,7 +270,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       console.error('Failed to delete event:', error);
       throw error;
     }
-  }, []);
+  }, [isDatabaseReady]);
 
   const loadMatch = useCallback(async (match: Match) => {
     try {
@@ -274,24 +278,34 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setClock(match.clock || defaultContextValue.clock);
       setSettings(match.settings || defaultContextValue.settings);
 
-      // Load events for this match from IndexedDB
-      const result = await db.getEnhancedMatchEvents(match.id);
-      if (result.success && result.data) {
-        const matchEvents: MatchEvent[] = result.data.map(event => ({
-          id: event.id,
-          kind: event.kind,
-          match_id: event.match_id,
-          season_id: match.season_id || event.match_id, // Use match season_id or fallback
-          team_id: event.team_id,
-          player_id: event.player_id,
-          period_number: event.period_number || 1,
-          clock_ms: event.clock_ms || 0,
-          sentiment: event.sentiment || 0,
-          notes: event.notes || '',
-          created: event.created_at
-        }));
-        
-        setEvents(matchEvents.sort((a, b) => a.created - b.created));
+      // Load events for this match from IndexedDB only if database is ready
+      if (isDatabaseReady) {
+        try {
+          const { db } = await import('../db/indexedDB');
+          const result = await db.getEnhancedMatchEvents(match.id);
+          if (result.success && result.data) {
+            const matchEvents: MatchEvent[] = result.data.map(event => ({
+              id: event.id,
+              kind: event.kind,
+              matchId: event.match_id,
+              createdAt: new Date(event.created_at),
+              periodNumber: event.period_number || 1,
+              clockMs: event.clock_ms || 0,
+              teamId: event.team_id,
+              playerId: event.player_id,
+              sentiment: event.sentiment || 0,
+              notes: event.notes || '',
+              // Auth fields required by shared types
+              created_by_user_id: event.created_by_user_id || 'system',
+              is_deleted: event.is_deleted || false,
+            }));
+            
+            setEvents(matchEvents.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+          }
+        } catch (dbError) {
+          console.warn('Database not available for loading match events:', dbError);
+          // Continue without events - they'll be loaded when database becomes available
+        }
       }
 
       console.log('Match loaded:', match.id);
@@ -299,7 +313,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       console.error('Failed to load match:', error);
       throw error;
     }
-  }, []);
+  }, [isDatabaseReady]);
 
   const saveMatch = useCallback(async () => {
     if (!currentMatch) {

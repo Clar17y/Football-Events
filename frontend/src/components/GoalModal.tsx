@@ -8,6 +8,11 @@ import { useMatchContext } from '../contexts/MatchContext';
 import { db } from '../db/indexedDB';
 import { useSpeechToText } from '../utils/useSpeechToText';
 import type { Player, Team } from '../types/index';
+
+// Temporary interface for components that expect players array
+interface TeamWithPlayers extends Team {
+  players: Player[];
+}
 import './GoalModal.css';
 type Step =
   | 'team'
@@ -24,8 +29,8 @@ interface Props {
   matchId: string;
   seasonId: string;
   period: number;
-  ourTeam: Team;
-  oppTeam: Team;
+  ourTeam: TeamWithPlayers;
+  oppTeam: TeamWithPlayers;
 }
 
 var ownGoalFlag = false; // global flag to track if the goal is an own goal
@@ -45,7 +50,7 @@ const GoalModal: React.FC<Props> = ({
 
   /* modal state */
   const [step, setStep]       = useState<Step>('team');
-  const [team, setTeam]       = useState<Team | null>(null);
+  const [team, setTeam]       = useState<TeamWithPlayers | null>(null);
   const [scorer, setScorer]   = useState<Player | null | 'none'>(null);
   const [assist, setAssist]   = useState<Player | null | 'none'>(null);
   const [notes, setNotes]     = useState('');
@@ -65,7 +70,7 @@ const GoalModal: React.FC<Props> = ({
 
   /* ——— final write ——— */
   const saveGoal = async (
-    targetTeam: Team,
+    targetTeam: TeamWithPlayers,
     scorerId: string | null,
     assistId: string | null,
     ownGoalFlag: boolean
@@ -101,7 +106,7 @@ const GoalModal: React.FC<Props> = ({
   };
 
   /* ——— click handlers ——— */
-  const chooseTeam = (t: Team) => {
+  const chooseTeam = (t: TeamWithPlayers) => {
     setTeam(t);
     if (t.players.length === 0) {
       setStep('goalType');          // Goal or Own Goal

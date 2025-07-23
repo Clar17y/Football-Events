@@ -1,0 +1,233 @@
+/* ===== COLOR PICKER MODAL STYLES ===== */
+/* Beautiful mobile-first color picker using React Colorful */
+
+.color-picker-modal {
+  --width: 100%;
+  --max-width: 400px;
+  --height: 100%;
+  --max-height: 80vh;
+  --border-radius: var(--grassroots-radius-lg);
+}
+
+.color-picker-content {
+  --background: var(--grassroots-background);
+  --padding-top: 0;
+  --padding-bottom: 0;
+  --padding-start: 0;
+  --padding-end: 0;
+}
+
+.color-picker-container {
+  padding: var(--grassroots-space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--grassroots-space-lg);
+}
+
+/* Color Preview Section */
+.color-preview-section {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-md);
+  padding: var(--grassroots-space-md);
+  background: var(--grassroots-surface);
+  border-radius: var(--grassroots-radius-md);
+  box-shadow: var(--grassroots-shadow-sm);
+  border: 1px solid var(--grassroots-surface-variant);
+}
+
+.selected-color-preview {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--grassroots-radius-sm);
+  box-shadow: var(--grassroots-shadow-md);
+  border: 2px solid var(--grassroots-surface-variant);
+}
+
+.color-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--grassroots-space-xs);
+}
+
+.color-value {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--grassroots-text-primary);
+  letter-spacing: 0.05em;
+}
+
+.color-label {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--grassroots-text-secondary);
+}
+
+/* Main Color Picker */
+.color-picker-section {
+  display: flex;
+  justify-content: center;
+  padding: var(--grassroots-space-md);
+  background: var(--grassroots-surface);
+  border-radius: var(--grassroots-radius-md);
+  box-shadow: var(--grassroots-shadow-sm);
+  border: 1px solid var(--grassroots-surface-variant);
+}
+
+.color-picker {
+  width: 100% !important;
+  max-width: 280px !important;
+  height: 200px !important;
+}
+
+/* Override React Colorful styles for better mobile experience */
+.color-picker .react-colorful__saturation {
+  border-radius: var(--grassroots-radius-sm) !important;
+  border: 2px solid var(--grassroots-surface-variant) !important;
+}
+
+.color-picker .react-colorful__hue {
+  border-radius: var(--grassroots-radius-sm) !important;
+  height: 24px !important;
+  margin-top: var(--grassroots-space-sm) !important;
+  border: 2px solid var(--grassroots-surface-variant) !important;
+}
+
+.color-picker .react-colorful__saturation-pointer,
+.color-picker .react-colorful__hue-pointer {
+  width: 20px !important;
+  height: 20px !important;
+  border: 3px solid white !important;
+  box-shadow: var(--grassroots-shadow-md) !important;
+}
+
+/* Preset Colors Section */
+.preset-colors-section {
+  background: var(--grassroots-surface);
+  border-radius: var(--grassroots-radius-md);
+  padding: var(--grassroots-space-md);
+  box-shadow: var(--grassroots-shadow-sm);
+  border: 1px solid var(--grassroots-surface-variant);
+}
+
+.preset-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--grassroots-text-primary);
+  margin: 0 0 var(--grassroots-space-sm) 0;
+}
+
+.preset-color {
+  width: 100%;
+  height: 32px;
+  border-radius: var(--grassroots-radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  box-shadow: var(--grassroots-shadow-sm);
+}
+
+.preset-color:hover {
+  transform: scale(1.1);
+  box-shadow: var(--grassroots-shadow-md);
+}
+
+.preset-color.selected {
+  border-color: var(--grassroots-accent);
+  box-shadow: 0 0 0 2px rgba(49, 130, 206, 0.3);
+  transform: scale(1.05);
+}
+
+/* Action Buttons */
+.color-picker-actions {
+  display: flex;
+  gap: var(--grassroots-space-sm);
+  margin-top: var(--grassroots-space-md);
+}
+
+.cancel-button {
+  --color: var(--grassroots-text-secondary);
+  --border-color: var(--grassroots-surface-variant);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  flex: 1;
+}
+
+.confirm-button {
+  --border-radius: var(--grassroots-radius-md);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  flex: 2;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .color-picker-modal {
+    --max-height: 100vh;
+    --border-radius: 0;
+  }
+  
+  .color-picker-container {
+    padding: var(--grassroots-space-sm);
+    gap: var(--grassroots-space-md);
+  }
+  
+  .color-picker {
+    height: 180px !important;
+  }
+  
+  .color-picker-actions {
+    flex-direction: column;
+  }
+  
+  .cancel-button,
+  .confirm-button {
+    flex: none;
+  }
+}
+
+/* Dark Theme Support */
+.dark-theme .color-preview-section,
+.dark-theme .color-picker-section,
+.dark-theme .preset-colors-section {
+  background: var(--grassroots-surface);
+  border-color: var(--grassroots-surface-variant);
+}
+
+.dark-theme .selected-color-preview,
+.dark-theme .preset-color {
+  border-color: var(--grassroots-surface-variant);
+}
+
+/* Accessibility */
+.preset-color:focus {
+  outline: 2px solid var(--grassroots-accent);
+  outline-offset: 2px;
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .preset-color {
+    border-width: 3px;
+  }
+  
+  .selected-color-preview {
+    border-width: 3px;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .preset-color {
+    transition: none;
+  }
+  
+  .preset-color:hover {
+    transform: none;
+  }
+}

@@ -199,12 +199,12 @@
   opacity: 1;
 }
 
-.nav-card-primary::before { background: linear-gradient(90deg, var(--grassroots-accent), var(--grassroots-accent-light)); }
-.nav-card-secondary::before { background: linear-gradient(90deg, var(--grassroots-success), var(--grassroots-success-light)); }
-.nav-card-tertiary::before { background: linear-gradient(90deg, var(--grassroots-interactive), var(--grassroots-interactive-hover)); }
-.nav-card-success::before { background: linear-gradient(90deg, var(--grassroots-success), var(--grassroots-success-light)); }
-.nav-card-warning::before { background: linear-gradient(90deg, var(--grassroots-warning), #f6ad55); }
-.nav-card-medium::before { background: linear-gradient(90deg, var(--grassroots-text-secondary), var(--grassroots-text-tertiary)); }
+.nav-card-primary::before { background: linear-gradient(90deg, var(--ion-color-primary), var(--ion-color-primary-tint)); }
+.nav-card-teal::before { background: linear-gradient(90deg, var(--ion-color-teal), var(--ion-color-teal-tint)); }
+.nav-card-indigo::before { background: linear-gradient(90deg, var(--ion-color-indigo), var(--ion-color-indigo-tint)); }
+.nav-card-rose::before { background: linear-gradient(90deg, var(--ion-color-rose), var(--ion-color-rose-tint)); }
+.nav-card-amber::before { background: linear-gradient(90deg, var(--ion-color-amber), var(--ion-color-amber-tint)); }
+.nav-card-purple::before { background: linear-gradient(90deg, var(--ion-color-purple), var(--ion-color-purple-tint)); }
 
 .nav-card-content {
   padding: var(--grassroots-space-lg);

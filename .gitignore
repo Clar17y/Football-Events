@@ -27,6 +27,8 @@ dist-ssr
 .env.production.local
 backend/.env
 frontend/.env
+frontend/.env.development
+frontend/.env.production
 
 # IDE and editor files
 .vscode/

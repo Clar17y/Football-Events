@@ -63,3 +63,20 @@ ion-chip {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-weight: 500;
 }
+
+/* Form label styling */
+.grassroots-form-label {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-weight: 600 !important;
+  font-size: 1.1rem !important;
+  color: var(--ion-color-dark) !important;
+}
+
+/* Form error text styling */
+.grassroots-form-error {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-weight: 500 !important;
+  font-size: 0.9rem !important;
+  color: var(--ion-color-danger) !important;
+  margin-top: 0.25rem !important;
+}

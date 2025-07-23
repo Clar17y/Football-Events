@@ -4,7 +4,7 @@ import { IonApp } from '@ionic/react';
 import App from './App';
 import { registerSW } from './serviceWorkerRegistration';
 
-import { MatchProvider } from './contexts/MatchContext';
+// MatchProvider moved to App.tsx to be inside DatabaseProvider
 import { ToastProvider } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -34,12 +34,10 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     }}>
       <ThemeProvider>
         <ToastProvider>
-          <MatchProvider>
-            <IonApp>
-              <App />
-              <ToastContainer />
-            </IonApp>
-          </MatchProvider>
+          <IonApp>
+            <App />
+            <ToastContainer />
+          </IonApp>
         </ToastProvider>
       </ThemeProvider>
     </ErrorBoundary>

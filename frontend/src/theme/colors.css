@@ -104,6 +104,114 @@
   --ion-color-medium-contrast-rgb: 255, 255, 255;
   --ion-color-medium-shade: var(--grassroots-text-tertiary);
   --ion-color-medium-tint: #a0aec0;
+
+  /* ===== CUSTOM PAGE COLORS ===== */
+  /* Additional colors for page headers - all work with white text */
+  
+  /* Purple - for sophisticated sections like Statistics */
+  --ion-color-purple: #7c3aed;
+  --ion-color-purple-rgb: 124, 58, 237;
+  --ion-color-purple-contrast: #ffffff;
+  --ion-color-purple-contrast-rgb: 255, 255, 255;
+  --ion-color-purple-shade: #6d28d9;
+  --ion-color-purple-tint: #8b5cf6;
+
+  /* Indigo - for professional sections like Players */
+  --ion-color-indigo: #4f46e5;
+  --ion-color-indigo-rgb: 79, 70, 229;
+  --ion-color-indigo-contrast: #ffffff;
+  --ion-color-indigo-contrast-rgb: 255, 255, 255;
+  --ion-color-indigo-shade: #4338ca;
+  --ion-color-indigo-tint: #6366f1;
+
+  /* Teal - for fresh sections like Teams */
+  --ion-color-teal: #0d9488;
+  --ion-color-teal-rgb: 13, 148, 136;
+  --ion-color-teal-contrast: #ffffff;
+  --ion-color-teal-contrast-rgb: 255, 255, 255;
+  --ion-color-teal-shade: #0f766e;
+  --ion-color-teal-tint: #14b8a6;
+
+  /* Rose - for awards and achievements (coral-red) */
+  --ion-color-rose: #ed4e4e;
+  --ion-color-rose-rgb: 237, 78, 78;
+  --ion-color-rose-contrast: #ffffff;
+  --ion-color-rose-contrast-rgb: 255, 255, 255;
+  --ion-color-rose-shade: #dc2626;
+  --ion-color-rose-tint: #f87171;
+
+  /* Amber - for live/active sections */
+  --ion-color-amber: #d97706;
+  --ion-color-amber-rgb: 217, 119, 6;
+  --ion-color-amber-contrast: #ffffff;
+  --ion-color-amber-contrast-rgb: 255, 255, 255;
+  --ion-color-amber-shade: #b45309;
+  --ion-color-amber-tint: #f59e0b;
+
+  /* Emerald - alternative green */
+  --ion-color-emerald: #059669;
+  --ion-color-emerald-rgb: 5, 150, 105;
+  --ion-color-emerald-contrast: #ffffff;
+  --ion-color-emerald-contrast-rgb: 255, 255, 255;
+  --ion-color-emerald-shade: #047857;
+  --ion-color-emerald-tint: #10b981;
+}
+
+/* ===== IONIC CUSTOM COLOR CLASSES ===== */
+/* Define custom color classes for Ionic components */
+
+.ion-color-teal {
+  --ion-color-base: var(--ion-color-teal);
+  --ion-color-base-rgb: var(--ion-color-teal-rgb);
+  --ion-color-contrast: var(--ion-color-teal-contrast);
+  --ion-color-contrast-rgb: var(--ion-color-teal-contrast-rgb);
+  --ion-color-shade: var(--ion-color-teal-shade);
+  --ion-color-tint: var(--ion-color-teal-tint);
+}
+
+.ion-color-indigo {
+  --ion-color-base: var(--ion-color-indigo);
+  --ion-color-base-rgb: var(--ion-color-indigo-rgb);
+  --ion-color-contrast: var(--ion-color-indigo-contrast);
+  --ion-color-contrast-rgb: var(--ion-color-indigo-contrast-rgb);
+  --ion-color-shade: var(--ion-color-indigo-shade);
+  --ion-color-tint: var(--ion-color-indigo-tint);
+}
+
+.ion-color-rose {
+  --ion-color-base: var(--ion-color-rose);
+  --ion-color-base-rgb: var(--ion-color-rose-rgb);
+  --ion-color-contrast: var(--ion-color-rose-contrast);
+  --ion-color-contrast-rgb: var(--ion-color-rose-contrast-rgb);
+  --ion-color-shade: var(--ion-color-rose-shade);
+  --ion-color-tint: var(--ion-color-rose-tint);
+}
+
+.ion-color-amber {
+  --ion-color-base: var(--ion-color-amber);
+  --ion-color-base-rgb: var(--ion-color-amber-rgb);
+  --ion-color-contrast: var(--ion-color-amber-contrast);
+  --ion-color-contrast-rgb: var(--ion-color-amber-contrast-rgb);
+  --ion-color-shade: var(--ion-color-amber-shade);
+  --ion-color-tint: var(--ion-color-amber-tint);
+}
+
+.ion-color-purple {
+  --ion-color-base: var(--ion-color-purple);
+  --ion-color-base-rgb: var(--ion-color-purple-rgb);
+  --ion-color-contrast: var(--ion-color-purple-contrast);
+  --ion-color-contrast-rgb: var(--ion-color-purple-contrast-rgb);
+  --ion-color-shade: var(--ion-color-purple-shade);
+  --ion-color-tint: var(--ion-color-purple-tint);
+}
+
+.ion-color-emerald {
+  --ion-color-base: var(--ion-color-emerald);
+  --ion-color-base-rgb: var(--ion-color-emerald-rgb);
+  --ion-color-contrast: var(--ion-color-emerald-contrast);
+  --ion-color-contrast-rgb: var(--ion-color-emerald-contrast-rgb);
+  --ion-color-shade: var(--ion-color-emerald-shade);
+  --ion-color-tint: var(--ion-color-emerald-tint);
 }
 
 /* ===== DARK MODE SUPPORT ===== */

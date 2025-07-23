@@ -1,10 +1,11 @@
 :root {
-  --football-font: 'Montserrat', 'Bebas Neue', 'Oswald', 'Impact', 'Arial Black', Arial, sans-serif;
-  --ion-font-family: var(--football-font); 
+  /* Use our Inter-based typography system */
+  --grassroots-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+  --ion-font-family: var(--grassroots-font); 
 }
 
-/* Override Ionic's default font everywhere */
+/* Override Ionic's default font everywhere with our clean Inter font */
 body, html, .ion-app, .ion-page, .ion-content, .ion-title, .ion-label, .ion-button, .ion-default-font {
-  font-family: var(--football-font) !important;
-  letter-spacing: 1px;
+  font-family: var(--grassroots-font) !important;
+  /* Removed excessive letter-spacing for better readability */
 }
