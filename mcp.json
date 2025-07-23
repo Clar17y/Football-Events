@@ -1,8 +1,8 @@
 {
   "$schema": "https://modelcontextprotocol.io/schema/v1.json",
   "name": "Grassroots-PWA Enhanced MCP Server",
-  "version": "2.1.0",
-  "description": "Enhanced MCP server with command execution, server management, API testing, and advanced logging capabilities with operation tracking and performance monitoring.",
+  "version": "2.1.1",
+  "description": "Enhanced MCP server with UTF-8 safe logging, command execution, server management, API testing, and advanced logging capabilities with intelligent auto-detection and performance monitoring.",
   "tools": [
     {
       "id": "exec",
@@ -319,6 +319,66 @@
       }
     },
     {
+      "id": "getLogFile",
+      "name": "Get Log File Content (UTF-8 Safe)",
+      "description": "Get log file content with intelligent auto-detection. Handles server logs (UTF-8 text) and command execution logs (base64) automatically. Supports filtering and search.",
+      "type": "http",
+      "url": "http://localhost:9123/getLogFile",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "filename": {
+            "type": "string",
+            "description": "Log file name. Examples: 'backend-2025-07-21.log' (server log), 'mdcvssq4-8jbo13.out' (command execution log)"
+          },
+          "level": {
+            "type": "string",
+            "enum": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"],
+            "description": "Filter by log level (optional)"
+          },
+          "search": {
+            "type": "string",
+            "description": "Search term to filter log entries (optional)"
+          }
+        },
+        "required": ["filename"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "filename": { "type": "string" },
+          "path": { "type": "string" },
+          "content": { 
+            "type": "string",
+            "description": "UTF-8 text content for server logs"
+          },
+          "contentBase64": { 
+            "type": "string",
+            "description": "Base64-encoded content for command execution logs (.out/.err files)"
+          },
+          "contentType": { 
+            "type": "string",
+            "enum": ["text", "base64"],
+            "description": "Indicates content format"
+          },
+          "size": { "type": "integer" },
+          "lines": { "type": "integer" },
+          "filtered": { "type": "boolean" },
+          "type": { 
+            "type": "string",
+            "enum": ["server_log", "command_execution"],
+            "description": "Auto-detected log file type"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    {
       "id": "testApiEndpoint",
       "name": "Test API Endpoint",
       "description": "Test API endpoints with detailed response analysis and timing.",
@@ -348,6 +408,115 @@
           "headers": { "type": "object" },
           "body": {},
           "responseTime": { "type": "number" }
+        },
+        "additionalProperties": true
+      }
+    },
+    {
+      "id": "checkPortStatus",
+      "name": "Check Port Status",
+      "description": "Check if a port is available or in use with detailed process information.",
+      "type": "http",
+      "url": "http://localhost:9123/checkPortStatus",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "integer",
+            "description": "Port number to check"
+          }
+        },
+        "required": ["port"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "port": { "type": "integer" },
+          "available": { "type": "boolean" },
+          "status": { "type": "string" },
+          "process": { "type": "object" }
+        },
+        "additionalProperties": true
+      }
+    },
+    {
+      "id": "stopAllServers",
+      "name": "Stop All Servers",
+      "description": "Stop all managed development servers with graceful shutdown.",
+      "type": "http",
+      "url": "http://localhost:9123/stopAllServers",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "stopped": { "type": "array" },
+          "errors": { "type": "array" }
+        },
+        "additionalProperties": true
+      }
+    },
+    {
+      "id": "listManagedServers",
+      "name": "List Managed Servers",
+      "description": "List all currently managed development servers with their status.",
+      "type": "http",
+      "url": "http://localhost:9123/listManagedServers",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "servers": { "type": "object" },
+          "count": { "type": "integer" }
+        },
+        "additionalProperties": true
+      }
+    },
+    {
+      "id": "forceKillPort",
+      "name": "Force Kill Port",
+      "description": "Force kill any process using a specific port.",
+      "type": "http",
+      "url": "http://localhost:9123/forceKillPort",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "integer",
+            "description": "Port number to force kill"
+          }
+        },
+        "required": ["port"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "pid": { "type": "string" },
+          "message": { "type": "string" }
         },
         "additionalProperties": true
       }

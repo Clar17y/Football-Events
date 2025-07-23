@@ -1,6 +1,8 @@
 import ProcessManager from './processManager.js';
 import ApiTester from './apiTester.js';
 import EnhancedLogger from './enhancedLogger.js';
+import path from 'path';
+import fs from 'fs';
 
 // Create singleton instances
 const processManager = new ProcessManager();
@@ -83,8 +85,85 @@ export default {
 
   async getLogFile(args) {
     const { filename, level = null, search = null } = args;
+    
+    // Check if this is a command execution log file (from .ai-outputs)
+    if (filename && (filename.includes('.out') || filename.includes('.err'))) {
+      // Handle command execution logs directly with base64 encoding
+      const outputDir = path.join(process.cwd(), '.ai-outputs');
+      const filePath = path.join(outputDir, filename);
+      
+      try {
+        if (!fs.existsSync(filePath)) {
+          return {
+            filename: filename,
+            error: 'Command execution log file not found',
+            exists: false
+          };
+        }
+
+        const stats = fs.statSync(filePath);
+        
+        // Always read as buffer and return as base64 to avoid UTF-8 issues
+        const buffer = fs.readFileSync(filePath);
+        let contentBase64 = buffer.toString('base64');
+        
+        // For filtering, we need to decode safely
+        if (level || search) {
+          try {
+            // Try UTF-8 first, fallback to latin1
+            let content;
+            try {
+              content = buffer.toString('utf8');
+            } catch {
+              content = buffer.toString('latin1');
+            }
+            
+            // Apply filters
+            if (level) {
+              const lines = content.split('\n');
+              const filteredLines = lines.filter(line => line.includes(`[${level}]`));
+              content = filteredLines.join('\n');
+            }
+            
+            if (search) {
+              const lines = content.split('\n');
+              const regex = new RegExp(search, 'gi');
+              const filteredLines = lines.filter(line => regex.test(line));
+              content = filteredLines.join('\n');
+            }
+            
+            contentBase64 = Buffer.from(content, 'utf8').toString('base64');
+          } catch (filterError) {
+            // If filtering fails, return original base64
+            console.log(`Warning: Filtering failed for ${filename}, returning original content`);
+          }
+        }
+        
+        return {
+          filename: filename,
+          path: filePath,
+          contentBase64: contentBase64,
+          contentType: 'base64',
+          size: stats.size,
+          created: stats.birthtime,
+          modified: stats.mtime,
+          lines: Math.max(1, buffer.toString('binary').split('\n').length),
+          filtered: !!(level || search),
+          type: 'command_execution'
+        };
+      } catch (error) {
+        return {
+          filename: filename,
+          error: error.message,
+          exists: false,
+          type: 'command_execution'
+        };
+      }
+    }
+    
     return EnhancedLogger.getLogFileContent(filename, { level, search });
   },
+
 
   async searchLogs(args) {
     const { project, query, options = {} } = args;

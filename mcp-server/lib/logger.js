@@ -165,7 +165,7 @@ class ServerLogger {
       }
 
       const stats = fs.statSync(filePath);
-      const content = fs.readFileSync(filePath, 'utf8');
+      const content = this.safeReadFileContent(filePath);
       
       return {
         filename: filename,
@@ -182,6 +182,34 @@ class ServerLogger {
         error: error.message,
         exists: false
       };
+    }
+  }
+
+  // Safe file reading method that handles both UTF-8 and binary content
+  static safeReadFileContent(filePath) {
+    try {
+      // First, read as buffer
+      const buffer = fs.readFileSync(filePath);
+      
+      // Try to decode as UTF-8
+      const content = buffer.toString('utf8');
+      
+      // Check if the content contains replacement characters (indicates invalid UTF-8)
+      if (content.includes('\uFFFD')) {
+        // Fallback to latin1 for binary data, which preserves all bytes
+        console.log(`Warning: File ${filePath} contains binary data, using latin1 encoding`);
+        return buffer.toString('latin1');
+      }
+      
+      // Clean up problematic characters that cause JSON serialization issues
+      // Replace non-printable characters except common whitespace and ANSI escape sequences
+      // Also handle problematic high-bit characters that cause UTF-8 issues
+      return content
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control characters
+        .replace(/[\x80-\x9F]/g, '') // Remove problematic high-bit characters
+        .replace(/\uFFFD/g, ''); // Remove replacement characters
+    } catch (error) {
+      throw new Error(`Failed to read file: ${error.message}`);
     }
   }
 }

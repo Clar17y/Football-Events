@@ -218,6 +218,7 @@ app.post('/getLogFile', async (req, res) => {
   }
 });
 
+
 // Enhanced logging endpoints
 app.post('/searchLogs', async (req, res) => {
   try {

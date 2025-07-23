@@ -20,6 +20,8 @@ A powerful Model Context Protocol (MCP) server with advanced logging, server man
 - 📁 **Multiple Log Files**: Separate files for main, error, and debug logs
 - 🔍 **Log Searching**: Regex-based search with filtering options
 - ⚡ **Fast Access**: Recent logs stored in memory for quick retrieval
+- 🛡️ **UTF-8 Safe**: Handles binary content in command execution logs via base64 encoding
+- 📋 **Command Execution Logs**: Access to `.out` and `.err` files from `.ai-outputs` directory
 
 ## 📋 API Endpoints
 
@@ -301,7 +303,7 @@ Content-Type: application/json
 }
 ```
 
-**Response:**
+**Response for Regular Log Files:**
 ```json
 {
   "filename": "backend-2025-07-14-12-34-32.log",
@@ -313,6 +315,44 @@ Content-Type: application/json
   "lines": 68,
   "filtered": false
 }
+```
+
+**Response for Command Execution Logs (.out/.err files):**
+```json
+{
+  "filename": "mdcvssq4-8jbo13.out",
+  "path": "/workspace/.ai-outputs/mdcvssq4-8jbo13.out",
+  "contentBase64": "CiBSVU4gIHYzLjIuNCAvd29ya3NwYWNlL2JhY2tlbmQ...",
+  "contentType": "base64",
+  "size": 4540,
+  "created": "1970-01-01T00:00:00.000Z",
+  "modified": "2025-07-21T09:06:26.286Z",
+  "lines": 54,
+  "filtered": false,
+  "type": "command_execution"
+}
+```
+
+
+**Note:** Command execution log files (`.out` and `.err` files from the `.ai-outputs` directory) are automatically detected and returned as base64-encoded content to handle binary data and prevent UTF-8 decoding issues. The `/getLogFile` endpoint intelligently handles both server logs (UTF-8 text) and command execution logs (base64) automatically.
+
+**To decode the content:**
+
+**PowerShell:**
+```powershell
+$response = Invoke-RestMethod -Uri "http://localhost:9123/getLogFile" -Method POST -ContentType "application/json" -Body '{"filename": "your-file.out"}'
+[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($response.contentBase64))
+```
+
+**JavaScript/Node.js:**
+```javascript
+const response = await fetch('http://localhost:9123/getLogFile', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ filename: 'your-file.out' })
+});
+const data = await response.json();
+const content = Buffer.from(data.contentBase64, 'base64').toString('utf8');
 ```
 
 #### Get Server Logs (Legacy)
@@ -613,6 +653,10 @@ Only specific commands are allowed for security:
 - ✅ Multiple log files (main, error, debug)
 - ✅ Fast in-memory log access
 - ✅ Regex-based log searching
+- ✅ **NEW**: UTF-8 safe command execution log handling
+- ✅ **NEW**: Base64 encoding for binary content in .out/.err files
+- ✅ **NEW**: Intelligent auto-detection of log file types
+- ✅ **NEW**: Single endpoint for all log file access
 
 ### **Improved Process Management**
 - ✅ Better process group handling
@@ -633,6 +677,37 @@ Only specific commands are allowed for security:
 - ✅ **NEW**: Quick reference table for all 20+ endpoints
 - ✅ **NEW**: Comprehensive parameter documentation
 - ✅ **NEW**: Response format specifications
+
+## 🔧 **Troubleshooting**
+
+### **Common Issues**
+
+1. **Command not permitted**: Check the allow-list in `server.js`
+2. **Server won't start**: Ensure port 9123 is available
+3. **API tests failing**: Check if target server is running
+4. **UTF-8 decoding errors**: Fixed! `/getLogFile` automatically handles both text and binary content safely
+
+### **Debug Steps**
+
+1. Check the logs using `/getRecentLogs` or `/searchLogs`
+2. Verify server status with `/status`
+3. Examine specific log files with `/listLogFiles` and `/getLogFile`
+4. Command execution logs (.out/.err files) are automatically base64-encoded for safety
+
+### **Log File Types**
+
+The `/getLogFile` endpoint automatically handles different log file types:
+
+- **Server Logs**: Text-based logs from managed development servers
+  - Location: `/logs/` directory
+  - Format: UTF-8 text content
+  - Examples: `backend-2025-07-21.log`, `frontend-2025-07-21-errors.log`
+
+- **Command Execution Logs**: Output from `/exec` commands
+  - Location: `.ai-outputs/` directory  
+  - Format: Base64-encoded content (handles binary data safely)
+  - Examples: `mdcvssq4-8jbo13.out` (stdout), `mdcvssq4-8jbo13.err` (stderr)
+  - **Auto-detection**: Files with `.out` or `.err` extensions are automatically base64-encoded
 
 ## 📞 Support
 
