@@ -75,6 +75,24 @@ describe('Players API Integration', () => {
       console.warn('Player cleanup warning:', error);
     }
     
+    // Clean up all events
+    try {
+      await prisma.event.deleteMany({
+        where: { created_by_user_id: { in: createdUserIds } }
+      });
+    } catch (error) {
+      console.warn('Event cleanup warning:', error);
+    }
+
+    // Clean up all matches
+    try {
+      await prisma.match.deleteMany({
+        where: { created_by_user_id: { in: createdUserIds } }
+      });
+    } catch (error) {
+      console.warn('Match cleanup warning:', error);
+    }
+
     // Clean up all teams
     try {
       await prisma.team.deleteMany({
@@ -83,7 +101,16 @@ describe('Players API Integration', () => {
     } catch (error) {
       console.warn('Team cleanup warning:', error);
     }
-    
+
+    // Clean up all seasons
+    try {
+      await prisma.seasons.deleteMany({
+        where: { created_by_user_id: { in: createdUserIds } }
+      });
+    } catch (error) {
+      console.warn('Season cleanup warning:', error);
+    }
+
     // Then clean up users
     if (createdUserIds.length > 0) {
       try {
@@ -689,4 +716,468 @@ describe('Players API Integration', () => {
       });
     });
   });
+
+  // ============================================================================
+  // BATCH OPERATIONS TESTS
+  // ============================================================================
+
+  describe('POST /api/v1/players/batch - Players Batch Operations', () => {
+    it('should create multiple players in batch', async () => {
+      const batchData = {
+        create: [
+          {
+            name: `Batch Player 1 ${Date.now()}`,
+            squadNumber: 50
+          },
+          {
+            name: `Batch Player 2 ${Date.now()}`,
+            squadNumber: 51
+          },
+          {
+            name: `Batch Player 3 ${Date.now()}`,
+            squadNumber: 52
+          }
+        ]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/players/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.results.created.success).toBe(3);
+      expect(response.body.results.created.failed).toBe(0);
+      expect(response.body.summary.totalSuccess).toBe(3);
+      expect(response.body.summary.totalFailed).toBe(0);
+    });
+
+    it('should handle mixed batch operations (create, update, delete)', async () => {
+      // Create players to update and delete
+      const player1Response = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Update Player ${Date.now()}`,
+          squadNumber: 60
+        })
+        .expect(201);
+
+      const player2Response = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Delete Player ${Date.now()}`,
+          squadNumber: 61
+        })
+        .expect(201);
+
+      const batchData = {
+        create: [
+          {
+            name: `New Batch Player ${Date.now()}`,
+            squadNumber: 62
+          }
+        ],
+        update: [
+          {
+            id: player1Response.body.id,
+            data: {
+              name: `Updated Player ${Date.now()}`,
+              squadNumber: 63
+            }
+          }
+        ],
+        delete: [player2Response.body.id]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/players/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.results.created.success).toBe(1);
+      expect(response.body.results.updated.success).toBe(1);
+      expect(response.body.results.deleted.success).toBe(1);
+      expect(response.body.summary.totalSuccess).toBe(3);
+      expect(response.body.summary.totalFailed).toBe(0);
+    });
+
+    it('should handle partial failures in batch operations', async () => {
+      const batchData = {
+        create: [
+          {
+            name: `Valid Player ${Date.now()}`,
+            squadNumber: 70
+          }
+        ],
+        update: [
+          {
+            id: '12345678-1234-1234-1234-123456789012', // Non-existent but valid UUID
+            data: {
+              name: 'Updated Name'
+            }
+          }
+        ],
+        delete: [
+          '87654321-4321-4321-4321-210987654321' // Non-existent but valid UUID
+        ]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/players/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(207); // Multi-Status for partial success
+
+      expect(response.body.results.created.success).toBe(1);
+      expect(response.body.results.created.failed).toBe(0);
+      expect(response.body.results.updated.failed).toBe(1);
+      expect(response.body.results.deleted.failed).toBe(1);
+      expect(response.body.summary.totalSuccess).toBe(1);
+      expect(response.body.summary.totalFailed).toBe(2);
+    });
+
+    it('should handle validation failures in batch operations', async () => {
+      const batchData = {
+        create: [
+          {
+            name: `Valid Player ${Date.now()}`,
+            squadNumber: 80
+          },
+          {
+            name: '', // Invalid - empty name should fail validation
+            squadNumber: 81
+          }
+        ]
+      };
+
+      // Should fail validation at request level due to invalid data
+      await apiRequest
+        .post('/api/v1/players/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(400);
+    });
+
+    it('should require authentication for batch operations', async () => {
+      const batchData = {
+        create: [
+          {
+            name: 'Test Player',
+            squadNumber: 90
+          }
+        ]
+      };
+
+      await apiRequest
+        .post('/api/v1/players/batch')
+        .send(batchData)
+        .expect(401);
+    });
+
+    it('should handle empty batch operations', async () => {
+      const batchData = {};
+
+      const response = await apiRequest
+        .post('/api/v1/players/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.results.created.success).toBe(0);
+      expect(response.body.results.updated.success).toBe(0);
+      expect(response.body.results.deleted.success).toBe(0);
+      expect(response.body.summary.totalSuccess).toBe(0);
+      expect(response.body.summary.totalFailed).toBe(0);
+    });
+
+    it('should handle access denied for other users players', async () => {
+      // Create a player with the test user
+      const playerResponse = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Access Test Player ${Date.now()}`,
+          squadNumber: 95
+        })
+        .expect(201);
+
+      // Try to update/delete with other user (should fail due to access control)
+      const batchData = {
+        update: [
+          {
+            id: playerResponse.body.id,
+            data: {
+              name: 'Unauthorized Update'
+            }
+          }
+        ],
+        delete: [playerResponse.body.id]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/players/batch')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send(batchData);
+
+      // Should return 400 for access denied
+      expect(response.status).toBe(400);
+      expect(response.body.results.updated.success).toBe(0);
+      expect(response.body.results.updated.failed).toBe(1);
+      expect(response.body.results.deleted.success).toBe(0);
+      expect(response.body.results.deleted.failed).toBe(1);
+      expect(response.body.results.updated.errors[0].error).toContain('not found or access denied');
+      expect(response.body.results.deleted.errors[0].error).toContain('not found or access denied');
+    });
+  });
+
+  // ============================================================================
+  // FRONTEND CONVENIENCE API TESTS
+  // ============================================================================
+
+  describe('GET /api/v1/players/:id/season-stats - Player Season Statistics', () => {
+    let testMatchId: String;
+    let testEventId: String;
+    let testLineupId: String;
+    let testSeasonId: String;
+    let testPlayerId: String;
+
+    beforeAll(async () => {
+      // Create a season 
+      const seasonData = {
+        label: '2025/2026 Test Season',
+        startDate: '2025-08-01',
+        endDate: '2026-05-31',
+        isCurrent: false,
+        description: 'Test season for player stats',
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/seasons')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(seasonData)
+        .expect(201);
+
+      testSeasonId = response.body.id;
+      // Create a match for the season
+      const testMatch = await apiRequest
+        .post('/api/v1/matches')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          homeTeamId: testTeamId,
+          awayTeamId: testTeamId,
+          seasonId: testSeasonId,
+          kickoffTime: new Date().toISOString(),
+          competition: 'Test League',
+          venue: 'Test Stadium'
+        })
+        .expect(201);
+      testMatchId = testMatch.body.id;
+
+      // Create a player
+      const testPlayer = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Test Player ${Date.now()}`,
+          currentTeam: testTeamId
+        })
+        .expect(201);
+      testPlayerId = testPlayer.body.id;
+
+      // Create events for the player
+      const testEvent = await apiRequest
+        .post('/api/v1/events')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          matchId: testMatchId,
+          kind: 'goal',
+          teamId: testTeamId,
+          playerId: testPlayerId,
+          periodNumber: 1,
+          clockMs: 300000,
+          notes: 'Test goal for stats'
+        })
+        .expect(201);
+      testEventId = testEvent.body.id;
+
+      // Create lineup for the player
+      const testLineup = await apiRequest
+        .post('/api/v1/lineups')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          matchId: testMatchId,
+          playerId: testPlayerId,
+          teamId: testTeamId,
+          position: 'ST',
+          startMinute: 0
+        })
+        .expect(201);
+      testLineupId = testLineup.body.id;
+    });
+
+    it('should return comprehensive player season statistics', async () => {
+      const response = await apiRequest
+        .get(`/api/v1/players/${testPlayerId}/season-stats?seasonId=${testSeasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(response.body).toHaveProperty('player');
+      expect(response.body).toHaveProperty('seasonId');
+      expect(response.body).toHaveProperty('stats');
+      expect(response.body).toHaveProperty('events');
+      expect(response.body).toHaveProperty('lineups');
+      expect(response.body).toHaveProperty('matches');
+
+      // Verify player data
+      expect(response.body.player.id).toBe(testPlayerId);
+      expect(response.body.seasonId).toBe(testSeasonId);
+
+      // Verify stats structure
+      const stats = response.body.stats;
+      expect(stats).toHaveProperty('matchesPlayed');
+      expect(stats).toHaveProperty('goals');
+      expect(stats).toHaveProperty('assists');
+      expect(stats).toHaveProperty('fouls');
+      expect(stats).toHaveProperty('totalEvents');
+      expect(stats).toHaveProperty('appearances');
+
+      // Verify stats values
+      expect(typeof stats.matchesPlayed).toBe('number');
+      expect(typeof stats.goals).toBe('number');
+      expect(typeof stats.assists).toBe('number');
+      expect(typeof stats.fouls).toBe('number');
+      expect(typeof stats.totalEvents).toBe('number');
+      expect(typeof stats.appearances).toBe('number');
+
+      // Should have at least one goal from our test event
+      expect(stats.goals).toBeGreaterThan(0);
+      expect(stats.totalEvents).toBeGreaterThan(0);
+      expect(stats.appearances).toBeGreaterThan(0);
+
+      // Verify events array
+      expect(Array.isArray(response.body.events)).toBe(true);
+      expect(response.body.events.length).toBeGreaterThan(0);
+      const event = response.body.events[0];
+      expect(event).toHaveProperty('kind');
+      expect(event).toHaveProperty('clockMs');
+      expect(event).toHaveProperty('match');
+
+      // Verify lineups array
+      expect(Array.isArray(response.body.lineups)).toBe(true);
+      expect(response.body.lineups.length).toBeGreaterThan(0);
+      const lineup = response.body.lineups[0];
+      expect(lineup).toHaveProperty('position');
+      expect(lineup).toHaveProperty('match');
+
+      // Verify matches array
+      expect(Array.isArray(response.body.matches)).toBe(true);
+      expect(response.body.matches.length).toBeGreaterThan(0);
+      const match = response.body.matches[0];
+      expect(match).toHaveProperty('matchId');
+      expect(match).toHaveProperty('kickoffTime');
+      expect(match).toHaveProperty('homeTeamId');
+      expect(match).toHaveProperty('awayTeamId');
+    });
+
+    it('should return empty stats for player with no activity in season', async () => {
+      // Create a new player with no activity
+      const newPlayer = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Inactive Player ${Date.now()}`,
+          squadNumber: 99
+        })
+        .expect(201);
+
+      const response = await apiRequest
+        .get(`/api/v1/players/${newPlayer.body.id}/season-stats?seasonId=${testSeasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(response.body.stats.matchesPlayed).toBe(0);
+      expect(response.body.stats.goals).toBe(0);
+      expect(response.body.stats.assists).toBe(0);
+      expect(response.body.stats.yellowCards).toBe(0);
+      expect(response.body.stats.redCards).toBe(0);
+      expect(response.body.stats.totalEvents).toBe(0);
+      expect(response.body.stats.appearances).toBe(0);
+      expect(response.body.events).toEqual([]);
+      expect(response.body.lineups).toEqual([]);
+    });
+
+    it('should require seasonId parameter', async () => {
+      await apiRequest
+        .get(`/api/v1/players/${testPlayerId}/season-stats`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(400);
+    });
+
+    it('should return 404 for non-existent player', async () => {
+      const nonExistentId = '12345678-1234-1234-1234-123456789012';
+      await apiRequest
+        .get(`/api/v1/players/${nonExistentId}/season-stats?seasonId=${testSeasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(404);
+    });
+
+    it('should deny access to other users players', async () => {
+      await apiRequest
+        .get(`/api/v1/players/${testPlayerId}/season-stats?seasonId=${testSeasonId}`)
+        .set(authHelper.getAuthHeader(otherUser))
+        .expect(404);
+    });
+
+    it('should require authentication', async () => {
+      await apiRequest
+        .get(`/api/v1/players/${testPlayerId}/season-stats?seasonId=${testSeasonId}`)
+        .expect(401);
+    });
+
+    it('should handle different event types in statistics', async () => {
+      // Create additional events of different types
+      await apiRequest
+        .post('/api/v1/events')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          matchId: testMatchId,
+          kind: 'assist',
+          teamId: testTeamId,
+          playerId: testPlayerId,
+          periodNumber: 1,
+          clockMs: 400000,
+          notes: 'Test assist'
+        })
+        .expect(201);
+
+      await apiRequest
+        .post('/api/v1/events')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          matchId: testMatchId,
+          kind: 'foul',
+          teamId: testTeamId,
+          playerId: testPlayerId,
+          periodNumber: 2,
+          clockMs: 500000,
+          notes: 'Test yellow card'
+        })
+        .expect(201);
+
+      const response = await apiRequest
+        .get(`/api/v1/players/${testPlayerId}/season-stats?seasonId=${testSeasonId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      const stats = response.body.stats;
+      expect(stats.goals).toBeGreaterThan(0);
+      expect(stats.assists).toBeGreaterThan(0);
+      expect(stats.fouls).toBeGreaterThan(0);
+      expect(stats.totalEvents).toBeGreaterThanOrEqual(3); // goal + assist + yellow card
+    });
+  });
+
 });

@@ -33,6 +33,18 @@ export interface PaginatedPlayers {
   };
 }
 
+export interface BatchPlayerRequest {
+  create?: PlayerCreateRequest[];
+  update?: { id: string; data: PlayerUpdateRequest }[];
+  delete?: string[];
+}
+
+export interface BatchPlayerResult {
+  created: { success: number; failed: number; errors: Array<{ data: PlayerCreateRequest; error: string }> };
+  updated: { success: number; failed: number; errors: Array<{ id: string; error: string }> };
+  deleted: { success: number; failed: number; errors: Array<{ id: string; error: string }> };
+}
+
 export class PlayerService {
   private prisma: PrismaClient;
 
@@ -304,6 +316,279 @@ export class PlayerService {
     });
 
     return teams.map(team => team.id);
+  }
+
+  async batchPlayers(operations: BatchPlayerRequest, userId: string, userRole: string): Promise<BatchPlayerResult> {
+    const result: BatchPlayerResult = {
+      created: { success: 0, failed: 0, errors: [] },
+      updated: { success: 0, failed: 0, errors: [] },
+      deleted: { success: 0, failed: 0, errors: [] }
+    };
+
+    // Process creates
+    if (operations.create && operations.create.length > 0) {
+      for (const createData of operations.create) {
+        try {
+          await this.createPlayer(createData, userId, userRole);
+          result.created.success++;
+        } catch (error: any) {
+          result.created.failed++;
+          result.created.errors.push({
+            data: createData,
+            error: error.message || 'Unknown error during creation'
+          });
+        }
+      }
+    }
+
+    // Process updates
+    if (operations.update && operations.update.length > 0) {
+      for (const updateOp of operations.update) {
+        try {
+          const updated = await this.updatePlayer(updateOp.id, updateOp.data, userId, userRole);
+          if (updated) {
+            result.updated.success++;
+          } else {
+            result.updated.failed++;
+            result.updated.errors.push({
+              id: updateOp.id,
+              error: 'Player not found or access denied'
+            });
+          }
+        } catch (error: any) {
+          result.updated.failed++;
+          result.updated.errors.push({
+            id: updateOp.id,
+            error: error.message || 'Unknown error during update'
+          });
+        }
+      }
+    }
+
+    // Process deletes
+    if (operations.delete && operations.delete.length > 0) {
+      for (const deleteId of operations.delete) {
+        try {
+          const deleted = await this.deletePlayer(deleteId, userId, userRole);
+          if (deleted) {
+            result.deleted.success++;
+          } else {
+            result.deleted.failed++;
+            result.deleted.errors.push({
+              id: deleteId,
+              error: 'Player not found or access denied'
+            });
+          }
+        } catch (error: any) {
+          result.deleted.failed++;
+          result.deleted.errors.push({
+            id: deleteId,
+            error: error.message || 'Unknown error during deletion'
+          });
+        }
+      }
+    }
+
+    return result;
+  }
+
+  async getPlayerSeasonStats(playerId: string, seasonId: string, userId: string, userRole: string): Promise<any | null> {
+    // First check if user has access to this player
+    const playerWhere: any = { 
+      id: playerId,
+      is_deleted: false 
+    };
+
+    // Non-admin users can only access players they created or from their teams
+    if (userRole !== 'ADMIN') {
+      const userTeamIds = await this.getUserTeamIds(userId);
+      playerWhere.OR = [
+        { created_by_user_id: userId },
+        {
+          player_teams: {
+            some: {
+              team_id: { in: userTeamIds },
+              is_active: true,
+              is_deleted: false
+            }
+          }
+        }
+      ];
+    }
+
+    const player = await this.prisma.player.findFirst({ 
+      where: playerWhere,
+      include: {
+        created_by: {
+          select: {
+            id: true,
+            email: true,
+            first_name: true,
+            last_name: true
+          }
+        }
+      }
+    });
+    
+    if (!player) {
+      return null; // Player not found or access denied
+    }
+
+    // Get matches for this season that the player was involved in
+    const matches = await this.prisma.match.findMany({
+      where: {
+        season_id: seasonId,
+        is_deleted: false,
+        OR: [
+          {
+            lineup: {
+              some: {
+                player_id: playerId,
+                is_deleted: false
+              }
+            }
+          },
+          {
+            events: {
+              some: {
+                player_id: playerId,
+                is_deleted: false
+              }
+            }
+          }
+        ]
+      },
+      select: { 
+        match_id: true,
+        kickoff_ts: true,
+        home_team_id: true,
+        away_team_id: true
+      }
+    });
+
+    const matchIds = matches.map(m => m.match_id);
+
+    if (matchIds.length === 0) {
+      return {
+        player: transformPlayer(player),
+        seasonId,
+        stats: {
+          matchesPlayed: 0,
+          goals: 0,
+          assists: 0,
+          yellowCards: 0,
+          redCards: 0,
+          totalEvents: 0,
+          appearances: 0
+        },
+        events: [],
+        lineups: []
+      };
+    }
+
+    // Get all events for this player in this season
+    const [events, lineups, goalCount, assistCount, fouls] = await Promise.all([
+      this.prisma.event.findMany({
+        where: {
+          match_id: { in: matchIds },
+          player_id: playerId,
+          is_deleted: false
+        },
+        orderBy: [
+          { matches: { kickoff_ts: 'desc' } },
+          { clock_ms: 'asc' }
+        ],
+        include: {
+          matches: {
+            select: {
+              match_id: true,
+              kickoff_ts: true,
+              competition: true
+            }
+          },
+          teams: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
+      }),
+      this.prisma.lineup.findMany({
+        where: {
+          match_id: { in: matchIds },
+          player_id: playerId,
+          is_deleted: false
+        },
+        include: {
+          matches: {
+            select: {
+              match_id: true,
+              kickoff_ts: true,
+              competition: true
+            }
+          }
+        }
+      }),
+      this.prisma.event.count({
+        where: {
+          match_id: { in: matchIds },
+          player_id: playerId,
+          kind: 'goal',
+          is_deleted: false
+        }
+      }),
+      this.prisma.event.count({
+        where: {
+          match_id: { in: matchIds },
+          player_id: playerId,
+          kind: 'assist',
+          is_deleted: false
+        }
+      }),
+      this.prisma.event.count({
+        where: {
+          match_id: { in: matchIds },
+          player_id: playerId,
+          kind: 'foul',
+          is_deleted: false
+        }
+      })
+    ]);
+
+    return {
+      player: transformPlayer(player),
+      seasonId,
+      stats: {
+        matchesPlayed: matches.length,
+        goals: goalCount,
+        assists: assistCount,
+        fouls: fouls,
+        totalEvents: events.length,
+        appearances: lineups.length
+      },
+      events: events.map(e => ({
+        id: e.id,
+        kind: e.kind,
+        periodNumber: e.period_number,
+        clockMs: e.clock_ms,
+        notes: e.notes,
+        sentiment: e.sentiment,
+        match: e.matches,
+        createdAt: e.created_at
+      })),
+      lineups: lineups.map(l => ({
+        id: l.id,
+        position: l.position,
+        match: l.matches
+      })),
+      matches: matches.map(m => ({
+        matchId: m.match_id,
+        kickoffTime: m.kickoff_ts,
+        homeTeamId: m.home_team_id,
+        awayTeamId: m.away_team_id
+      }))
+    };
   }
 
   async disconnect(): Promise<void> {

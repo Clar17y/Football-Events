@@ -3,7 +3,7 @@ import { PlayerService } from '../../services/PlayerService';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
 import { authenticateToken } from '../../middleware/auth';
-import { playerCreateSchema, playerUpdateSchema } from '../../validation/schemas';
+import { playerCreateSchema, playerUpdateSchema, playerBatchSchema } from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { extractApiError } from '../../utils/prismaErrorHandler';
 
@@ -110,6 +110,61 @@ router.delete('/:id', authenticateToken, validateUUID(), asyncHandler(async (req
   }
   
   return res.status(204).send();
+}));
+
+// POST /api/v1/players/batch - Batch operations for players
+router.post('/batch', authenticateToken, validateRequest(playerBatchSchema), asyncHandler(async (req, res) => {
+  const result = await playerService.batchPlayers(req.body, req.user!.id, req.user!.role);
+  
+  // Determine appropriate status code based on results
+  const hasFailures = result.created.failed > 0 || result.updated.failed > 0 || result.deleted.failed > 0;
+  const hasSuccesses = result.created.success > 0 || result.updated.success > 0 || result.deleted.success > 0;
+  
+  let statusCode = 200;
+  if (!hasSuccesses && hasFailures) {
+    statusCode = 400; // All operations failed
+  } else if (hasSuccesses && hasFailures) {
+    statusCode = 207; // Partial success (Multi-Status)
+  } else if (hasSuccesses && !hasFailures) {
+    statusCode = 200; // All operations succeeded
+  }
+  
+  res.status(statusCode).json({
+    results: result,
+    summary: {
+      totalOperations: (req.body.create?.length || 0) + (req.body.update?.length || 0) + (req.body.delete?.length || 0),
+      totalSuccess: result.created.success + result.updated.success + result.deleted.success,
+      totalFailed: result.created.failed + result.updated.failed + result.deleted.failed
+    }
+  });
+}));
+
+// GET /api/v1/players/:id/season-stats - Get player statistics for a season
+router.get('/:id/season-stats', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const { seasonId } = req.query;
+  
+  if (!seasonId) {
+    return res.status(400).json({
+      error: 'Validation Error',
+      message: 'seasonId query parameter is required'
+    });
+  }
+  
+  const stats = await playerService.getPlayerSeasonStats(
+    req.params['id']!,
+    seasonId as string,
+    req.user!.id,
+    req.user!.role
+  );
+  
+  if (!stats) {
+    return res.status(404).json({
+      error: 'Player not found',
+      message: `Player with ID ${req.params['id']} does not exist or access denied`
+    });
+  }
+  
+  return res.json(stats);
 }));
 
 export default router;
