@@ -174,6 +174,7 @@ model awards {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model lineup {
+  id                 String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   match_id           String        @db.Uuid
   player_id          String        @db.Uuid
   start_min          Float         @default(0)
@@ -190,7 +191,7 @@ model lineup {
   matches            Match         @relation(fields: [match_id], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
   players            Player        @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@id([match_id, player_id, start_min])
+  @@unique([match_id, player_id, start_min])
   @@schema("grassroots")
 }
 

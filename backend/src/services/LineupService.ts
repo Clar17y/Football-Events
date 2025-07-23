@@ -37,14 +37,14 @@ export interface PaginatedLineups {
 
 export interface BatchLineupRequest {
   create?: LineupCreateRequest[];
-  update?: { matchId: string; playerId: string; startMinute: number; data: LineupUpdateRequest }[];
-  delete?: { matchId: string; playerId: string; startMinute: number }[];
+  update?: { id: string; data: LineupUpdateRequest }[];
+  delete?: string[];
 }
 
 export interface BatchLineupResult {
   created: { success: number; failed: number; errors: Array<{ data: LineupCreateRequest; error: string }> };
-  updated: { success: number; failed: number; errors: Array<{ key: string; error: string }> };
-  deleted: { success: number; failed: number; errors: Array<{ key: string; error: string }> };
+  updated: { success: number; failed: number; errors: Array<{ id: string; error: string }> };
+  deleted: { success: number; failed: number; errors: Array<{ id: string; error: string }> };
 }
 
 export class LineupService {
@@ -153,6 +153,45 @@ export class LineupService {
     };
   }
 
+  async getLineupById(id: string, userId: string, userRole: string): Promise<Lineup | null> {
+    const where: any = { 
+      id,
+      is_deleted: false 
+    };
+
+    // Authorization: Only show lineups from accessible matches
+    if (userRole !== 'ADMIN') {
+      where.matches = {
+        created_by_user_id: userId,
+        is_deleted: false
+      };
+    } else {
+      where.matches = {
+        is_deleted: false
+      };
+    }
+
+    const lineup = await this.prisma.lineup.findFirst({
+      where,
+      include: {
+        matches: {
+          select: {
+            match_id: true,
+            created_by_user_id: true
+          }
+        },
+        players: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    return safeTransformLineup(lineup);
+  }
+
   async getLineupByKey(matchId: string, playerId: string, startMinute: number, userId: string, userRole: string): Promise<Lineup | null> {
     // First check if user has access to the match
     const matchWhere: any = { 
@@ -199,7 +238,7 @@ export class LineupService {
       if (!match) {
         const error = new Error('Match not found or access denied');
         (error as any).code = 'MATCH_ACCESS_DENIED';
-        (error as any).statusCode = 400;
+        (error as any).statusCode = 403;
         throw error;
       }
 
@@ -216,7 +255,52 @@ export class LineupService {
     }, 'Lineup');
   }
 
-  async updateLineup(matchId: string, playerId: string, startMinute: number, data: LineupUpdateRequest, userId: string, userRole: string): Promise<Lineup | null> {
+  async updateLineup(id: string, data: LineupUpdateRequest, userId: string, userRole: string): Promise<Lineup | null> {
+    try {
+      // Check if lineup exists and user has access
+      const where: any = {
+        id,
+        is_deleted: false
+      };
+
+      // Authorization: Only update lineups from accessible matches
+      if (userRole !== 'ADMIN') {
+        where.matches = {
+          created_by_user_id: userId,
+          is_deleted: false
+        };
+      } else {
+        where.matches = {
+          is_deleted: false
+        };
+      }
+
+      const existingLineup = await this.prisma.lineup.findFirst({ where });
+      if (!existingLineup) {
+        return null; // Not found or no permission
+      }
+
+      // Update existing lineup
+      const prismaInput = transformLineupUpdateRequest(data);
+      
+      // Always update the updated_at timestamp
+      (prismaInput as any).updated_at = new Date();
+
+      const lineup = await this.prisma.lineup.update({
+        where: { id },
+        data: prismaInput
+      });
+
+      return transformLineup(lineup);
+    } catch (error: any) {
+      if (error.code === 'P2025') {
+        return null; // Lineup not found
+      }
+      throw error;
+    }
+  }
+
+  async updateLineupByKey(matchId: string, playerId: string, startMinute: number, data: LineupUpdateRequest, userId: string, userRole: string): Promise<Lineup | null> {
     try {
       // First check if user has access to the match
       const matchWhere: any = { 
@@ -259,24 +343,8 @@ export class LineupService {
         }
       }
 
-      // Update existing lineup
-      const prismaInput = transformLineupUpdateRequest(data);
-      
-      // Always update the updated_at timestamp
-      (prismaInput as any).updated_at = new Date();
-
-      const lineup = await this.prisma.lineup.update({
-        where: { 
-          match_id_player_id_start_min: {
-            match_id: matchId,
-            player_id: playerId,
-            start_min: startMinute
-          }
-        },
-        data: prismaInput
-      });
-
-      return transformLineup(lineup);
+      // Update existing lineup using the new method
+      return await this.updateLineup(existingLineup.id, data, userId, userRole);
     } catch (error: any) {
       if (error.code === 'P2025') {
         return null; // Lineup not found
@@ -285,7 +353,51 @@ export class LineupService {
     }
   }
 
-  async deleteLineup(matchId: string, playerId: string, startMinute: number, userId: string, userRole: string): Promise<boolean> {
+  async deleteLineup(id: string, userId: string, userRole: string): Promise<boolean> {
+    try {
+      // Check if lineup exists and user has access
+      const where: any = {
+        id,
+        is_deleted: false
+      };
+
+      // Authorization: Only delete lineups from accessible matches
+      if (userRole !== 'ADMIN') {
+        where.matches = {
+          created_by_user_id: userId,
+          is_deleted: false
+        };
+      } else {
+        where.matches = {
+          is_deleted: false
+        };
+      }
+
+      const existingLineup = await this.prisma.lineup.findFirst({ where });
+      if (!existingLineup) {
+        return false; // Not found or no permission
+      }
+
+      // Soft delete the lineup
+      await this.prisma.lineup.update({
+        where: { id },
+        data: {
+          is_deleted: true,
+          deleted_at: new Date(),
+          deleted_by_user_id: userId
+        }
+      });
+
+      return true;
+    } catch (error: any) {
+      if (error.code === 'P2025') {
+        return false; // Lineup not found
+      }
+      throw error;
+    }
+  }
+
+  async deleteLineupByKey(matchId: string, playerId: string, startMinute: number, userId: string, userRole: string): Promise<boolean> {
     try {
       // First check if user has access to the match
       const matchWhere: any = { 
@@ -317,23 +429,8 @@ export class LineupService {
         return false; // Lineup not found
       }
 
-      // Soft delete the lineup
-      await this.prisma.lineup.update({
-        where: { 
-          match_id_player_id_start_min: {
-            match_id: matchId,
-            player_id: playerId,
-            start_min: startMinute
-          }
-        },
-        data: {
-          is_deleted: true,
-          deleted_at: new Date(),
-          deleted_by_user_id: userId
-        }
-      });
-
-      return true;
+      // Use the new delete method
+      return await this.deleteLineup(existingLineup.id, userId, userRole);
     } catch (error: any) {
       if (error.code === 'P2025') {
         return false; // Lineup not found
@@ -463,9 +560,7 @@ export class LineupService {
       for (const updateOp of operations.update) {
         try {
           const updated = await this.updateLineup(
-            updateOp.matchId, 
-            updateOp.playerId, 
-            updateOp.startMinute, 
+            updateOp.id, 
             updateOp.data,
             userId,
             userRole
@@ -475,14 +570,14 @@ export class LineupService {
           } else {
             result.updated.failed++;
             result.updated.errors.push({
-              key: `${updateOp.matchId}:${updateOp.playerId}:${updateOp.startMinute}`,
-              error: 'Lineup not found'
+              id: updateOp.id,
+              error: 'Lineup not found or access denied'
             });
           }
         } catch (error: any) {
           result.updated.failed++;
           result.updated.errors.push({
-            key: `${updateOp.matchId}:${updateOp.playerId}:${updateOp.startMinute}`,
+            id: updateOp.id,
             error: error.message || 'Unknown error during update'
           });
         }
@@ -491,12 +586,10 @@ export class LineupService {
 
     // Process deletes
     if (operations.delete && operations.delete.length > 0) {
-      for (const deleteOp of operations.delete) {
+      for (const deleteId of operations.delete) {
         try {
           const deleted = await this.deleteLineup(
-            deleteOp.matchId, 
-            deleteOp.playerId, 
-            deleteOp.startMinute,
+            deleteId,
             userId,
             userRole
           );
@@ -505,14 +598,14 @@ export class LineupService {
           } else {
             result.deleted.failed++;
             result.deleted.errors.push({
-              key: `${deleteOp.matchId}:${deleteOp.playerId}:${deleteOp.startMinute}`,
-              error: 'Lineup not found'
+              id: deleteId,
+              error: 'Lineup not found or access denied'
             });
           }
         } catch (error: any) {
           result.deleted.failed++;
           result.deleted.errors.push({
-            key: `${deleteOp.matchId}:${deleteOp.playerId}:${deleteOp.startMinute}`,
+            id: deleteId,
             error: error.message || 'Unknown error during deletion'
           });
         }

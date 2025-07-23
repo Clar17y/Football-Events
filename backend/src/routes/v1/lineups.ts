@@ -51,8 +51,22 @@ router.post('/', authenticateToken, validateRequest(lineupCreateSchema), asyncHa
   }
 }));
 
-// GET /api/v1/lineups/:matchId/:playerId/:startMinute - Get lineup by composite key
-router.get('/:matchId/:playerId/:startMinute', 
+// GET /api/v1/lineups/:id - Get lineup by ID
+router.get('/:id', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const lineup = await lineupService.getLineupById(req.params['id']!, req.user!.id, req.user!.role);
+  
+  if (!lineup) {
+    return res.status(404).json({
+      error: 'Lineup not found',
+      message: `No lineup found with ID: ${req.params['id']} or access denied`
+    });
+  }
+  
+  return res.json(lineup);
+}));
+
+// GET /api/v1/lineups/by-key/:matchId/:playerId/:startMinute - Get lineup by composite key (backward compatibility)
+router.get('/by-key/:matchId/:playerId/:startMinute', 
   authenticateToken,
   asyncHandler(async (req, res) => {
     const matchId = req.params['matchId']!;
@@ -80,8 +94,27 @@ router.get('/:matchId/:playerId/:startMinute',
   })
 );
 
-// PUT /api/v1/lineups/:matchId/:playerId/:startMinute - Update lineup (with upsert capability)
-router.put('/:matchId/:playerId/:startMinute', 
+// PUT /api/v1/lineups/:id - Update lineup
+router.put('/:id',
+  authenticateToken,
+  validateUUID(),
+  validateRequest(lineupUpdateSchema),
+  asyncHandler(async (req, res) => {
+    const lineup = await lineupService.updateLineup(req.params['id']!, req.body, req.user!.id, req.user!.role);
+    
+    if (!lineup) {
+      return res.status(404).json({
+        error: 'Lineup not found',
+        message: `No lineup found with ID: ${req.params['id']} or access denied`
+      });
+    }
+    
+    return res.json(lineup);
+  })
+);
+
+// PUT /api/v1/lineups/by-key/:matchId/:playerId/:startMinute - Update lineup by composite key (with upsert capability)
+router.put('/by-key/:matchId/:playerId/:startMinute', 
   authenticateToken,
   validateRequest(lineupUpdateSchema), 
   asyncHandler(async (req, res) => {
@@ -97,7 +130,7 @@ router.put('/:matchId/:playerId/:startMinute',
       });
     }
 
-    const lineup = await lineupService.updateLineup(matchId, playerId, startMin, req.body, req.user!.id, req.user!.role);
+    const lineup = await lineupService.updateLineupByKey(matchId, playerId, startMin, req.body, req.user!.id, req.user!.role);
     
     if (!lineup) {
       return res.status(404).json({
@@ -110,8 +143,22 @@ router.put('/:matchId/:playerId/:startMinute',
   })
 );
 
-// DELETE /api/v1/lineups/:matchId/:playerId/:startMinute - Delete lineup
-router.delete('/:matchId/:playerId/:startMinute', 
+// DELETE /api/v1/lineups/:id - Delete lineup
+router.delete('/:id', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const deleted = await lineupService.deleteLineup(req.params['id']!, req.user!.id, req.user!.role);
+  
+  if (!deleted) {
+    return res.status(404).json({
+      error: 'Lineup not found',
+      message: `No lineup found with ID: ${req.params['id']} or access denied`
+    });
+  }
+  
+  return res.status(204).send();
+}));
+
+// DELETE /api/v1/lineups/by-key/:matchId/:playerId/:startMinute - Delete lineup by composite key
+router.delete('/by-key/:matchId/:playerId/:startMinute', 
   authenticateToken,
   asyncHandler(async (req, res) => {
     const matchId = req.params['matchId']!;
@@ -126,7 +173,7 @@ router.delete('/:matchId/:playerId/:startMinute',
       });
     }
 
-    const deleted = await lineupService.deleteLineup(matchId, playerId, startMin, req.user!.id, req.user!.role);
+    const deleted = await lineupService.deleteLineupByKey(matchId, playerId, startMin, req.user!.id, req.user!.role);
     
     if (!deleted) {
       return res.status(404).json({
@@ -180,6 +227,63 @@ router.post('/batch', authenticateToken, validateRequest(lineupBatchSchema), asy
       totalOperations: (req.body.create?.length || 0) + (req.body.update?.length || 0) + (req.body.delete?.length || 0),
       totalSuccess: result.created.success + result.updated.success + result.deleted.success,
       totalFailed: result.created.failed + result.updated.failed + result.deleted.failed
+    }
+  });
+}));
+
+// POST /api/v1/lineups/batch-by-match - Match-scoped batch operations for lineups
+router.post('/batch-by-match', authenticateToken, asyncHandler(async (req, res) => {
+  const { matchId } = req.body;
+  
+  if (!matchId) {
+    return res.status(400).json({
+      error: 'Validation Error',
+      message: 'matchId is required for match-scoped batch operations'
+    });
+  }
+
+  // Validate that all operations are for the specified match
+  const operations = req.body;
+  const invalidOperations: string[] = [];
+  
+  if (operations.create) {
+    operations.create.forEach((lineup: any, index: number) => {
+      if (lineup.matchId !== matchId) {
+        invalidOperations.push(`create[${index}]: matchId mismatch`);
+      }
+    });
+  }
+  
+  if (invalidOperations.length > 0) {
+    return res.status(400).json({
+      error: 'Validation Error',
+      message: 'All operations must be for the specified match',
+      details: invalidOperations
+    });
+  }
+
+  const result = await lineupService.batchLineups(operations, req.user!.id, req.user!.role);
+  
+  // Determine appropriate status code based on results
+  const hasFailures = result.created.failed > 0 || result.updated.failed > 0 || result.deleted.failed > 0;
+  const hasSuccesses = result.created.success > 0 || result.updated.success > 0 || result.deleted.success > 0;
+  
+  let statusCode = 200;
+  if (!hasSuccesses && hasFailures) {
+    statusCode = 400; // All operations failed
+  } else if (hasSuccesses && hasFailures) {
+    statusCode = 207; // Partial success (Multi-Status)
+  } else if (hasSuccesses && !hasFailures) {
+    statusCode = 200; // All operations succeeded
+  }
+  
+  return res.status(statusCode).json({
+    results: result,
+    summary: {
+      totalOperations: (operations.create?.length || 0) + (operations.update?.length || 0) + (operations.delete?.length || 0),
+      totalSuccess: result.created.success + result.updated.success + result.deleted.success,
+      totalFailed: result.created.failed + result.updated.failed + result.deleted.failed,
+      matchId
     }
   });
 }));
