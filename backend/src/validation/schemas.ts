@@ -249,33 +249,81 @@ export const eventBatchSchema = z.object({
 export const lineupBatchSchema = z.object({
   create: z.array(lineupCreateSchema).optional().default([]),
   update: z.array(z.object({
-    matchId: z.string().uuid('Match ID must be a valid UUID'),
-    playerId: z.string().uuid('Player ID must be a valid UUID'),
-    startMinute: z.number().min(0).max(300),
+    id: z.string().uuid('Lineup ID must be a valid UUID'),
     data: lineupUpdateSchema
   })).optional().default([]),
-  delete: z.array(z.object({
-    matchId: z.string().uuid('Match ID must be a valid UUID'),
-    playerId: z.string().uuid('Player ID must be a valid UUID'),
-    startMinute: z.number().min(0).max(300)
-  })).optional().default([])
+  delete: z.array(z.string().uuid('Lineup ID must be a valid UUID')).optional().default([])
 });
 
 // Player Teams validation schemas
 export const playerTeamCreateSchema = z.object({
-  playerId: z.string().uuid('Player ID must be a valid UUID'),
-  teamId: z.string().uuid('Team ID must be a valid UUID'),
+  // UUID-based fields
+  playerId: z.string().uuid('Player ID must be a valid UUID').optional(),
+  teamId: z.string().uuid('Team ID must be a valid UUID').optional(),
+  // Natural key fields
+  playerName: z.string().min(1, 'Player name is required').max(100, 'Player name must be less than 100 characters').optional(),
+  teamName: z.string().min(1, 'Team name is required').max(100, 'Team name must be less than 100 characters').optional(),
+  // Common fields
   startDate: z.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be in YYYY-MM-DD format'),
   endDate: z.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must be in YYYY-MM-DD format')
     .optional(),
   isActive: z.boolean().optional().default(true)
-});
+}).refine(
+  (data) => {
+    // Must have either UUID pair or natural key pair, but not both
+    const hasUUIDs = data.playerId && data.teamId;
+    const hasNaturalKeys = data.playerName && data.teamName;
+    return (hasUUIDs && !hasNaturalKeys) || (!hasUUIDs && hasNaturalKeys);
+  },
+  {
+    message: 'Must provide either (playerId + teamId) or (playerName + teamName), but not both',
+    path: ['playerId']
+  }
+);
 
 export const playerTeamUpdateSchema = z.object({
   endDate: z.string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'End date must be in YYYY-MM-DD format')
     .optional(),
   isActive: z.boolean().optional()
+});
+
+export const playerTeamBatchSchema = z.object({
+  create: z.array(playerTeamCreateSchema).optional().default([]),
+  update: z.array(z.object({
+    id: z.string().uuid('Player-team relationship ID must be a valid UUID'),
+    data: playerTeamUpdateSchema
+  })).optional().default([]),
+  delete: z.array(z.string().uuid('Player-team relationship ID must be a valid UUID')).optional().default([])
+});
+
+// Awards batch operation schemas
+export const awardBatchSchema = z.object({
+  create: z.array(awardCreateSchema).optional().default([]),
+  update: z.array(z.object({
+    id: z.string().uuid('Award ID must be a valid UUID'),
+    data: awardUpdateSchema
+  })).optional().default([]),
+  delete: z.array(z.string().uuid('Award ID must be a valid UUID')).optional().default([])
+});
+
+export const matchAwardBatchSchema = z.object({
+  create: z.array(matchAwardCreateSchema).optional().default([]),
+  update: z.array(z.object({
+    id: z.string().uuid('Match Award ID must be a valid UUID'),
+    data: matchAwardUpdateSchema
+  })).optional().default([]),
+  delete: z.array(z.string().uuid('Match Award ID must be a valid UUID')).optional().default([])
+});
+
+// Players batch operation schemas
+export const playerBatchSchema = z.object({
+  create: z.array(playerCreateSchema).optional().default([]),
+  update: z.array(z.object({
+    id: z.string().uuid('Player ID must be a valid UUID'),
+    data: playerUpdateSchema
+  })).optional().default([]),
+  delete: z.array(z.string().uuid('Player ID must be a valid UUID')).optional().default([])
 });

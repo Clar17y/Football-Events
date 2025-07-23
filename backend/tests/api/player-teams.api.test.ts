@@ -26,7 +26,12 @@ describe('Player Teams API Integration', () => {
   let testTeamId: string;
   let otherUserTeamId: string;
   let testPlayerId: string;
+  let testTeam2Id: string;
   let otherUserPlayerId: string;
+  let batchPlayerId: string;  
+  let batchPlayer2Id: string;
+  let batchPlayer3Id: string;
+  let batchPlayer4Id: string;
 
   beforeAll(async () => {
     prisma = new PrismaClient({
@@ -52,6 +57,12 @@ describe('Player Teams API Integration', () => {
       .set(authHelper.getAuthHeader(testUser))
       .send({ name: `Test Team ${Date.now()}` })
       .expect(201);
+
+    const testTeam2Response = await request(app)
+      .post('/api/v1/teams')
+      .set(authHelper.getAuthHeader(testUser))
+      .send({ name: `Test Team ${Date.now()}` })
+      .expect(201);
     
     const otherTeamResponse = await request(app)
       .post('/api/v1/teams')
@@ -60,6 +71,7 @@ describe('Player Teams API Integration', () => {
       .expect(201);
     
     testTeamId = testTeamResponse.body.id;
+    testTeam2Id = testTeam2Response.body.id;
     otherUserTeamId = otherTeamResponse.body.id;
     
     // Create test players
@@ -77,10 +89,39 @@ describe('Player Teams API Integration', () => {
     
     testPlayerId = testPlayerResponse.body.id;
     otherUserPlayerId = otherPlayerResponse.body.id;
+
+    const batchPlayerResponse = await request(app)
+      .post('/api/v1/players')
+      .set(authHelper.getAuthHeader(testUser))
+      .send({ name: `Test Player ${Date.now()}` })
+      .expect(201);
+
+    const batchPlayer2Response = await request(app)
+      .post('/api/v1/players')
+      .set(authHelper.getAuthHeader(testUser))
+      .send({ name: `Test Player2 ${Date.now()}` })
+      .expect(201);
+
+    const batchPlayer3Response = await request(app)
+      .post('/api/v1/players')
+      .set(authHelper.getAuthHeader(testUser))
+      .send({ name: `Test Player ${Date.now()}` })
+      .expect(201);
+
+    const batchPlayer4Response = await request(app)
+      .post('/api/v1/players')
+      .set(authHelper.getAuthHeader(testUser))
+      .send({ name: `Test Player2 ${Date.now()}` })
+      .expect(201);
     
+    batchPlayerId = batchPlayerResponse.body.id;
+    batchPlayer2Id = batchPlayer2Response.body.id;
+    batchPlayer3Id = batchPlayer3Response.body.id;
+    batchPlayer4Id = batchPlayer4Response.body.id;
+
     createdUserIds.push(testUser.id, otherUser.id, adminUser.id);
     createdTeamIds.push(testTeamId, otherUserTeamId);
-    createdPlayerIds.push(testPlayerId, otherUserPlayerId);
+    createdPlayerIds.push(testPlayerId, otherUserPlayerId, batchPlayerId, batchPlayer2Id, batchPlayer3Id, batchPlayer4Id);
     
     console.log('Player Teams API Tests: Database connected and test data created');
   });
@@ -251,7 +292,7 @@ describe('Player Teams API Integration', () => {
         .post('/api/v1/player-teams')
         .set(authHelper.getAuthHeader(testUser))
         .send(overlappingData)
-        .expect(500); // Should fail due to overlap
+        .expect(409); // Should fail due to overlap (Conflict)
       
       console.log('Overlap prevention working correctly');
     });
@@ -694,7 +735,7 @@ describe('Player Teams API Integration', () => {
           .post('/api/v1/player-teams')
           .set(authHelper.getAuthHeader(testUser))
           .send(relationshipData)
-          .expect(500); // Access denied error
+          .expect(403); // Access denied error (Forbidden)
         
         console.log('Access denied for creating relationship with unowned player and team');
       });
@@ -901,6 +942,666 @@ describe('Player Teams API Integration', () => {
 
         console.log('Admin can delete any relationship');
       });
+    });
+  });
+
+  describe('POST /api/v1/player-teams/batch', () => {
+
+    it('should handle batch create operations', async () => {
+      const batchData = {
+        create: [
+          {
+            playerId: batchPlayerId,
+            teamId: testTeamId,
+            startDate: '2024-01-01',
+            isActive: true
+          },
+          {
+            playerId: batchPlayer2Id,
+            teamId: testTeamId,
+            startDate: '2024-01-15',
+            isActive: true
+          }
+        ]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.results.created.success).toBe(2);
+      expect(response.body.results.created.failed).toBe(0);
+      expect(response.body.summary.total).toBe(2);
+      expect(response.body.summary.successful).toBe(2);
+
+      console.log('Batch create operations successful');
+    });
+
+    it('should handle batch update operations', async () => {
+      // First create some relationships to update
+      const relationship1 = await apiRequest
+        .post('/api/v1/player-teams')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          playerId: batchPlayer3Id,
+          teamId: testTeamId,
+          startDate: '2024-01-01',
+          isActive: true
+        })
+        .expect(201);
+      const relationship2 = await apiRequest
+        .post('/api/v1/player-teams')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          playerId: batchPlayer4Id,
+          teamId: testTeamId,
+          startDate: '2024-01-15',
+          isActive: true
+        })
+        .expect(201);
+
+      const batchData = {
+        update: [
+          {
+            id: relationship1.body.id,
+            data: {
+              endDate: '2024-06-30',
+              isActive: false
+            }
+          },
+          {
+            id: relationship2.body.id,
+            data: {
+              endDate: '2024-07-31',
+              isActive: false
+            }
+          }
+        ]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.results.updated.success).toBe(2);
+      expect(response.body.results.updated.failed).toBe(0);
+      expect(response.body.summary.total).toBe(2);
+      expect(response.body.summary.successful).toBe(2);
+
+      console.log('Batch update operations successful');
+    });
+
+    it('should handle batch delete operations', async () => {
+      // First create some relationships
+      const relationship1 = await apiRequest
+        .post('/api/v1/player-teams')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          playerId: batchPlayerId,
+          teamId: testTeam2Id,
+          startDate: '2024-01-01',
+          isActive: true
+        })
+        .expect(201);
+
+      const relationship2 = await apiRequest
+        .post('/api/v1/player-teams')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          playerId: batchPlayer2Id,
+          teamId: testTeam2Id,
+          startDate: '2024-01-01',
+          isActive: true
+        })
+        .expect(201);
+
+      // Now batch delete them
+      const batchData = {
+        delete: [
+          relationship1.body.id,
+          relationship2.body.id
+        ]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.results.deleted.success).toBe(2);
+      expect(response.body.results.deleted.failed).toBe(0);
+      expect(response.body.summary.total).toBe(2);
+      expect(response.body.summary.successful).toBe(2);
+
+      console.log('Batch delete operations successful');
+    });
+
+    it('should handle mixed batch operations', async () => {
+      // Create one relationship first for updating
+      const existingRelationship = await apiRequest
+        .post('/api/v1/player-teams')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          playerId: batchPlayer3Id,
+          teamId: testTeam2Id,
+          startDate: '2024-01-01',
+          isActive: true
+        })
+        .expect(201);
+
+      // Mixed batch operations
+      const batchData = {
+        create: [
+          {
+            playerId: batchPlayer4Id,
+            teamId: testTeam2Id,
+            startDate: '2024-02-01',
+            isActive: true
+          }
+        ],
+        update: [
+          {
+            id: existingRelationship.body.id,
+            data: {
+              endDate: '2024-06-30',
+              isActive: false
+            }
+          }
+        ],
+        delete: [] // No deletes in this test
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.results.created.success).toBe(1);
+      expect(response.body.results.updated.success).toBe(1);
+      expect(response.body.results.deleted.success).toBe(0);
+      expect(response.body.summary.total).toBe(2);
+      expect(response.body.summary.successful).toBe(2);
+
+      console.log('Mixed batch operations successful');
+    });
+
+    it('should handle access denied in batch operations', async () => {
+      const batchData = {
+        create: [
+          {
+            playerId: otherUserPlayerId,
+            teamId: otherUserTeamId, // Team owned by other user
+            startDate: '2024-01-01',
+            isActive: true
+          }
+        ]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.results.created.success).toBe(0);
+      expect(response.body.results.created.failed).toBe(1);
+      expect(response.body.results.created.errors).toHaveLength(1);
+      expect(response.body.results.created.errors[0].error).toContain('Access denied');
+
+      console.log('Batch access denied handling working correctly');
+    });
+
+    it('should require authentication', async () => {
+      const batchData = {
+        create: [
+          {
+            playerId: batchPlayerId,
+            teamId: testTeam2Id,
+            startDate: '2024-01-01',
+            isActive: true
+          }
+        ]
+      };
+
+      await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .send(batchData)
+        .expect(401);
+
+      console.log('Batch authentication requirement working');
+    });
+
+    it('should validate batch request structure', async () => {
+      // Empty batch request
+      await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({})
+        .expect(200); // Should succeed with empty operations
+
+      // Invalid structure
+      await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          create: 'invalid' // Should be array
+        })
+        .expect(400);
+
+      console.log('Batch request validation working');
+    });
+  });
+
+  // ============================================================================
+  // NATURAL KEYS BATCH OPERATIONS TESTS
+  // ============================================================================
+
+  describe('POST /api/v1/player-teams/batch - Natural Keys Support', () => {
+    let naturalKeyTestTeamId: string;
+    let naturalKeyTestPlayerId: string;
+
+    beforeEach(async () => {
+      // Create test team and player for natural key tests
+      const teamResponse = await apiRequest
+        .post('/api/v1/teams')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Natural Key Team ${Date.now()}`,
+          homePrimary: '#FF0000'
+        })
+        .expect(201);
+      
+      naturalKeyTestTeamId = teamResponse.body.id;
+
+      const playerResponse = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Natural Key Player ${Date.now()}`,
+          squadNumber: 42,
+          preferredPosition: 'ST'
+        })
+        .expect(201);
+      
+      naturalKeyTestPlayerId = playerResponse.body.id;
+    });
+
+    it('should create player-team relationships using natural keys', async () => {
+      const batchData = {
+        create: [
+          {
+            playerName: `Natural Key Player ${Date.now()}`,
+            teamName: `Natural Key Team ${Date.now()}`,
+            startDate: '2024-01-01',
+            isActive: true
+          }
+        ]
+      };
+
+      // Get the actual names from the created entities
+      const teamData = await apiRequest
+        .get(`/api/v1/teams/${naturalKeyTestTeamId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+      
+      const playerData = await apiRequest
+        .get(`/api/v1/players/${naturalKeyTestPlayerId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      // Update batch data with actual names
+      batchData.create[0].playerName = playerData.body.name;
+      batchData.create[0].teamName = teamData.body.name;
+
+      const response = await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.results.created.success).toBe(1);
+      expect(response.body.results.created.failed).toBe(0);
+      expect(response.body.summary.successful).toBe(1);
+    });
+
+    it('should handle mixed UUID and natural key requests', async () => {
+      // Create a second player for this test
+      const player2Response = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Natural Key Player 2 ${Date.now()}`,
+          squadNumber: 43,
+          preferredPosition: 'CM'
+        })
+        .expect(201);
+
+      // Get actual names for natural key request
+      const teamData = await apiRequest
+        .get(`/api/v1/teams/${naturalKeyTestTeamId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+      
+      const player2Data = await apiRequest
+        .get(`/api/v1/players/${player2Response.body.id}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      const batchData = {
+        create: [
+          {
+            // UUID-based request
+            playerId: naturalKeyTestPlayerId,
+            teamId: naturalKeyTestTeamId,
+            startDate: '2024-01-01',
+            isActive: true
+          },
+          {
+            // Natural key-based request (different player)
+            playerName: player2Data.body.name,
+            teamName: teamData.body.name,
+            startDate: '2024-02-01',
+            isActive: true
+          }
+        ]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.results.created.success).toBe(2);
+      expect(response.body.results.created.failed).toBe(0);
+      expect(response.body.summary.successful).toBe(2);
+    });
+
+    it('should handle natural key resolution errors gracefully', async () => {
+      const batchData = {
+        create: [
+          {
+            playerName: 'Non Existent Player',
+            teamName: 'Non Existent Team',
+            startDate: '2024-01-01',
+            isActive: true
+          }
+        ]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.results.created.success).toBe(0);
+      expect(response.body.results.created.failed).toBe(1);
+      expect(response.body.results.created.errors).toHaveLength(1);
+      expect(response.body.results.created.errors[0].error).toContain('not found');
+    });
+
+    it('should validate natural key request format', async () => {
+      // Missing teamName
+      const invalidBatchData = {
+        create: [
+          {
+            playerName: 'Some Player',
+            startDate: '2024-01-01',
+            isActive: true
+          }
+        ]
+      };
+
+      await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(invalidBatchData)
+        .expect(400);
+    });
+
+    it('should reject mixed UUID and natural key in same request', async () => {
+      const invalidBatchData = {
+        create: [
+          {
+            playerId: naturalKeyTestPlayerId,
+            teamName: 'Some Team',
+            startDate: '2024-01-01',
+            isActive: true
+          }
+        ]
+      };
+
+      await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(invalidBatchData)
+        .expect(400);
+    });
+
+    it('should handle case insensitive natural key matching', async () => {
+      // Get actual names
+      const teamData = await apiRequest
+        .get(`/api/v1/teams/${naturalKeyTestTeamId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+      
+      const playerData = await apiRequest
+        .get(`/api/v1/players/${naturalKeyTestPlayerId}`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      const batchData = {
+        create: [
+          {
+            playerName: playerData.body.name.toLowerCase(), // Use lowercase
+            teamName: teamData.body.name.toUpperCase(), // Use uppercase
+            startDate: '2024-01-01',
+            isActive: true
+          }
+        ]
+      };
+
+      const response = await apiRequest
+        .post('/api/v1/player-teams/batch')
+        .set(authHelper.getAuthHeader(testUser))
+        .send(batchData)
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.results.created.success).toBe(1);
+      expect(response.body.results.created.failed).toBe(0);
+    });
+  });
+
+  // ============================================================================
+  // CONVENIENCE ENDPOINTS TESTS
+  // ============================================================================
+
+  describe('GET /api/v1/teams/:id/active-players - Active Players Convenience Endpoint', () => {
+    let testTeamForActivePlayersId: string;
+    let activePlayer1Id: string;
+    let activePlayer2Id: string;
+    let inactivePlayerId: string;
+
+    beforeEach(async () => {
+      // Create a test team
+      const teamResponse = await apiRequest
+        .post('/api/v1/teams')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Active Players Test Team ${Date.now()}`,
+          homePrimary: '#FF0000'
+        })
+        .expect(201);
+      
+      testTeamForActivePlayersId = teamResponse.body.id;
+
+      // Create test players with different squad numbers
+      const player1Response = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Active Player 1 ${Date.now()}`,
+          squadNumber: 10,
+          preferredPosition: 'ST'
+        })
+        .expect(201);
+      
+      activePlayer1Id = player1Response.body.id;
+
+      const player2Response = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Active Player 2 ${Date.now()}`,
+          squadNumber: 5,
+          preferredPosition: 'CM'
+        })
+        .expect(201);
+      
+      activePlayer2Id = player2Response.body.id;
+
+      const player3Response = await apiRequest
+        .post('/api/v1/players')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Inactive Player ${Date.now()}`,
+          squadNumber: 99,
+          preferredPosition: 'CB'
+        })
+        .expect(201);
+      
+      inactivePlayerId = player3Response.body.id;
+
+      // Create active relationships for first two players
+      await apiRequest
+        .post('/api/v1/player-teams')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          playerId: activePlayer1Id,
+          teamId: testTeamForActivePlayersId,
+          startDate: '2024-01-01',
+          isActive: true
+        })
+        .expect(201);
+
+      await apiRequest
+        .post('/api/v1/player-teams')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          playerId: activePlayer2Id,
+          teamId: testTeamForActivePlayersId,
+          startDate: '2024-01-01',
+          isActive: true
+        })
+        .expect(201);
+
+      // Create inactive relationship for third player
+      await apiRequest
+        .post('/api/v1/player-teams')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          playerId: inactivePlayerId,
+          teamId: testTeamForActivePlayersId,
+          startDate: '2024-01-01',
+          isActive: false
+        })
+        .expect(201);
+    });
+
+    it('should return only active players for a team', async () => {
+      const response = await apiRequest
+        .get(`/api/v1/teams/${testTeamForActivePlayersId}/active-players`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(response.body).toHaveLength(2);
+      
+      // Should be sorted by squad number (5, 10)
+      expect(response.body[0].squadNumber).toBe(5);
+      expect(response.body[0].playerName).toContain('Active Player 2');
+      expect(response.body[0].preferredPosition).toBe('CM');
+      
+      expect(response.body[1].squadNumber).toBe(10);
+      expect(response.body[1].playerName).toContain('Active Player 1');
+      expect(response.body[1].preferredPosition).toBe('ST');
+
+      // Verify response structure
+      expect(response.body[0]).toHaveProperty('relationshipId');
+      expect(response.body[0]).toHaveProperty('playerId');
+      expect(response.body[0]).toHaveProperty('playerName');
+      expect(response.body[0]).toHaveProperty('squadNumber');
+      expect(response.body[0]).toHaveProperty('preferredPosition');
+      expect(response.body[0]).toHaveProperty('startDate');
+      expect(response.body[0]).toHaveProperty('joinedAt');
+    });
+
+    it('should return empty array for team with no active players', async () => {
+      // Create a team with no active players
+      const emptyTeamResponse = await apiRequest
+        .post('/api/v1/teams')
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          name: `Empty Team ${Date.now()}`,
+          homePrimary: '#00FF00'
+        })
+        .expect(201);
+
+      const response = await apiRequest
+        .get(`/api/v1/teams/${emptyTeamResponse.body.id}/active-players`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(response.body).toHaveLength(0);
+    });
+
+    it('should require authentication', async () => {
+      await apiRequest
+        .get(`/api/v1/teams/${testTeamForActivePlayersId}/active-players`)
+        .expect(401);
+    });
+
+    it('should require valid UUID for team ID', async () => {
+      await apiRequest
+        .get('/api/v1/teams/invalid-uuid/active-players')
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(400);
+    });
+
+    it('should return empty array for non-existent team', async () => {
+      const nonExistentTeamId = '12345678-1234-1234-1234-123456789012';
+      
+      const response = await apiRequest
+        .get(`/api/v1/teams/${nonExistentTeamId}/active-players`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(response.body).toHaveLength(0);
+    });
+
+    it('should deny access to other users teams', async () => {
+      const response = await apiRequest
+        .get(`/api/v1/teams/${testTeamForActivePlayersId}/active-players`)
+        .set(authHelper.getAuthHeader(otherUser))
+        .expect(200);
+
+      // Should return empty array due to access control
+      expect(response.body).toHaveLength(0);
     });
   });
 });

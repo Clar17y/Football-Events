@@ -1,17 +1,28 @@
 import { PrismaClient } from '@prisma/client';
+import { 
+  transformPlayerTeam, 
+  transformPlayerTeamCreateRequest, 
+  transformPlayerTeamUpdateRequest,
+  transformPlayerTeams 
+} from '@shared/types';
+import type { 
+  PlayerTeam, 
+  PlayerTeamCreateRequest as SharedPlayerTeamCreateRequest, 
+  PlayerTeamUpdateRequest as SharedPlayerTeamUpdateRequest 
+} from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { createOrRestoreSoftDeleted, SoftDeletePatterns } from '../utils/softDeleteUtils';
+import { NaturalKeyResolver } from '../utils/naturalKeyResolver';
 
-export interface PlayerTeamCreateRequest {
-  playerId: string;
-  teamId: string;
-  startDate: string; // ISO date string
-  endDate?: string; // ISO date string
+// Extend shared interfaces to include service-specific fields
+export interface PlayerTeamCreateRequest extends SharedPlayerTeamCreateRequest {
   isActive?: boolean;
+  // Natural key support
+  playerName?: string;
+  teamName?: string;
 }
 
-export interface PlayerTeamUpdateRequest {
-  endDate?: string; // ISO date string
+export interface PlayerTeamUpdateRequest extends SharedPlayerTeamUpdateRequest {
   isActive?: boolean;
 }
 
@@ -24,7 +35,7 @@ export interface GetPlayerTeamsOptions {
 }
 
 export interface PaginatedPlayerTeams {
-  data: any[];
+  data: PlayerTeam[];
   pagination: {
     page: number;
     limit: number;
@@ -35,11 +46,25 @@ export interface PaginatedPlayerTeams {
   };
 }
 
+export interface BatchPlayerTeamRequest {
+  create?: PlayerTeamCreateRequest[];
+  update?: { id: string; data: PlayerTeamUpdateRequest }[];
+  delete?: string[];
+}
+
+export interface BatchPlayerTeamResult {
+  created: { success: number; failed: number; errors: Array<{ data: PlayerTeamCreateRequest; error: string }> };
+  updated: { success: number; failed: number; errors: Array<{ id: string; error: string }> };
+  deleted: { success: number; failed: number; errors: Array<{ id: string; error: string }> };
+}
+
 export class PlayerTeamService {
   private prisma: PrismaClient;
+  private naturalKeyResolver: NaturalKeyResolver;
 
   constructor() {
     this.prisma = new PrismaClient();
+    this.naturalKeyResolver = new NaturalKeyResolver();
   }
 
   async getPlayerTeams(userId: string, userRole: string, options: GetPlayerTeamsOptions): Promise<PaginatedPlayerTeams> {
@@ -115,7 +140,7 @@ export class PlayerTeamService {
     const totalPages = Math.ceil(total / limit);
 
     return {
-      data: playerTeams.map(this.transformPlayerTeam),
+      data: playerTeams.map(pt => this.transformPlayerTeamWithServiceFields(pt)),
       pagination: {
         page,
         limit,
@@ -127,7 +152,7 @@ export class PlayerTeamService {
     };
   }
 
-  async getPlayerTeamById(id: string, userId: string, userRole: string): Promise<any | null> {
+  async getPlayerTeamById(id: string, userId: string, userRole: string): Promise<PlayerTeam | null> {
     const where: any = { 
       id,
       is_deleted: false 
@@ -172,10 +197,10 @@ export class PlayerTeamService {
       }
     });
 
-    return playerTeam ? this.transformPlayerTeam(playerTeam) : null;
+    return playerTeam ? this.transformPlayerTeamWithServiceFields(playerTeam) : null;
   }
 
-  async createPlayerTeam(data: PlayerTeamCreateRequest, userId: string, userRole: string): Promise<any> {
+  async createPlayerTeam(data: PlayerTeamCreateRequest, userId: string, userRole: string): Promise<PlayerTeam> {
     return withPrismaErrorHandling(async () => {
       // Check if user can create relationship for this team and player
       if (userRole !== 'ADMIN') {
@@ -183,7 +208,9 @@ export class PlayerTeamService {
         const userPlayerIds = await this.getUserPlayerIds(userId);
         
         if (!userTeamIds.includes(data.teamId) && !userPlayerIds.includes(data.playerId)) {
-          throw new Error('Access denied: You can only create relationships for teams you own or players you created');
+          const error = new Error('Access denied: You can only create relationships for teams you own or players you created') as any;
+          error.statusCode = 403;
+          throw error;
         }
       }
 
@@ -198,13 +225,18 @@ export class PlayerTeamService {
       ]);
 
       if (!player) {
-        throw new Error('Player not found');
+        const error = new Error('Player not found') as any;
+        error.statusCode = 404;
+        throw error;
       }
       if (!team) {
-        throw new Error('Team not found');
+        const error = new Error('Team not found') as any;
+        error.statusCode = 404;
+        throw error;
       }
 
       // Check for overlapping active relationships before creating/restoring
+      const startDateObj = new Date(data.startDate);
       const existingActiveRelationship = await this.prisma.player_teams.findFirst({
         where: {
           player_id: data.playerId,
@@ -213,39 +245,41 @@ export class PlayerTeamService {
           is_deleted: false,
           OR: [
             { end_date: null }, // No end date (currently active)
-            { end_date: { gte: new Date(data.startDate) } } // End date after start date
+            { end_date: { gte: startDateObj } } // End date after start date
           ]
         }
       });
 
       if (existingActiveRelationship) {
-        throw new Error('Player already has an active relationship with this team during the specified period');
+        const error = new Error('Player already has an active relationship with this team during the specified period') as any;
+        error.statusCode = 409;
+        throw error;
       }
 
+      // Transform the request using shared transformer
+      const baseCreateData = transformPlayerTeamCreateRequest(data, userId);
+      
       const playerTeam = await createOrRestoreSoftDeleted({
         prisma: this.prisma,
         model: 'player_teams',
         uniqueConstraints: SoftDeletePatterns.playerTeamConstraint(
           data.playerId,
           data.teamId,
-          new Date(data.startDate)
+          startDateObj
         ),
         createData: {
-          player_id: data.playerId,
-          team_id: data.teamId,
-          start_date: new Date(data.startDate),
-          end_date: data.endDate ? new Date(data.endDate) : null,
+          ...baseCreateData,
           is_active: data.isActive ?? true
         },
         userId,
-        transformer: this.transformPlayerTeam.bind(this)
+        transformer: this.transformPlayerTeamWithServiceFields.bind(this)
       });
 
       return playerTeam;
     });
   }
 
-  async updatePlayerTeam(id: string, data: PlayerTeamUpdateRequest, userId: string, userRole: string): Promise<any | null> {
+  async updatePlayerTeam(id: string, data: PlayerTeamUpdateRequest, userId: string, userRole: string): Promise<PlayerTeam | null> {
     return withPrismaErrorHandling(async () => {
       // Check if relationship exists and user has access
       const where: any = {
@@ -269,13 +303,14 @@ export class PlayerTeamService {
         return null; // Not found or no permission
       }
 
+      // Transform the request using shared transformer
+      const baseUpdateData = transformPlayerTeamUpdateRequest(data);
+      
       const updateData: any = {
+        ...baseUpdateData,
         updated_at: new Date()
       };
       
-      if (data.endDate !== undefined) {
-        updateData.end_date = data.endDate ? new Date(data.endDate) : null;
-      }
       if (data.isActive !== undefined) {
         updateData.is_active = data.isActive;
       }
@@ -308,7 +343,7 @@ export class PlayerTeamService {
         }
       });
 
-      return this.transformPlayerTeam(playerTeam);
+      return this.transformPlayerTeamWithServiceFields(playerTeam);
     });
   }
 
@@ -381,8 +416,62 @@ export class PlayerTeamService {
     });
 
     return playerTeams.map(pt => ({
-      ...this.transformPlayerTeam(pt),
+      ...this.transformPlayerTeamWithServiceFields(pt),
       player: pt.player
+    }));
+  }
+
+  async getActiveTeamPlayers(teamId: string, userId: string, userRole: string): Promise<any[]> {
+    // Check if user can access this team
+    if (userRole !== 'ADMIN') {
+      const userTeamIds = await this.getUserTeamIds(userId);
+      if (!userTeamIds.includes(teamId)) {
+        return []; // Return empty array if no access
+      }
+    }
+
+    const playerTeams = await this.prisma.player_teams.findMany({
+      where: { 
+        team_id: teamId,
+        is_active: true,
+        is_deleted: false 
+      },
+      orderBy: [
+        { 
+          player: {
+            squad_number: 'asc'
+          }
+        },
+        { 
+          player: {
+            name: 'asc'
+          }
+        }
+      ],
+      include: {
+        player: {
+          select: {
+            id: true,
+            name: true,
+            squad_number: true,
+            preferred_pos: true,
+            dob: true,
+            notes: true
+          }
+        }
+      }
+    });
+
+    return playerTeams.map(pt => ({
+      relationshipId: pt.id,
+      playerId: pt.player.id,
+      playerName: pt.player.name,
+      squadNumber: pt.player.squad_number,
+      preferredPosition: pt.player.preferred_pos,
+      dateOfBirth: pt.player.dob ? pt.player.dob.toISOString().split('T')[0] : null,
+      notes: pt.player.notes,
+      startDate: pt.start_date.toISOString().split('T')[0],
+      joinedAt: pt.created_at.toISOString()
     }));
   }
 
@@ -414,24 +503,20 @@ export class PlayerTeamService {
     });
 
     return playerTeams.map(pt => ({
-      ...this.transformPlayerTeam(pt),
+      ...this.transformPlayerTeamWithServiceFields(pt),
       team: pt.team
     }));
   }
 
-  private transformPlayerTeam(prismaPlayerTeam: any): any {
+  /**
+   * Transform PlayerTeam with service-specific fields
+   */
+  private transformPlayerTeamWithServiceFields(prismaPlayerTeam: any): any {
+    const baseTransform = transformPlayerTeam(prismaPlayerTeam);
     return {
-      id: prismaPlayerTeam.id,
-      playerId: prismaPlayerTeam.player_id,
-      teamId: prismaPlayerTeam.team_id,
-      startDate: prismaPlayerTeam.start_date.toISOString().split('T')[0],
-      endDate: prismaPlayerTeam.end_date ? prismaPlayerTeam.end_date.toISOString().split('T')[0] : null,
+      ...baseTransform,
       isActive: prismaPlayerTeam.is_active,
-      createdAt: prismaPlayerTeam.created_at,
-      updatedAt: prismaPlayerTeam.updated_at ?? undefined,
-      player: prismaPlayerTeam.player,
-      team: prismaPlayerTeam.team,
-      createdBy: prismaPlayerTeam.created_by
+      endDate: prismaPlayerTeam.end_date ? prismaPlayerTeam.end_date.toISOString().split('T')[0] : null,
     };
   }
 
@@ -465,7 +550,191 @@ export class PlayerTeamService {
     return players.map(player => player.id);
   }
 
+  async batchPlayerTeams(operations: BatchPlayerTeamRequest, userId: string, userRole: string): Promise<BatchPlayerTeamResult> {
+    const result: BatchPlayerTeamResult = {
+      created: { success: 0, failed: 0, errors: [] },
+      updated: { success: 0, failed: 0, errors: [] },
+      deleted: { success: 0, failed: 0, errors: [] }
+    };
+
+    // Process creates
+    if (operations.create && operations.create.length > 0) {
+      for (const originalData of operations.create) {
+        try {
+          // Resolve natural keys for this individual request
+          const resolvedData = await this.resolveNaturalKeysForSingleRequest(originalData, userId, userRole);
+          await this.createPlayerTeam(resolvedData, userId, userRole);
+          result.created.success++;
+        } catch (error: any) {
+          result.created.failed++;
+          result.created.errors.push({
+            data: originalData,
+            error: error.message || 'Unknown error during creation'
+          });
+        }
+      }
+    }
+
+    // Process updates
+    if (operations.update && operations.update.length > 0) {
+      for (const updateOp of operations.update) {
+        try {
+          const updated = await this.updatePlayerTeam(updateOp.id, updateOp.data, userId, userRole);
+          if (updated) {
+            result.updated.success++;
+          } else {
+            result.updated.failed++;
+            result.updated.errors.push({
+              id: updateOp.id,
+              error: 'Player-team relationship not found or access denied'
+            });
+          }
+        } catch (error: any) {
+          result.updated.failed++;
+          result.updated.errors.push({
+            id: updateOp.id,
+            error: error.message || 'Unknown error during update'
+          });
+        }
+      }
+    }
+
+    // Process deletes
+    if (operations.delete && operations.delete.length > 0) {
+      for (const deleteId of operations.delete) {
+        try {
+          const deleted = await this.deletePlayerTeam(deleteId, userId, userRole);
+          if (deleted) {
+            result.deleted.success++;
+          } else {
+            result.deleted.failed++;
+            result.deleted.errors.push({
+              id: deleteId,
+              error: 'Player-team relationship not found or access denied'
+            });
+          }
+        } catch (error: any) {
+          result.deleted.failed++;
+          result.deleted.errors.push({
+            id: deleteId,
+            error: error.message || 'Unknown error during deletion'
+          });
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Resolve natural keys to UUIDs for a single request
+   */
+  private async resolveNaturalKeysForSingleRequest(request: PlayerTeamCreateRequest, userId: string, userRole: string): Promise<PlayerTeamCreateRequest> {
+    if (NaturalKeyResolver.hasNaturalKeys(request)) {
+      // Validate that we have both playerName and teamName
+      if (!request.playerName || !request.teamName) {
+        throw new Error('Natural key resolution requires both playerName and teamName.');
+      }
+      
+      // Resolve natural keys to UUIDs
+      const resolved = await this.naturalKeyResolver.resolvePlayerTeamKeys(
+        request.playerName,
+        request.teamName,
+        userId,
+        userRole
+      );
+      
+      return {
+        ...request,
+        playerId: resolved.playerId,
+        teamId: resolved.teamId,
+        // Remove natural key fields to avoid confusion
+        playerName: undefined,
+        teamName: undefined
+      };
+    } else {
+      // Validate that we have both playerId and teamId for UUID-based requests
+      if (!request.playerId || !request.teamId) {
+        throw new Error('UUID-based request requires both playerId and teamId.');
+      }
+      return request;
+    }
+  }
+
+  /**
+   * Resolve natural keys to UUIDs for batch operations (kept for potential future use)
+   */
+  private async resolveNaturalKeysForBatch(createRequests: PlayerTeamCreateRequest[], userId: string, userRole: string): Promise<PlayerTeamCreateRequest[]> {
+    const resolved: PlayerTeamCreateRequest[] = [];
+    
+    // Separate requests that need natural key resolution from those that don't
+    const naturalKeyRequests: Array<{ index: number; playerName: string; teamName: string }> = [];
+    
+    for (let i = 0; i < createRequests.length; i++) {
+      const request = createRequests[i];
+      
+      if (NaturalKeyResolver.hasNaturalKeys(request)) {
+        // Validate that we have both playerName and teamName
+        if (!request.playerName || !request.teamName) {
+          throw new Error(`Natural key resolution requires both playerName and teamName. Request ${i} is missing required fields.`);
+        }
+        
+        naturalKeyRequests.push({
+          index: i,
+          playerName: request.playerName,
+          teamName: request.teamName
+        });
+      } else {
+        // Validate that we have both playerId and teamId for UUID-based requests
+        if (!request.playerId || !request.teamId) {
+          throw new Error(`UUID-based request requires both playerId and teamId. Request ${i} is missing required fields.`);
+        }
+      }
+    }
+    
+    // Resolve natural keys in batch if any exist
+    let resolvedKeys: Array<{ playerId: string; teamId: string }> = [];
+    if (naturalKeyRequests.length > 0) {
+      const keyRequests = naturalKeyRequests.map(req => ({
+        playerName: req.playerName,
+        teamName: req.teamName
+      }));
+      
+      const resolvedPlayerTeamKeys = await this.naturalKeyResolver.resolveMultiplePlayerTeamKeys(keyRequests, userId, userRole);
+      resolvedKeys = resolvedPlayerTeamKeys.map(resolved => ({
+        playerId: resolved.playerId,
+        teamId: resolved.teamId
+      }));
+    }
+    
+    // Build the resolved requests array
+    let naturalKeyIndex = 0;
+    for (let i = 0; i < createRequests.length; i++) {
+      const request = createRequests[i];
+      
+      if (NaturalKeyResolver.hasNaturalKeys(request)) {
+        // Use resolved UUIDs
+        const resolvedKey = resolvedKeys[naturalKeyIndex];
+        resolved.push({
+          ...request,
+          playerId: resolvedKey.playerId,
+          teamId: resolvedKey.teamId,
+          // Remove natural key fields to avoid confusion
+          playerName: undefined,
+          teamName: undefined
+        });
+        naturalKeyIndex++;
+      } else {
+        // Use existing UUIDs
+        resolved.push(request);
+      }
+    }
+    
+    return resolved;
+  }
+
   async disconnect(): Promise<void> {
     await this.prisma.$disconnect();
+    await this.naturalKeyResolver.disconnect();
   }
 }

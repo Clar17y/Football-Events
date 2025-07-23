@@ -6,7 +6,8 @@ import { validateUUID } from '../../middleware/uuidValidation';
 import { authenticateToken } from '../../middleware/auth';
 import { 
   playerTeamCreateSchema, 
-  playerTeamUpdateSchema
+  playerTeamUpdateSchema,
+  playerTeamBatchSchema
 } from '../../validation/schemas';
 
 const router = Router();
@@ -87,10 +88,32 @@ router.get('/team/:teamId/players', authenticateToken, validateUUID('teamId'), a
   return res.json(players);
 }));
 
+
 // GET /api/v1/player-teams/player/:playerId/teams - Get all teams for a specific player
 router.get('/player/:playerId/teams', authenticateToken, validateUUID('playerId'), asyncHandler(async (req, res) => {
   const teams = await playerTeamService.getPlayerTeamsByPlayer(req.params['playerId']!, req.user!.id, req.user!.role);
   return res.json(teams);
+}));
+
+// POST /api/v1/player-teams/batch - Batch operations for player-team relationships
+router.post('/batch', authenticateToken, validateRequest(playerTeamBatchSchema), asyncHandler(async (req, res) => {
+  const result = await playerTeamService.batchPlayerTeams(req.body, req.user!.id, req.user!.role);
+  
+  // Calculate overall status
+  const totalOperations = (req.body.create?.length || 0) + (req.body.update?.length || 0) + (req.body.delete?.length || 0);
+  const totalSuccessful = result.created.success + result.updated.success + result.deleted.success;
+  const totalFailed = result.created.failed + result.updated.failed + result.deleted.failed;
+  
+  res.json({
+    success: true,
+    message: `Batch operation completed: ${totalSuccessful}/${totalOperations} operations successful`,
+    results: result,
+    summary: {
+      total: totalOperations,
+      successful: totalSuccessful,
+      failed: totalFailed
+    }
+  });
 }));
 
 export default router;
