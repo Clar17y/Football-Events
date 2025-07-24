@@ -34,6 +34,7 @@ import {
 } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader';
 import CreateTeamModal from '../components/CreateTeamModal';
+import TeamContextMenu from '../components/TeamContextMenu';
 import { useTeams } from '../hooks/useTeams';
 import type { Team } from '@shared/types';
 import './PageStyles.css';
@@ -59,6 +60,9 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     loadTeams();
@@ -80,25 +84,25 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
     event.detail.complete();
   };
 
-  const handleTeamAction = (team: Team, action: string) => {
-    setSelectedTeam(team);
-    setShowActionSheet(false);
+  const handleTeamAction = (action: string) => {
+    if (!selectedTeam) return;
     
     switch (action) {
       case 'edit':
-        // TODO: Open edit team modal
-        console.log('Edit team:', team.name);
+        setShowEditModal(true);
         break;
       case 'delete':
         setShowDeleteAlert(true);
         break;
       case 'players':
         // TODO: Navigate to team players
-        console.log('View players for:', team.name);
+        console.log('View players for:', selectedTeam.name);
+        setSelectedTeam(null); // Clear after action
         break;
       case 'stats':
         // TODO: Navigate to team stats
-        console.log('View stats for:', team.name);
+        console.log('View stats for:', selectedTeam.name);
+        setSelectedTeam(null); // Clear after action
         break;
     }
   };
@@ -172,10 +176,16 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
             <IonButton 
               fill="clear" 
               size="small"
-              onClick={() => {
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setContextMenuPosition({
+                  x: rect.right - 200, // Position menu to the left of the button
+                  y: rect.bottom + 5   // Position menu below the button
+                });
                 setSelectedTeam(team);
-                setShowActionSheet(true);
+                setContextMenuOpen(true);
               }}
+              className="team-ellipses-button"
             >
               <IonIcon icon={ellipsisVertical} />
             </IonButton>
@@ -310,38 +320,16 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
           </IonFabButton>
         </IonFab>
 
-        {/* Team Actions Sheet */}
-        <IonActionSheet
-          isOpen={showActionSheet}
-          onDidDismiss={() => setShowActionSheet(false)}
-          header={selectedTeam?.name}
-          buttons={[
-            {
-              text: 'Edit Team',
-              icon: pencil,
-              handler: () => handleTeamAction(selectedTeam!, 'edit')
-            },
-            {
-              text: 'View Players',
-              icon: personAdd,
-              handler: () => handleTeamAction(selectedTeam!, 'players')
-            },
-            {
-              text: 'Team Statistics',
-              icon: statsChart,
-              handler: () => handleTeamAction(selectedTeam!, 'stats')
-            },
-            {
-              text: 'Delete Team',
-              icon: trash,
-              role: 'destructive',
-              handler: () => handleTeamAction(selectedTeam!, 'delete')
-            },
-            {
-              text: 'Cancel',
-              role: 'cancel'
-            }
-          ]}
+        {/* Team Context Menu */}
+        <TeamContextMenu
+          isOpen={contextMenuOpen}
+          onClose={() => {
+            setContextMenuOpen(false);
+            // Don't clear selectedTeam here - let individual actions handle it
+          }}
+          team={selectedTeam}
+          position={contextMenuPosition}
+          onAction={handleTeamAction}
         />
 
         {/* Delete Confirmation Alert */}
@@ -371,6 +359,19 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
             // Auto-refresh teams list after creating a team
             loadTeams();
           }}
+        />
+
+        {/* Edit Team Modal */}
+        <CreateTeamModal
+          isOpen={showEditModal}
+          onDidDismiss={() => {
+            setShowEditModal(false);
+            setSelectedTeam(null);
+            // Auto-refresh teams list after editing a team
+            loadTeams();
+          }}
+          editTeam={selectedTeam}
+          mode="edit"
         />
       </IonContent>
     </IonPage>

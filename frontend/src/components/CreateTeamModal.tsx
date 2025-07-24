@@ -34,12 +34,14 @@ import {
 } from 'ionicons/icons';
 import { useTeams } from '../hooks/useTeams';
 import ColorPickerModal from './ColorPickerModal';
-import type { TeamCreateRequest } from '@shared/types';
+import type { Team, TeamCreateRequest } from '@shared/types';
 import './CreateTeamModal.css';
 
 interface CreateTeamModalProps {
   isOpen: boolean;
   onDidDismiss: () => void;
+  editTeam?: Team | null;
+  mode?: 'create' | 'edit';
 }
 
 interface FormData {
@@ -60,8 +62,13 @@ interface FormErrors {
   logoUrl?: string;
 }
 
-const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ isOpen, onDidDismiss }) => {
-  const { createTeam, loading } = useTeams();
+const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ 
+  isOpen, 
+  onDidDismiss, 
+  editTeam = null, 
+  mode = 'create' 
+}) => {
+  const { createTeam, updateTeam, loading } = useTeams();
   
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -71,6 +78,30 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ isOpen, onDidDismiss 
     awayKitSecondary: '',
     logoUrl: ''
   });
+
+  // Initialize form data when editing
+  React.useEffect(() => {
+    if (mode === 'edit' && editTeam) {
+      setFormData({
+        name: editTeam.name || '',
+        homeKitPrimary: editTeam.homeKitPrimary || '',
+        homeKitSecondary: editTeam.homeKitSecondary || '',
+        awayKitPrimary: editTeam.awayKitPrimary || '',
+        awayKitSecondary: editTeam.awayKitSecondary || '',
+        logoUrl: editTeam.logoUrl || ''
+      });
+    } else if (mode === 'create') {
+      // Reset form for create mode
+      setFormData({
+        name: '',
+        homeKitPrimary: '',
+        homeKitSecondary: '',
+        awayKitPrimary: '',
+        awayKitSecondary: '',
+        logoUrl: ''
+      });
+    }
+  }, [mode, editTeam, isOpen]);
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -144,7 +175,7 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ isOpen, onDidDismiss 
       return;
     }
 
-    const teamData: TeamCreateRequest = {
+    const teamData = {
       name: formData.name.trim(),
       homeKitPrimary: formData.homeKitPrimary || undefined,
       homeKitSecondary: formData.homeKitSecondary || undefined,
@@ -153,7 +184,14 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ isOpen, onDidDismiss 
       logoUrl: formData.logoUrl || undefined
     };
 
-    const result = await createTeam(teamData);
+    let result;
+    if (mode === 'edit' && editTeam) {
+      console.log('Updating team with ID:', editTeam.id, 'and data:', teamData);
+      result = await updateTeam(editTeam.id, teamData);
+    } else {
+      console.log('Creating new team with data:', teamData);
+      result = await createTeam(teamData);
+    }
     
     if (result) {
       // Reset form and close modal
@@ -168,9 +206,6 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ isOpen, onDidDismiss 
       setErrors({});
       setTouched({});
       onDidDismiss();
-      
-      // Refresh the teams list to show the new team
-      // This is handled automatically by the useTeams hook's optimistic updates
     }
   };
 
@@ -234,7 +269,7 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ isOpen, onDidDismiss 
     <IonModal isOpen={isOpen} onDidDismiss={onDidDismiss} className="create-team-modal">
       <IonHeader>
         <IonToolbar color="teal">
-          <IonTitle>Create New Team</IonTitle>
+          <IonTitle>{mode === 'edit' ? 'Edit Team' : 'Create New Team'}</IonTitle>
           <IonButton 
             fill="clear" 
             slot="end" 
@@ -469,12 +504,14 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ isOpen, onDidDismiss 
               {loading ? (
                 <>
                   <IonSpinner name="crescent" />
-                  <span style={{ marginLeft: '8px' }}>Creating...</span>
+                  <span style={{ marginLeft: '8px' }}>
+                    {mode === 'edit' ? 'Updating...' : 'Creating...'}
+                  </span>
                 </>
               ) : (
                 <>
                   <IonIcon icon={checkmark} slot="start" />
-                  Create Team
+                  {mode === 'edit' ? 'Update Team' : 'Create Team'}
                 </>
               )}
             </IonButton>

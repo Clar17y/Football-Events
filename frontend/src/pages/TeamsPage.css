@@ -304,6 +304,15 @@ ion-skeleton-text {
   border-radius: var(--grassroots-radius-sm);
 }
 
+/* Team ellipses button styling */
+.team-ellipses-button {
+  color: black;
+}
+
+.dark-theme .team-ellipses-button {
+  color: white;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .teams-header {
