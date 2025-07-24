@@ -30,6 +30,7 @@
   box-shadow: var(--grassroots-shadow-sm);
   border: 1px solid var(--grassroots-surface-variant);
   background: var(--grassroots-surface);
+  overflow: visible;
 }
 
 .form-section ion-card-header {
@@ -38,6 +39,7 @@
 
 .form-section ion-card-content {
   padding-top: var(--grassroots-space-xs);
+  overflow: visible !important;
 }
 
 /* Move labels to very top of their containers */
@@ -66,7 +68,7 @@
 
 .section-icon {
   font-size: 1.25rem;
-  color: var(--grassroots-accent);
+  color: var(--ion-color-teal);
 }
 
 /* Form Items */
@@ -77,6 +79,7 @@
   --padding-start: 0;
   --padding-end: 0;
   margin-bottom: 0;
+  overflow: visible !important;
 }
 
 .form-item.error {
@@ -128,8 +131,8 @@
 }
 
 .form-item ion-input:focus-within {
-  --border-color: var(--grassroots-accent);
-  box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1);
+  --border-color: var(--ion-color-teal);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
 }
 
 .form-item.error ion-input {
@@ -150,12 +153,15 @@
 .color-input-row {
   display: flex;
   align-items: center;
-  gap: var(--grassroots-space-sm);
+  gap: var(--grassroots-space-md);
   width: 100%;
+  overflow: visible;
 }
 
 .color-input {
-  flex: 1;
+  flex: 0 0 auto;
+  width: 120px; /* Just enough for hex codes like #FFFFFF */
+  min-width: 120px;
 }
 
 /* Color Preview */
@@ -340,11 +346,12 @@
 
 /* Focus States for Accessibility */
 .form-item ion-input:focus-within {
-  outline: 2px solid var(--grassroots-accent);
+  outline: 2px solid var(--ion-color-teal);
   outline-offset: 2px;
+  border-radius: var(--grassroots-radius-sm);
 }
 
 .color-preview-dot:focus {
-  outline: 2px solid var(--grassroots-accent);
+  outline: 2px solid var(--ion-color-teal);
   outline-offset: 2px;
 }

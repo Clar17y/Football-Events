@@ -123,13 +123,15 @@ export class TeamService {
     return team ? transformTeam(team) : null;
   }
 
-  async createTeam(data: TeamCreateRequest, userId: string): Promise<Team> {
+  async createTeam(data: TeamCreateRequest, userId: string): Promise<Team> {  
     return withPrismaErrorHandling(async () => {
+      const transformedData = transformTeamCreateRequest(data, userId);
+      
       const team = await createOrRestoreSoftDeleted({
         prisma: this.prisma,
         model: 'team',
         uniqueConstraints: UniqueConstraintBuilders.userScoped('name', data.name, userId),
-        createData: transformTeamCreateRequest(data),
+        createData: transformedData,
         userId,
         transformer: transformTeam
       });

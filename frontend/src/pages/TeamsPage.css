@@ -89,12 +89,60 @@
   overflow: hidden;
   background: var(--grassroots-surface);
   margin-bottom: var(--grassroots-space-md);
+  position: relative;
 }
 
-.team-card:hover {
+/* Team Color Stripes */
+.team-color-stripes {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 35%;
+  display: flex;
+  z-index: 1;
+  opacity: 0.15;
+  transition: opacity 0.3s ease;
+}
+
+.stripe {
+  flex: 1;
+  transform: skewX(-15deg);
+  transform-origin: top;
+  margin-left: -2px; /* Overlap slightly to avoid gaps */
+}
+
+.stripe-primary {
+  background: var(--team-primary, var(--ion-color-teal));
+}
+
+.stripe-secondary {
+  background: var(--team-secondary, var(--ion-color-teal-tint));
+}
+
+/* Dynamic hover effects based on team colors */
+.team-card-with-colors:hover {
   transform: translateY(-2px);
   box-shadow: var(--grassroots-shadow-lg);
-  border-color: var(--grassroots-accent-light);
+  border-color: var(--team-primary);
+}
+
+.team-card-with-colors:hover .team-color-stripes {
+  opacity: 0.25;
+}
+
+/* Default hover for teams without colors */
+.team-card-default:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--grassroots-shadow-lg);
+  border-color: var(--ion-color-teal);
+}
+
+/* Ensure content is above stripes */
+.team-card ion-card-header,
+.team-card ion-card-content {
+  position: relative;
+  z-index: 2;
 }
 
 .team-card-header {
@@ -304,8 +352,21 @@ ion-skeleton-text {
   border-color: var(--grassroots-surface-variant);
 }
 
-.dark-theme .team-card:hover {
-  border-color: var(--grassroots-accent-light);
+.dark-theme .team-card-with-colors:hover {
+  border-color: var(--team-primary);
+}
+
+.dark-theme .team-card-default:hover {
+  border-color: var(--ion-color-teal);
+}
+
+/* Slightly more visible stripes in dark mode */
+.dark-theme .team-color-stripes {
+  opacity: 0.2;
+}
+
+.dark-theme .team-card-with-colors:hover .team-color-stripes {
+  opacity: 0.3;
 }
 
 .dark-theme .color-dot {

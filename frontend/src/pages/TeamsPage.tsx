@@ -29,7 +29,8 @@ import {
   trash,
   personAdd,
   statsChart,
-  refresh
+  refresh,
+  refreshOutline
 } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader';
 import CreateTeamModal from '../components/CreateTeamModal';
@@ -110,10 +111,30 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
     setShowDeleteAlert(false);
   };
 
-  const renderTeamCard = (team: Team) => (
-    <IonCol size="12" sizeMd="6" sizeLg="4" key={team.id}>
-      <IonCard className="team-card">
-        <IonCardHeader>
+  const renderTeamCard = (team: Team) => {
+    // Generate dynamic styles for team colors
+    const hasTeamColors = team.homeKitPrimary && team.homeKitSecondary;
+    const primaryColor = team.homeKitPrimary || 'var(--ion-color-teal)';
+    const secondaryColor = team.homeKitSecondary || 'var(--ion-color-teal-tint)';
+    
+    const teamCardStyle = hasTeamColors ? {
+      '--team-primary': primaryColor,
+      '--team-secondary': secondaryColor,
+    } as React.CSSProperties : {};
+
+    return (
+      <IonCol size="12" sizeMd="6" sizeLg="4" key={team.id}>
+        <IonCard 
+          className={`team-card ${hasTeamColors ? 'team-card-with-colors' : 'team-card-default'}`}
+          style={teamCardStyle}
+        >
+          {/* Team color stripes */}
+          <div className="team-color-stripes">
+            <div className="stripe stripe-primary" style={{ backgroundColor: primaryColor }}></div>
+            <div className="stripe stripe-secondary" style={{ backgroundColor: secondaryColor }}></div>
+          </div>
+          
+          <IonCardHeader>
           <div className="team-card-header">
             <div className="team-info">
               <IonCardTitle className="team-name">{team.name}</IonCardTitle>
@@ -179,7 +200,8 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
         </IonCardContent>
       </IonCard>
     </IonCol>
-  );
+    );
+  };
 
   const renderEmptyState = () => (
     <div className="empty-state">
@@ -222,7 +244,19 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
 
   return (
     <IonPage>
-      <PageHeader onNavigate={navigate} />
+      <PageHeader 
+        onNavigate={navigate}
+        additionalButtons={
+          <IonButton 
+            fill="clear" 
+            onClick={() => loadTeams()}
+            style={{ color: 'white' }}
+            disabled={loading}
+          >
+            <IonIcon icon={refreshOutline} />
+          </IonButton>
+        }
+      />
       
       <IonContent>
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
@@ -332,7 +366,11 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
         {/* Create Team Modal */}
         <CreateTeamModal
           isOpen={showCreateModal}
-          onDidDismiss={() => setShowCreateModal(false)}
+          onDidDismiss={() => {
+            setShowCreateModal(false);
+            // Auto-refresh teams list after creating a team
+            loadTeams();
+          }}
         />
       </IonContent>
     </IonPage>

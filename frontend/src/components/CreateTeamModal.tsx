@@ -233,13 +233,14 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ isOpen, onDidDismiss 
   return (
     <IonModal isOpen={isOpen} onDidDismiss={onDidDismiss} className="create-team-modal">
       <IonHeader>
-        <IonToolbar color="secondary">
+        <IonToolbar color="teal">
           <IonTitle>Create New Team</IonTitle>
           <IonButton 
             fill="clear" 
             slot="end" 
             onClick={handleCancel}
             disabled={loading}
+            style={{ color: 'white' }}
           >
             <IonIcon icon={close} />
           </IonButton>
@@ -293,7 +294,7 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ isOpen, onDidDismiss 
             <IonCardContent>
               <IonGrid>
                 <IonRow>
-                  <IonCol size="12" sizeMd="6">
+                  <IonCol size="12">
                     <IonItem className={`form-item ${errors.homeKitPrimary && touched.homeKitPrimary ? 'error' : ''}`}>
                       <IonLabel position="stacked">Primary Color</IonLabel>
                       <div className="color-input-row">
@@ -314,7 +315,9 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ isOpen, onDidDismiss 
                       </IonText>
                     )}
                   </IonCol>
-                  <IonCol size="12" sizeMd="6">
+                </IonRow>
+                <IonRow>
+                  <IonCol size="12">
                     <IonItem className={`form-item ${errors.homeKitSecondary && touched.homeKitSecondary ? 'error' : ''}`}>
                       <IonLabel position="stacked">Secondary Color</IonLabel>
                       <div className="color-input-row">
@@ -351,7 +354,7 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ isOpen, onDidDismiss 
             <IonCardContent>
               <IonGrid>
                 <IonRow>
-                  <IonCol size="12" sizeMd="6">
+                  <IonCol size="12">
                     <IonItem className={`form-item ${errors.awayKitPrimary && touched.awayKitPrimary ? 'error' : ''}`}>
                       <IonLabel position="stacked">Primary Color</IonLabel>
                       <div className="color-input-row">
@@ -372,7 +375,9 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ isOpen, onDidDismiss 
                       </IonText>
                     )}
                   </IonCol>
-                  <IonCol size="12" sizeMd="6">
+                </IonRow>
+                <IonRow>
+                  <IonCol size="12">
                     <IonItem className={`form-item ${errors.awayKitSecondary && touched.awayKitSecondary ? 'error' : ''}`}>
                       <IonLabel position="stacked">Secondary Color</IonLabel>
                       <div className="color-input-row">
@@ -456,7 +461,7 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({ isOpen, onDidDismiss 
             </IonButton>
             <IonButton 
               expand="block" 
-              color="secondary" 
+              color="teal" 
               onClick={handleSubmit}
               disabled={loading || !formData.name.trim()}
               className="submit-button"

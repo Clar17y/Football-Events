@@ -233,15 +233,20 @@ export const transformPlayerUpdateRequest = (
 export const transformTeamCreateRequest = (
   request: TeamCreateRequest,
   created_by_user_id: string
-): PrismaTeamCreateInput => ({
-  name: request.name,
-  home_kit_primary: request.homeKitPrimary ?? null,
-  home_kit_secondary: request.homeKitSecondary ?? null,
-  away_kit_primary: request.awayKitPrimary ?? null,
-  away_kit_secondary: request.awayKitSecondary ?? null,
-  logo_url: request.logoUrl ?? null,
-  created_by_user_id,
-});
+): PrismaTeamCreateInput => {
+  
+  const result = {
+    name: request.name,
+    home_kit_primary: request.homePrimary ?? null,
+    home_kit_secondary: request.homeSecondary ?? null,
+    away_kit_primary: request.awayPrimary ?? null,
+    away_kit_secondary: request.awaySecondary ?? null,
+    logo_url: request.logoUrl ?? null,
+    created_by_user_id,
+  };
+
+  return result;
+};
 
 export const transformTeamUpdateRequest = (
   request: TeamUpdateRequest
