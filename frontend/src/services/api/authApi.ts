@@ -232,6 +232,13 @@ export class AuthApi {
       return false;
     }
   }
+
+  /**
+   * Clear authentication token (alias for logout)
+   */
+  clearToken(): void {
+    this.clearTokens();
+  }
 }
 
 // Create singleton instance

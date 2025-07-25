@@ -36,6 +36,7 @@ import PageHeader from '../components/PageHeader';
 import CreateTeamModal from '../components/CreateTeamModal';
 import TeamContextMenu from '../components/TeamContextMenu';
 import { useTeams } from '../hooks/useTeams';
+import { matchesApi } from '../services/api/matchesApi';
 import type { Team } from '@shared/types';
 import './PageStyles.css';
 import './TeamsPage.css';
@@ -63,10 +64,37 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [matchCounts, setMatchCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadTeams();
   }, [loadTeams]);
+
+  // Load match counts for all teams
+  useEffect(() => {
+    const loadMatchCounts = async () => {
+      if (teams.length > 0) {
+        const counts: Record<string, number> = {};
+        
+        // Load match counts for all teams in parallel
+        await Promise.all(
+          teams.map(async (team) => {
+            try {
+              const matches = await matchesApi.getMatchesByTeam(team.id);
+              counts[team.id] = matches.length;
+            } catch (error) {
+              console.error(`Failed to load matches for team ${team.id}:`, error);
+              counts[team.id] = 0;
+            }
+          })
+        );
+        
+        setMatchCounts(counts);
+      }
+    };
+
+    loadMatchCounts();
+  }, [teams]);
 
   const navigate = (page: string) => {
     if (onNavigate) {
@@ -120,6 +148,7 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
     const hasTeamColors = team.homeKitPrimary && team.homeKitSecondary;
     const primaryColor = team.homeKitPrimary || 'var(--theme-primary, var(--ion-color-teal))';
     const secondaryColor = team.homeKitSecondary || 'var(--theme-primary-tint, var(--ion-color-teal-tint))';
+    const matchCount = matchCounts[team.id] ?? 0;
     
     const teamCardStyle = hasTeamColors ? {
       '--team-primary': primaryColor,
@@ -199,7 +228,7 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
             </IonChip>
             <IonChip color="medium" className="stat-chip">
               <IonIcon icon={statsChart} />
-              <span>0 matches</span>
+              <span>{matchCount} match{matchCount !== 1 ? 'es' : ''}</span>
             </IonChip>
           </div>
           {team.logoUrl && (

@@ -37,6 +37,7 @@ import { useSeasons } from '../hooks/useSeasons';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import 'dayjs/locale/en-gb';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { TextField } from '@mui/material';
 import dayjs, { Dayjs } from 'dayjs';
@@ -202,7 +203,7 @@ const CreateSeasonModal: React.FC<CreateSeasonModalProps> = ({
   const renderDatePicker = (label: string, field: 'startDate' | 'endDate') => (
     <div className={`${styles.datePickerWrapper} ${errors[field] && touched[field] ? styles.error : ''}`}>
       <ThemeProvider theme={muiTheme}>
-        <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="en-gb">
           <DatePicker
             label={label}
             value={formData[field]}

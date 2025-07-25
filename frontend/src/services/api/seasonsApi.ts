@@ -64,12 +64,12 @@ export const seasonsApi = {
    * Create a new season
    */
   async createSeason(seasonData: SeasonCreateRequest): Promise<SeasonResponse> {
-    // Transform frontend camelCase to backend snake_case if needed
+    // Transform frontend data to match backend schema
     const backendData = {
-      name: seasonData.name,
-      startDate: seasonData.startDate,
-      endDate: seasonData.endDate,
-      isActive: seasonData.isActive
+      label: seasonData.name,  // Backend expects 'label', not 'name'
+      startDate: seasonData.startDate ? seasonData.startDate.split('T')[0] : '', // Convert ISO to YYYY-MM-DD
+      endDate: seasonData.endDate ? seasonData.endDate.split('T')[0] : '',       // Convert ISO to YYYY-MM-DD
+      isCurrent: seasonData.isActive  // Backend expects 'isCurrent', not 'isActive'
     };
 
     const response = await apiClient.post('/seasons', backendData);
@@ -84,12 +84,12 @@ export const seasonsApi = {
    * Update an existing season
    */
   async updateSeason(id: string, seasonData: SeasonUpdateRequest): Promise<SeasonResponse> {
-    // Transform frontend camelCase to backend snake_case if needed
+    // Transform frontend data to match backend schema
     const backendData = {
-      name: seasonData.name,
-      startDate: seasonData.startDate,
-      endDate: seasonData.endDate,
-      isActive: seasonData.isActive
+      label: seasonData.name,  // Backend expects 'label', not 'name'
+      startDate: seasonData.startDate ? seasonData.startDate.split('T')[0] : undefined, // Convert ISO to YYYY-MM-DD
+      endDate: seasonData.endDate ? seasonData.endDate.split('T')[0] : undefined,       // Convert ISO to YYYY-MM-DD
+      isCurrent: seasonData.isActive  // Backend expects 'isCurrent', not 'isActive'
     };
 
     // Remove undefined values

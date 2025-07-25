@@ -36,6 +36,7 @@ import PageHeader from '../components/PageHeader';
 import CreateSeasonModal from '../components/CreateSeasonModal';
 import SeasonContextMenu from '../components/SeasonContextMenu';
 import { useSeasons } from '../hooks/useSeasons';
+import { matchesApi } from '../services/api/matchesApi';
 import type { Season } from '@shared/types';
 import './PageStyles.css';
 import './SeasonsPage.css';
@@ -62,10 +63,37 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [matchCounts, setMatchCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadSeasons();
   }, [loadSeasons]);
+
+  // Load match counts for all seasons
+  useEffect(() => {
+    const loadMatchCounts = async () => {
+      if (seasons.length > 0) {
+        const counts: Record<string, number> = {};
+        
+        // Load match counts for all seasons in parallel
+        await Promise.all(
+          seasons.map(async (season) => {
+            try {
+              const matches = await matchesApi.getMatchesBySeason(season.id);
+              counts[season.id] = matches.length;
+            } catch (error) {
+              console.error(`Failed to load matches for season ${season.id}:`, error);
+              counts[season.id] = 0;
+            }
+          })
+        );
+        
+        setMatchCounts(counts);
+      }
+    };
+
+    loadMatchCounts();
+  }, [seasons]);
 
   const navigate = (page: string) => {
     if (onNavigate) {
@@ -94,7 +122,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
         setShowDeleteAlert(true);
         break;
       case 'stats':
-        console.log('View stats for:', selectedSeason.name);
+        console.log('View stats for:', selectedSeason.label);
         setSelectedSeason(null);
         break;
     }
@@ -111,14 +139,15 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
   const formatDateRange = (startDate: string, endDate: string) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const startFormatted = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const endFormatted = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const startFormatted = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const endFormatted = end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     return `${startFormatted} - ${endFormatted}`;
   };
 
   const renderSeasonCard = (season: Season) => {
-    const isActive = season.isActive;
+    const isActive = season.isCurrent;
     const statusColor = isActive ? 'success' : 'medium';
+    const matchCount = matchCounts[season.id] ?? 0;
     
     return (
       <IonCol size="12" sizeMd="6" sizeLg="4" key={season.id}>
@@ -129,10 +158,10 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
           <IonCardHeader>
             <div className="season-card-header">
               <div className="season-info">
-                <IonCardTitle className="season-name">{season.name}</IonCardTitle>
+                <IonCardTitle className="season-name">{season.label}</IonCardTitle>
                 <div className="season-dates">
                   <IonIcon icon={calendar} />
-                  <span>{formatDateRange(season.startDate, season.endDate)}</span>
+                  <span>{formatDateRange(season.startDate ?? '', season.endDate ?? '')}</span>
                 </div>
               </div>
               <IonButton 
@@ -162,7 +191,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
               </IonChip>
               <IonChip color="medium" className="stat-chip">
                 <IonIcon icon={statsChart} />
-                <span>0 matches</span>
+                <span>{matchCount} match{matchCount !== 1 ? 'es' : ''}</span>
               </IonChip>
             </div>
           </IonCardContent>
@@ -295,7 +324,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
           isOpen={showDeleteAlert}
           onDidDismiss={() => setShowDeleteAlert(false)}
           header="Delete Season"
-          message={`Are you sure you want to delete "${selectedSeason?.name}"? This action cannot be undone.`}
+          message={`Are you sure you want to delete "${selectedSeason?.label}"? This action cannot be undone.`}
           buttons={[
             {
               text: 'Cancel',
