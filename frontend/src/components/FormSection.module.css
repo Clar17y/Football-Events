@@ -67,8 +67,8 @@
   --border-radius: var(--grassroots-radius-sm);
   --padding-start: 0;
   --padding-end: 0;
-  --padding-top: var(--grassroots-space-sm);
-  --padding-bottom: var(--grassroots-space-sm);
+  --padding-top: 0;
+  --padding-bottom: 0;
   margin-bottom: var(--grassroots-space-sm);
   border: none;
   border-radius: var(--grassroots-radius-sm);
@@ -99,9 +99,8 @@
   --color: var(--theme-on-surface, var(--grassroots-text-primary));
   font-weight: 600;
   font-size: 0.9rem;
-  margin-bottom: var(--grassroots-space-xs);
-  margin-left: 4px;
-  margin-top: var(--grassroots-space-xs);
+  margin-bottom: var(--grassroots-space-xs) !important;
+  margin-left: 6px !important;
 }
 
 .formInput {
