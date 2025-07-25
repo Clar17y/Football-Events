@@ -1,0 +1,145 @@
+/* ===== DATE PICKER MODAL STYLES ===== */
+/* Beautiful date picker following the grassroots design system */
+
+.date-picker-modal {
+  --width: 100%;
+  --max-width: 500px;
+  --height: 100%;
+  --max-height: 80vh;
+  --border-radius: var(--grassroots-radius-lg);
+}
+
+.date-picker-content {
+  --background: var(--grassroots-background);
+  --padding-top: 0;
+  --padding-bottom: 0;
+  --padding-start: 0;
+  --padding-end: 0;
+}
+
+/* Date Picker Container */
+.date-picker-container {
+  padding: var(--grassroots-space-lg);
+  max-width: 100%;
+}
+
+/* Date Preview Section */
+.date-preview-section {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-md);
+  padding: var(--grassroots-space-lg);
+  margin-bottom: var(--grassroots-space-md);
+  background: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-primary-shade) 100%);
+  border-radius: var(--grassroots-radius-md);
+  color: white;
+}
+
+.date-preview-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--grassroots-radius-sm);
+  font-size: 1.5rem;
+}
+
+.date-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.date-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.date-label {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  font-weight: 500;
+}
+
+/* Date Picker Section */
+.date-picker-section {
+  margin-bottom: var(--grassroots-space-lg);
+}
+
+.date-picker-item {
+  --background: var(--grassroots-surface);
+  --border-radius: var(--grassroots-radius-md);
+  --padding-start: var(--grassroots-space-md);
+  --padding-end: var(--grassroots-space-md);
+  --padding-top: var(--grassroots-space-md);
+  --padding-bottom: var(--grassroots-space-md);
+  margin-bottom: var(--grassroots-space-sm);
+  border: 1px solid var(--grassroots-surface-variant);
+}
+
+.custom-datetime {
+  --color: var(--grassroots-text-primary);
+  --placeholder-color: var(--grassroots-text-secondary);
+}
+
+/* Action Buttons */
+.date-picker-actions {
+  display: flex;
+  gap: var(--grassroots-space-sm);
+  margin-top: var(--grassroots-space-xl);
+}
+
+.cancel-button {
+  --color: var(--grassroots-text-secondary);
+  --background: transparent;
+  --background-hover: var(--grassroots-surface-variant);
+  --border-radius: var(--grassroots-radius-md);
+  font-weight: 600;
+  flex: 1;
+}
+
+.confirm-button {
+  --border-radius: var(--grassroots-radius-md);
+  font-weight: 600;
+  flex: 2;
+}
+
+/* Dark mode support */
+.dark-theme .date-picker-content {
+  --background: var(--grassroots-background-dark);
+}
+
+.dark-theme .date-picker-item {
+  --background: var(--grassroots-surface-dark);
+  border-color: var(--grassroots-surface-variant-dark);
+}
+
+.dark-theme .custom-datetime {
+  --color: var(--grassroots-text-primary-dark);
+  --placeholder-color: var(--grassroots-text-secondary-dark);
+}
+
+.dark-theme .cancel-button {
+  --color: var(--grassroots-text-secondary-dark);
+  --background-hover: var(--grassroots-surface-variant-dark);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .date-picker-container {
+    padding: var(--grassroots-space-md);
+  }
+  
+  .date-picker-actions {
+    flex-direction: column;
+  }
+  
+  .cancel-button,
+  .confirm-button {
+    flex: 1;
+  }
+}

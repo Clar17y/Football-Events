@@ -1,0 +1,343 @@
+/* ===== SHARED FORM SECTION STYLES ===== */
+/* Structural layout and spacing - no colors hardcoded */
+
+.modal {
+  --width: 100%;
+  --max-width: 600px;
+  --height: 100%;
+  --max-height: 90vh;
+  --border-radius: var(--grassroots-radius-lg);
+}
+
+.content {
+  --background: var(--theme-background, var(--grassroots-background));
+  --padding-top: 0;
+  --padding-bottom: 0;
+  --padding-start: 0;
+  --padding-end: 0;
+}
+
+.container {
+  padding: var(--grassroots-space-sm);
+  max-width: 100%;
+}
+
+/* Form Sections */
+.sectionCard {
+  margin-bottom: var(--grassroots-space-sm);
+  border-radius: var(--grassroots-radius-md);
+  box-shadow: var(--grassroots-shadow-sm);
+  border: 1px solid var(--theme-surface-variant, var(--grassroots-surface-variant));
+  background: var(--theme-surface, var(--grassroots-surface));
+}
+
+.sectionHeader {
+  background: var(--theme-primary, var(--ion-color-primary)) !important;
+  --color: var(--theme-on-primary, white);
+  border-radius: var(--grassroots-radius-md) var(--grassroots-radius-md) 0 0;
+  padding: var(--grassroots-space-md);
+}
+
+.sectionTitle {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--theme-on-primary, white) !important;
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-sm);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.sectionIcon {
+  font-size: 1.2rem;
+  color: var(--theme-on-primary, white) !important;
+}
+
+.sectionContent {
+  --background: var(--theme-surface, var(--grassroots-surface));
+  background: var(--theme-surface, var(--grassroots-surface)) !important;
+  padding: var(--grassroots-space-md);
+}
+
+/* Form Items */
+.formItem {
+  --background: transparent !important;
+  --border-radius: var(--grassroots-radius-sm);
+  --padding-start: 0;
+  --padding-end: 0;
+  --padding-top: var(--grassroots-space-sm);
+  --padding-bottom: var(--grassroots-space-sm);
+  margin-bottom: var(--grassroots-space-sm);
+  border: none;
+  border-radius: var(--grassroots-radius-sm);
+  transition: all 0.2s ease;
+  --border-width: 0;
+  --inner-border-width: 0;
+}
+
+/* Remove Ionic's default item-inner border/underline */
+.formItem .item-inner {
+  border-bottom: none !important;
+  --border-width: 0 !important;
+  --inner-border-width: 0 !important;
+}
+
+.formItem.error {
+  border-color: var(--ion-color-danger);
+  background: rgba(var(--ion-color-danger-rgb), 0.05);
+}
+
+/* Remove focus styling from the item container */
+.formItem:focus-within {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.formLabel {
+  --color: var(--theme-on-surface, var(--grassroots-text-primary));
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: var(--grassroots-space-xs);
+  margin-left: 4px;
+  margin-top: var(--grassroots-space-xs);
+}
+
+.formInput {
+  --color: var(--theme-on-surface, var(--grassroots-text-primary));
+  --placeholder-color: var(--theme-on-surface-variant, var(--grassroots-text-secondary));
+  font-size: 0.95rem;
+  font-weight: 500;
+  --background: transparent !important;
+  --border-style: solid;
+  --border-color: var(--theme-surface-variant, var(--grassroots-surface-variant));
+  --highlight-color-focused: var(--theme-primary, var(--ion-color-primary));
+  --highlight-height: 2px;
+  --border-radius: var(--grassroots-radius-sm);
+  --padding-start: var(--grassroots-space-sm);
+  --padding-end: var(--grassroots-space-sm);
+  --padding-top: var(--grassroots-space-sm);
+  --padding-bottom: var(--grassroots-space-sm);
+  margin-top: var(--grassroots-space-xs);
+  margin-left: 4px;
+  margin-right: 8px;
+  width: calc(100% - 12px);
+  border: 2px solid var(--theme-surface-variant, var(--grassroots-surface-variant));
+  border-radius: var(--grassroots-radius-sm);
+  --border-style: none;
+  --highlight-color-invalid: transparent;
+}
+
+/* Enhanced focus styling for inputs */
+.formInput:focus-within {
+  --highlight-color-focused: var(--theme-primary, var(--ion-color-primary)) !important;
+  --highlight-height: 4px !important;
+  border: 3px solid var(--theme-primary, var(--ion-color-primary)) !important;
+  box-shadow: 0 0 0 3px rgba(var(--theme-primary-rgb, var(--ion-color-primary-rgb)), 0.15) !important;
+  transform: scale(1.01);
+  transition: all 0.2s ease;
+}
+
+.formInput.error:focus-within {
+  --highlight-color-focused: var(--ion-color-danger) !important;
+  border: 3px solid var(--ion-color-danger) !important;
+  box-shadow: 0 0 0 3px rgba(var(--ion-color-danger-rgb), 0.15) !important;
+}
+
+/* Date Picker Wrapper */
+.datePickerWrapper {
+  margin-top: var(--grassroots-space-md);
+  margin-bottom: var(--grassroots-space-sm);
+}
+
+.datePickerWrapper.error .MuiOutlinedInput-root fieldset {
+  border-color: var(--ion-color-danger) !important;
+}
+
+/* Action Buttons */
+.formActions {
+  display: flex;
+  gap: var(--grassroots-space-sm);
+  margin-top: var(--grassroots-space-xl);
+  padding: var(--grassroots-space-md) 0;
+}
+
+.cancelButton {
+  --color: var(--theme-on-surface-variant, var(--grassroots-text-secondary));
+  --background: transparent;
+  --background-hover: var(--theme-surface-variant, var(--grassroots-surface-variant));
+  --border-radius: var(--grassroots-radius-md);
+  font-weight: 600;
+  flex: 1;
+}
+
+.submitButton {
+  --border-radius: var(--grassroots-radius-md);
+  font-weight: 600;
+  flex: 2;
+  --background: var(--theme-primary, var(--ion-color-primary));
+  --background-activated: var(--theme-primary-shade, var(--ion-color-primary-shade));
+  --background-hover: var(--theme-primary-tint, var(--ion-color-primary-tint));
+  --color: var(--theme-on-primary, white);
+  opacity: 1 !important;
+}
+
+/* Error Text */
+.errorText {
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-top: var(--grassroots-space-xs);
+  margin-left: var(--grassroots-space-sm);
+  display: block;
+}
+
+/* Color Input Row */
+.colorInputRow {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-sm);
+  width: 100%;
+}
+
+/* Color Preview */
+.colorPreview {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-xs);
+  cursor: pointer;
+}
+
+.colorPreviewDot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.colorPreviewDot:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.colorPreviewLabel {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--theme-on-surface, var(--grassroots-text-primary));
+}
+
+/* Logo Preview */
+.logoPreview {
+  margin-top: var(--grassroots-space-sm);
+  text-align: center;
+}
+
+.logoPreview img {
+  max-width: 100px;
+  max-height: 100px;
+  border-radius: var(--grassroots-radius-sm);
+  box-shadow: var(--grassroots-shadow-sm);
+}
+
+/* Dark mode support - using CSS custom properties for better theme integration */
+:global(.dark-theme) .content {
+  --theme-background: #1e1e1e;
+}
+
+:global(.dark-theme) .sectionCard {
+  --theme-surface: #2a2a2a;
+  --theme-surface-variant: #3a3a3a;
+}
+
+:global(.dark-theme) .sectionContent {
+  --theme-surface: #2a2a2a;
+}
+
+:global(.dark-theme) .formItem {
+  border-color: transparent;
+  background: transparent;
+}
+
+:global(.dark-theme) .formItem.error {
+  background: rgba(var(--ion-color-danger-rgb), 0.1);
+}
+
+:global(.dark-theme) .formLabel {
+  --theme-on-surface: #ffffff !important;
+  color: #ffffff !important;
+}
+
+:global(.dark-theme) .formInput {
+  --theme-on-surface: #ffffff !important;
+  --theme-on-surface-variant: #888888 !important;
+  color: #ffffff !important;
+  --placeholder-color: #888888 !important;
+}
+
+/* Ensure Ionic input elements get the right colors in dark mode */
+:global(.dark-theme) .formInput {
+  --color: #ffffff !important;
+}
+
+:global(.dark-theme) .formInput input {
+  color: #ffffff !important;
+}
+
+:global(.dark-theme) .formInput input::placeholder {
+  color: #888888 !important;
+}
+
+/* Target IonInput specifically for dark mode */
+:global(.dark-theme) ion-input {
+  --color: #ffffff !important;
+  --placeholder-color: #888888 !important;
+}
+
+:global(.dark-theme) ion-input input {
+  color: #ffffff !important;
+}
+
+:global(.dark-theme) .cancelButton {
+  --theme-on-surface-variant: #888888;
+  --theme-surface-variant: #3a3a3a;
+}
+
+:global(.dark-theme) .colorPreviewLabel {
+  --theme-on-surface: #ffffff !important;
+  color: #ffffff !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .container {
+    padding: var(--grassroots-space-xs);
+  }
+  
+  .sectionHeader {
+    padding: var(--grassroots-space-sm);
+  }
+  
+  .sectionContent {
+    padding: var(--grassroots-space-sm);
+  }
+  
+  .sectionTitle {
+    font-size: 0.9rem;
+  }
+  
+  .sectionIcon {
+    font-size: 1.1rem;
+  }
+  
+  .formActions {
+    flex-direction: column;
+    gap: var(--grassroots-space-xs);
+  }
+  
+  .cancelButton,
+  .submitButton {
+    flex: 1;
+  }
+}

@@ -1,0 +1,299 @@
+/* ===== SEASONS PAGE STYLES ===== */
+/* Beautiful, modern season management interface following the grassroots design system */
+
+/* Seasons Header Section */
+.seasons-header {
+  padding: var(--grassroots-space-lg) var(--grassroots-space-md) var(--grassroots-space-md);
+  background: linear-gradient(135deg, var(--grassroots-surface) 0%, var(--grassroots-surface-elevated) 100%);
+  border-bottom: 1px solid var(--grassroots-surface-variant);
+}
+
+.seasons-title-section {
+  margin-bottom: var(--grassroots-space-md);
+}
+
+.seasons-main-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  font-size: 1.75rem;
+  color: white;
+  margin: 0;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  padding: var(--grassroots-space-sm) var(--grassroots-space-md);
+  border-radius: var(--grassroots-radius-sm);
+}
+
+.seasons-subtitle {
+  font-size: 0.95rem;
+  color: var(--grassroots-text-secondary);
+  margin: var(--grassroots-space-xs) 0 0 0;
+  font-weight: 500;
+}
+
+.seasons-search {
+  --background: var(--grassroots-surface);
+  --border-radius: var(--grassroots-radius-md);
+  --box-shadow: var(--grassroots-shadow-sm);
+  --color: var(--grassroots-text-primary);
+  --placeholder-color: var(--grassroots-text-secondary);
+  margin-top: var(--grassroots-space-sm);
+}
+
+/* Seasons Content */
+.seasons-content {
+  padding: var(--grassroots-space-md);
+}
+
+/* Season Cards */
+.season-card {
+  position: relative;
+  margin-bottom: var(--grassroots-space-md);
+  border-radius: var(--grassroots-radius-md);
+  box-shadow: var(--grassroots-shadow-sm);
+  border: 1px solid var(--grassroots-surface-variant);
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.season-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--grassroots-shadow-md);
+}
+
+.season-card-active {
+  border-left: 4px solid var(--ion-color-primary);
+}
+
+.season-card-inactive {
+  border-left: 4px solid var(--ion-color-medium);
+}
+
+/* Season Status Bar */
+.season-status-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 1;
+}
+
+.season-status-bar.active {
+  background: linear-gradient(90deg, var(--ion-color-primary) 0%, var(--ion-color-primary-tint) 100%);
+}
+
+.season-status-bar.inactive {
+  background: linear-gradient(90deg, var(--ion-color-medium) 0%, var(--ion-color-medium-tint) 100%);
+}
+
+/* Season Card Header */
+.season-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--grassroots-space-sm);
+}
+
+.season-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.season-name {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--grassroots-text-primary);
+  margin: 0 0 var(--grassroots-space-xs) 0;
+  line-height: 1.3;
+  word-wrap: break-word;
+}
+
+.season-dates {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-xs);
+  font-size: 0.85rem;
+  color: var(--grassroots-text-secondary);
+  font-weight: 500;
+}
+
+.season-dates ion-icon {
+  font-size: 1rem;
+  color: var(--ion-color-primary);
+}
+
+/* Season ellipses button styling */
+.season-ellipses-button {
+  color: black;
+  --padding-start: 8px;
+  --padding-end: 8px;
+  --padding-top: 8px;
+  --padding-bottom: 8px;
+}
+
+.dark-theme .season-ellipses-button {
+  color: white;
+}
+
+/* Season Stats */
+.season-stats {
+  display: flex;
+  gap: var(--grassroots-space-xs);
+  flex-wrap: wrap;
+  margin-top: var(--grassroots-space-sm);
+}
+
+.status-chip {
+  --background: var(--ion-color-success-tint);
+  --color: var(--ion-color-success-shade);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.stat-chip {
+  --background: var(--ion-color-medium-tint);
+  --color: var(--ion-color-medium-shade);
+  font-weight: 500;
+  font-size: 0.8rem;
+}
+
+.status-chip ion-icon,
+.stat-chip ion-icon {
+  font-size: 0.9rem;
+  margin-right: 4px;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--grassroots-space-xl) var(--grassroots-space-md);
+  min-height: 400px;
+}
+
+.empty-icon {
+  font-size: 4rem;
+  color: var(--ion-color-primary);
+  margin-bottom: var(--grassroots-space-md);
+  opacity: 0.7;
+}
+
+.empty-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  font-size: 1.25rem;
+  color: var(--grassroots-text-primary);
+  margin: 0 0 var(--grassroots-space-sm) 0;
+}
+
+.empty-subtitle {
+  font-size: 0.95rem;
+  color: var(--grassroots-text-secondary);
+  margin: 0 0 var(--grassroots-space-lg) 0;
+  max-width: 300px;
+  line-height: 1.4;
+}
+
+.empty-action {
+  --border-radius: var(--grassroots-radius-md);
+  font-weight: 600;
+  max-width: 250px;
+}
+
+/* Dark mode support */
+.dark-theme .seasons-header {
+  background: linear-gradient(135deg, var(--grassroots-surface-dark) 0%, var(--grassroots-surface-elevated-dark) 100%);
+  border-bottom-color: var(--grassroots-surface-variant-dark);
+}
+
+.dark-theme .seasons-subtitle {
+  color: var(--grassroots-text-secondary-dark);
+}
+
+.dark-theme .seasons-search {
+  --background: var(--grassroots-surface-dark);
+  --color: var(--grassroots-text-primary-dark);
+  --placeholder-color: var(--grassroots-text-secondary-dark);
+}
+
+.dark-theme .season-card {
+  background: var(--grassroots-surface-dark);
+  border-color: var(--grassroots-surface-variant-dark);
+}
+
+.dark-theme .season-name {
+  color: var(--grassroots-text-primary-dark);
+}
+
+.dark-theme .season-dates {
+  color: var(--grassroots-text-secondary-dark);
+}
+
+.dark-theme .empty-title {
+  color: var(--grassroots-text-primary-dark);
+}
+
+.dark-theme .empty-subtitle {
+  color: var(--grassroots-text-secondary-dark);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .seasons-header {
+    padding: var(--grassroots-space-md) var(--grassroots-space-sm) var(--grassroots-space-sm);
+  }
+  
+  .seasons-main-title {
+    font-size: 1.5rem;
+    padding: var(--grassroots-space-xs) var(--grassroots-space-sm);
+  }
+  
+  .seasons-content {
+    padding: var(--grassroots-space-sm);
+  }
+  
+  .season-card-header {
+    align-items: center;
+  }
+  
+  .season-name {
+    font-size: 1rem;
+  }
+  
+  .season-dates {
+    font-size: 0.8rem;
+  }
+  
+  .empty-state {
+    padding: var(--grassroots-space-lg) var(--grassroots-space-sm);
+    min-height: 300px;
+  }
+  
+  .empty-icon {
+    font-size: 3rem;
+  }
+  
+  .empty-title {
+    font-size: 1.1rem;
+  }
+  
+  .empty-subtitle {
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .season-stats {
+    justify-content: center;
+  }
+  
+  .status-chip,
+  .stat-chip {
+    font-size: 0.75rem;
+  }
+}

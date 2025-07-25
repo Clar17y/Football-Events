@@ -1,0 +1,58 @@
+/* ===== THEME TOKENS ===== */
+/* Semantic color tokens that can be overridden per page/modal */
+
+:root {
+  /* Default theme tokens */
+  --theme-primary: var(--ion-color-primary);
+  --theme-primary-shade: var(--ion-color-primary-shade);
+  --theme-primary-tint: var(--ion-color-primary-tint);
+  --theme-primary-rgb: var(--ion-color-primary-rgb);
+  --theme-on-primary: #ffffff;
+  
+  --theme-surface: var(--grassroots-surface);
+  --theme-surface-variant: var(--grassroots-surface-variant);
+  --theme-on-surface: var(--grassroots-text-primary);
+  --theme-on-surface-variant: var(--grassroots-text-secondary);
+  
+  --theme-background: var(--grassroots-background);
+}
+
+/* Theme overrides for pages and modals */
+/* Team theme - Teal colors */
+ion-page[data-theme='team'],
+ion-modal[data-theme='team'],
+.page[data-theme='team'],
+.modal[data-theme='team'],
+[data-theme='team'],
+[data-theme='team'] * {
+  --theme-primary: var(--ion-color-teal);
+  --theme-primary-shade: var(--ion-color-teal-shade);
+  --theme-primary-tint: var(--ion-color-teal-tint);
+  --theme-primary-rgb: var(--ion-color-teal-rgb);
+}
+
+/* Season theme - Blue colors */
+ion-page[data-theme='season'],
+ion-modal[data-theme='season'],
+.page[data-theme='season'],
+.modal[data-theme='season'],
+[data-theme='season'],
+[data-theme='season'] * {
+  --theme-primary: var(--ion-color-primary);
+  --theme-primary-shade: var(--ion-color-primary-shade);
+  --theme-primary-tint: var(--ion-color-primary-tint);
+  --theme-primary-rgb: var(--ion-color-primary-rgb);
+}
+
+/* Dark mode adjustments */
+.dark-theme,
+.dark-theme [data-theme='team'],
+.dark-theme [data-theme='season'],
+.dark-theme [data-theme='team'] *,
+.dark-theme [data-theme='season'] * {
+  --theme-background: #1e1e1e !important;
+  --theme-surface: #2a2a2a !important;
+  --theme-surface-variant: #3a3a3a !important;
+  --theme-on-surface: #ffffff !important;
+  --theme-on-surface-variant: #888888 !important;
+}

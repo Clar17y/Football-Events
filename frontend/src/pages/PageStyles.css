@@ -19,7 +19,7 @@
 
 .title-icon {
   font-size: 1.5rem;
-  color: var(--grassroots-text-on-dark);
+  color: white;
 }
 
 /* Page Header with Color Background */
@@ -53,8 +53,9 @@
 
 /* White text on colored backgrounds */
 .page-header-with-color .page-main-title,
-.page-header-with-color .teams-main-title {
-  color: white;
+.page-header-with-color .teams-main-title,
+.page-header-with-color .seasons-main-title {
+  color: white !important;
 }
 
 /* Apply theme-aware styles to all pages */
@@ -116,7 +117,7 @@ li {
 
 /* Icon styling */
 .page-icon {
-  color: var(--grassroots-text-tertiary);
+  color: var(--ion-color-medium);
 }
 
 /* Fab button theming */

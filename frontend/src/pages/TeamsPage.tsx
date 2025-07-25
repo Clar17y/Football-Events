@@ -118,8 +118,8 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
   const renderTeamCard = (team: Team) => {
     // Generate dynamic styles for team colors
     const hasTeamColors = team.homeKitPrimary && team.homeKitSecondary;
-    const primaryColor = team.homeKitPrimary || 'var(--ion-color-teal)';
-    const secondaryColor = team.homeKitSecondary || 'var(--ion-color-teal-tint)';
+    const primaryColor = team.homeKitPrimary || 'var(--theme-primary, var(--ion-color-teal))';
+    const secondaryColor = team.homeKitSecondary || 'var(--theme-primary-tint, var(--ion-color-teal-tint))';
     
     const teamCardStyle = hasTeamColors ? {
       '--team-primary': primaryColor,
@@ -253,7 +253,7 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
   );
 
   return (
-    <IonPage>
+    <IonPage className="page" data-theme="team">
       <PageHeader 
         onNavigate={navigate}
         additionalButtons={
@@ -280,7 +280,7 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
 
         <div className="teams-header">
           <div className="teams-title-section">
-            <div className="page-header-with-color" style={{ backgroundColor: 'var(--ion-color-teal)' }}>
+            <div className="page-header-with-color" style={{ backgroundColor: 'var(--theme-primary, var(--ion-color-teal))' }}>
               <h1 className="teams-main-title">Teams</h1>
             </div>
             <p className="teams-subtitle">
@@ -313,7 +313,11 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
 
         <IonFab vertical="bottom" horizontal="end" slot="fixed">
           <IonFabButton 
-            color="teal"
+            style={{ 
+              '--background': 'var(--theme-primary, var(--ion-color-teal))',
+              '--background-activated': 'var(--theme-primary-shade, var(--ion-color-teal-shade))',
+              '--color': 'var(--theme-on-primary, white)'
+            } as React.CSSProperties}
             onClick={() => setShowCreateModal(true)}
           >
             <IonIcon icon={add} />

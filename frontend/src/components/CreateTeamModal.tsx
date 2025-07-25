@@ -35,7 +35,7 @@ import {
 import { useTeams } from '../hooks/useTeams';
 import ColorPickerModal from './ColorPickerModal';
 import type { Team, TeamCreateRequest } from '@shared/types';
-import './CreateTeamModal.css';
+import styles from './FormSection.module.css';
 
 interface CreateTeamModalProps {
   isOpen: boolean;
@@ -251,22 +251,27 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
   };
 
   const renderColorPreview = (color: string, label: string, field: keyof FormData) => (
-    <div className="color-preview">
+    <div className={styles.colorPreview}>
       <div 
-        className="color-preview-dot"
+        className={styles.colorPreviewDot}
         style={{ 
           backgroundColor: color || '#f0f0f0',
-          border: color ? '2px solid var(--grassroots-surface-variant)' : '2px dashed var(--grassroots-text-tertiary)'
+          border: color ? '2px solid var(--theme-surface-variant, var(--grassroots-surface-variant))' : '2px dashed var(--theme-on-surface-variant, var(--grassroots-text-tertiary))'
         }}
         onClick={() => handleColorPickerOpen(field)}
         title={`Click to choose ${label.toLowerCase()} color`}
       />
-      <span className="color-preview-label">{label}</span>
+      <span className={styles.colorPreviewLabel}>{label}</span>
     </div>
   );
 
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={onDidDismiss} className="create-team-modal">
+    <IonModal 
+      isOpen={isOpen} 
+      onDidDismiss={onDidDismiss} 
+      className={styles.modal}
+      data-theme="team"
+    >
       <IonHeader>
         <IonToolbar color="teal">
           <IonTitle>{mode === 'edit' ? 'Edit Team' : 'Create New Team'}</IonTitle>
@@ -282,22 +287,22 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
         </IonToolbar>
       </IonHeader>
       
-      <IonContent className="create-team-content">
-        <div className="form-container">
+      <IonContent className={styles.content}>
+        <div className={styles.container}>
           {/* Team Name Section */}
-          <IonCard className="form-section">
-            <IonCardHeader>
-              <IonCardTitle>
-                <IonIcon icon={shirt} className="section-icon" />
+          <IonCard className={styles.sectionCard}>
+            <IonCardHeader className={styles.sectionHeader}>
+              <IonCardTitle className={styles.sectionTitle}>
+                <IonIcon icon={shirt} className={styles.sectionIcon} />
                 Team Information
               </IonCardTitle>
             </IonCardHeader>
-            <IonCardContent>
+            <IonCardContent className={styles.sectionContent}>
               <IonGrid>
                 <IonRow>
                   <IonCol size="12">
-                    <IonItem className={`form-item ${errors.name && touched.name ? 'error' : ''}`}>
-                      <IonLabel position="stacked">Team Name *</IonLabel>
+                    <IonItem className={`${styles.formItem} ${errors.name && touched.name ? styles.error : ''}`}>
+                      <IonLabel position="stacked" className={styles.formLabel}>Team Name *</IonLabel>
                       <IonInput
                         value={formData.name}
                         onIonInput={(e) => handleInputChange('name', e.detail.value!)}
@@ -305,10 +310,11 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
                         placeholder="Enter team name"
                         maxlength={100}
                         disabled={loading}
+                        className={styles.formInput}
                       />
                     </IonItem>
                     {errors.name && touched.name && (
-                      <IonText color="danger" className="error-text">
+                      <IonText color="danger" className={styles.errorText}>
                         {errors.name}
                       </IonText>
                     )}
@@ -319,33 +325,33 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
           </IonCard>
 
           {/* Home Kit Colors */}
-          <IonCard className="form-section">
-            <IonCardHeader>
-              <IonCardTitle>
-                <IonIcon icon={colorPalette} className="section-icon" />
+          <IonCard className={styles.sectionCard}>
+            <IonCardHeader className={styles.sectionHeader}>
+              <IonCardTitle className={styles.sectionTitle}>
+                <IonIcon icon={colorPalette} className={styles.sectionIcon} />
                 Home Kit Colors
               </IonCardTitle>
             </IonCardHeader>
-            <IonCardContent>
+            <IonCardContent className={styles.sectionContent}>
               <IonGrid>
                 <IonRow>
                   <IonCol size="12">
-                    <IonItem className={`form-item ${errors.homeKitPrimary && touched.homeKitPrimary ? 'error' : ''}`}>
-                      <IonLabel position="stacked">Primary Color</IonLabel>
-                      <div className="color-input-row">
+                    <IonItem className={`${styles.formItem} ${errors.homeKitPrimary && touched.homeKitPrimary ? styles.error : ''}`}>
+                      <IonLabel position="stacked" className={styles.formLabel}>Primary Color</IonLabel>
+                      <div className={styles.colorInputRow}>
                         <IonInput
                           value={formData.homeKitPrimary}
                           onIonInput={(e) => handleInputChange('homeKitPrimary', e.detail.value!)}
                           onIonBlur={() => handleInputBlur('homeKitPrimary')}
                           placeholder="#FF0000"
                           disabled={loading}
-                          className="color-input"
+                          className={styles.formInput}
                         />
                         {renderColorPreview(formData.homeKitPrimary, 'Pick', 'homeKitPrimary')}
                       </div>
                     </IonItem>
                     {errors.homeKitPrimary && touched.homeKitPrimary && (
-                      <IonText color="danger" className="error-text">
+                      <IonText color="danger" className={styles.errorText}>
                         {errors.homeKitPrimary}
                       </IonText>
                     )}
@@ -353,22 +359,22 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
                 </IonRow>
                 <IonRow>
                   <IonCol size="12">
-                    <IonItem className={`form-item ${errors.homeKitSecondary && touched.homeKitSecondary ? 'error' : ''}`}>
-                      <IonLabel position="stacked">Secondary Color</IonLabel>
-                      <div className="color-input-row">
+                    <IonItem className={`${styles.formItem} ${errors.homeKitSecondary && touched.homeKitSecondary ? styles.error : ''}`}>
+                      <IonLabel position="stacked" className={styles.formLabel}>Secondary Color</IonLabel>
+                      <div className={styles.colorInputRow}>
                         <IonInput
                           value={formData.homeKitSecondary}
                           onIonInput={(e) => handleInputChange('homeKitSecondary', e.detail.value!)}
                           onIonBlur={() => handleInputBlur('homeKitSecondary')}
                           placeholder="#FFFFFF"
                           disabled={loading}
-                          className="color-input"
+                          className={styles.formInput}
                         />
                         {renderColorPreview(formData.homeKitSecondary, 'Pick', 'homeKitSecondary')}
                       </div>
                     </IonItem>
                     {errors.homeKitSecondary && touched.homeKitSecondary && (
-                      <IonText color="danger" className="error-text">
+                      <IonText color="danger" className={styles.errorText}>
                         {errors.homeKitSecondary}
                       </IonText>
                     )}
@@ -379,33 +385,33 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
           </IonCard>
 
           {/* Away Kit Colors */}
-          <IonCard className="form-section">
-            <IonCardHeader>
-              <IonCardTitle>
-                <IonIcon icon={colorPalette} className="section-icon" />
+          <IonCard className={styles.sectionCard}>
+            <IonCardHeader className={styles.sectionHeader}>
+              <IonCardTitle className={styles.sectionTitle}>
+                <IonIcon icon={colorPalette} className={styles.sectionIcon} />
                 Away Kit Colors
               </IonCardTitle>
             </IonCardHeader>
-            <IonCardContent>
+            <IonCardContent className={styles.sectionContent}>
               <IonGrid>
                 <IonRow>
                   <IonCol size="12">
-                    <IonItem className={`form-item ${errors.awayKitPrimary && touched.awayKitPrimary ? 'error' : ''}`}>
-                      <IonLabel position="stacked">Primary Color</IonLabel>
-                      <div className="color-input-row">
+                    <IonItem className={`${styles.formItem} ${errors.awayKitPrimary && touched.awayKitPrimary ? styles.error : ''}`}>
+                      <IonLabel position="stacked" className={styles.formLabel}>Primary Color</IonLabel>
+                      <div className={styles.colorInputRow}>
                         <IonInput
                           value={formData.awayKitPrimary}
                           onIonInput={(e) => handleInputChange('awayKitPrimary', e.detail.value!)}
                           onIonBlur={() => handleInputBlur('awayKitPrimary')}
                           placeholder="#0000FF"
                           disabled={loading}
-                          className="color-input"
+                          className={styles.formInput}
                         />
                         {renderColorPreview(formData.awayKitPrimary, 'Pick', 'awayKitPrimary')}
                       </div>
                     </IonItem>
                     {errors.awayKitPrimary && touched.awayKitPrimary && (
-                      <IonText color="danger" className="error-text">
+                      <IonText color="danger" className={styles.errorText}>
                         {errors.awayKitPrimary}
                       </IonText>
                     )}
@@ -413,22 +419,22 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
                 </IonRow>
                 <IonRow>
                   <IonCol size="12">
-                    <IonItem className={`form-item ${errors.awayKitSecondary && touched.awayKitSecondary ? 'error' : ''}`}>
-                      <IonLabel position="stacked">Secondary Color</IonLabel>
-                      <div className="color-input-row">
+                    <IonItem className={`${styles.formItem} ${errors.awayKitSecondary && touched.awayKitSecondary ? styles.error : ''}`}>
+                      <IonLabel position="stacked" className={styles.formLabel}>Secondary Color</IonLabel>
+                      <div className={styles.colorInputRow}>
                         <IonInput
                           value={formData.awayKitSecondary}
                           onIonInput={(e) => handleInputChange('awayKitSecondary', e.detail.value!)}
                           onIonBlur={() => handleInputBlur('awayKitSecondary')}
                           placeholder="#FFFFFF"
                           disabled={loading}
-                          className="color-input"
+                          className={styles.formInput}
                         />
                         {renderColorPreview(formData.awayKitSecondary, 'Pick', 'awayKitSecondary')}
                       </div>
                     </IonItem>
                     {errors.awayKitSecondary && touched.awayKitSecondary && (
-                      <IonText color="danger" className="error-text">
+                      <IonText color="danger" className={styles.errorText}>
                         {errors.awayKitSecondary}
                       </IonText>
                     )}
@@ -439,34 +445,35 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
           </IonCard>
 
           {/* Team Logo */}
-          <IonCard className="form-section">
-            <IonCardHeader>
-              <IonCardTitle>
-                <IonIcon icon={image} className="section-icon" />
+          <IonCard className={styles.sectionCard}>
+            <IonCardHeader className={styles.sectionHeader}>
+              <IonCardTitle className={styles.sectionTitle}>
+                <IonIcon icon={image} className={styles.sectionIcon} />
                 Team Logo (Optional)
               </IonCardTitle>
             </IonCardHeader>
-            <IonCardContent>
+            <IonCardContent className={styles.sectionContent}>
               <IonGrid>
                 <IonRow>
                   <IonCol size="12">
-                    <IonItem className={`form-item ${errors.logoUrl && touched.logoUrl ? 'error' : ''}`}>
-                      <IonLabel position="stacked">Logo URL</IonLabel>
+                    <IonItem className={`${styles.formItem} ${errors.logoUrl && touched.logoUrl ? styles.error : ''}`}>
+                      <IonLabel position="stacked" className={styles.formLabel}>Logo URL</IonLabel>
                       <IonInput
                         value={formData.logoUrl}
                         onIonInput={(e) => handleInputChange('logoUrl', e.detail.value!)}
                         onIonBlur={() => handleInputBlur('logoUrl')}
                         placeholder="https://example.com/logo.png"
                         disabled={loading}
+                        className={styles.formInput}
                       />
                     </IonItem>
                     {errors.logoUrl && touched.logoUrl && (
-                      <IonText color="danger" className="error-text">
+                      <IonText color="danger" className={styles.errorText}>
                         {errors.logoUrl}
                       </IonText>
                     )}
                     {formData.logoUrl && !errors.logoUrl && (
-                      <div className="logo-preview">
+                      <div className={styles.logoPreview}>
                         <img 
                           src={formData.logoUrl} 
                           alt="Team logo preview" 
@@ -484,13 +491,13 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
           </IonCard>
 
           {/* Action Buttons */}
-          <div className="form-actions">
+          <div className={styles.formActions}>
             <IonButton 
               expand="block" 
               fill="clear" 
               onClick={handleCancel}
               disabled={loading}
-              className="cancel-button"
+              className={styles.cancelButton}
             >
               Cancel
             </IonButton>
@@ -499,7 +506,7 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
               color="teal" 
               onClick={handleSubmit}
               disabled={loading || !formData.name.trim()}
-              className="submit-button"
+              className={styles.submitButton}
             >
               {loading ? (
                 <>

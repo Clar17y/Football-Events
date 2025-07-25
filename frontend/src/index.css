@@ -1,3 +1,6 @@
+/* Import theme tokens first */
+@import './styles/theme-tokens.css';
+
 :root {
   /* Use our Inter-based typography system */
   --grassroots-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;

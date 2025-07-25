@@ -16,7 +16,19 @@ This document outlines the design principles and philosophy established during t
 - Responsive layouts that work beautifully on all screen sizes
 - Native mobile patterns and gestures (pull-to-refresh, etc.)
 
+### **Context-Aware Interactions**
+- Custom floating menus positioned relative to touch points
+- Contextual actions that appear where users expect them
+- Smooth animations and transitions that feel natural
+- Intelligent positioning that adapts to screen boundaries
+
 ## 🎨 Visual Design System
+
+### **Dynamic Team Branding**
+- Team colors integrated as visual accents (borders, stripes)
+- Color dots showing kit combinations (home/away primary/secondary)
+- CSS custom properties for dynamic color theming
+- Subtle team identity without overwhelming the interface
 
 ### **Color Palette**
 ```css
@@ -180,6 +192,7 @@ This document outlines the design principles and philosophy established during t
 - **Appropriate target sizes**: Minimum 44px touch targets
 - **Gesture support**: Pull-to-refresh, swipe actions where appropriate
 - **Hover alternatives**: Touch-friendly interactions, no hover-only features
+- **Context menus**: Custom floating menus positioned relative to touch points
 
 ## 📱 Mobile Optimization
 
@@ -230,6 +243,8 @@ This document outlines the design principles and philosophy established during t
 - **Semantic HTML**: Proper heading hierarchy, form labels
 - **ARIA labels**: Descriptive labels for complex interactions
 - **Status announcements**: Important state changes announced
+- **Tooltips**: Descriptive tooltips for color indicators and actions
+- **Keyboard shortcuts**: ESC to close menus, standard navigation patterns
 
 ## 🔄 Animation Guidelines
 
@@ -298,9 +313,10 @@ This document outlines the design principles and philosophy established during t
 
 ### **Enhancement Opportunities**
 - **Advanced animations**: Micro-interactions for premium feel
-- **Theming system**: Support for multiple themes (light/dark/team colors)
+- **Theming system**: `.dark-theme` class-based theming with proper contrast
 - **Accessibility improvements**: Enhanced screen reader support
 - **Performance optimization**: Further animation and rendering improvements
+- **Smart positioning**: Context-aware menu positioning that adapts to screen boundaries
 
 ---
 
