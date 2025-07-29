@@ -146,6 +146,9 @@ Invoke-RestMethod -Uri "http://localhost:9123/exec" -Method POST -ContentType "a
 
 # Check status
 Invoke-RestMethod -Uri "http://localhost:9123/status" -Method GET
+
+# TypeScript check
+Invoke-RestMethod -Uri "http://localhost:9123/exec" -Method POST -ContentType "application/json" -Body '{"command": "cd frontend && npx tsc --project tsconfig.json --noEmit"}'
 ```
 
 ## Success Criteria
