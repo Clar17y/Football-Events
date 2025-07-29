@@ -65,13 +65,11 @@
 
 .teams-search {
   --background: var(--grassroots-surface);
+  --border-radius: var(--grassroots-radius-md);
+  --box-shadow: var(--grassroots-shadow-sm);
   --color: var(--grassroots-text-primary);
   --placeholder-color: var(--grassroots-text-tertiary);
-  --icon-color: var(--grassroots-text-tertiary);
-  --clear-button-color: var(--grassroots-text-tertiary);
-  border-radius: var(--grassroots-radius-md);
-  box-shadow: var(--grassroots-shadow-sm);
-  border: 1px solid var(--grassroots-surface-variant);
+  margin-top: var(--grassroots-space-sm);
 }
 
 /* Teams Content Area */

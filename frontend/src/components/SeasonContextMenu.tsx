@@ -98,7 +98,7 @@ const SeasonContextMenu: React.FC<SeasonContextMenuProps> = ({
         style={menuStyle}
       >
         <div className="season-context-menu-header">
-          <span className="season-context-menu-title">{season.name}</span>
+          <span className="season-context-menu-title">{season.label}</span>
         </div>
         <div className="season-context-menu-items">
           {menuItems.map((item) => (

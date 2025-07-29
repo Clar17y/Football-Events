@@ -205,6 +205,13 @@
   align-items: center;
   gap: var(--grassroots-space-xs);
   cursor: pointer;
+  padding: var(--grassroots-space-xs);
+  border-radius: var(--grassroots-radius-sm);
+  transition: background-color 0.2s ease;
+}
+
+.colorPreview:hover {
+  background-color: var(--theme-surface-variant, var(--grassroots-surface-variant));
 }
 
 .colorPreviewDot {
@@ -225,6 +232,7 @@
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--theme-on-surface, var(--grassroots-text-primary));
+  user-select: none;
 }
 
 /* Logo Preview */
@@ -307,6 +315,16 @@
   --theme-on-surface: #ffffff !important;
   color: #ffffff !important;
 }
+
+/* Dark mode adjustments for color components */
+:global(.dark-theme) .colorPreview:hover {
+  background-color: #3a3a3a;
+}
+
+:global(.dark-theme) .logoPreview img {
+  border-color: #3a3a3a;
+}
+
 
 /* Responsive Design */
 @media (max-width: 768px) {

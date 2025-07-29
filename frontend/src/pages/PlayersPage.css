@@ -1,0 +1,378 @@
+/* ===== PLAYERS PAGE STYLES ===== */
+/* Beautiful, modern player management interface following the grassroots design system */
+
+/* Import home title styles for MatchMaster branding */
+.home-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: -0.025em;
+}
+
+.title-container {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-sm);
+}
+
+.title-icon {
+  font-size: 1.5rem;
+  color: var(--grassroots-text-on-dark);
+}
+
+/* Players Header Section */
+.players-header {
+  padding: var(--grassroots-space-lg) var(--grassroots-space-md) var(--grassroots-space-md);
+  background: linear-gradient(135deg, var(--grassroots-surface) 0%, var(--grassroots-surface-elevated) 100%);
+  border-bottom: 1px solid var(--grassroots-surface-variant);
+}
+
+.players-title-section {
+  margin-bottom: var(--grassroots-space-md);
+}
+
+/* Page Header with Color Bar */
+.page-header-with-color {
+  background: var(--theme-primary, var(--ion-color-indigo));
+  padding: var(--grassroots-space-sm) var(--grassroots-space-md);
+  border-radius: var(--grassroots-radius-md);
+  margin-bottom: var(--grassroots-space-xs);
+  width: 100%;
+}
+
+.players-main-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  font-size: 1.75rem;
+  letter-spacing: -0.025em;
+  color: var(--grassroots-text-on-dark);
+  margin: 0;
+}
+
+.players-subtitle {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 400;
+  font-size: 0.95rem;
+  color: var(--grassroots-text-secondary);
+  margin: var(--grassroots-space-xs) 0 0 0;
+  line-height: 1.5;
+}
+
+.players-count {
+  font-weight: 500;
+  color: var(--grassroots-text-primary);
+}
+
+/* Search Section */
+.players-search {
+  --background: var(--grassroots-surface);
+  --border-radius: var(--grassroots-radius-md);
+  --box-shadow: var(--grassroots-shadow-sm);
+  --color: var(--grassroots-text-primary);
+  --placeholder-color: var(--grassroots-text-secondary);
+  margin-top: var(--grassroots-space-sm);
+}
+
+
+/* Players Grid */
+.players-grid {
+  padding: 0 var(--grassroots-space-md) var(--grassroots-space-xl);
+}
+
+.players-grid-container {
+  display: grid;
+  gap: var(--grassroots-space-md);
+  grid-template-columns: 1fr;
+}
+
+/* Player Card */
+.player-card {
+  --background: var(--grassroots-surface-elevated);
+  --color: var(--grassroots-text-primary);
+  border-radius: var(--grassroots-radius-lg);
+  box-shadow: var(--grassroots-shadow-sm);
+  margin: 0;
+  transition: all 0.2s ease;
+  border: 1px solid var(--grassroots-surface-variant);
+  overflow: hidden;
+}
+
+.player-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--grassroots-shadow-md);
+  border-color: var(--ion-color-indigo-tint);
+}
+
+.player-card-content {
+  padding: var(--grassroots-space-md);
+  position: relative;
+}
+
+/* Player Header */
+.player-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--grassroots-space-sm);
+}
+
+.player-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.player-name-section {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-sm);
+  margin-bottom: var(--grassroots-space-xs);
+}
+
+.player-jersey-number {
+  background: var(--theme-primary, var(--ion-color-indigo));
+  color: var(--theme-on-primary, var(--grassroots-text-on-dark));
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  font-size: 0.875rem;
+  padding: var(--grassroots-space-xs) var(--grassroots-space-sm);
+  border-radius: var(--grassroots-radius-sm);
+  min-width: 32px;
+  text-align: center;
+  line-height: 1;
+}
+
+.player-name {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  font-size: 1.125rem;
+  color: var(--grassroots-text-primary);
+  margin: 0;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-position {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--theme-primary, var(--ion-color-indigo));
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+/* Player Actions */
+.player-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-xs);
+}
+
+.player-menu-button {
+  --color: var(--grassroots-text-secondary);
+  --background: transparent;
+  --background-hover: var(--grassroots-surface-variant);
+  --border-radius: var(--grassroots-radius-sm);
+  --padding-start: var(--grassroots-space-xs);
+  --padding-end: var(--grassroots-space-xs);
+  --padding-top: var(--grassroots-space-xs);
+  --padding-bottom: var(--grassroots-space-xs);
+  margin: 0;
+}
+
+.player-menu-button:hover {
+  --color: var(--grassroots-text-primary);
+}
+
+/* Player Details */
+.player-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--grassroots-space-xs);
+}
+
+.player-team-info {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-xs);
+}
+
+.player-team-chip {
+  --background: var(--grassroots-surface-variant);
+  --color: var(--grassroots-text-secondary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 500;
+  font-size: 0.8125rem;
+  height: 28px;
+}
+
+.player-stats {
+  display: flex;
+  gap: var(--grassroots-space-md);
+  margin-top: var(--grassroots-space-sm);
+}
+
+.stat-chip {
+  --background: var(--grassroots-surface-variant);
+  --color: var(--grassroots-text-secondary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 500;
+  font-size: 0.8125rem;
+  height: 28px;
+}
+
+.stat-chip ion-icon {
+  font-size: 0.875rem;
+  margin-right: var(--grassroots-space-xs);
+}
+
+/* Empty State */
+.players-empty-state {
+  text-align: center;
+  padding: var(--grassroots-space-xl) var(--grassroots-space-md);
+  color: var(--grassroots-text-secondary);
+}
+
+.players-empty-icon {
+  font-size: 4rem;
+  color: var(--grassroots-text-tertiary);
+  margin-bottom: var(--grassroots-space-md);
+}
+
+.players-empty-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  font-size: 1.25rem;
+  color: var(--grassroots-text-primary);
+  margin-bottom: var(--grassroots-space-sm);
+}
+
+.players-empty-subtitle {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 400;
+  font-size: 0.95rem;
+  color: var(--grassroots-text-secondary);
+  line-height: 1.5;
+  margin-bottom: var(--grassroots-space-lg);
+}
+
+/* Loading Skeletons */
+.player-skeleton {
+  --background: var(--grassroots-surface-elevated);
+  border-radius: var(--grassroots-radius-lg);
+  box-shadow: var(--grassroots-shadow-sm);
+  margin: 0;
+  border: 1px solid var(--grassroots-surface-variant);
+}
+
+.player-skeleton-content {
+  padding: var(--grassroots-space-md);
+}
+
+.skeleton-header {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-sm);
+  margin-bottom: var(--grassroots-space-sm);
+}
+
+.skeleton-jersey {
+  width: 32px;
+  height: 24px;
+  border-radius: var(--grassroots-radius-sm);
+}
+
+.skeleton-name {
+  height: 20px;
+  width: 60%;
+  border-radius: var(--grassroots-radius-xs);
+}
+
+.skeleton-position {
+  height: 16px;
+  width: 40%;
+  border-radius: var(--grassroots-radius-xs);
+  margin-bottom: var(--grassroots-space-xs);
+}
+
+.skeleton-team {
+  height: 16px;
+  width: 50%;
+  border-radius: var(--grassroots-radius-xs);
+}
+
+
+/* Responsive Design */
+@media (min-width: 768px) {
+  .players-grid-container {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .players-header {
+    padding: var(--grassroots-space-xl) var(--grassroots-space-lg) var(--grassroots-space-lg);
+  }
+  
+  .players-grid {
+    padding: 0 var(--grassroots-space-lg) var(--grassroots-space-xl);
+  }
+}
+
+@media (min-width: 1024px) {
+  .players-grid-container {
+    grid-template-columns: repeat(3, 1fr);
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  
+  .players-header {
+    padding: var(--grassroots-space-xl) var(--grassroots-space-xl) var(--grassroots-space-lg);
+  }
+  
+  .players-grid {
+    padding: 0 var(--grassroots-space-xl) var(--grassroots-space-xl);
+  }
+}
+
+/* Dark Theme Support */
+.dark-theme .player-card {
+  --background: var(--grassroots-surface-elevated-dark, #2d3748);
+  border-color: var(--grassroots-surface-variant-dark, #4a5568);
+}
+
+.dark-theme .player-card:hover {
+  border-color: var(--ion-color-indigo-tint);
+}
+
+.dark-theme .players-searchbar {
+  --background: var(--grassroots-surface-elevated-dark, #2d3748);
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .player-card {
+    border-width: 2px;
+    border-color: var(--grassroots-text-primary);
+  }
+  
+  .player-jersey-number {
+    border: 2px solid var(--grassroots-text-on-dark);
+  }
+  
+  .stat-chip,
+  .player-team-chip {
+    border: 1px solid var(--grassroots-text-secondary);
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .player-card {
+    transition: none;
+  }
+  
+  .player-card:hover {
+    transform: none;
+  }
+}
