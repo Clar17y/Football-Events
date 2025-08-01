@@ -34,7 +34,7 @@ import {
 } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader';
 import CreateTeamModal from '../components/CreateTeamModal';
-import TeamContextMenu from '../components/TeamContextMenu';
+import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu';
 import { useTeams } from '../hooks/useTeams';
 import { matchesApi } from '../services/api/matchesApi';
 import type { Team } from '@shared/types';
@@ -63,7 +63,7 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
-  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [contextMenuAnchor, setContextMenuAnchor] = useState<HTMLElement | null>(null);
   const [matchCounts, setMatchCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -111,6 +111,34 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
     await loadTeams();
     event.detail.complete();
   };
+
+  // Define team context menu items
+  const teamContextItems: ContextMenuItem[] = [
+    {
+      text: 'Edit Team',
+      icon: pencil,
+      action: 'edit',
+      color: 'primary'
+    },
+    {
+      text: 'View Players',
+      icon: personAdd,
+      action: 'players',
+      color: 'medium'
+    },
+    {
+      text: 'Team Statistics',
+      icon: statsChart,
+      action: 'stats',
+      color: 'medium'
+    },
+    {
+      text: 'Delete Team',
+      icon: trash,
+      action: 'delete',
+      color: 'danger'
+    }
+  ];
 
   const handleTeamAction = (action: string) => {
     if (!selectedTeam) return;
@@ -206,11 +234,9 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
               fill="clear" 
               size="small"
               onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setContextMenuPosition({
-                  x: rect.right - 200, // Position menu to the left of the button
-                  y: rect.bottom + 5   // Position menu below the button
-                });
+                e.stopPropagation();
+                const buttonElement = e.currentTarget as HTMLElement;
+                setContextMenuAnchor(buttonElement);
                 setSelectedTeam(team);
                 setContextMenuOpen(true);
               }}
@@ -354,15 +380,18 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
         </IonFab>
 
         {/* Team Context Menu */}
-        <TeamContextMenu
+        <ContextMenu
           isOpen={contextMenuOpen}
           onClose={() => {
             setContextMenuOpen(false);
             // Don't clear selectedTeam here - let individual actions handle it
           }}
-          team={selectedTeam}
-          position={contextMenuPosition}
+          title={selectedTeam?.name || ''}
+          anchorElement={contextMenuAnchor}
+          items={teamContextItems}
           onAction={handleTeamAction}
+          themeColor={selectedTeam?.homeKitPrimary}
+          className="team-theme"
         />
 
         {/* Delete Confirmation Alert */}

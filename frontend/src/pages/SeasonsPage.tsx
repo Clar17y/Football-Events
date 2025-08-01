@@ -34,7 +34,7 @@ import {
 } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader';
 import CreateSeasonModal from '../components/CreateSeasonModal';
-import SeasonContextMenu from '../components/SeasonContextMenu';
+import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu';
 import { useSeasons } from '../hooks/useSeasons';
 import { matchesApi } from '../services/api/matchesApi';
 import type { Season } from '@shared/types';
@@ -62,7 +62,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
-  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [contextMenuAnchor, setContextMenuAnchor] = useState<HTMLElement | null>(null);
   const [matchCounts, setMatchCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -110,6 +110,28 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
     await loadSeasons();
     event.detail.complete();
   };
+
+  // Define season context menu items
+  const seasonContextItems: ContextMenuItem[] = [
+    {
+      text: 'Edit season',
+      icon: pencil,
+      action: 'edit',
+      color: 'primary'
+    },
+    {
+      text: 'Season statistics',
+      icon: statsChart,
+      action: 'stats',
+      color: 'medium'
+    },
+    {
+      text: 'Delete season',
+      icon: trash,
+      action: 'delete',
+      color: 'danger'
+    }
+  ];
 
   const handleSeasonAction = (action: string) => {
     if (!selectedSeason) return;
@@ -168,11 +190,9 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
                 fill="clear" 
                 size="small"
                 onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  setContextMenuPosition({
-                    x: rect.right - 200,
-                    y: rect.bottom + 5
-                  });
+                  e.stopPropagation();
+                  const buttonElement = e.currentTarget as HTMLElement;
+                  setContextMenuAnchor(buttonElement);
                   setSelectedSeason(season);
                   setContextMenuOpen(true);
                 }}
@@ -309,14 +329,16 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
         </IonFab>
 
         {/* Season Context Menu */}
-        <SeasonContextMenu
+        <ContextMenu
           isOpen={contextMenuOpen}
           onClose={() => {
             setContextMenuOpen(false);
           }}
-          season={selectedSeason}
-          position={contextMenuPosition}
+          title={selectedSeason?.label || ''}
+          anchorElement={contextMenuAnchor}
+          items={seasonContextItems}
           onAction={handleSeasonAction}
+          className="season-theme"
         />
 
         {/* Delete Confirmation Alert */}

@@ -1,48 +1,48 @@
-/* ===== TEAM CONTEXT MENU STYLES ===== */
-/* Elegant floating menu with team color accents */
+/* ===== UNIVERSAL CONTEXT MENU STYLES ===== */
+/* Reusable floating menu for all entity types */
 
-.team-context-menu-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 9999;
-  pointer-events: none;
-}
-
-.team-context-menu {
-  pointer-events: all;
+.context-menu {
   background: var(--ion-color-light, #ffffff);
   border-radius: 12px;
   box-shadow: 
     0 8px 32px rgba(0, 0, 0, 0.12),
     0 2px 8px rgba(0, 0, 0, 0.08);
-  border: 2px solid var(--team-primary, var(--ion-color-teal));
+  border: 2px solid var(--theme-color, var(--ion-color-primary));
   min-width: 200px;
   overflow: hidden;
-  transform: translateY(-8px);
-  animation: contextMenuSlideIn 0.2s ease-out forwards;
+  /* Popper.js will handle positioning */
+  position: absolute;
+  z-index: 10000;
+  /* Start invisible but measurable until positioned */
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.98);
+}
+
+.context-menu[data-popper-placement] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
 }
 
 /* Dark mode support */
-.dark-theme .team-context-menu {
+.dark-theme .context-menu {
   background: #1e1e1e;
   box-shadow: 
     0 8px 32px rgba(0, 0, 0, 0.3),
     0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-.team-context-menu-header {
+.context-menu-header {
   padding: 12px 16px 8px;
   border-bottom: 1px solid #e0e0e0;
 }
 
-.dark-theme .team-context-menu-header {
+.dark-theme .context-menu-header {
   border-bottom-color: #2a2a2a;
 }
 
-.team-context-menu-title {
+.context-menu-title {
   font-weight: 600;
   font-size: 0.9rem;
   color: #000000;
@@ -53,15 +53,15 @@
   text-transform: none !important;
 }
 
-.dark-theme .team-context-menu-title {
+.dark-theme .context-menu-title {
   color: #ffffff;
 }
 
-.team-context-menu-items {
+.context-menu-items {
   padding: 4px 0;
 }
 
-.team-context-menu-item {
+.context-menu-item {
   --color: #000000;
   --background: transparent;
   --background-hover: #f8f8f8;
@@ -79,63 +79,87 @@
   transition: all 0.2s ease;
 }
 
-.dark-theme .team-context-menu-item {
+.dark-theme .context-menu-item {
   --color: #ffffff;
   --background-hover: #2a2a2a;
   --background-activated: #1a1a1a;
 }
 
-.team-context-menu-item ion-icon {
+.context-menu-item ion-icon {
   margin-right: 12px;
   font-size: 1.1rem;
 }
 
-.team-context-menu-item span {
+.context-menu-item span {
   flex: 1;
   text-transform: none !important;
 }
 
 /* Color variants */
-.team-context-menu-item.primary {
-  --color: var(--ion-color-primary, #3880ff);
+.context-menu-item.primary {
+  --color: var(--theme-color, var(--ion-color-primary));
 }
 
-.team-context-menu-item.medium {
+.context-menu-item.medium {
   --color: var(--ion-color-medium, #92949c);
 }
 
-.team-context-menu-item.danger {
+.context-menu-item.danger {
   --color: var(--ion-color-danger, #eb445a);
 }
 
-.team-context-menu-item.danger:hover {
+.context-menu-item.danger:hover {
   --background-hover: rgba(235, 68, 90, 0.1);
 }
 
-.dark-theme .team-context-menu-item.danger:hover {
+.dark-theme .context-menu-item.danger:hover {
   --background-hover: rgba(235, 68, 90, 0.2);
+}
+
+/* Theme-specific classes */
+.context-menu.team-theme {
+  border-color: var(--theme-color, var(--ion-color-teal));
+}
+
+.context-menu.team-theme .context-menu-item.primary {
+  --color: var(--theme-color, var(--ion-color-teal));
+}
+
+.context-menu.season-theme {
+  border-color: var(--ion-color-primary);
+}
+
+.context-menu.season-theme .context-menu-item.primary {
+  --color: var(--ion-color-primary);
+}
+
+.context-menu.player-theme {
+  border-color: var(--ion-color-indigo);
+}
+
+.context-menu.player-theme .context-menu-item.primary {
+  --color: var(--ion-color-indigo);
 }
 
 /* Animation */
 @keyframes contextMenuSlideIn {
   from {
     opacity: 0;
-    transform: translateY(-8px) scale(0.95);
+    transform: scale(0.95);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: scale(1);
   }
 }
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .team-context-menu {
+  .context-menu {
     min-width: 180px;
-    transform: translateY(-4px);
   }
   
-  .team-context-menu-item {
+  .context-menu-item {
     --padding-top: 14px;
     --padding-bottom: 14px;
   }

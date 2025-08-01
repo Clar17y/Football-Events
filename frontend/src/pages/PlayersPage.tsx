@@ -32,6 +32,7 @@ import {
 } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader';
 import CreatePlayerModal from '../components/CreatePlayerModal';
+import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu';
 import { usePlayers } from '../hooks/usePlayers';
 import { teamsApi } from '../services/api/teamsApi';
 import type { Player, Team } from '@shared/types';
@@ -58,7 +59,8 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate }) => {
   const [searchText, setSearchText] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
-  const [showActionSheet, setShowActionSheet] = useState(false);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuAnchor, setContextMenuAnchor] = useState<HTMLElement | null>(null);
   const [teams, setTeams] = useState<Record<string, Team>>({});
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -105,25 +107,61 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate }) => {
     event.detail.complete();
   };
 
-  // Handle player actions
-  const handlePlayerAction = (player: Player, action: string) => {
+  // Handle ellipses click to show context menu
+  const handlePlayerEllipsesClick = (event: React.MouseEvent, player: Player) => {
+    event.stopPropagation();
+    const buttonElement = event.currentTarget as HTMLElement;
+    setContextMenuAnchor(buttonElement);
     setSelectedPlayer(player);
-    setShowActionSheet(false);
+    setShowContextMenu(true);
+  };
+
+  // Define player context menu items
+  const playerContextItems: ContextMenuItem[] = [
+    {
+      text: 'Edit player',
+      icon: pencil,
+      action: 'edit',
+      color: 'primary'
+    },
+    {
+      text: 'View statistics',
+      icon: statsChart,
+      action: 'stats',
+      color: 'medium'
+    },
+    {
+      text: 'Manage team',
+      icon: people,
+      action: 'team',
+      color: 'medium'
+    },
+    {
+      text: 'Delete player',
+      icon: trash,
+      action: 'delete',
+      color: 'danger'
+    }
+  ];
+
+  // Handle context menu actions
+  const handlePlayerContextAction = (action: string) => {
+    if (!selectedPlayer) return;
     
     switch (action) {
       case 'edit':
-        handleEditPlayer(player);
+        handleEditPlayer(selectedPlayer);
         break;
       case 'delete':
         setShowDeleteAlert(true);
         break;
       case 'stats':
         // TODO: Navigate to player stats
-        console.log('View stats for player:', player);
+        console.log('View stats for player:', selectedPlayer);
         break;
       case 'team':
         // TODO: Navigate to player team management
-        console.log('Manage team for player:', player);
+        console.log('Manage team for player:', selectedPlayer);
         break;
     }
   };
@@ -186,10 +224,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate }) => {
                   fill="clear"
                   size="small"
                   className="player-menu-button"
-                  onClick={() => {
-                    setSelectedPlayer(player);
-                    setShowActionSheet(true);
-                  }}
+                  onClick={(e) => handlePlayerEllipsesClick(e, player)}
                 >
                   <IonIcon icon={ellipsisVertical} />
                 </IonButton>
@@ -323,39 +358,18 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate }) => {
           </IonFabButton>
         </IonFab>
 
-        {/* Action Sheet */}
-        <IonActionSheet
-          isOpen={showActionSheet}
-          onDidDismiss={() => setShowActionSheet(false)}
-          header={selectedPlayer ? `${selectedPlayer.name}` : 'Player Options'}
-          buttons={[
-            {
-              text: 'Edit Player',
-              icon: pencil,
-              handler: () => handlePlayerAction(selectedPlayer!, 'edit')
-            },
-            {
-              text: 'View Statistics',
-              icon: statsChart,
-              handler: () => handlePlayerAction(selectedPlayer!, 'stats')
-            },
-            {
-              text: 'Manage Team',
-              icon: people,
-              handler: () => handlePlayerAction(selectedPlayer!, 'team')
-            },
-            {
-              text: 'Delete Player',
-              icon: trash,
-              role: 'destructive',
-              handler: () => handlePlayerAction(selectedPlayer!, 'delete')
-            },
-            {
-              text: 'Cancel',
-              role: 'cancel'
-            }
-          ]}
-        />
+        {/* Player Context Menu */}
+        {showContextMenu && contextMenuAnchor && (
+          <ContextMenu
+            isOpen={showContextMenu}
+            onClose={() => setShowContextMenu(false)}
+            title={selectedPlayer?.name || ''}
+            anchorElement={contextMenuAnchor}
+            items={playerContextItems}
+            onAction={handlePlayerContextAction}
+            className="player-theme"
+          />
+        )}
 
         {/* Delete Confirmation Alert */}
         <IonAlert
