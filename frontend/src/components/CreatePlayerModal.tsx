@@ -26,8 +26,7 @@ import {
   IonSpinner,
   IonSelect,
   IonSelectOption,
-  IonTextarea,
-  IonActionSheet
+  IonTextarea
 } from '@ionic/react';
 import {
   close,
@@ -39,6 +38,8 @@ import {
 } from 'ionicons/icons';
 import { usePlayers } from '../hooks/usePlayers';
 import { useTeams } from '../hooks/useTeams';
+import TeamSelectionModal from './TeamSelectionModal';
+import PositionSelectionModal from './PositionSelectionModal';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -62,7 +63,7 @@ interface FormData {
   preferredPosition: string;
   dateOfBirth: Dayjs | null;
   notes: string;
-  currentTeam: string;
+  currentTeams: string[]; // Changed to array for multiple teams
 }
 
 interface FormErrors {
@@ -71,25 +72,9 @@ interface FormErrors {
   preferredPosition?: string;
   dateOfBirth?: string;
   notes?: string;
-  currentTeam?: string;
+  currentTeams?: string;
 }
 
-// Common football positions
-const POSITIONS = [
-  { code: 'GK', name: 'Goalkeeper' },
-  { code: 'DEF', name: 'Defender' },
-  { code: 'MID', name: 'Midfielder' },
-  { code: 'FWD', name: 'Forward' },
-  { code: 'LB', name: 'Left Back' },
-  { code: 'CB', name: 'Centre Back' },
-  { code: 'RB', name: 'Right Back' },
-  { code: 'CDM', name: 'Defensive Midfielder' },
-  { code: 'CM', name: 'Central Midfielder' },
-  { code: 'CAM', name: 'Attacking Midfielder' },
-  { code: 'LW', name: 'Left Winger' },
-  { code: 'RW', name: 'Right Winger' },
-  { code: 'ST', name: 'Striker' }
-];
 
 const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({ 
   isOpen, 
@@ -104,21 +89,31 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
     name: '',
     squadNumber: '',
     preferredPosition: '',
-    dateOfBirth: dayjs('2000-01-01'),
+    dateOfBirth: null,
     notes: '',
-    currentTeam: ''
+    currentTeams: []
   });
 
   // Initialize form data when editing
   React.useEffect(() => {
     if (mode === 'edit' && editPlayer) {
+      console.log('[CreatePlayerModal] Editing player:', editPlayer);
+      console.log('[CreatePlayerModal] editPlayer.currentTeam:', editPlayer.currentTeam);
+      
+      // Split currentTeam string back into array
+      const currentTeamsArray = editPlayer.currentTeam 
+        ? editPlayer.currentTeam.split(', ').filter(team => team.trim() !== '')
+        : [];
+      
+      console.log('[CreatePlayerModal] Converted to teams array:', currentTeamsArray);
+      
       setFormData({
         name: editPlayer.name || '',
         squadNumber: editPlayer.squadNumber?.toString() || '',
         preferredPosition: editPlayer.preferredPosition || '',
         dateOfBirth: editPlayer.dateOfBirth ? dayjs(editPlayer.dateOfBirth) : null,
         notes: editPlayer.notes || '',
-        currentTeam: editPlayer.currentTeam || ''
+        currentTeams: currentTeamsArray
       });
     } else if (mode === 'create') {
       // Reset form for create mode
@@ -126,9 +121,9 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
         name: '',
         squadNumber: '',
         preferredPosition: '',
-        dateOfBirth: dayjs('2000-01-01'),
+        dateOfBirth: null,
         notes: '',
-        currentTeam: ''
+        currentTeams: []
       });
     }
   }, [mode, editPlayer, isOpen]);
@@ -142,8 +137,8 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  const [positionActionSheetOpen, setPositionActionSheetOpen] = useState(false);
-  const [teamActionSheetOpen, setTeamActionSheetOpen] = useState(false);
+  const [positionModalOpen, setPositionModalOpen] = useState(false);
+  const [teamModalOpen, setTeamModalOpen] = useState(false);
 
   // Create MUI theme with indigo color
   const muiTheme = createTheme({
@@ -174,10 +169,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
       }
     }
 
-    // Position validation
-    if (formData.preferredPosition && !POSITIONS.find(p => p.code === formData.preferredPosition)) {
-      newErrors.preferredPosition = 'Please select a valid position';
-    }
+    // Position validation - removed since PositionSelectionModal handles validation
 
     // Date of birth validation
     if (formData.dateOfBirth) {
@@ -220,18 +212,23 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
       return;
     }
 
-    const playerData: PlayerCreateRequest = {
+    // Find team IDs from team names
+    const selectedTeams = teams.filter(team => formData.currentTeams.includes(team.name));
+    
+    const playerData: PlayerCreateRequest & { teamIds?: string[] } = {
       name: formData.name.trim(),
       squadNumber: formData.squadNumber ? parseInt(formData.squadNumber, 10) : undefined,
       preferredPosition: formData.preferredPosition || undefined,
-      dateOfBirth: formData.dateOfBirth ? formData.dateOfBirth.toDate() : undefined,
+      dateOfBirth: formData.dateOfBirth ? formData.dateOfBirth.format('DD-MM-YYYY') : undefined,
       notes: formData.notes || undefined,
-      currentTeam: formData.currentTeam || undefined
+      currentTeam: formData.currentTeams.join(', ') || undefined, // Join team names for backward compatibility
+      teamIds: selectedTeams.map(team => team.id) // Add team IDs array
     };
 
     let result;
     if (mode === 'edit' && editPlayer) {
       console.log('Updating player with ID:', editPlayer.id, 'and data:', playerData);
+      // For updates, include teamIds to handle team changes
       result = await updatePlayer(editPlayer.id, playerData);
     } else {
       console.log('Creating new player with data:', playerData);
@@ -244,9 +241,9 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
         name: '',
         squadNumber: '',
         preferredPosition: '',
-        dateOfBirth: dayjs('2000-01-01'),
+        dateOfBirth: null,
         notes: '',
-        currentTeam: ''
+        currentTeams: []
       });
       setErrors({});
       setTouched({});
@@ -262,7 +259,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
       preferredPosition: '',
       dateOfBirth: null,
       notes: '',
-      currentTeam: ''
+      currentTeams: []
     });
     setErrors({});
     setTouched({});
@@ -271,17 +268,43 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
 
   const handlePositionSelect = (position: string) => {
     handleInputChange('preferredPosition', position);
-    setPositionActionSheetOpen(false);
+    setPositionModalOpen(false);
   };
 
   const handleTeamSelect = (teamName: string) => {
-    handleInputChange('currentTeam', teamName);
-    setTeamActionSheetOpen(false);
+    if (teamName === '') {
+      // "No Team" selected - clear all teams
+      handleInputChange('currentTeams', []);
+    } else {
+      // Toggle team selection
+      const currentTeams = formData.currentTeams;
+      const isSelected = currentTeams.includes(teamName);
+      
+      if (isSelected) {
+        // Remove team from selection
+        handleInputChange('currentTeams', currentTeams.filter(team => team !== teamName));
+      } else {
+        // Add team to selection
+        handleInputChange('currentTeams', [...currentTeams, teamName]);
+      }
+    }
+    // Don't close modal immediately - allow multiple selections
   };
 
   const getPositionDisplayName = (code: string) => {
-    const position = POSITIONS.find(p => p.code === code);
-    return position ? `${position.name} (${position.code})` : code;
+    // Simple display format - the PositionSelectionModal handles the full position data
+    return code ? `${code}` : '';
+  };
+
+  const getTeamsDisplayText = () => {
+    const teamCount = formData.currentTeams.length;
+    if (teamCount === 0) {
+      return '';
+    } else if (teamCount === 1) {
+      return formData.currentTeams[0];
+    } else {
+      return `${teamCount} teams`;
+    }
   };
 
   const renderDatePicker = (label: string, field: 'dateOfBirth') => (
@@ -451,7 +474,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
             <IonCardHeader className={styles.sectionHeader}>
               <IonCardTitle className={styles.sectionTitle}>
                 <IonIcon icon={shirt} className={styles.sectionIcon} />
-                Position & Team
+                Position & Team(s)
               </IonCardTitle>
             </IonCardHeader>
             <IonCardContent className={styles.sectionContent}>
@@ -461,7 +484,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
                     <IonItem 
                       className={`${styles.formItem} ${errors.preferredPosition && touched.preferredPosition ? styles.error : ''}`}
                       button
-                      onClick={() => setPositionActionSheetOpen(true)}
+                      onClick={() => setPositionModalOpen(true)}
                       disabled={loading}
                     >
                       <IonLabel position="stacked" className={styles.formLabel}>Preferred Position</IonLabel>
@@ -480,22 +503,22 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
                   </IonCol>
                   <IonCol size="12" sizeMd="6">
                     <IonItem 
-                      className={`${styles.formItem} ${errors.currentTeam && touched.currentTeam ? styles.error : ''}`}
+                      className={`${styles.formItem} ${errors.currentTeams && touched.currentTeams ? styles.error : ''}`}
                       button
-                      onClick={() => setTeamActionSheetOpen(true)}
+                      onClick={() => setTeamModalOpen(true)}
                       disabled={loading}
                     >
-                      <IonLabel position="stacked" className={styles.formLabel}>Current Team</IonLabel>
+                      <IonLabel position="stacked" className={styles.formLabel}>Current Team(s)</IonLabel>
                       <IonInput
-                        value={formData.currentTeam}
-                        placeholder="Select team"
+                        value={getTeamsDisplayText()}
+                        placeholder="Select team(s)"
                         readonly
                         className={styles.formInput}
                       />
                     </IonItem>
-                    {errors.currentTeam && touched.currentTeam && (
+                    {errors.currentTeams && touched.currentTeams && (
                       <IonText color="danger" className={styles.errorText}>
-                        {errors.currentTeam}
+                        {errors.currentTeams}
                       </IonText>
                     )}
                   </IonCol>
@@ -599,42 +622,23 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
           </div>
         </div>
 
-        {/* Position Selection Action Sheet */}
-        <IonActionSheet
-          isOpen={positionActionSheetOpen}
-          onDidDismiss={() => setPositionActionSheetOpen(false)}
-          header="Select Position"
-          buttons={[
-            ...POSITIONS.map(position => ({
-              text: `${position.name} (${position.code})`,
-              handler: () => handlePositionSelect(position.code)
-            })),
-            {
-              text: 'Cancel',
-              role: 'cancel'
-            }
-          ]}
+        {/* Position Selection Modal */}
+        <PositionSelectionModal
+          isOpen={positionModalOpen}
+          onDidDismiss={() => setPositionModalOpen(false)}
+          onPositionSelect={handlePositionSelect}
+          selectedPosition={formData.preferredPosition}
+          title="Select Position"
         />
 
-        {/* Team Selection Action Sheet */}
-        <IonActionSheet
-          isOpen={teamActionSheetOpen}
-          onDidDismiss={() => setTeamActionSheetOpen(false)}
-          header="Select Team"
-          buttons={[
-            ...teams.map(team => ({
-              text: team.name,
-              handler: () => handleTeamSelect(team.name)
-            })),
-            {
-              text: 'No Team',
-              handler: () => handleTeamSelect('')
-            },
-            {
-              text: 'Cancel',
-              role: 'cancel'
-            }
-          ]}
+        {/* Team Selection Modal */}
+        <TeamSelectionModal
+          isOpen={teamModalOpen}
+          onDidDismiss={() => setTeamModalOpen(false)}
+          onTeamSelect={handleTeamSelect}
+          selectedTeams={formData.currentTeams}
+          title="Select Team(s)"
+          allowMultiple={true}
         />
 
       </IonContent>

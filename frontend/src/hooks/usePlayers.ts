@@ -72,13 +72,25 @@ export const usePlayers = (): UsePlayersReturn => {
   }, [showToast]);
 
   /**
-   * Create a new player
+   * Create a new player (with optional team assignment)
    */
-  const createPlayer = useCallback(async (playerData: PlayerCreateRequest): Promise<Player | null> => {
+  const createPlayer = useCallback(async (playerData: PlayerCreateRequest & { teamId?: string; teamIds?: string[] }): Promise<Player | null> => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      const response = await playersApi.createPlayer(playerData);
+      let response;
+      
+      // If teamIds array is provided, use the players-with-teams endpoint
+      if (playerData.teamIds && playerData.teamIds.length > 0) {
+        response = await playersApi.createPlayerWithTeams(playerData as PlayerCreateRequest & { teamIds: string[] });
+      } else if (playerData.teamId) {
+        // If single teamId is provided, use the players-with-team endpoint (backward compatibility)
+        response = await playersApi.createPlayerWithTeam(playerData as PlayerCreateRequest & { teamId: string });
+      } else {
+        // Otherwise use the regular players endpoint
+        const { teamId, teamIds, ...playerFields } = playerData;
+        response = await playersApi.createPlayer(playerFields);
+      }
       
       // Add the new player to the list
       setState(prev => ({
@@ -117,13 +129,22 @@ export const usePlayers = (): UsePlayersReturn => {
   }, [showToast]);
 
   /**
-   * Update an existing player
+   * Update an existing player (with optional team changes)
    */
-  const updatePlayer = useCallback(async (id: string, playerData: PlayerUpdateRequest): Promise<Player | null> => {
+  const updatePlayer = useCallback(async (id: string, playerData: PlayerUpdateRequest & { teamIds?: string[] }): Promise<Player | null> => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      const response = await playersApi.updatePlayer(id, playerData);
+      let response;
+      
+      // If teamIds are provided, we need to handle team changes
+      if (playerData.teamIds !== undefined) {
+        response = await playersApi.updatePlayerWithTeams(id, playerData as PlayerUpdateRequest & { teamIds: string[] });
+      } else {
+        // Regular player update without team changes
+        const { teamIds, ...updateFields } = playerData;
+        response = await playersApi.updatePlayer(id, updateFields);
+      }
       
       // Update the player in the list
       setState(prev => ({

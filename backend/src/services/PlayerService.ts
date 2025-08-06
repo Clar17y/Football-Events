@@ -106,6 +106,20 @@ export class PlayerService {
               first_name: true,
               last_name: true
             }
+          },
+          player_teams: {
+            where: {
+              is_active: true,
+              is_deleted: false
+            },
+            include: {
+              team: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              }
+            }
           }
         }
       }),
@@ -114,8 +128,21 @@ export class PlayerService {
 
     const totalPages = Math.ceil(total / limit);
 
+    // Transform players and populate currentTeam for each
+    const transformedPlayers = players.map(player => {
+      const transformedPlayer = transformPlayer(player);
+      
+      // Get active team names
+      const activeTeamNames = player.player_teams.map(pt => pt.team.name);
+      transformedPlayer.currentTeam = activeTeamNames.join(', ');
+      
+      console.log(`[PlayerService] getPlayers - Player: ${player.name}, Teams: ${activeTeamNames.join(', ')}`);
+      
+      return transformedPlayer;
+    });
+
     return {
-      data: transformPlayers(players),
+      data: transformedPlayers,
       pagination: {
         page,
         limit,
@@ -149,11 +176,41 @@ export class PlayerService {
             first_name: true,
             last_name: true
           }
+        },
+        player_teams: {
+          where: {
+            is_active: true,
+            is_deleted: false
+          },
+          include: {
+            team: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
         }
       }
     });
 
-    return player ? transformPlayer(player) : null;
+    if (!player) {
+      return null;
+    }
+
+    // Transform player and populate currentTeam from active relationships
+    const transformedPlayer = transformPlayer(player);
+    
+    // Get active team names
+    const activeTeamNames = player.player_teams.map(pt => pt.team.name);
+    transformedPlayer.currentTeam = activeTeamNames.join(', ');
+
+    console.log(`[PlayerService] getPlayerById - Player: ${player.name}`);
+    console.log(`[PlayerService] getPlayerById - Found ${player.player_teams.length} active team relationships`);
+    console.log(`[PlayerService] getPlayerById - Active teams:`, activeTeamNames);
+    console.log(`[PlayerService] getPlayerById - Final currentTeam:`, transformedPlayer.currentTeam);
+
+    return transformedPlayer;
   }
 
   async createPlayer(data: PlayerCreateRequest, userId: string, userRole: string): Promise<Player> {

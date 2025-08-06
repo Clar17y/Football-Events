@@ -1,0 +1,317 @@
+/* ===== POSITION SELECTION MODAL STYLES ===== */
+/* Mobile-first design optimized for iPhone UX */
+
+.position-selection-modal {
+  --border-radius: 12px;
+  --box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.position-selection-modal ion-modal {
+  --height: 90%;
+  --border-radius: 16px 16px 0 0;
+  --box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.1);
+  border-bottom: 2px solid var(--ion-color-light-shade, #e9ecef);
+}
+
+.dark-theme .position-selection-modal ion-modal {
+  border-bottom-color: #2a2a2a;
+}
+
+/* Header Styles */
+.position-selection-modal ion-toolbar {
+  --padding-start: 8px;
+  --padding-end: 8px;
+}
+
+.position-selection-modal .back-button,
+.position-selection-modal .close-button {
+  --color: white;
+  --padding-start: 12px;
+  --padding-end: 12px;
+  margin: 0;
+}
+
+.position-selection-modal ion-title {
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+/* Content Styles */
+.position-selection-content {
+  --padding-top: 0;
+  --padding-bottom: env(safe-area-inset-bottom, 20px);
+}
+
+/* Search Container */
+.search-container {
+  padding: 16px;
+  background: var(--ion-color-light, #f8f9fa);
+  border-bottom: 1px solid var(--ion-color-light-shade, #e9ecef);
+}
+
+.dark-theme .search-container {
+  background: #1e1e1e;
+  border-bottom-color: #2a2a2a;
+}
+
+.position-search {
+  --background: var(--ion-color-light-tint, #ffffff);
+  --border-radius: 12px;
+  --box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --color: var(--ion-color-dark, #000000);
+  --placeholder-color: var(--ion-color-medium, #92949c);
+  --icon-color: var(--ion-color-medium, #92949c);
+  margin: 0;
+  padding: 0;
+}
+
+.dark-theme .position-search {
+  --background: #2a2a2a;
+  --color: #ffffff;
+  --placeholder-color: #888888;
+  --icon-color: #888888;
+}
+
+/* Positions Container */
+.positions-container {
+  padding: 0 0 20px 0;
+}
+
+/* Position Category */
+.position-category {
+  margin-bottom: 24px;
+}
+
+.position-category:last-child {
+  margin-bottom: 0;
+}
+
+/* Category Header */
+.category-header {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px 12px;
+  background: var(--ion-color-light, #f8f9fa);
+  border-bottom: 1px solid var(--ion-color-light-shade, #e9ecef);
+}
+
+.dark-theme .category-header {
+  background: #1e1e1e;
+  border-bottom-color: #2a2a2a;
+}
+
+.category-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  color: white;
+}
+
+.category-icon ion-icon {
+  font-size: 1.2rem;
+}
+
+.category-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--ion-color-dark, #000000);
+  margin: 0;
+}
+
+.dark-theme .category-title {
+  color: #ffffff;
+}
+
+/* Position List */
+.position-list {
+  padding: 0;
+  margin: 0;
+}
+
+/* Position Item */
+.position-item {
+  --padding-start: 20px;
+  --padding-end: 20px;
+  --padding-top: 8px;
+  --padding-bottom: 8px;
+  --min-height: 44px;
+  --background: transparent;
+  --border-color: transparent;
+  margin: 0;
+  border-bottom: 1px solid var(--ion-color-light-shade, #e9ecef);
+  transition: all 0.2s ease;
+}
+
+.dark-theme .position-item {
+  border-bottom-color: #2a2a2a;
+}
+
+.position-item:hover {
+  --background: var(--ion-color-light-tint, #f8f9fa);
+}
+
+.dark-theme .position-item:hover {
+  --background: #2a2a2a;
+}
+
+.position-item.selected {
+  --background: rgba(63, 81, 181, 0.08);
+  border-left: 4px solid var(--ion-color-indigo);
+  --padding-start: 16px;
+}
+
+.dark-theme .position-item.selected {
+  --background: rgba(63, 81, 181, 0.15);
+}
+
+/* Position Emoji - Removed */
+
+/* Position Labels */
+.position-item ion-label {
+  margin: 0;
+}
+
+.position-name {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--ion-color-dark, #000000);
+  margin: 0 0 4px 0;
+  line-height: 1.3;
+}
+
+.dark-theme .position-name {
+  color: #ffffff;
+}
+
+/* Position description removed */
+
+/* Selected Icon */
+.selected-icon {
+  color: var(--ion-color-indigo);
+  font-size: 1.2rem;
+  margin-left: auto;
+}
+
+/* No Results State */
+.no-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.no-results h3 {
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin: 0 0 8px 0;
+  color: var(--ion-color-medium, #92949c);
+}
+
+.no-results p {
+  font-size: 0.9rem;
+  margin: 0;
+  color: var(--ion-color-medium, #92949c);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .position-item {
+    --padding-start: 16px;
+    --padding-end: 16px;
+    --padding-top: 10px;
+    --padding-bottom: 10px;
+    --min-height: 48px;
+  }
+  
+  .position-item.selected {
+    --padding-start: 12px;
+  }
+  
+  /* Position emoji removed */
+  
+  .position-name {
+    font-size: 1.05rem;
+  }
+  
+  /* Position description removed */
+  
+  .category-header {
+    padding: 14px 16px 10px;
+  }
+  
+  .category-icon {
+    width: 28px;
+    height: 28px;
+    margin-right: 10px;
+  }
+  
+  .category-icon ion-icon {
+    font-size: 1.1rem;
+  }
+  
+  .category-title {
+    font-size: 0.95rem;
+  }
+}
+
+/* Animation for modal entrance */
+@keyframes slideUpIn {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.position-selection-modal.modal-entering {
+  animation: slideUpIn 0.3s ease-out;
+}
+
+/* Haptic feedback simulation */
+.position-item:active {
+  transform: scale(0.98);
+  transition: transform 0.1s ease;
+}
+
+/* Safe area adjustments for iPhone */
+@supports (padding: max(0px)) {
+  .position-selection-content {
+    --padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Category-specific styling */
+.position-category:first-child .category-header {
+  border-top: 1px solid var(--ion-color-light-shade, #e9ecef);
+}
+
+.dark-theme .position-category:first-child .category-header {
+  border-top-color: #2a2a2a;
+}
+
+/* Smooth scrolling for long lists */
+.position-selection-content {
+  scroll-behavior: smooth;
+}
+
+/* Enhanced visual hierarchy */
+.position-item:last-child {
+  border-bottom: none;
+}
+
+.position-category:not(:last-child) .position-list .position-item:last-child {
+  border-bottom: 1px solid var(--ion-color-light-shade, #e9ecef);
+}
+
+.dark-theme .position-category:not(:last-child) .position-list .position-item:last-child {
+  border-bottom-color: #2a2a2a;
+}

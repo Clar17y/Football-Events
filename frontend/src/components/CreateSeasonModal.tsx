@@ -92,10 +92,10 @@ const CreateSeasonModal: React.FC<CreateSeasonModalProps> = ({
   React.useEffect(() => {
     if (mode === 'edit' && editSeason) {
       setFormData({
-        name: editSeason.name || '',
+        name: editSeason.label || '',
         startDate: editSeason.startDate ? dayjs(editSeason.startDate) : dayjs(),
         endDate: editSeason.endDate ? dayjs(editSeason.endDate) : dayjs().add(3, 'month'),
-        isActive: editSeason.isActive ?? true
+        isActive: editSeason.isCurrent ?? true
       });
     } else if (mode === 'create') {
       // Reset form for create mode
@@ -158,7 +158,7 @@ const CreateSeasonModal: React.FC<CreateSeasonModalProps> = ({
     }
 
     const seasonData = {
-      name: formData.name.trim(),
+      label: formData.name.trim(),
       startDate: formData.startDate?.toISOString() || '',
       endDate: formData.endDate?.toISOString() || '',
       isActive: formData.isActive

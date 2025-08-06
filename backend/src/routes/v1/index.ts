@@ -3,6 +3,7 @@ import teamsRouter from './teams';
 import playersRouter from './players';
 import playerTeamsRouter from './player-teams';
 import playersWithTeamRouter from './players-with-team';
+import playersWithTeamsRouter from './players-with-teams';
 import seasonsRouter from './seasons';
 import matchesRouter from './matches';
 import eventsRouter from './events';
@@ -24,6 +25,7 @@ v1Router.get('/', (_req, res) => {
       players: '/api/v1/players',
       playerTeams: '/api/v1/player-teams',
       playersWithTeam: '/api/v1/players-with-team',
+      playersWithTeams: '/api/v1/players-with-teams',
       seasons: '/api/v1/seasons',
       matches: '/api/v1/matches',
       events: '/api/v1/events',
@@ -41,6 +43,7 @@ v1Router.use('/teams', teamsRouter);
 v1Router.use('/players', playersRouter);
 v1Router.use('/player-teams', playerTeamsRouter);
 v1Router.use('/players-with-team', playersWithTeamRouter);
+v1Router.use('/players-with-teams', playersWithTeamsRouter);
 v1Router.use('/seasons', seasonsRouter);
 v1Router.use('/matches', matchesRouter);
 v1Router.use('/events', eventsRouter);

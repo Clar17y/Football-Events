@@ -62,6 +62,7 @@ export const playersApi = {
    */
   async getPlayerById(id: string): Promise<PlayerResponse> {
     const response = await apiClient.get(`/players/${id}`);
+    console.log('[playersApi] getPlayerById response:', response.data);
     return {
       data: response.data as Player,
       success: true
@@ -98,6 +99,30 @@ export const playersApi = {
   },
 
   /**
+   * Update an existing player with team changes
+   */
+  async updatePlayerWithTeams(id: string, playerData: PlayerUpdateRequest & { teamIds: string[] }): Promise<PlayerResponse> {
+    const { teamIds, ...playerFields } = playerData;
+    
+    // Remove undefined values from player fields
+    const cleanPlayerData = Object.fromEntries(
+      Object.entries(playerFields).filter(([_, value]) => value !== undefined)
+    );
+
+    const requestData = {
+      ...cleanPlayerData,
+      teamIds
+    };
+
+    const response = await apiClient.put(`/players-with-teams/${id}`, requestData);
+    return {
+      data: response.data.player as Player,
+      success: true,
+      message: `Player updated and team assignments changed successfully`
+    };
+  },
+
+  /**
    * Delete a player (soft delete)
    */
   async deletePlayer(id: string): Promise<{ success: boolean; message: string }> {
@@ -128,6 +153,48 @@ export const playersApi = {
     const url = `/players/${playerId}/stats${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
     const response = await apiClient.get(url);
     return response.data;
+  },
+
+  /**
+   * Create a new player with team assignment in one operation
+   */
+  async createPlayerWithTeam(playerData: PlayerCreateRequest & { teamId: string; startDate?: string }): Promise<PlayerResponse> {
+    const { teamId, startDate = '2024-01-01', ...playerFields } = playerData;
+    
+    const requestData = {
+      ...playerFields,
+      teamId,
+      startDate,
+      isActive: true
+    };
+    
+    const response = await apiClient.post('/players-with-team', requestData);
+    return {
+      data: response.data.player as Player,
+      success: true,
+      message: 'Player created and assigned to team successfully'
+    };
+  },
+
+  /**
+   * Create a new player with multiple team assignments in one operation
+   */
+  async createPlayerWithTeams(playerData: PlayerCreateRequest & { teamIds: string[]; startDate?: string }): Promise<PlayerResponse> {
+    const { teamIds, startDate = '2024-01-01', ...playerFields } = playerData;
+    
+    const requestData = {
+      ...playerFields,
+      teamIds,
+      startDate,
+      isActive: true
+    };
+    
+    const response = await apiClient.post('/players-with-teams', requestData);
+    return {
+      data: response.data.player as Player,
+      success: true,
+      message: `Player created and assigned to ${teamIds.length} team${teamIds.length !== 1 ? 's' : ''} successfully`
+    };
   }
 };
 

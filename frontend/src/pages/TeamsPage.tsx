@@ -37,6 +37,7 @@ import CreateTeamModal from '../components/CreateTeamModal';
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu';
 import { useTeams } from '../hooks/useTeams';
 import { matchesApi } from '../services/api/matchesApi';
+import { teamsApi } from '../services/api/teamsApi';
 import type { Team } from '@shared/types';
 import './PageStyles.css';
 import './TeamsPage.css';
@@ -65,35 +66,48 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [contextMenuAnchor, setContextMenuAnchor] = useState<HTMLElement | null>(null);
   const [matchCounts, setMatchCounts] = useState<Record<string, number>>({});
+  const [playerCounts, setPlayerCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadTeams();
   }, [loadTeams]);
 
-  // Load match counts for all teams
+  // Load match counts and player counts for all teams
   useEffect(() => {
-    const loadMatchCounts = async () => {
+    const loadTeamCounts = async () => {
       if (teams.length > 0) {
-        const counts: Record<string, number> = {};
+        const matchCounts: Record<string, number> = {};
+        const playerCounts: Record<string, number> = {};
         
-        // Load match counts for all teams in parallel
+        // Load match counts and player counts for all teams in parallel
         await Promise.all(
           teams.map(async (team) => {
             try {
+              // Load match count
               const matches = await matchesApi.getMatchesByTeam(team.id);
-              counts[team.id] = matches.length;
+              matchCounts[team.id] = matches.length;
             } catch (error) {
               console.error(`Failed to load matches for team ${team.id}:`, error);
-              counts[team.id] = 0;
+              matchCounts[team.id] = 0;
+            }
+
+            try {
+              // Load active player count
+              const playersResponse = await teamsApi.getActiveTeamPlayers(team.id);
+              playerCounts[team.id] = playersResponse.data.length;
+            } catch (error) {
+              console.error(`Failed to load players for team ${team.id}:`, error);
+              playerCounts[team.id] = 0;
             }
           })
         );
         
-        setMatchCounts(counts);
+        setMatchCounts(matchCounts);
+        setPlayerCounts(playerCounts);
       }
     };
 
-    loadMatchCounts();
+    loadTeamCounts();
   }, [teams]);
 
   const navigate = (page: string) => {
@@ -177,6 +191,7 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
     const primaryColor = team.homeKitPrimary || 'var(--theme-primary, var(--ion-color-teal))';
     const secondaryColor = team.homeKitSecondary || 'var(--theme-primary-tint, var(--ion-color-teal-tint))';
     const matchCount = matchCounts[team.id] ?? 0;
+    const playerCount = playerCounts[team.id] ?? 0;
     
     const teamCardStyle = hasTeamColors ? {
       '--team-primary': primaryColor,
@@ -250,7 +265,7 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
           <div className="team-stats">
             <IonChip color="medium" className="stat-chip">
               <IonIcon icon={people} />
-              <span>0 players</span>
+              <span>{playerCount} player{playerCount !== 1 ? 's' : ''}</span>
             </IonChip>
             <IonChip color="medium" className="stat-chip">
               <IonIcon icon={statsChart} />

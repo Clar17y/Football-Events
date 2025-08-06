@@ -201,6 +201,18 @@ export const transformPlayerTeam = (prismaPlayerTeam: PrismaPlayerTeam): PlayerT
 });
 
 // ============================================================================
+// UTILITY FUNCTIONS FOR DATE CONVERSION
+// ============================================================================
+
+/**
+ * Convert DD-MM-YYYY string to ISO Date for Prisma
+ */
+const convertDDMMYYYYToISO = (dateString: string): Date => {
+  const [day, month, year] = dateString.split('-');
+  return new Date(`${year}-${month}-${day}T00:00:00.000Z`);
+};
+
+// ============================================================================
 // FRONTEND TO PRISMA TRANSFORMERS (for API requests)
 // ============================================================================
 
@@ -211,7 +223,7 @@ export const transformPlayerCreateRequest = (
   name: request.name,
   squad_number: request.squadNumber ?? null,
   preferred_pos: request.preferredPosition ?? null,
-  dob: request.dateOfBirth ?? null,
+  dob: request.dateOfBirth ? convertDDMMYYYYToISO(request.dateOfBirth) : null,
   notes: request.notes ?? null,
   created_by_user_id,
 });
@@ -224,7 +236,9 @@ export const transformPlayerUpdateRequest = (
   if (request.name !== undefined) update.name = request.name;
   if (request.squadNumber !== undefined) update.squad_number = request.squadNumber;
   if (request.preferredPosition !== undefined) update.preferred_pos = request.preferredPosition;
-  if (request.dateOfBirth !== undefined) update.dob = request.dateOfBirth;
+  if (request.dateOfBirth !== undefined) {
+    update.dob = request.dateOfBirth ? convertDDMMYYYYToISO(request.dateOfBirth) : null;
+  }
   if (request.notes !== undefined) update.notes = request.notes;
   
   return update;
