@@ -17,7 +17,8 @@ import {
   IonRefresher,
   IonRefresherContent,
   IonActionSheet,
-  IonAlert
+  IonAlert,
+  IonSpinner
 } from '@ionic/react';
 import { 
   add, 
@@ -28,12 +29,14 @@ import {
   statsChart,
   refresh,
   people,
-  shirt
+  shirt,
+  close
 } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader';
 import CreatePlayerModal from '../components/CreatePlayerModal';
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu';
 import { usePlayers } from '../hooks/usePlayers';
+import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import { teamsApi } from '../services/api/teamsApi';
 import type { Player, Team } from '@shared/types';
 import './PageStyles.css';
@@ -41,9 +44,13 @@ import './PlayersPage.css';
 
 interface PlayersPageProps {
   onNavigate?: (page: string) => void;
+  initialTeamFilter?: {
+    teamId: string;
+    teamName: string;
+  };
 }
 
-const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate }) => {
+const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter }) => {
   const {
     players,
     loading,
@@ -56,7 +63,6 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate }) => {
   } = usePlayers();
 
   // Local state
-  const [searchText, setSearchText] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -65,6 +71,25 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate }) => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editPlayer, setEditPlayer] = useState<Player | null>(null);
+  
+  // Team filtering state
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState<string | null>(
+    initialTeamFilter?.teamId || null
+  );
+  const [teamFilterName, setTeamFilterName] = useState<string>(
+    initialTeamFilter?.teamName || ''
+  );
+
+  // Debounced search functionality
+  const { searchText, setSearchText, showSpinner } = useDebouncedSearch({
+    delay: 300,
+    onSearch: async (searchTerm: string) => {
+      await loadPlayers({
+        search: searchTerm || undefined,
+        teamId: selectedTeamFilter || undefined
+      });
+    }
+  });
 
   const navigate = (page: string) => {
     if (onNavigate) {
@@ -72,10 +97,12 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate }) => {
     }
   };
 
-  // Load players on mount
+  // Load players on mount with initial team filter
   useEffect(() => {
-    loadPlayers();
-  }, [loadPlayers]);
+    loadPlayers({
+      teamId: selectedTeamFilter || undefined
+    });
+  }, [selectedTeamFilter]); // Remove loadPlayers from dependencies
 
   // Load teams for player team assignments
   useEffect(() => {
@@ -95,16 +122,19 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate }) => {
     loadTeams();
   }, []);
 
-  // Handle search
-  const handleSearch = async (value: string) => {
-    setSearchText(value);
-    await loadPlayers({ search: value.trim() || undefined });
-  };
-
   // Handle refresh
   const handleRefresh = async (event: CustomEvent) => {
-    await refreshPlayers();
+    await loadPlayers({
+      search: searchText.trim() || undefined,
+      teamId: selectedTeamFilter || undefined
+    });
     event.detail.complete();
+  };
+
+  // Clear team filter
+  const clearTeamFilter = () => {
+    setSelectedTeamFilter(null);
+    setTeamFilterName('');
   };
 
   // Handle ellipses click to show context menu
@@ -302,13 +332,31 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate }) => {
             </p>
           </div>
 
-          <IonSearchbar
-            value={searchText}
-            onIonInput={(e) => handleSearch(e.detail.value!)}
-            placeholder="Search players by name..."
-            showClearButton="focus"
-            className="players-search"
-          />
+          <div className="search-container">
+            <IonSearchbar
+              value={searchText}
+              onIonInput={(e) => setSearchText(e.detail.value!)}
+              placeholder="Search players by name..."
+              showClearButton="focus"
+              className="players-search"
+            />
+            {showSpinner && (
+              <div className={`search-loading ${showSpinner ? 'visible' : ''}`}>
+                <IonSpinner name="dots" />
+              </div>
+            )}
+          </div>
+
+          {/* Team Filter Chip */}
+          {selectedTeamFilter && (
+            <div className="filter-chips">
+              <IonChip color="primary" outline onClick={clearTeamFilter}>
+                <IonIcon icon={people} />
+                <span>{teamFilterName}</span>
+                <IonIcon icon={close} />
+              </IonChip>
+            </div>
+          )}
         </div>
 
         {/* Players Grid */}
@@ -330,12 +378,16 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate }) => {
               <IonIcon icon={person} className="empty-icon" />
               <h2 className="empty-title">No Players Yet</h2>
               <p className="empty-subtitle">
-                {searchText 
+                {searchText && selectedTeamFilter
+                  ? `No players found in "${teamFilterName}" matching "${searchText}". Try a different search term or clear filters.`
+                  : searchText 
                   ? `No players found matching "${searchText}". Try a different search term.`
+                  : selectedTeamFilter
+                  ? `No players found in "${teamFilterName}". This team doesn't have any players assigned yet.`
                   : 'Start building your team by adding your first player. Track their progress, manage positions, and celebrate their achievements.'
                 }
               </p>
-              {!searchText && (
+              {!searchText && !selectedTeamFilter && (
                 <IonButton 
                   color="indigo" 
                   onClick={handleCreatePlayer}

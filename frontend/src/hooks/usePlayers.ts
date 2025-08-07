@@ -206,8 +206,29 @@ export const usePlayers = (): UsePlayersReturn => {
    * Refresh players list
    */
   const refreshPlayers = useCallback(async () => {
-    await loadPlayers({ page: state.page });
-  }, [loadPlayers, state.page]);
+    setState(prev => ({ ...prev, loading: true, error: null }));
+    
+    try {
+      const response = await playersApi.getPlayers({ page: state.page });
+      setState(prev => ({
+        ...prev,
+        players: response.data,
+        total: response.total,
+        page: response.page,
+        hasMore: response.hasMore,
+        loading: false,
+        error: null
+      }));
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to load players';
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: errorMessage
+      }));
+      showToast({ message: errorMessage, severity: 'error' });
+    }
+  }, [state.page, showToast]);
 
   /**
    * Clear error state

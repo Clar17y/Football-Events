@@ -25,6 +25,37 @@ const AppRoutes: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const [currentPage, setCurrentPage] = useState('home');
 
+  // Parse URL parameters for team filtering
+  const parseUrlParams = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const teamId = urlParams.get('teamId');
+    const teamName = urlParams.get('teamName');
+    
+    if (teamId && teamName) {
+      return {
+        teamId: teamId,
+        teamName: decodeURIComponent(teamName)
+      };
+    }
+    return null;
+  };
+
+  // Enhanced navigation handler to support URL parameters
+  const handleNavigation = (pageOrUrl: string) => {
+    if (pageOrUrl.includes('?')) {
+      // Handle URL with parameters
+      const [page, params] = pageOrUrl.split('?');
+      setCurrentPage(page);
+      // Update URL without page reload
+      window.history.pushState({}, '', `?${params}`);
+    } else {
+      // Handle simple page navigation
+      setCurrentPage(pageOrUrl);
+      // Clear URL parameters
+      window.history.pushState({}, '', window.location.pathname);
+    }
+  };
+
   console.log('AppRoutes: isLoading =', isLoading, 'isAuthenticated =', isAuthenticated);
 
   if (isLoading) {
@@ -36,40 +67,42 @@ const AppRoutes: React.FC = () => {
 
   // Simple page navigation without router
   const renderCurrentPage = () => {
+    const teamFilter = parseUrlParams();
+    
     switch (currentPage) {
       case 'login':
-        return <LoginPage onNavigate={setCurrentPage} />;
+        return <LoginPage onNavigate={handleNavigation} />;
       case 'register':
-        return <RegisterPage onNavigate={setCurrentPage} />;
+        return <RegisterPage onNavigate={handleNavigation} />;
       case 'seasons':
         if (!isAuthenticated) {
           setCurrentPage('login');
-          return <LoginPage onNavigate={setCurrentPage} />;
+          return <LoginPage onNavigate={handleNavigation} />;
         }
-        return <SeasonsPage onNavigate={setCurrentPage} />;
+        return <SeasonsPage onNavigate={handleNavigation} />;
       case 'teams':
         if (!isAuthenticated) {
           setCurrentPage('login');
-          return <LoginPage onNavigate={setCurrentPage} />;
+          return <LoginPage onNavigate={handleNavigation} />;
         }
-        return <TeamsPage onNavigate={setCurrentPage} />;
+        return <TeamsPage onNavigate={handleNavigation} />;
       case 'players':
         if (!isAuthenticated) {
           setCurrentPage('login');
-          return <LoginPage onNavigate={setCurrentPage} />;
+          return <LoginPage onNavigate={handleNavigation} />;
         }
-        return <PlayersPage onNavigate={setCurrentPage} />;
+        return <PlayersPage onNavigate={handleNavigation} initialTeamFilter={teamFilter} />;
       case 'awards':
         if (!isAuthenticated) {
           setCurrentPage('login');
-          return <LoginPage onNavigate={setCurrentPage} />;
+          return <LoginPage onNavigate={handleNavigation} />;
         }
-        return <AwardsPage onNavigate={setCurrentPage} />;
+        return <AwardsPage onNavigate={handleNavigation} />;
       case 'statistics':
-        return <StatisticsPage onNavigate={setCurrentPage} />;
+        return <StatisticsPage onNavigate={handleNavigation} />;
       case 'home':
       default:
-        return <HomePage onNavigate={setCurrentPage} />;
+        return <HomePage onNavigate={handleNavigation} />;
     }
   };
 

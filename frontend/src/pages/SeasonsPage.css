@@ -297,3 +297,40 @@
     font-size: 0.75rem;
   }
 }
+
+/* Search Loading Indicator */
+.search-container {
+  position: relative;
+}
+
+.search-loading {
+  position: absolute;
+  right: 55px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1000 !important;
+  pointer-events: none;
+  background: var(--ion-color-step-50, #f9f9f9);
+  border-radius: 50%;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+}
+
+.search-loading.visible {
+  opacity: 1;
+}
+
+.search-loading ion-spinner {
+  --color: var(--ion-color-medium);
+  width: 16px;
+  height: 16px;
+}
+
+/* Ensure search bar has enough padding for the spinner */
+.search-container ion-searchbar {
+  --padding-end: 48px;
+}

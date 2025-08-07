@@ -39,12 +39,8 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({
 }) => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const generateId = useCallback(() => {
-    return `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  }, []);
-
   const showToast = useCallback((toast: Omit<ToastMessage, 'id'>): string => {
-    const id = generateId();
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newToast: ToastMessage = {
       id,
       dismissible: true,
@@ -61,12 +57,12 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({
     // Auto-dismiss if duration is set
     if (newToast.duration && newToast.duration > 0) {
       setTimeout(() => {
-        dismissToast(id);
+        setToasts(prev => prev.filter(t => t.id !== id));
       }, newToast.duration);
     }
 
     return id;
-  }, [generateId, maxToasts]);
+  }, [maxToasts]);
 
   const dismissToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));

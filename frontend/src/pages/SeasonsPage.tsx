@@ -18,7 +18,8 @@ import {
   IonSkeletonText,
   IonRefresher,
   IonRefresherContent,
-  IonAlert
+  IonAlert,
+  IonSpinner
 } from '@ionic/react';
 import { 
   add, 
@@ -36,6 +37,7 @@ import PageHeader from '../components/PageHeader';
 import CreateSeasonModal from '../components/CreateSeasonModal';
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu';
 import { useSeasons } from '../hooks/useSeasons';
+import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import { matchesApi } from '../services/api/matchesApi';
 import type { Season } from '@shared/types';
 import './PageStyles.css';
@@ -56,7 +58,6 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
     clearError
   } = useSeasons();
 
-  const [searchText, setSearchText] = useState('');
   const [selectedSeason, setSelectedSeason] = useState<Season | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -64,6 +65,14 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [contextMenuAnchor, setContextMenuAnchor] = useState<HTMLElement | null>(null);
   const [matchCounts, setMatchCounts] = useState<Record<string, number>>({});
+
+  // Debounced search functionality
+  const { searchText, setSearchText, showSpinner } = useDebouncedSearch({
+    delay: 300,
+    onSearch: async (searchTerm: string) => {
+      await loadSeasons({ search: searchTerm || undefined });
+    }
+  });
 
   useEffect(() => {
     loadSeasons();
@@ -99,11 +108,6 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
     if (onNavigate) {
       onNavigate(page);
     }
-  };
-
-  const handleSearch = (text: string) => {
-    setSearchText(text);
-    loadSeasons({ search: text.trim() || undefined });
   };
 
   const handleRefresh = async (event: CustomEvent) => {
@@ -296,13 +300,20 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
             </p>
           </div>
           
-          <IonSearchbar
-            value={searchText}
-            onIonInput={(e) => handleSearch(e.detail.value!)}
-            placeholder="Search seasons..."
-            showClearButton="focus"
-            className="seasons-search"
-          />
+          <div className="search-container">
+            <IonSearchbar
+              value={searchText}
+              onIonInput={(e) => setSearchText(e.detail.value!)}
+              placeholder="Search seasons..."
+              showClearButton="focus"
+              className="seasons-search"
+            />
+            {showSpinner && (
+              <div className={`search-loading ${showSpinner ? 'visible' : ''}`}>
+                <IonSpinner name="dots" />
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="seasons-content">

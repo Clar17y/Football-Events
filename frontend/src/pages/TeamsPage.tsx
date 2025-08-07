@@ -19,7 +19,8 @@ import {
   IonRefresher,
   IonRefresherContent,
   IonActionSheet,
-  IonAlert
+  IonAlert,
+  IonSpinner
 } from '@ionic/react';
 import { 
   add, 
@@ -36,6 +37,7 @@ import PageHeader from '../components/PageHeader';
 import CreateTeamModal from '../components/CreateTeamModal';
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu';
 import { useTeams } from '../hooks/useTeams';
+import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import { matchesApi } from '../services/api/matchesApi';
 import { teamsApi } from '../services/api/teamsApi';
 import type { Team } from '@shared/types';
@@ -57,7 +59,6 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
     clearError
   } = useTeams();
 
-  const [searchText, setSearchText] = useState('');
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
@@ -67,6 +68,14 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
   const [contextMenuAnchor, setContextMenuAnchor] = useState<HTMLElement | null>(null);
   const [matchCounts, setMatchCounts] = useState<Record<string, number>>({});
   const [playerCounts, setPlayerCounts] = useState<Record<string, number>>({});
+
+  // Debounced search functionality
+  const { searchText, setSearchText, showSpinner } = useDebouncedSearch({
+    delay: 300,
+    onSearch: async (searchTerm: string) => {
+      await loadTeams({ search: searchTerm || undefined });
+    }
+  });
 
   useEffect(() => {
     loadTeams();
@@ -116,11 +125,6 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
     }
   };
 
-  const handleSearch = (text: string) => {
-    setSearchText(text);
-    loadTeams({ search: text.trim() || undefined });
-  };
-
   const handleRefresh = async (event: CustomEvent) => {
     await loadTeams();
     event.detail.complete();
@@ -165,8 +169,10 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
         setShowDeleteAlert(true);
         break;
       case 'players':
-        // TODO: Navigate to team players
-        console.log('View players for:', selectedTeam.name);
+        // Navigate to players page with team filter
+        if (onNavigate) {
+          onNavigate(`players?teamId=${selectedTeam.id}&teamName=${encodeURIComponent(selectedTeam.name)}`);
+        }
         setSelectedTeam(null); // Clear after action
         break;
       case 'stats':
@@ -358,13 +364,20 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
             </p>
           </div>
           
-          <IonSearchbar
-            value={searchText}
-            onIonInput={(e) => handleSearch(e.detail.value!)}
-            placeholder="Search teams..."
-            showClearButton="focus"
-            className="teams-search"
-          />
+          <div className="search-container">
+            <IonSearchbar
+              value={searchText}
+              onIonInput={(e) => setSearchText(e.detail.value!)}
+              placeholder="Search teams..."
+              showClearButton="focus"
+              className="teams-search"
+            />
+            {showSpinner && (
+              <div className={`search-loading ${showSpinner ? 'visible' : ''}`}>
+                <IonSpinner name="dots" />
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="teams-content">
