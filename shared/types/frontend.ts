@@ -9,6 +9,17 @@ import type { EventKind } from './prisma';
 // CORE ENTITIES - Frontend Interfaces
 // ============================================================================
 
+export interface PlayerStats {
+  matches: number;
+  goals?: number;
+  assists?: number;
+  saves?: number;
+  tackles?: number;
+  interceptions?: number;
+  keyPasses?: number;
+  cleanSheets?: number;
+}
+
 export interface Player {
   id: string;
   name: string;                    // mapped from full_name
@@ -17,6 +28,7 @@ export interface Player {
   dateOfBirth?: Date;             // mapped from dob
   notes?: string;
   currentTeam?: string;           // mapped from current_team
+  stats?: PlayerStats;            // Player statistics
   createdAt: Date;                // mapped from created_at
   updatedAt?: Date;               // mapped from updated_at
   // Authentication and soft delete fields

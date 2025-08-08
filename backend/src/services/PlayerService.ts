@@ -120,6 +120,14 @@ export class PlayerService {
                 }
               }
             }
+          },
+          lineup: {
+            where: {
+              is_deleted: false
+            },
+            select: {
+              match_id: true
+            }
           }
         }
       }),
@@ -128,7 +136,54 @@ export class PlayerService {
 
     const totalPages = Math.ceil(total / limit);
 
-    // Transform players and populate currentTeam for each
+    // Get all player IDs for batch event query
+    const playerIds = players.map(p => p.id);
+    
+    // Get all events for these players in a single query
+    const allEvents = await this.prisma.event.findMany({
+      where: {
+        player_id: { in: playerIds },
+        is_deleted: false
+      },
+      select: {
+        player_id: true,
+        kind: true
+      }
+    });
+
+    // Group events by player_id for efficient lookup
+    const eventsByPlayer: Record<string, any[]> = {};
+    allEvents.forEach(event => {
+      if (!eventsByPlayer[event.player_id!]) {
+        eventsByPlayer[event.player_id!] = [];
+      }
+      eventsByPlayer[event.player_id!].push(event);
+    });
+
+    // Clean sheets per player via lineup x matches where opponent_score = 0
+    const cleanSheetsGrouped = await this.prisma.lineup.groupBy({
+      by: ['player_id'],
+      where: {
+        is_deleted: false,
+        player_id: { in: playerIds },
+        matches: {
+          is: {
+            is_deleted: false,
+            opponent_score: 0,
+          }
+        }
+      },
+      _count: { _all: true }
+    });
+    const cleanSheetsByPlayer: Record<string, number> = {};
+    cleanSheetsGrouped.forEach(row => {
+      // @ts-ignore _count shape depending on Prisma version
+      const count = (row as any)._count?._all ?? 0;
+      // @ts-ignore player_id present in groupBy output
+      cleanSheetsByPlayer[(row as any).player_id] = count;
+    });
+
+    // Transform players and populate currentTeam and stats for each
     const transformedPlayers = players.map(player => {
       const transformedPlayer = transformPlayer(player);
       
@@ -136,7 +191,32 @@ export class PlayerService {
       const activeTeamNames = player.player_teams.map(pt => pt.team.name);
       transformedPlayer.currentTeam = activeTeamNames.join(', ');
       
-      console.log(`[PlayerService] getPlayers - Player: ${player.name}, Teams: ${activeTeamNames.join(', ')}`);
+      // Calculate matches played from unique match_ids in lineup
+      const uniqueMatchIds = new Set(player.lineup.map(l => l.match_id));
+      const matchesPlayed = uniqueMatchIds.size;
+      
+      // Calculate all stats from events
+      const playerEvents = eventsByPlayer[player.id] || [];
+      const goals = playerEvents.filter(e => e.kind === 'goal').length;
+      const assists = playerEvents.filter(e => e.kind === 'assist').length;
+      const saves = playerEvents.filter(e => e.kind === 'save').length;
+      const tackles = playerEvents.filter(e => e.kind === 'tackle').length;
+      const interceptions = playerEvents.filter(e => e.kind === 'interception').length;
+      const keyPasses = playerEvents.filter(e => e.kind === 'key_pass').length;
+      
+      // Add stats object
+      transformedPlayer.stats = {
+        matches: matchesPlayed,
+        goals: goals,
+        assists: assists,
+        saves: saves,
+        tackles: tackles,
+        interceptions: interceptions,
+        keyPasses: keyPasses,
+        cleanSheets: cleanSheetsByPlayer[player.id] || 0
+      };
+      
+      console.log(`[PlayerService] getPlayers - Player: ${player.name}, Teams: ${activeTeamNames.join(', ')}, Matches: ${matchesPlayed}, Goals: ${goals}, CleanSheets: ${cleanSheetsByPlayer[player.id] || 0}`);
       
       return transformedPlayer;
     });

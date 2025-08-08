@@ -74,7 +74,179 @@
 }
 
 
-/* Players Grid */
+/* Players Content */
+.players-content {
+  min-height: calc(100vh - 200px);
+}
+
+/* Player Card Styles */
+.player-card {
+  border-radius: var(--grassroots-radius-lg);
+  box-shadow: var(--grassroots-shadow-md);
+  border: 1px solid var(--grassroots-surface-variant);
+  transition: all 0.3s ease;
+  overflow: hidden;
+  background: var(--grassroots-surface);
+  margin-bottom: var(--grassroots-space-md);
+  position: relative;
+  min-height: 140px; /* Fixed height for consistency */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Position Stripe - diagonal like team stripes */
+.player-position-stripe {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 20%;
+  background: var(--ion-color-indigo, #3880ff);
+  z-index: 1;
+  opacity: 0.15;
+  transform: skewX(-15deg);
+  transform-origin: top;
+  transition: opacity 0.3s ease;
+}
+
+/* Position-based stripe colors */
+.player-card-goalkeeper .player-position-stripe {
+  background: #10b981; /* Green for goalkeepers */
+}
+
+.player-card-defender .player-position-stripe {
+  background: #3182ce; /* Blue for defenders */
+}
+
+.player-card-midfielder .player-position-stripe {
+  background: #ed8936; /* Orange for midfielders */
+}
+
+.player-card-forward .player-position-stripe {
+  background: #e53e3e; /* Red for forwards */
+}
+
+/* Default stripe for players without position */
+.player-card-default .player-position-stripe {
+  background: var(--ion-color-indigo, #3880ff);
+}
+
+/* Ensure content is above stripe */
+.player-card .player-card-content {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 0; /* Allow content to shrink if needed */
+}
+
+/* Player card hover effects */
+.player-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--grassroots-shadow-lg);
+}
+
+.player-card:hover .player-position-stripe {
+  opacity: 0.25;
+}
+
+.player-card-goalkeeper:hover {
+  border-color: #10b981;
+}
+
+.player-card-defender:hover {
+  border-color: #3182ce;
+}
+
+.player-card-midfielder:hover {
+  border-color: #ed8936;
+}
+
+.player-card-forward:hover {
+  border-color: #e53e3e;
+}
+
+.player-card-default:hover {
+  border-color: var(--ion-color-indigo);
+}
+
+/* Position Sections */
+.players-sections {
+  padding: var(--grassroots-space-md);
+}
+
+.position-section {
+  margin-bottom: var(--grassroots-space-lg);
+}
+
+.position-section:last-child {
+  margin-bottom: 0;
+}
+
+/* Section Headers */
+.position-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--grassroots-space-sm) var(--grassroots-space-md);
+  background: var(--grassroots-surface-elevated);
+  border: 1px solid var(--grassroots-surface-variant);
+  border-radius: var(--grassroots-radius-md);
+  margin-bottom: var(--grassroots-space-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.position-section-header:hover {
+  background: var(--grassroots-surface-variant);
+  transform: translateY(-1px);
+  box-shadow: var(--grassroots-shadow-sm);
+}
+
+.section-header-content {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-sm);
+}
+
+.section-icon {
+  font-size: 1.25rem;
+  color: var(--grassroots-text-secondary);
+}
+
+.section-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--grassroots-text-primary);
+  margin: 0;
+  letter-spacing: -0.025em;
+}
+
+.section-chevron {
+  font-size: 1.25rem;
+  color: var(--grassroots-text-tertiary);
+  transition: transform 0.2s ease;
+}
+
+/* Section Grid */
+.section-grid {
+  margin: 0;
+  padding: 0;
+}
+
+.section-grid ion-row {
+  margin: 0;
+}
+
+/* Animations for collapsible sections */
+.position-section .section-grid {
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+}
 .players-grid {
   padding: 0 var(--grassroots-space-md) var(--grassroots-space-xl);
 }
@@ -85,23 +257,7 @@
   grid-template-columns: 1fr;
 }
 
-/* Player Card */
-.player-card {
-  --background: var(--grassroots-surface-elevated);
-  --color: var(--grassroots-text-primary);
-  border-radius: var(--grassroots-radius-lg);
-  box-shadow: var(--grassroots-shadow-sm);
-  margin: 0;
-  transition: all 0.2s ease;
-  border: 1px solid var(--grassroots-surface-variant);
-  overflow: hidden;
-}
-
-.player-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--grassroots-shadow-md);
-  border-color: var(--ion-color-indigo-tint);
-}
+/* Legacy player card styles removed - using new position-based styles above */
 
 .player-card-content {
   padding: var(--grassroots-space-md);

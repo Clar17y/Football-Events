@@ -30,7 +30,15 @@ import {
   refresh,
   people,
   shirt,
-  close
+  close,
+  chevronDown,
+  chevronUp,
+  shield,
+  checkmark,
+  football,
+  trophy,
+  eye,
+  flash
 } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader';
 import CreatePlayerModal from '../components/CreatePlayerModal';
@@ -79,6 +87,15 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
   const [teamFilterName, setTeamFilterName] = useState<string>(
     initialTeamFilter?.teamName || ''
   );
+
+  // Section collapse state
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    'no-position': false,
+    'goalkeeper': false,
+    'defender': false,
+    'midfielder': false,
+    'forward': false
+  });
 
   // Debounced search functionality
   const { searchText, setSearchText, showSpinner } = useDebouncedSearch({
@@ -227,13 +244,168 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
     setShowDeleteAlert(false);
   };
 
+  // Get position category for color coding
+  const getPositionCategory = (position: string): 'goalkeeper' | 'defender' | 'midfielder' | 'forward' => {
+    const goalkeepers = ['GK'];
+    const defenders = ['CB', 'RCB', 'LCB', 'SW', 'RB', 'LB', 'RWB', 'LWB', 'WB', 'FB'];
+    const midfielders = ['CDM', 'RDM', 'LDM', 'CM', 'RCM', 'LCM', 'CAM', 'RAM', 'LAM', 'RM', 'LM', 'RW', 'LW', 'AM', 'DM', 'WM'];
+    const forwards = ['RF', 'LF', 'CF', 'ST', 'SS'];
+    
+    if (goalkeepers.includes(position)) return 'goalkeeper';
+    if (defenders.includes(position)) return 'defender';
+    if (midfielders.includes(position)) return 'midfielder';
+    if (forwards.includes(position)) return 'forward';
+    return 'midfielder'; // default
+  };
+
+  // Group players by position category
+  const groupPlayersByPosition = () => {
+    const groups = {
+      'no-position': [] as Player[],
+      'goalkeeper': [] as Player[],
+      'defender': [] as Player[],
+      'midfielder': [] as Player[],
+      'forward': [] as Player[]
+    };
+
+    players.forEach(player => {
+      if (!player.preferredPosition) {
+        groups['no-position'].push(player);
+      } else {
+        const category = getPositionCategory(player.preferredPosition);
+        groups[category].push(player);
+      }
+    });
+
+    return groups;
+  };
+
+  // Toggle section collapse
+  const toggleSection = (sectionKey: string) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey]
+    }));
+  };
+
+  // Render position-specific statistics
+  const renderPositionSpecificStats = (player: Player) => {
+    const positionCategory = player.preferredPosition ? getPositionCategory(player.preferredPosition) : null;
+    const matches = player.stats?.matches || 0;
+    const goals = player.stats?.goals || 0;
+    const assists = player.stats?.assists || 0;
+    const saves = player.stats?.saves || 0;
+    const tackles = player.stats?.tackles || 0;
+    const interceptions = player.stats?.interceptions || 0;
+    const keyPasses = player.stats?.keyPasses || 0;
+    const cleanSheets = player.stats?.cleanSheets || 0;
+    
+    // Using real data for all event-based stats, only clean sheets still needs implementation
+    switch (positionCategory) {
+      case 'goalkeeper':
+        return (
+          <>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={statsChart} />
+              <span>{matches} match{matches !== 1 ? 'es' : ''}</span>
+            </IonChip>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={checkmark} />
+              <span>{saves} save{saves !== 1 ? 's' : ''}</span>
+            </IonChip>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={shield} />
+              <span>{cleanSheets} clean sheet{cleanSheets !== 1 ? 's' : ''}</span>
+            </IonChip>
+          </>
+        );
+      
+      case 'defender':
+        return (
+          <>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={statsChart} />
+              <span>{matches} match{matches !== 1 ? 'es' : ''}</span>
+            </IonChip>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={flash} />
+              <span>{tackles} tackle{tackles !== 1 ? 's' : ''}</span>
+            </IonChip>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={eye} />
+              <span>{interceptions} interception{interceptions !== 1 ? 's' : ''}</span>
+            </IonChip>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={shield} />
+              <span>{cleanSheets} clean sheet{cleanSheets !== 1 ? 's' : ''}</span>
+            </IonChip>
+          </>
+        );
+      
+      case 'midfielder':
+        return (
+          <>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={statsChart} />
+              <span>{matches} match{matches !== 1 ? 'es' : ''}</span>
+            </IonChip>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={trophy} />
+              <span>{assists} assist{assists !== 1 ? 's' : ''}</span>
+            </IonChip>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={eye} />
+              <span>{keyPasses} key pass{keyPasses !== 1 ? 'es' : ''}</span>
+            </IonChip>
+          </>
+        );
+      
+      case 'forward':
+        return (
+          <>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={statsChart} />
+              <span>{matches} match{matches !== 1 ? 'es' : ''}</span>
+            </IonChip>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={football} />
+              <span>{goals} goal{goals !== 1 ? 's' : ''}</span>
+            </IonChip>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={trophy} />
+              <span>{assists} assist{assists !== 1 ? 's' : ''}</span>
+            </IonChip>
+          </>
+        );
+      
+      default:
+        // Players without position - show generic stats
+        return (
+          <>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={statsChart} />
+              <span>{matches} match{matches !== 1 ? 'es' : ''}</span>
+            </IonChip>
+            <IonChip color="medium" className="stat-chip">
+              <IonIcon icon={football} />
+              <span>{goals} goal{goals !== 1 ? 's' : ''}</span>
+            </IonChip>
+          </>
+        );
+    }
+  };
+
   // Render player card
   const renderPlayerCard = (player: Player) => {
     const currentTeam = player.currentTeam ? teams[player.currentTeam] : null;
+    const positionCategory = player.preferredPosition ? getPositionCategory(player.preferredPosition) : null;
     
     return (
       <IonCol size="12" sizeMd="6" sizeLg="4" key={player.id}>
-        <IonCard className="player-card">
+        <IonCard className={`player-card ${positionCategory ? `player-card-${positionCategory}` : 'player-card-default'}`}>
+          {/* Position stripe */}
+          <div className="player-position-stripe"></div>
+          
           <IonCardContent className="player-card-content">
             <div className="player-header">
               <div className="player-info">
@@ -272,14 +444,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
               )}
               
               <div className="player-stats">
-                <IonChip color="medium" className="stat-chip">
-                  <IonIcon icon={statsChart} />
-                  <span>0 matches</span>
-                </IonChip>
-                <IonChip color="medium" className="stat-chip">
-                  <IonIcon icon={shirt} />
-                  <span>0 goals</span>
-                </IonChip>
+                {renderPositionSpecificStats(player)}
               </div>
             </div>
           </IonCardContent>
@@ -288,10 +453,51 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
     );
   };
 
+  // Render section header
+  const renderSectionHeader = (sectionKey: string, title: string, count: number, icon: string) => {
+    const isCollapsed = collapsedSections[sectionKey];
+    
+    return (
+      <div className="position-section-header" onClick={() => toggleSection(sectionKey)}>
+        <div className="section-header-content">
+          <IonIcon icon={icon} className="section-icon" />
+          <h3 className="section-title">{title} ({count})</h3>
+        </div>
+        <IonIcon 
+          icon={isCollapsed ? chevronDown : chevronUp} 
+          className="section-chevron"
+        />
+      </div>
+    );
+  };
+
+  // Render position section
+  const renderPositionSection = (sectionKey: string, title: string, players: Player[], icon: string) => {
+    if (players.length === 0) return null; // Don't show empty sections
+    
+    const isCollapsed = collapsedSections[sectionKey];
+    
+    return (
+      <div key={sectionKey} className="position-section">
+        {renderSectionHeader(sectionKey, title, players.length, icon)}
+        {!isCollapsed && (
+          <IonGrid className="section-grid">
+            <IonRow>
+              {players.map(renderPlayerCard)}
+            </IonRow>
+          </IonGrid>
+        )}
+      </div>
+    );
+  };
+
   // Render loading skeleton
   const renderPlayerSkeleton = (index: number) => (
     <IonCol size="12" sizeMd="6" sizeLg="4" key={`skeleton-${index}`}>
-      <IonCard className="player-skeleton">
+      <IonCard className="player-card player-skeleton">
+        {/* Position stripe for skeleton */}
+        <div className="player-position-stripe"></div>
+        
         <IonCardContent className="player-skeleton-content">
           <div className="skeleton-header">
             <IonSkeletonText animated className="skeleton-jersey" />
@@ -368,11 +574,20 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
               </IonRow>
             </IonGrid>
           ) : players.length > 0 ? (
-            <IonGrid>
-              <IonRow>
-                {players.map(renderPlayerCard)}
-              </IonRow>
-            </IonGrid>
+            <div className="players-sections">
+              {(() => {
+                const groupedPlayers = groupPlayersByPosition();
+                return (
+                  <>
+                    {renderPositionSection('no-position', 'Position Not Set', groupedPlayers['no-position'], person)}
+                    {renderPositionSection('goalkeeper', 'Goalkeepers', groupedPlayers['goalkeeper'], person)}
+                    {renderPositionSection('defender', 'Defenders', groupedPlayers['defender'], person)}
+                    {renderPositionSection('midfielder', 'Midfielders', groupedPlayers['midfielder'], person)}
+                    {renderPositionSection('forward', 'Forwards', groupedPlayers['forward'], person)}
+                  </>
+                );
+              })()}
+            </div>
           ) : (
             <div className="empty-state">
               <IonIcon icon={person} className="empty-icon" />
