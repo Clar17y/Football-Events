@@ -12,7 +12,7 @@ const playerService = new PlayerService();
 
 // GET /api/v1/players - List players with pagination and filtering
 router.get('/', authenticateToken, asyncHandler(async (req, res) => {
-  const { page = 1, limit = 25, search, teamId, position } = req.query;
+  const { page = 1, limit = 25, search, teamId, teamIds, noTeam, position } = req.query;
   
   const result = await playerService.getPlayers(
     req.user!.id,
@@ -22,6 +22,8 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
       limit: Number(limit),
       search: search as string,
       teamId: teamId as string,
+      teamIds: typeof teamIds === 'string' ? (teamIds as string).split(',').filter(Boolean) : undefined,
+      noTeam: typeof noTeam === 'string' ? (noTeam as string) === 'true' : undefined,
       position: position as string
     }
   );

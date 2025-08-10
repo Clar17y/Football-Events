@@ -17,7 +17,9 @@ export interface GetPlayersOptions {
   page: number;
   limit: number;
   search?: string;
-  teamId?: string;
+  teamId?: string; // single team filter (backward-compatible)
+  teamIds?: string[]; // multi-team filter
+  noTeam?: boolean; // players without active team
   position?: string;
 }
 
@@ -53,7 +55,7 @@ export class PlayerService {
   }
 
   async getPlayers(userId: string, userRole: string, options: GetPlayersOptions): Promise<PaginatedPlayers> {
-    const { page, limit, search, teamId, position } = options;
+    const { page, limit, search, teamId, teamIds, noTeam, position } = options;
     const skip = (page - 1) * limit;
 
     // Build where clause for filtering and ownership
@@ -72,6 +74,25 @@ export class PlayerService {
       where.player_teams = {
         some: {
           team_id: teamId,
+          is_active: true,
+          is_deleted: false
+        }
+      };
+    }
+
+    if (teamIds && teamIds.length > 0) {
+      where.player_teams = {
+        some: {
+          team_id: { in: teamIds },
+          is_active: true,
+          is_deleted: false
+        }
+      };
+    }
+
+    if (noTeam === true) {
+      where.player_teams = {
+        none: {
           is_active: true,
           is_deleted: false
         }

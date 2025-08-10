@@ -232,6 +232,20 @@
   transition: transform 0.2s ease;
 }
 
+.team-filter-inline {
+  display: flex;
+  align-items: center;
+  margin-left: var(--grassroots-space-sm);
+}
+
+.team-filter-inline-rounded .team-filter-button {
+  --border-radius: 999px;
+  --padding-top: 6px;
+  --padding-bottom: 6px;
+  --padding-start: 10px;
+  --padding-end: 10px;
+}
+
 /* Section Grid */
 .section-grid {
   margin: 0;

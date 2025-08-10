@@ -16,7 +16,9 @@ export interface PlayersListParams {
   page?: number;
   limit?: number;
   search?: string;
-  teamId?: string;
+  teamId?: string; // backward-compatible single team filter
+  teamIds?: string[]; // new multi-team filter
+  noTeam?: boolean; // filter players without active team
   position?: string;
 }
 
@@ -36,7 +38,7 @@ export const playersApi = {
    * Get paginated list of user's players with optional search and filtering
    */
   async getPlayers(params: PlayersListParams = {}): Promise<PlayersListResponse> {
-    const { page = 1, limit = 25, search, teamId, position } = params;
+    const { page = 1, limit = 25, search, teamId, teamIds, noTeam, position } = params;
     
     const queryParams = new URLSearchParams({
       page: page.toString(),
@@ -48,6 +50,12 @@ export const playersApi = {
     }
     if (teamId) {
       queryParams.append('teamId', teamId);
+    }
+    if (teamIds && teamIds.length > 0) {
+      queryParams.append('teamIds', teamIds.join(','));
+    }
+    if (noTeam !== undefined) {
+      queryParams.append('noTeam', String(noTeam));
     }
     if (position) {
       queryParams.append('position', position);

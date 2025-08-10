@@ -42,6 +42,7 @@ import {
 } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader';
 import CreatePlayerModal from '../components/CreatePlayerModal';
+import TeamSelectionModal from '../components/TeamSelectionModal';
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu';
 import { usePlayers } from '../hooks/usePlayers';
 import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
@@ -79,6 +80,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editPlayer, setEditPlayer] = useState<Player | null>(null);
+  const [showTeamModal, setShowTeamModal] = useState(false);
   
   // Team filtering state
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string | null>(
@@ -87,6 +89,10 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
   const [teamFilterName, setTeamFilterName] = useState<string>(
     initialTeamFilter?.teamName || ''
   );
+  // New multi-team filter state
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [selectedTeamNames, setSelectedTeamNames] = useState<string[]>([]);
+  const [filterNoTeam, setFilterNoTeam] = useState<boolean>(false);
 
   // Section collapse state
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
@@ -117,9 +123,11 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
   // Load players on mount with initial team filter
   useEffect(() => {
     loadPlayers({
-      teamId: selectedTeamFilter || undefined
+      teamId: selectedTeamFilter || undefined,
+      teamIds: selectedTeamIds.length > 0 ? selectedTeamIds : undefined,
+      noTeam: filterNoTeam || undefined
     });
-  }, [selectedTeamFilter]); // Remove loadPlayers from dependencies
+  }, [selectedTeamFilter, selectedTeamIds, filterNoTeam]); // Remove loadPlayers from dependencies
 
   // Load teams for player team assignments
   useEffect(() => {
@@ -152,6 +160,41 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
   const clearTeamFilter = () => {
     setSelectedTeamFilter(null);
     setTeamFilterName('');
+    setSelectedTeamIds([]);
+    setSelectedTeamNames([]);
+    setFilterNoTeam(false);
+    // Remove from URL params
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('teamId');
+      url.searchParams.delete('teamIds');
+      url.searchParams.delete('teamName');
+      url.searchParams.delete('noTeam');
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
+
+  const openTeamSelector = () => setShowTeamModal(true);
+
+  const handleTeamSelectedFromModal = (teamName: string, teamId?: string) => {
+    // For single-select backward compatibility
+    if (teamId && teamName && selectedTeamIds.length === 0) {
+      setSelectedTeamFilter(teamId);
+      setTeamFilterName(teamName);
+      setSelectedTeamIds([teamId]);
+      setSelectedTeamNames([teamName]);
+    }
+    // Persist to URL for multi-select
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (selectedTeamIds.length > 0) {
+        url.searchParams.set('teamIds', selectedTeamIds.join(','));
+        url.searchParams.delete('teamId');
+        url.searchParams.delete('teamName');
+      }
+      window.history.replaceState({}, '', url.toString());
+    }
+    setShowTeamModal(false);
   };
 
   // Handle ellipses click to show context menu
@@ -326,10 +369,6 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
             <IonChip color="medium" className="stat-chip">
               <IonIcon icon={statsChart} />
               <span>{matches} match{matches !== 1 ? 'es' : ''}</span>
-            </IonChip>
-            <IonChip color="medium" className="stat-chip">
-              <IonIcon icon={flash} />
-              <span>{tackles} tackle{tackles !== 1 ? 's' : ''}</span>
             </IonChip>
             <IonChip color="medium" className="stat-chip">
               <IonIcon icon={eye} />
@@ -538,7 +577,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
             </p>
           </div>
 
-          <div className="search-container">
+          <div className="search-container players-search-with-filter">
             <IonSearchbar
               value={searchText}
               onIonInput={(e) => setSearchText(e.detail.value!)}
@@ -551,9 +590,16 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
                 <IonSpinner name="dots" />
               </div>
             )}
+            <div className="team-filter-inline team-filter-inline-rounded">
+              <IonButton className="team-filter-button" color="indigo" fill="outline" size="small" onClick={openTeamSelector}>
+                <IonIcon icon={people} slot="start" />
+                {selectedTeamNames.length > 0 ? `${selectedTeamNames.length} team${selectedTeamNames.length !== 1 ? 's' : ''}` : 'Filter by team'}
+                <IonIcon icon={chevronDown} slot="end" />
+              </IonButton>
+            </div>
           </div>
 
-          {/* Team Filter Chip */}
+          {/* Team Filter Chip (secondary clear option) */}
           {selectedTeamFilter && (
             <div className="filter-chips">
               <IonChip color="primary" outline onClick={clearTeamFilter}>
@@ -624,6 +670,57 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
             <IonIcon icon={add} />
           </IonFabButton>
         </IonFab>
+
+        {/* Team Selection Modal */}
+        <TeamSelectionModal
+          isOpen={showTeamModal}
+          onDidDismiss={() => setShowTeamModal(false)}
+          onTeamSelect={(name, id) => {
+            if (!name) {
+              // Toggle No Team filter
+              const next = !filterNoTeam;
+              setFilterNoTeam(next);
+              if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                if (next) url.searchParams.set('noTeam', 'true');
+                else url.searchParams.delete('noTeam');
+                window.history.replaceState({}, '', url.toString());
+              }
+              return;
+            }
+            if (id) {
+              // Toggle selection
+              const idx = selectedTeamIds.indexOf(id);
+              const ids = [...selectedTeamIds];
+              const names = [...selectedTeamNames];
+              if (idx >= 0) {
+                ids.splice(idx, 1);
+                const nIdx = names.indexOf(name);
+                if (nIdx >= 0) names.splice(nIdx, 1);
+              } else {
+                ids.push(id);
+                if (!names.includes(name)) names.push(name);
+              }
+              setSelectedTeamIds(ids);
+              setSelectedTeamNames(names);
+              // Update URL
+              if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                if (ids.length > 0) {
+                  url.searchParams.set('teamIds', ids.join(','));
+                } else {
+                  url.searchParams.delete('teamIds');
+                }
+                window.history.replaceState({}, '', url.toString());
+              }
+            }
+          }}
+          selectedTeams={selectedTeamNames}
+          noTeamSelected={filterNoTeam}
+          noTeamLabel="Players without an active team"
+          title="Filter by team"
+          allowMultiple={true}
+        />
 
         {/* Player Context Menu */}
         {showContextMenu && contextMenuAnchor && (
