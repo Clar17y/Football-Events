@@ -124,6 +124,11 @@ export class ApiClient {
         // Token expired or invalid - clear it
         this.setToken(null);
         apiError.message = 'Authentication required. Please log in again.';
+        try {
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+          const toast = (window as any).__toastApi?.current;
+          toast?.showError?.('Your session expired. Please sign in again.');
+        } catch {}
       }
 
       throw apiError;
@@ -149,14 +154,147 @@ export class ApiClient {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseURL}${endpoint}`;
-    
-    const config: RequestInit = {
-      ...options,
-      headers: this.createHeaders(options.headers as Record<string, string>),
+
+    const buildConfig = (opts: RequestInit = {}): RequestInit => ({
+      ...opts,
+      headers: this.createHeaders(opts.headers as Record<string, string>),
+    });
+
+    const decodeExpMs = (): number | null => {
+      try {
+        const t = this.getToken();
+        if (!t) return null;
+        const parts = t.split('.');
+        if (parts.length < 2) return null;
+        const payloadJson = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
+        const payload = JSON.parse(payloadJson);
+        return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+      } catch { return null; }
+    };
+
+    const proactiveRefreshIfNeeded = async (): Promise<void> => {
+      const expMs = decodeExpMs();
+      if (!expMs) return;
+      const now = Date.now();
+      const timeLeft = expMs - now;
+      const hasRefresh = (() => { try { return !!localStorage.getItem('refresh_token'); } catch { return false; } })();
+      if (hasRefresh && timeLeft <= 60_000) {
+        try {
+          const refreshToken = localStorage.getItem('refresh_token') as string;
+          const refreshResp = await fetch(`${this.baseURL}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshToken })
+          });
+          if (refreshResp.ok) {
+            const data = await refreshResp.json();
+            if (data?.access_token) {
+              this.setToken(data.access_token);
+              try { if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token); } catch {}
+              try { window.dispatchEvent(new CustomEvent('auth:refreshed')); } catch {}
+            }
+          }
+        } catch {
+          // ignore preflight refresh errors; the request may still succeed
+        }
+      }
+    };
+
+    const attemptRefreshAndRetry = async (originalResponse: Response): Promise<ApiResponse<T>> => {
+      try {
+        // Try to parse error to check if token expired
+        let errorBody: any = null;
+        try {
+          const ct = originalResponse.headers.get('content-type');
+          errorBody = ct && ct.includes('application/json') ? await originalResponse.clone().json() : await originalResponse.clone().text();
+        } catch {
+          // ignore parse errors
+        }
+
+        const hasRefresh = (() => {
+          try {
+            return !!localStorage.getItem('refresh_token');
+          } catch {
+            return false;
+          }
+        })();
+
+        if (!hasRefresh) {
+          // No refresh token available, clear and notify
+          this.setToken(null);
+          try {
+            window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+            const toast = (window as any).__toastApi?.current;
+            toast?.showError?.('Your session expired. Please sign in again.');
+          } catch {}
+          return await this.handleResponse<T>(originalResponse);
+        }
+
+        // Attempt to refresh token
+        const refreshToken = localStorage.getItem('refresh_token') as string;
+        const refreshResp = await fetch(`${this.baseURL}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken })
+        });
+
+        if (!refreshResp.ok) {
+          // Refresh failed
+          this.setToken(null);
+          try { localStorage.removeItem('refresh_token'); } catch {}
+          try {
+            window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+            const toast = (window as any).__toastApi?.current;
+            toast?.showError?.('Your session expired. Please sign in again.');
+          } catch {}
+          // Return original error
+          return await this.handleResponse<T>(originalResponse);
+        }
+
+        const refreshData = await refreshResp.json();
+        if (refreshData?.access_token) {
+          this.setToken(refreshData.access_token);
+          try { if (refreshData.refresh_token) localStorage.setItem('refresh_token', refreshData.refresh_token); } catch {}
+          try { window.dispatchEvent(new CustomEvent('auth:refreshed')); } catch {}
+
+          // Retry original request with new token
+          const retryResp = await fetch(url, buildConfig(options));
+          return await this.handleResponse<T>(retryResp);
+        }
+
+        // If no access token in response, treat as failure
+        this.setToken(null);
+        try { localStorage.removeItem('refresh_token'); } catch {}
+        try {
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+          const toast = (window as any).__toastApi?.current;
+          toast?.showError?.('Your session expired. Please sign in again.');
+        } catch {}
+        return await this.handleResponse<T>(originalResponse);
+      } catch (err) {
+        // Any error during refresh -> clear and propagate
+        this.setToken(null);
+        try { localStorage.removeItem('refresh_token'); } catch {}
+        try {
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+          const toast = (window as any).__toastApi?.current;
+          toast?.showError?.('Your session expired. Please sign in again.');
+        } catch {}
+        // Fallback to original error handling
+        return await this.handleResponse<T>(originalResponse);
+      }
     };
 
     try {
-      const response = await fetch(url, config);
+      // Proactive refresh to implement sliding session
+      await proactiveRefreshIfNeeded();
+
+      const response = await fetch(url, buildConfig(options));
+      if (response.status === 401) {
+        // Try refresh logic and retry once
+        const result = await attemptRefreshAndRetry(response);
+        return result;
+      }
       return await this.handleResponse<T>(response);
     } catch (error) {
       // Network or other errors

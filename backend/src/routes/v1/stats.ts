@@ -49,8 +49,8 @@ router.get('/global', asyncHandler(async (req, res) => {
       // Total teams across platform
       prisma.team.count(),
       
-      // Total players across platform
-      prisma.player.count(),
+      // Total players across platform (exclude soft-deleted)
+      prisma.player.count({ where: { is_deleted: false } }),
       
       // Total matches ever created
       prisma.match.count(),

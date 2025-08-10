@@ -116,6 +116,24 @@ describe('Stats API', () => {
       expect(response.body.last_updated).toBeDefined();
     });
 
+    it('should exclude soft-deleted players from total count', async () => {
+      // Create a player and then soft-delete them
+      const softDeleted = await prisma.player.create({
+        data: { name: 'Soft Deleted', created_by_user_id: testUser.id }
+      });
+      await prisma.player.update({
+        where: { id: softDeleted.id },
+        data: { is_deleted: true, deleted_at: new Date(), deleted_by_user_id: testUser.id }
+      });
+
+      const response = await request(app)
+        .get('/api/v1/stats/global')
+        .expect(200);
+
+      // We previously created 2 non-deleted players. Adding a soft-deleted one should not change the count
+      expect(response.body.total_players).toBe(2);
+    });
+
     it('should handle errors gracefully', async () => {
       // This test ensures the endpoint doesn't crash even if there are database issues
       const response = await request(app)
