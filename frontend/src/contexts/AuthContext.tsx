@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { authApi } from '../services/api/authApi';
 import type { UserProfile } from '../services/api/authApi';
 
@@ -36,8 +36,27 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [tokenExpiryMs, setTokenExpiryMs] = useState<number | null>(null);
 
   const isAuthenticated = authApi.isAuthenticated() && user !== null;
+
+  // Helper: decode JWT exp (seconds) -> ms
+  const getAccessTokenExpiryMs = (): number | null => {
+    try {
+      const token = authApi.getAccessToken();
+      if (!token) return null;
+      const [, payloadB64] = token.split('.');
+      if (!payloadB64) return null;
+      const payloadJson = atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'));
+      const payload = JSON.parse(payloadJson);
+      if (payload && typeof payload.exp === 'number') {
+        return payload.exp * 1000;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
 
   // Initialize auth state on app load
   useEffect(() => {
@@ -51,6 +70,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           if (response.success && response.data) {
             console.log('AuthContext: Profile loaded successfully');
             setUser(response.data);
+            setTokenExpiryMs(getAccessTokenExpiryMs());
           } else {
             console.log('AuthContext: Profile failed, trying refresh...');
             // Token might be expired, try to refresh
@@ -61,11 +81,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               if (retryResponse.success && retryResponse.data) {
                 console.log('AuthContext: Profile loaded after refresh');
                 setUser(retryResponse.data);
+                setTokenExpiryMs(getAccessTokenExpiryMs());
               }
             } else {
               console.log('AuthContext: Refresh failed, clearing tokens...');
               // Clear invalid tokens
               await authApi.logout();
+              setUser(null);
+              setTokenExpiryMs(null);
             }
           }
         } else {
@@ -75,6 +98,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.warn('AuthContext: Failed to initialize auth:', error);
         // Clear potentially invalid tokens
         await authApi.logout();
+        setUser(null);
+        setTokenExpiryMs(null);
       } finally {
         console.log('AuthContext: Setting isLoading = false');
         setIsLoading(false);
@@ -94,6 +119,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const profileResponse = await authApi.getProfile();
         if (profileResponse.success && profileResponse.data) {
           setUser(profileResponse.data);
+          setTokenExpiryMs(getAccessTokenExpiryMs());
           return { success: true };
         } else {
           return { success: false, error: 'Failed to get user profile' };
@@ -146,10 +172,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsLoading(true);
       await authApi.logout();
       setUser(null);
+      setTokenExpiryMs(null);
+      // Broadcast logout to interested listeners
+      try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
     } catch (error) {
       console.error('Logout error:', error);
       // Clear user state even if logout request fails
       setUser(null);
+      setTokenExpiryMs(null);
+      try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
     } finally {
       setIsLoading(false);
     }
@@ -167,6 +198,73 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('Failed to refresh user:', error);
     }
   };
+
+  useEffect(() => {
+    // Listen for global auth events from apiClient
+    const onUnauthorized = () => {
+      // Force logout flow and redirect handled by AppRoutes depending on isAuthenticated
+      setUser(null);
+      setTokenExpiryMs(null);
+    };
+    const onRefreshed = () => {
+      setTokenExpiryMs(getAccessTokenExpiryMs());
+      // Optionally refresh profile to keep user data fresh
+      refreshUser();
+    };
+
+    window.addEventListener('auth:unauthorized', onUnauthorized as EventListener);
+    window.addEventListener('auth:refreshed', onRefreshed as EventListener);
+
+    return () => {
+      window.removeEventListener('auth:unauthorized', onUnauthorized as EventListener);
+      window.removeEventListener('auth:refreshed', onRefreshed as EventListener);
+    };
+  }, []);
+
+  // Sliding session: refresh token on user activity
+  useEffect(() => {
+    let activityTimeout: number | undefined;
+
+    const scheduleProactiveRefresh = () => {
+      // If we know expiry, refresh 60s before; else skip
+      const expiry = tokenExpiryMs;
+      if (!expiry) return;
+      const now = Date.now();
+      const msUntilRefresh = Math.max(expiry - now - 60_000, 0);
+      window.clearTimeout(activityTimeout);
+      activityTimeout = window.setTimeout(async () => {
+        try {
+          const ok = await authApi.attemptTokenRefresh();
+          if (ok) {
+            setTokenExpiryMs(getAccessTokenExpiryMs());
+          } else {
+            setUser(null);
+            setTokenExpiryMs(null);
+          }
+        } catch {
+          setUser(null);
+          setTokenExpiryMs(null);
+        }
+      }, msUntilRefresh);
+    };
+
+    const bumpOnActivity = () => {
+      // Any activity triggers a check/schedule
+      scheduleProactiveRefresh();
+    };
+
+    // Attach common activity events
+    const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart', 'visibilitychange'];
+    events.forEach(evt => window.addEventListener(evt, bumpOnActivity, { passive: true } as any));
+
+    // Initial schedule
+    scheduleProactiveRefresh();
+
+    return () => {
+      window.clearTimeout(activityTimeout);
+      events.forEach(evt => window.removeEventListener(evt, bumpOnActivity as any));
+    };
+  }, [tokenExpiryMs]);
 
   const value: AuthContextType = {
     user,

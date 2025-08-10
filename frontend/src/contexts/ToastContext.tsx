@@ -15,6 +15,8 @@ export interface ToastMessage {
 }
 
 interface ToastContextType {
+  // Expose a ref getter so non-React code can show toasts
+  getApi?: () => ToastContextType | undefined;
   toasts: ToastMessage[];
   showToast: (toast: Omit<ToastMessage, 'id'>) => string;
   dismissToast: (id: string) => void;
@@ -38,6 +40,9 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({
   maxToasts = 5 
 }) => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Keep a global reference so non-React code (e.g. apiClient) can trigger toasts
+  ;(window as any).__toastApi = (window as any).__toastApi || { current: undefined };
 
   const showToast = useCallback((toast: Omit<ToastMessage, 'id'>): string => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -99,6 +104,8 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({
   }, [showToast]);
 
   const value: ToastContextType = {
+    // Allow non-React code to obtain the API on demand
+    getApi: () => (window as any).__toastApi?.current,
     toasts,
     showToast,
     dismissToast,
@@ -108,6 +115,9 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({
     showWarning,
     showError
   };
+
+  // Update the global reference on each render
+  ;(window as any).__toastApi.current = value;
 
   return (
     <ToastContext.Provider value={value}>
