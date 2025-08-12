@@ -48,7 +48,8 @@ model User {
 
 model Team {
   id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name               String         @unique
+  name               String
+  is_opponent        Boolean        @default(false)
   home_kit_primary   String?        @db.VarChar(7)
   home_kit_secondary String?        @db.VarChar(7)
   away_kit_primary   String?        @db.VarChar(7)
