@@ -47,7 +47,7 @@ router.get('/global', asyncHandler(async (req, res) => {
       matchesPlayed
     ] = await Promise.all([
       // Total teams across platform
-      prisma.team.count(),
+      prisma.team.count({ where: { is_deleted: false, is_opponent: false } }),
       
       // Total players across platform (exclude soft-deleted)
       prisma.player.count({ where: { is_deleted: false } }),

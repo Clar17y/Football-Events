@@ -13,6 +13,13 @@ const teamService = new TeamService();
 const playerTeamService = new PlayerTeamService();
 
 // GET /api/v1/teams - List teams with pagination and filtering
+// GET /api/v1/teams/opponents - List opponent teams for current user (optional search)
+router.get('/opponents', authenticateToken, asyncHandler(async (req, res) => {
+  const { search } = req.query;
+  const teams = await teamService.getOpponentTeams(req.user!.id, req.user!.role, search as string | undefined);
+  return res.json(teams);
+}));
+
 router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   const { page = 1, limit = 25, search } = req.query;
   
@@ -35,7 +42,9 @@ router.post('/',
   validateRequest(teamCreateSchema),
   asyncHandler(async (req, res) => {
     try {
+      console.log('[TEAMS ROUTE] Raw request body:', JSON.stringify(req.body, null, 2));
       const team = await teamService.createTeam(req.body, req.user!.id);
+      console.log('[TEAMS ROUTE] Created team result:', JSON.stringify(team, null, 2));
       res.status(201).json(team);
     } catch (error: any) {
       const apiError = extractApiError(error);

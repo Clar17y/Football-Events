@@ -1,0 +1,180 @@
+.activity-card {
+  margin: 1rem 0;
+  background: var(--grassroots-surface);
+  border: 1px solid var(--grassroots-surface-variant);
+}
+
+.activity-card ion-card-content {
+  --background: var(--grassroots-surface);
+  background: var(--grassroots-surface);
+}
+
+.activity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.activity-header .section-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--grassroots-text-primary);
+}
+
+.activity-list {
+  margin: 0;
+  padding: 0;
+  --background: var(--grassroots-surface);
+  background: var(--grassroots-surface);
+}
+
+.activity-item {
+  --padding-start: 0;
+  --padding-end: 0;
+  --inner-padding-end: 0;
+  --background: var(--grassroots-surface);
+  --color: var(--grassroots-text-primary);
+  margin-bottom: 0;
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.activity-item:hover {
+  --background: var(--grassroots-surface-elevated);
+}
+
+.activity-item-icon {
+  margin-right: 1rem;
+  font-size: 1.5rem;
+}
+
+.activity-description {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--grassroots-text-primary);
+  line-height: 1.4;
+}
+
+.activity-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.activity-type-chip {
+  --background: var(--ion-color-primary-tint);
+  --color: var(--ion-color-primary-shade);
+  font-size: 0.75rem;
+  height: 1.5rem;
+  text-transform: capitalize;
+}
+
+.activity-time {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.activity-time ion-icon {
+  font-size: 0.9rem;
+}
+
+.activity-placeholder {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.activity-placeholder .activity-icon {
+  font-size: 3rem;
+  color: var(--ion-color-medium);
+  margin-bottom: 1rem;
+}
+
+.activity-placeholder h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--grassroots-text-primary);
+}
+
+.activity-placeholder p {
+  margin: 0 0 1.5rem 0;
+  color: var(--ion-color-medium);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.activity-error {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.activity-error .activity-icon {
+  font-size: 3rem;
+  color: var(--ion-color-danger);
+  margin-bottom: 1rem;
+}
+
+.activity-error h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--ion-color-danger);
+}
+
+.activity-error p {
+  margin: 0 0 1.5rem 0;
+  color: var(--ion-color-medium);
+  font-size: 0.9rem;
+}
+
+.activity-footer {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--ion-color-light);
+}
+
+.activity-pagination-info {
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.activity-pagination-info ion-note {
+  font-size: 0.8rem;
+}
+
+.activity-pagination-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.activity-pagination-controls ion-button {
+  --padding-start: 0.75rem;
+  --padding-end: 0.75rem;
+  font-size: 0.85rem;
+}
+
+/* Dark theme adjustments */
+@media (prefers-color-scheme: dark) {
+  .activity-card {
+    background: var(--grassroots-surface);
+    border: 1px solid var(--grassroots-surface-variant);
+  }
+
+  .activity-item {
+    --background: var(--grassroots-surface);
+    --color: var(--grassroots-text-primary);
+  }
+
+  .activity-item:hover {
+    --background: var(--grassroots-surface-elevated);
+  }
+}

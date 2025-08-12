@@ -11,6 +11,7 @@ import lineupsRouter from './lineups';
 import awardsRouter from './awards';
 import statsRouter from './stats';
 import authRouter from './auth';
+import activityRouter from './activity';
 
 const v1Router = Router();
 
@@ -32,7 +33,8 @@ v1Router.get('/', (_req, res) => {
       lineups: '/api/v1/lineups',
       awards: '/api/v1/awards',
       stats: '/api/v1/stats',
-      auth: '/api/v1/auth'
+      auth: '/api/v1/auth',
+      activity: '/api/v1/activity'
     },
     documentation: 'https://api-docs.grassroots-football.com/v1' // TODO: Add actual docs URL
   });
@@ -51,5 +53,6 @@ v1Router.use('/lineups', lineupsRouter);
 v1Router.use('/awards', awardsRouter);
 v1Router.use('/stats', statsRouter);
 v1Router.use('/auth', authRouter);
+v1Router.use('/activity', activityRouter);
 
 export default v1Router;
