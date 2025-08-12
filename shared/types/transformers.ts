@@ -102,6 +102,8 @@ export const transformTeam = (prismaTeam: PrismaTeam): Team => ({
   deleted_at: prismaTeam.deleted_at ?? undefined,
   deleted_by_user_id: prismaTeam.deleted_by_user_id ?? undefined,
   is_deleted: prismaTeam.is_deleted,
+  // Visibility
+  is_opponent: (prismaTeam as any).is_opponent ?? false,
 });
 
 export const transformMatch = (prismaMatch: PrismaMatch): Match => ({
@@ -251,6 +253,7 @@ export const transformTeamCreateRequest = (
   
   const result = {
     name: request.name,
+    is_opponent: (request as any).is_opponent ?? false,
     home_kit_primary: request.homePrimary ?? null,
     home_kit_secondary: request.homeSecondary ?? null,
     away_kit_primary: request.awayPrimary ?? null,

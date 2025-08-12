@@ -150,7 +150,7 @@
 
 /* ===== NAVIGATION SECTION ===== */
 .navigation-section {
-  padding: 0 var(--grassroots-space-md) var(--grassroots-space-xl);
+  padding: 0 var(--grassroots-space-md) 0;
 }
 
 .section-title {
@@ -167,13 +167,35 @@
   padding: 0;
 }
 
+/* ensure proper spacing via columns instead of card margins */
+/* REVERT: Let Ionic grid manage its own padding; remove overrides */
+.navigation-grid {
+}
+
+.navigation-grid ion-col,
+.navigation-grid .col {
+  padding: 0;
+}
+
+
 /* ===== NAVIGATION CARDS ===== */
+
+.nav-card-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--grassroots-space-sm);
+}
+
 .nav-card {
-  margin: var(--grassroots-space-sm);
-  border-radius: var(--grassroots-radius-lg);
+  margin: 0; /* avoid extra width that can break Ionic grid wrapping */
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 12px;
   box-shadow: var(--grassroots-shadow-md);
-  border: 1px solid var(--grassroots-surface-variant);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid var(--grassroots-surface-variant);
+  
+  transition: all 0.2s ease;
   overflow: hidden;
   position: relative;
   background: var(--grassroots-surface);
@@ -195,6 +217,7 @@
   box-shadow: var(--grassroots-shadow-xl);
 }
 
+
 .nav-card:hover::before {
   opacity: 1;
 }
@@ -205,6 +228,14 @@
 .nav-card-rose::before { background: linear-gradient(90deg, var(--ion-color-rose), var(--ion-color-rose-tint)); }
 .nav-card-amber::before { background: linear-gradient(90deg, var(--ion-color-amber), var(--ion-color-amber-tint)); }
 .nav-card-purple::before { background: linear-gradient(90deg, var(--ion-color-purple), var(--ion-color-purple-tint)); }
+
+/* Make border/outline match card color on hover/focus */
+.nav-card-primary:hover, .nav-card-primary:focus-visible { border-color: var(--ion-color-primary); outline-color: var(--ion-color-primary); }
+.nav-card-teal:hover, .nav-card-teal:focus-visible { border-color: var(--ion-color-teal); outline-color: var(--ion-color-teal); }
+.nav-card-indigo:hover, .nav-card-indigo:focus-visible { border-color: var(--ion-color-indigo); outline-color: var(--ion-color-indigo); }
+.nav-card-rose:hover, .nav-card-rose:focus-visible { border-color: var(--ion-color-rose); outline-color: var(--ion-color-rose); }
+.nav-card-amber:hover, .nav-card-amber:focus-visible { border-color: var(--ion-color-amber); outline-color: var(--ion-color-amber); }
+.nav-card-purple:hover, .nav-card-purple:focus-visible { border-color: var(--ion-color-purple); outline-color: var(--ion-color-purple); }
 
 .nav-card-content {
   padding: var(--grassroots-space-lg);
@@ -326,7 +357,7 @@
 
 /* ===== ACCESSIBILITY & INTERACTIONS ===== */
 .nav-card:focus-visible {
-  outline: 2px solid var(--ion-color-primary);
+  outline: 2px solid transparent; /* base transparent; specific card classes set the color */
   outline-offset: 2px;
 }
 

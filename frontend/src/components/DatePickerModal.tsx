@@ -17,7 +17,6 @@ import { close, checkmark, calendar } from 'ionicons/icons';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { TextField } from '@mui/material';
 import dayjs, { Dayjs } from 'dayjs';
 import './DatePickerModal.css';
@@ -44,15 +43,6 @@ const DatePickerModal: React.FC<DatePickerModalProps> = ({
   const [selectedDate, setSelectedDate] = useState<Dayjs | null>(
     initialDate ? dayjs(initialDate) : dayjs()
   );
-
-  // Create MUI theme with primary color
-  const muiTheme = createTheme({
-    palette: {
-      primary: {
-        main: '#3880ff', // ion-color-primary
-      },
-    },
-  });
 
   const handleConfirm = () => {
     if (selectedDate) {
@@ -102,7 +92,6 @@ const DatePickerModal: React.FC<DatePickerModalProps> = ({
 
           {/* Main Date Picker */}
           <div className="date-picker-section">
-            <ThemeProvider theme={muiTheme}>
               <LocalizationProvider dateAdapter={AdapterDayjs}>
                 <DatePicker
                   label="Select Date"
@@ -146,7 +135,6 @@ const DatePickerModal: React.FC<DatePickerModalProps> = ({
                   }}
                 />
               </LocalizationProvider>
-            </ThemeProvider>
           </div>
 
           {/* Action Buttons */}

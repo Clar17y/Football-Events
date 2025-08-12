@@ -54,6 +54,7 @@ export type PrismaPlayerUpdateInput = {
 
 export type PrismaTeamCreateInput = {
   name: string;
+  is_opponent?: boolean;
   home_kit_primary?: string | null;
   home_kit_secondary?: string | null;
   away_kit_primary?: string | null;

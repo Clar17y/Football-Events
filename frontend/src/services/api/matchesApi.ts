@@ -6,6 +6,19 @@
 import apiClient from './baseApi';
 import type { Match } from '@shared/types';
 
+export interface QuickStartPayload {
+  myTeamId?: string;
+  myTeamName?: string;
+  opponentName?: string;
+  isHome: boolean;
+  kickoffTime?: string; // ISO
+  seasonId?: string;
+  competition?: string;
+  venue?: string;
+  durationMinutes?: number;
+  periodFormat?: 'quarter' | 'half' | 'whole';
+}
+
 export interface MatchesListParams {
   page?: number;
   limit?: number;
@@ -19,6 +32,13 @@ export interface MatchesListParams {
  * Matches API service
  */
 export const matchesApi = {
+  /**
+   * Quick-start a match
+   */
+  async quickStart(payload: QuickStartPayload): Promise<Match> {
+    const response = await apiClient.post<Match>('/matches/quick-start', payload);
+    return response.data as unknown as Match;
+  },
   /**
    * Get matches by season ID
    */
@@ -71,6 +91,28 @@ export const matchesApi = {
     
     const response = await apiClient.get(`/matches?${queryParams.toString()}`);
     return response.data;
+  },
+
+  /**
+   * Upcoming matches
+   */
+  async getUpcoming(limit: number = 10, teamId?: string): Promise<Match[]> {
+    const params = new URLSearchParams();
+    params.append('limit', String(limit));
+    if (teamId) params.append('teamId', teamId);
+    const response = await apiClient.get<Match[]>(`/matches/upcoming?${params.toString()}`);
+    return response.data as unknown as Match[];
+  },
+
+  /**
+   * Recent matches
+   */
+  async getRecent(limit: number = 10, teamId?: string): Promise<Match[]> {
+    const params = new URLSearchParams();
+    params.append('limit', String(limit));
+    if (teamId) params.append('teamId', teamId);
+    const response = await apiClient.get<Match[]>(`/matches/recent?${params.toString()}`);
+    return response.data as unknown as Match[];
   }
 };
 

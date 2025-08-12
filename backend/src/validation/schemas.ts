@@ -89,6 +89,22 @@ export const seasonUpdateSchema = seasonBaseSchema.partial().refine(
 );
 
 // Match validation schemas
+export const matchQuickStartSchema = z.object({
+  myTeamId: z.string().uuid('My team ID must be a valid UUID').optional(),
+  myTeamName: z.string().min(1, 'My team name is required if no team ID provided').max(100).trim().optional(),
+  opponentName: z.string().max(100).trim().optional(),
+  isHome: z.boolean({ required_error: 'isHome is required' }),
+  kickoffTime: z.string().datetime().optional(),
+  seasonId: z.string().uuid().optional(),
+  competition: z.string().max(100).optional(),
+  venue: z.string().max(100).optional(),
+  durationMinutes: z.number().int().min(1).max(200).optional(),
+  periodFormat: z.enum(['quarter', 'half', 'whole']).optional()
+}).refine(data => !!data.myTeamId || !!data.myTeamName, {
+  message: 'Provide either myTeamId or myTeamName',
+  path: ['myTeamId']
+});
+
 export const matchCreateSchema = z.object({
   seasonId: z.string().uuid('Season ID must be a valid UUID'),
   kickoffTime: z.string().datetime('Kickoff time must be a valid ISO date'),

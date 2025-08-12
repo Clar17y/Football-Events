@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { DatabaseStatus } from '../components/DatabaseStatus';
 import { 
   IonPage, 
@@ -33,6 +33,21 @@ import { useGlobalStats } from '../hooks/useGlobalStats';
 import { useAuth } from '../contexts/AuthContext';
 import UserProfile from '../components/UserProfile';
 import './HomePage.css';
+import './HomePage.quickstart-dark.css';
+import { teamsApi } from '../services/api/teamsApi';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { TimePicker } from '@mui/x-date-pickers/TimePicker';
+import Autocomplete from '@mui/material/Autocomplete';
+import TextField from '@mui/material/TextField';
+import CircularProgress from '@mui/material/CircularProgress';
+import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
+import dayjs, { Dayjs } from 'dayjs';
+import { matchesApi, type QuickStartPayload } from '../services/api/matchesApi';
+import CreateTeamModal from '../components/CreateTeamModal';
+import RecentActivity from '../components/RecentActivity';
+import type { Team } from '@shared/types';
 
 interface HomePageProps {
   onNavigate?: (page: string) => void;
@@ -41,7 +56,67 @@ interface HomePageProps {
 const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const { user } = useAuth();
   const { stats, loading, error, fromCache } = useGlobalStats();
-  
+
+  // Quick Start state
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(false);
+  const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [myTeamId, setMyTeamId] = useState<string>('');
+  const [opponentOptions, setOpponentOptions] = useState<string[]>([]);
+  const { searchText: opponentText, setSearchText: setOpponentText, showSpinner: opponentLoading } = useDebouncedSearch({
+    delay: 250,
+    minLength: 2,
+    onSearch: async (term: string) => {
+      if (!user || !term) { setOpponentOptions([]); return; }
+      try {
+        const list = await teamsApi.getOpponentTeams(term.trim());
+        setOpponentOptions(list.map(t => t.name));
+      } catch {
+        setOpponentOptions([]);
+      }
+    }
+  });
+  const [isHome, setIsHome] = useState<boolean>(true);
+  const defaultKickoffIso = useMemo(() => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString(), []);
+  const [kickoffDate, setKickoffDate] = useState<Dayjs | null>(dayjs(defaultKickoffIso));
+  const [kickoffTime, setKickoffTime] = useState<Dayjs | null>(dayjs(defaultKickoffIso));
+  const [durationMinutes, setDurationMinutes] = useState<number>(50);
+  const [periodFormat, setPeriodFormat] = useState<'quarter' | 'half' | 'whole'>('quarter');
+  const [collapsed, setCollapsed] = useState<boolean>(true);
+  const [submitting, setSubmitting] = useState(false);
+  const defaultsKey = 'quick_start_defaults_v1';
+  const loadDefaults = useRef(() => {
+    try {
+      const raw = localStorage.getItem(defaultsKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed.teamId) setMyTeamId(parsed.teamId);
+      if (parsed.durationMinutes) setDurationMinutes(parsed.durationMinutes);
+      if (parsed.periodFormat) setPeriodFormat(parsed.periodFormat);
+    } catch {}
+  });
+
+  useEffect(() => {
+    loadDefaults.current();
+  }, []);
+
+  useEffect(() => {
+    // load user's teams for dropdown
+    const load = async () => {
+      try {
+        setTeamsLoading(true);
+        const res = await teamsApi.getTeams({ page: 1, limit: 100 });
+        setTeams(res.data || []);
+        if (res.data && res.data.length && !myTeamId) {
+          setMyTeamId(res.data[0].id);
+        }
+      } finally {
+        setTeamsLoading(false);
+      }
+    };
+    if (user) load();
+  }, [user]);
+
   const navigate = (page: string) => {
     if (onNavigate) {
       onNavigate(page);
@@ -200,57 +275,250 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           )}
         </div>
 
+
         {/* Navigation Grid */}
         <div className="navigation-section">
-          <h2 className="section-title">Quick Access</h2>
           <IonGrid className="navigation-grid">
+            {user && (
+              <IonRow style={{ justifyContent: 'center', marginBottom: '0.5rem' }}>
+                <IonCol size="12" sizeMd="6" sizeLg="4">
+                  <div className="nav-card-wrapper">
+                    <IonCard className="nav-card nav-card-amber">
+                      <IonCardContent className="nav-card-content">
+                        <div className="nav-card-header" style={{ cursor: 'pointer' }} onClick={() => setCollapsed(prev => !prev)}>
+                          <IonIcon icon={play} className="nav-card-icon" color="amber" />
+                          <div className="nav-card-text">
+                            <h3 className="nav-card-title">Quick Start</h3>
+                            <p className="nav-card-subtitle">{collapsed ? 'Click here to get started…' : 'Create a match and start recording events'}</p>
+                          </div>
+                        </div>
+
+                        <div className="form-grid quickstart-grid" style={{ display: collapsed ? 'none' : 'grid', gap: '0.75rem', marginTop: '0.75rem' }}>
+
+                          {/* My Team */}
+                          <div className="form-row">
+                            <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>My Team</label>
+                            <div>
+                              {teams.length > 0 ? (
+                                <Autocomplete
+                                  options={teams}
+                                  getOptionLabel={(opt) => opt.name}
+                                  value={teams.find(t => t.id === myTeamId) || null}
+                                  onChange={(_, val) => setMyTeamId(val?.id || '')}
+                                  loading={teamsLoading}
+                                  renderInput={(params) => (
+                                    <TextField
+                                      {...params}
+                                      placeholder="Select your team"
+                                      size="small"
+                                      className="quickstart-input"
+                                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                                      InputProps={{
+                                        ...params.InputProps,
+                                        endAdornment: (
+                                          <>
+                                            {teamsLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                                            {params.InputProps.endAdornment}
+                                          </>
+                                        ),
+                                      }}
+                                    />
+                                  )}
+                                  fullWidth
+                                />
+                              ) : (
+                                <IonButton expand="block" onClick={() => setShowCreateTeam(true)}>Create Team</IonButton>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Opponent */}
+                          <div className="form-row">
+                            <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block'}}>Opponent Team</label>
+                            <Autocomplete
+                              freeSolo
+                              options={opponentOptions}
+                              loading={opponentLoading}
+                              inputValue={opponentText}
+                              onInputChange={(_, value) => setOpponentText(value)}
+                              renderInput={(params) => (
+                                <TextField
+                                  {...params}
+                                  placeholder="Opponent team"
+                                  size="small"
+                                  className="quickstart-input"
+                                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                                  InputProps={{
+                                    ...params.InputProps,
+                                    endAdornment: (
+                                      <>
+                                        {opponentLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                                        {params.InputProps.endAdornment}
+                                      </>
+                                    ),
+                                  }}
+                                />
+                              )}
+                              fullWidth
+                            />
+                          </div>
+
+                          {/* Venue + Periods side-by-side */}
+                          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+                            {/* Venue */}
+                            <div>
+                              <label className="form-label" style={{ fontWeight: 700, marginBottom: 4, display: 'block' }}>Venue</label>
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <IonButton fill={isHome ? 'solid' : 'outline'} color="primary" onClick={() => setIsHome(true)}>Home</IonButton>
+                                <IonButton fill={!isHome ? 'solid' : 'outline'} color="medium" onClick={() => setIsHome(false)}>Away</IonButton>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="form-label" style={{ fontWeight: 700, marginBottom: 4, display: 'block' }}>Periods</label>
+                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <IonButton fill={periodFormat === 'quarter' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('quarter')}>Quarters</IonButton>
+                                <IonButton fill={periodFormat === 'half' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('half')}>Halves</IonButton>
+                                <IonButton fill={periodFormat === 'whole' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('whole')}>Whole</IonButton>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Duration */}
+                          <div className="form-row">
+                            <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>Duration (mins)</label>
+                            <input
+                              className="form-input quickstart-input"
+                              type="number"
+                              min={1}
+                              max={200}
+                              value={durationMinutes}
+                              onChange={(e) => setDurationMinutes(Number(e.target.value) || 0)}
+                              style={{ width: '100%' }}
+                            />
+                          </div>
+
+                          {/* Kickoff */}
+                          <div className="form-row">
+                            <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block'}}>Kickoff</label>
+                            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="en-gb">
+                              <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: '1fr 1fr' }}>
+                                <DatePicker
+                                  label="Date"
+                                  value={kickoffDate}
+                                  onChange={(newVal) => setKickoffDate(newVal)}
+                                  slotProps={{ textField: { fullWidth: true, className: 'quickstart-input' } }}
+                                />
+                                <TimePicker
+                                  label="Time"
+                                  value={kickoffTime}
+                                  onChange={(newVal) => setKickoffTime(newVal)}
+                                  slotProps={{ textField: { fullWidth: true, className: 'quickstart-input' } }}
+                                />
+                              </div>
+                            </LocalizationProvider>
+                          </div>
+
+                          <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <IonButton
+                              color="primary"
+                              disabled={submitting || !myTeamId || !opponentText.trim()}
+                              onClick={async () => {
+                                try {
+                                  setSubmitting(true);
+                                  const payload: QuickStartPayload = {
+                                    myTeamId,
+                                    opponentName: opponentText.trim(),
+                                    isHome,
+                                    kickoffTime: (() => { const d = kickoffDate || dayjs(); const t = kickoffTime || dayjs(); const merged = d.hour(t.hour()).minute(t.minute()).second(0).millisecond(0); return merged.toDate().toISOString(); })(),
+                                    durationMinutes,
+                                    periodFormat
+                                  };
+                                  const match = await matchesApi.quickStart(payload);
+                                  const id = (match as any).id || (match as any).match_id;
+                                  if (id) {
+                                    onNavigate?.(`/live/${id}`);
+                                  }
+                                } catch (err) {
+                                  console.error('Quick start failed', err);
+                                } finally {
+                                  setSubmitting(false);
+                                }
+                              }}
+                            >
+                              Start Live Match
+                            </IonButton>
+                            
+                          </div>
+
+                          <CreateTeamModal
+                            isOpen={showCreateTeam}
+                            onDidDismiss={() => setShowCreateTeam(false)}
+                            onCreated={(team) => {
+                              setTeams(prev => {
+                                const exists = prev.some(t => t.id === team.id);
+                                return exists ? prev.map(t => (t.id === team.id ? team : t)) : [team, ...prev];
+                              });
+                              setMyTeamId(team.id);
+                              setShowCreateTeam(false);
+                            }}
+                          />
+                        </div>
+                      </IonCardContent>
+                    </IonCard>
+                  </div>
+                </IonCol>
+              </IonRow>
+            )}
+
             <IonRow>
               {navigationCards.map((card, index) => (
                 <IonCol size="12" sizeMd="6" sizeLg="4" key={index}>
-                  <IonCard 
-                    className={`nav-card nav-card-${card.color}`}
-                    button={card.route !== '#'}
-                    onClick={() => {
-                      if (card.route === '#') return;
-                      
-                      // Convert route to page name
-                      const pageName = card.route.replace('/', '');
-                      
-                      // Check if route requires authentication
-                      const protectedRoutes = ['seasons', 'teams', 'players', 'awards'];
-                      if (protectedRoutes.includes(pageName) && !user) {
-                        // Redirect to login for protected routes
-                        navigate('login');
-                      } else {
-                        navigate(pageName);
-                      }
-                    }}
-                  >
-                    <IonCardContent className="nav-card-content">
-                      <div className="nav-card-header">
-                        <IonIcon 
-                          icon={card.icon} 
-                          className="nav-card-icon"
-                          color={card.color}
-                        />
-                        <div className="nav-card-text">
-                          <h3 className="nav-card-title">{card.title}</h3>
-                          <p className="nav-card-subtitle">{card.subtitle}</p>
+                  <div className="nav-card-wrapper">
+                    <IonCard 
+                      className={`nav-card nav-card-${card.color}`}
+                      button={card.route !== '#'}
+                      onClick={() => {
+                        if (card.route === '#') return;
+                        
+                        // Convert route to page name
+                        const pageName = card.route.replace('/', '');
+                        
+                        // Check if route requires authentication
+                        const protectedRoutes = ['seasons', 'teams', 'players', 'awards'];
+                        if (protectedRoutes.includes(pageName) && !user) {
+                          // Redirect to login for protected routes
+                          navigate('login');
+                        } else {
+                          navigate(pageName);
+                        }
+                      }}
+                    >
+                      <IonCardContent className="nav-card-content">
+                        <div className="nav-card-header">
+                          <IonIcon 
+                            icon={card.icon} 
+                            className="nav-card-icon"
+                            color={card.color}
+                          />
+                          <div className="nav-card-text">
+                            <h3 className="nav-card-title">{card.title}</h3>
+                            <p className="nav-card-subtitle">{card.subtitle}</p>
+                          </div>
                         </div>
-                      </div>
-                      <p className="nav-card-description">{card.description}</p>
-                      {(card.title === 'Statistics' || card.title === 'Live Match') && (
-                        <IonChip color="medium" className="coming-soon-chip">
-                          <IonLabel>Coming Soon</IonLabel>
-                        </IonChip>
-                      )}
-                      {!user && ['Seasons', 'Teams', 'Players', 'Awards'].includes(card.title) && (
-                        <IonChip color="primary" className="login-required-chip">
-                          <IonLabel>Sign In Required</IonLabel>
-                        </IonChip>
-                      )}
-                    </IonCardContent>
-                  </IonCard>
+                        <p className="nav-card-description">{card.description}</p>
+                        {(card.title === 'Statistics' || card.title === 'Live Match') && (
+                          <IonChip color="medium" className="coming-soon-chip">
+                            <IonLabel>Coming Soon</IonLabel>
+                          </IonChip>
+                        )}
+                        {!user && ['Seasons', 'Teams', 'Players', 'Awards'].includes(card.title) && (
+                          <IonChip color="primary" className="login-required-chip">
+                            <IonLabel>Sign In Required</IonLabel>
+                          </IonChip>
+                        )}
+                      </IonCardContent>
+                    </IonCard>
+                  </div>
                 </IonCol>
               ))}
             </IonRow>
@@ -258,25 +526,11 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         </div>
 
         {/* Recent Activity Section */}
-        <div className="activity-section">
-          <h2 className="section-title">Recent Activity</h2>
-          <IonCard className="activity-card">
-            <IonCardContent>
-              <div className="activity-placeholder">
-                <IonIcon icon={trophy} className="activity-icon" />
-                <h3>No recent activity</h3>
-                <p>Start by creating a season or adding teams to see activity here</p>
-                <IonButton 
-                  fill="outline" 
-                  color="primary"
-                  onClick={() => navigate('seasons')}
-                >
-                  Get Started
-                </IonButton>
-              </div>
-            </IonCardContent>
-          </IonCard>
-        </div>
+        {user && (
+          <div className="activity-section">
+            <RecentActivity onNavigate={navigate} limit={10} days={30} />
+          </div>
+        )}
       </IonContent>
     </IonPage>
   );

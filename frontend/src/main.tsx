@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { IonApp } from '@ionic/react';
 import App from './App';
+import MuiThemeBridge from './MuiThemeBridge';
 import { registerSW } from './serviceWorkerRegistration';
 
 // MatchProvider moved to App.tsx to be inside DatabaseProvider
@@ -34,10 +35,12 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     }}>
       <ThemeProvider>
         <ToastProvider>
-          <IonApp>
-            <App />
-            <ToastContainer />
-          </IonApp>
+          <MuiThemeBridge>
+            <IonApp>
+              <App />
+              <ToastContainer />
+            </IonApp>
+          </MuiThemeBridge>
         </ToastProvider>
       </ThemeProvider>
     </ErrorBoundary>

@@ -206,6 +206,16 @@ export const teamsApi = {
       },
       success: true
     };
+  },
+
+  /**
+   * List opponent teams (is_opponent=true) for current user
+   */
+  async getOpponentTeams(search?: string): Promise<Team[]> {
+    const params = new URLSearchParams();
+    if (search && search.trim()) params.append('search', search.trim());
+    const response = await apiClient.get(`/teams/opponents${params.toString() ? `?${params.toString()}` : ''}`);
+    return response.data as Team[];
   }
 };
 

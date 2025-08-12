@@ -3,7 +3,7 @@ import { MatchService } from '../../services/MatchService';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
 import { authenticateToken } from '../../middleware/auth';
-import { matchCreateSchema, matchUpdateSchema } from '../../validation/schemas';
+import { matchCreateSchema, matchUpdateSchema, matchQuickStartSchema } from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { extractApiError } from '../../utils/prismaErrorHandler';
 
@@ -66,6 +66,34 @@ router.get('/upcoming', authenticateToken, asyncHandler(async (req, res) => {
   );
   return res.json(matches);
 }));
+
+// POST /api/v1/matches/quick-start - Quick start match creation
+router.post('/quick-start',
+  authenticateToken,
+  validateRequest(matchQuickStartSchema),
+  asyncHandler(async (req, res) => {
+    try {
+      // Resolve current season if not provided
+      const payload = { ...req.body } as any;
+      if (!payload.seasonId) {
+        // Defer to service to determine current season
+      }
+      const match = await matchService.createQuickStartMatch(payload, req.user!.id, req.user!.role);
+      return res.status(201).json(match);
+    } catch (error: any) {
+      const apiError = extractApiError(error);
+      if (apiError) {
+        return res.status(apiError.statusCode).json({
+          error: apiError.error,
+          message: apiError.message,
+          field: apiError.field,
+          constraint: apiError.constraint
+        });
+      }
+      throw error;
+    }
+  })
+);
 
 // GET /api/v1/matches/recent - Get recent matches
 router.get('/recent', authenticateToken, asyncHandler(async (req, res) => {

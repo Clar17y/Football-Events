@@ -35,6 +35,9 @@ export interface PaginatedMatches {
 }
 
 export class MatchService {
+  // Quick-start create flow payload type placeholder for documentation
+  public static QuickStartShape: any = {};
+
   private prisma: PrismaClient;
 
   constructor() {
@@ -702,6 +705,172 @@ export class MatchService {
     });
 
     return teams.map(team => team.id);
+  }
+
+  async createQuickStartMatch(payload: any, userId: string, userRole: string): Promise<Match> {
+    const {
+      myTeamId,
+      myTeamName,
+      opponentName,
+      isHome,
+      kickoffTime,
+      seasonId,
+      competition,
+      venue
+    } = payload || {};
+
+    if (userRole !== 'ADMIN' && !myTeamId && !myTeamName) {
+      const err: any = new Error('Provide myTeamId or myTeamName');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // Resolve my team
+    let resolvedMyTeamId: string | null = myTeamId || null;
+    if (!resolvedMyTeamId && myTeamName) {
+      const existing = await this.prisma.team.findFirst({
+        where: {
+          name: myTeamName,
+          created_by_user_id: userId,
+          is_deleted: false,
+          is_opponent: false
+        }
+      });
+      if (existing) {
+        resolvedMyTeamId = existing.id;
+      } else {
+        const created = await this.prisma.team.create({
+          data: {
+            name: myTeamName,
+            is_opponent: false,
+            created_by_user_id: userId
+          }
+        });
+        resolvedMyTeamId = created.id;
+      }
+    }
+
+    // Verify ownership of myTeamId for non-admin users
+    if (userRole !== 'ADMIN' && resolvedMyTeamId) {
+      const owned = await this.prisma.team.findFirst({
+        where: {
+          id: resolvedMyTeamId,
+          created_by_user_id: userId,
+          is_deleted: false
+        }
+      });
+      if (!owned) {
+        const err: any = new Error('Access denied: team ownership required');
+        err.statusCode = 403;
+        throw err;
+      }
+    }
+
+    // Resolve opponent team (scoped to user)
+    const oppName = (opponentName && String(opponentName).trim()) || 'Unknown Opponent';
+    let resolvedOpponentTeamId: string | null = null;
+    const existingOpp = await this.prisma.team.findFirst({
+      where: {
+        name: oppName,
+        created_by_user_id: userId,
+        is_deleted: false,
+        is_opponent: true
+      }
+    });
+    if (existingOpp) {
+      resolvedOpponentTeamId = existingOpp.id;
+    } else {
+      const createdOpp = await this.prisma.team.create({
+        data: {
+          name: oppName,
+          is_opponent: true,
+          created_by_user_id: userId
+        }
+      });
+      resolvedOpponentTeamId = createdOpp.id;
+    }
+
+    if (!resolvedMyTeamId || !resolvedOpponentTeamId) {
+      const err: any = new Error('Failed to resolve teams for quick start');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // Determine home/away using isHome flag
+    const homeId = isHome ? resolvedMyTeamId : resolvedOpponentTeamId;
+    const awayId = isHome ? resolvedOpponentTeamId : resolvedMyTeamId;
+
+    // Determine seasonId (fallback to current)
+    let finalSeasonId: string | undefined = seasonId as string | undefined;
+    if (!finalSeasonId) {
+      // Try to find current season for this user
+      const current = await this.prisma.seasons.findFirst({
+        where: { is_current: true, is_deleted: false, created_by_user_id: userId },
+        orderBy: { start_date: 'desc' }
+      });
+      if (current) {
+        finalSeasonId = current.season_id;
+      } else {
+        // Auto-create a default season based on current date (UK grassroots convention):
+        // Season runs Aug 1 -> Jun 30 of next year. Label: "YYYY-YYYY Season"
+        const now = new Date();
+        const m = now.getMonth(); // 0-11
+        const startYear = m >= 7 ? now.getFullYear() : now.getFullYear() - 1; // Aug (7) or later -> current year, else previous year
+        const endYear = startYear + 1;
+        const startDate = new Date(startYear, 7, 1); // Aug 1
+        const endDate = new Date(endYear, 5, 30);    // Jun 30
+        const label = `${startYear}-${endYear} Season`;
+
+        // Try to find-or-create by label scoped to user
+        let season = await this.prisma.seasons.findFirst({
+          where: { label, created_by_user_id: userId, is_deleted: false }
+        });
+        if (!season) {
+          season = await this.prisma.seasons.create({
+            data: {
+              label,
+              start_date: startDate,
+              end_date: endDate,
+              is_current: true,
+              description: 'Auto-created by Quick Start',
+              created_by_user_id: userId
+            }
+          });
+        } else if (!season.is_current) {
+          // Optionally mark it current
+          season = await this.prisma.seasons.update({
+            where: { season_id: season.season_id },
+            data: { is_current: true }
+          });
+        }
+        finalSeasonId = season.season_id;
+      }
+    }
+
+    // Create match (restore if soft-deleted with same unique constraint)
+    const match = await createOrRestoreSoftDeleted({
+      prisma: this.prisma,
+      model: 'match',
+      uniqueConstraints: SoftDeletePatterns.matchConstraint(homeId!, awayId!, new Date(kickoffTime || Date.now())),
+      createData: {
+        season_id: finalSeasonId!,
+        kickoff_ts: new Date(kickoffTime || Date.now()),
+        competition: competition ?? null,
+        home_team_id: homeId!,
+        away_team_id: awayId!,
+        venue: venue ?? null,
+        duration_mins: payload?.durationMinutes ?? 50,
+        period_format: (payload?.periodFormat === 'half' ? 'half' : payload?.periodFormat === 'whole' ? 'whole' : 'quarter'),
+        our_score: 0,
+        opponent_score: 0,
+        notes: null,
+      },
+      userId,
+      transformer: transformMatch,
+      primaryKeyField: 'match_id'
+    });
+
+    return match;
   }
 
   async disconnect(): Promise<void> {

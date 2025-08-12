@@ -42,6 +42,7 @@ interface CreateTeamModalProps {
   onDidDismiss: () => void;
   editTeam?: Team | null;
   mode?: 'create' | 'edit';
+  onCreated?: (team: Team) => void;
 }
 
 interface FormData {
@@ -66,7 +67,8 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
   isOpen, 
   onDidDismiss, 
   editTeam = null, 
-  mode = 'create' 
+  mode = 'create',
+  onCreated
 }) => {
   const { createTeam, updateTeam, loading } = useTeams();
   
@@ -194,6 +196,15 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
     }
     
     if (result) {
+      // Notify parent on create for immediate UI updates
+      if (mode === 'create' && onCreated) {
+        try {
+          onCreated(result as Team);
+        } catch (e) {
+          // no-op; parent handler optional
+        }
+      }
+
       // Reset form and close modal
       setFormData({
         name: '',

@@ -38,13 +38,32 @@ export class TeamService {
     this.prisma = new PrismaClient();
   }
 
+  async getOpponentTeams(userId: string, userRole: string, search?: string): Promise<Team[]> {
+    const where: any = {
+      is_deleted: false,
+      is_opponent: true,
+      created_by_user_id: userId,
+    };
+    if (search && search.trim()) {
+      where.name = { contains: search.trim(), mode: 'insensitive' };
+    }
+
+    const teams = await this.prisma.team.findMany({
+      where,
+      orderBy: { name: 'asc' }
+    });
+
+    return teams.map(transformTeam);
+  }
+
   async getTeams(userId: string, userRole: string, options: GetTeamsOptions): Promise<PaginatedTeams> {
     const { page, limit, search } = options;
     const skip = (page - 1) * limit;
 
     // Build where clause for search and ownership
     const where: any = {
-      is_deleted: false // Exclude soft-deleted teams
+      is_deleted: false, // Exclude soft-deleted teams
+      is_opponent: false // Hide opponent teams from management lists by default
     };
 
     // Non-admin users can only see their own teams

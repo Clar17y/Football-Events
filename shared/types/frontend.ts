@@ -53,6 +53,8 @@ export interface Team {
   deleted_at?: Date;
   deleted_by_user_id?: string;
   is_deleted: boolean;
+  // Visibility flags
+  is_opponent: boolean;
 }
 
 export interface Match {
@@ -165,6 +167,8 @@ export interface TeamCreateRequest {
   awayKitPrimary?: string;
   awayKitSecondary?: string;
   logoUrl?: string;
+  // Visibility
+  is_opponent?: boolean;
 }
 
 export interface TeamUpdateRequest {
