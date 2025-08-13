@@ -4,7 +4,6 @@
 @import '../styles/brand-headers.css';
 
 /* MatchMaster Branding Styles */
-/* Title styles moved to shared brand-headers.css */
 
 /* Page Header with Color Background */
 .page-header-section {
@@ -21,10 +20,6 @@
   box-shadow: var(--grassroots-shadow-sm);
 }
 
-.page-color-bar {
-  /* Remove the thin bar since we're using full background now */
-  display: none;
-}
 
 .page-main-title {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -71,11 +66,7 @@ ion-card-content {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-/* Page content styling */
-.page-content {
-  color: var(--grassroots-text-secondary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
+/* Removed unused page-color-bar and page-content selectors */
 
 .page-title {
   color: var(--grassroots-text-primary) !important;

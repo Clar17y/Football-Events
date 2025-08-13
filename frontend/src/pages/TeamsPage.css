@@ -39,13 +39,6 @@
   margin-bottom: var(--grassroots-space-xs);
 }
 
-.page-color-bar {
-  width: 4px;
-  height: 2.5rem;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
 .teams-main-title {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 2rem;
@@ -78,6 +71,19 @@
   min-height: calc(100vh - 200px);
 }
 
+/* Grid spacing: mimic HomePage nav-card wrapper to prevent overflow */
+.teams-grid ion-col,
+.teams-grid .col {
+  padding: 0;
+}
+
+.team-card-wrapper {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: var(--grassroots-space-sm);
+}
+
 /* Team Card Styles */
 .team-card {
   border-radius: var(--grassroots-radius-lg);
@@ -86,7 +92,9 @@
   transition: all 0.3s ease;
   overflow: hidden;
   background: var(--grassroots-surface);
-  margin-bottom: var(--grassroots-space-md);
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
   position: relative;
 }
 

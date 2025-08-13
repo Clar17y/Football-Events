@@ -193,7 +193,7 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
 
   const renderTeamCard = (team: Team) => {
     // Generate dynamic styles for team colors
-    const hasTeamColors = team.homeKitPrimary && team.homeKitSecondary;
+    const hasTeamColors = !!team.homeKitPrimary; // treat primary color as sufficient for theming
     const primaryColor = team.homeKitPrimary || 'var(--theme-primary, var(--ion-color-teal))';
     const secondaryColor = team.homeKitSecondary || 'var(--theme-primary-tint, var(--ion-color-teal-tint))';
     const matchCount = matchCounts[team.id] ?? 0;
@@ -206,6 +206,7 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
 
     return (
       <IonCol size="12" sizeMd="6" sizeLg="4" key={team.id}>
+        <div className="team-card-wrapper">
         <IonCard 
           className={`team-card ${hasTeamColors ? 'team-card-with-colors' : 'team-card-default'}`}
           style={teamCardStyle}
@@ -284,8 +285,9 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
             </div>
           )}
         </IonCardContent>
-      </IonCard>
-    </IonCol>
+        </IonCard>
+        </div>
+      </IonCol>
     );
   };
 
@@ -309,7 +311,7 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
   );
 
   const renderLoadingSkeleton = () => (
-    <IonGrid>
+    <IonGrid className="teams-grid">
       <IonRow>
         {[1, 2, 3, 4].map((i) => (
           <IonCol size="12" sizeMd="6" sizeLg="4" key={i}>
@@ -386,7 +388,7 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
           ) : teams.length === 0 && !loading ? (
             renderEmptyState()
           ) : (
-            <IonGrid>
+            <IonGrid className="teams-grid">
               <IonRow>
                 {teams.map(renderTeamCard)}
               </IonRow>

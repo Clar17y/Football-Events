@@ -155,6 +155,13 @@
   --ion-color-emerald-contrast-rgb: 255, 255, 255;
   --ion-color-emerald-shade: #047857;
   --ion-color-emerald-tint: #10b981;
+
+  /* ===== SEMANTIC ROLE COLORS ===== */
+  /* Player position colors (used in cards/stripes/badges) */
+  --position-goalkeeper: var(--ion-color-emerald); /* green */
+  --position-defender: var(--ion-color-indigo);    /* blue/purple */
+  --position-midfielder: var(--ion-color-amber);   /* orange */
+  --position-forward: var(--ion-color-rose);       /* red */
 }
 
 /* ===== IONIC CUSTOM COLOR CLASSES ===== */
@@ -230,25 +237,4 @@
   --grassroots-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.4);
 }
 
-/* ===== UTILITY CLASSES ===== */
-.text-primary { color: var(--grassroots-text-primary); }
-.text-secondary { color: var(--grassroots-text-secondary); }
-.text-tertiary { color: var(--grassroots-text-tertiary); }
-.text-on-dark { color: var(--grassroots-text-on-dark); }
-.text-on-accent { color: var(--grassroots-text-on-accent); }
-
-.bg-surface { background-color: var(--grassroots-surface); }
-.bg-surface-elevated { background-color: var(--grassroots-surface-elevated); }
-.bg-surface-variant { background-color: var(--grassroots-surface-variant); }
-.bg-primary { background-color: var(--grassroots-primary); }
-.bg-accent { background-color: var(--grassroots-accent); }
-
-.shadow-sm { box-shadow: var(--grassroots-shadow-sm); }
-.shadow-md { box-shadow: var(--grassroots-shadow-md); }
-.shadow-lg { box-shadow: var(--grassroots-shadow-lg); }
-.shadow-xl { box-shadow: var(--grassroots-shadow-xl); }
-
-.rounded-sm { border-radius: var(--grassroots-radius-sm); }
-.rounded-md { border-radius: var(--grassroots-radius-md); }
-.rounded-lg { border-radius: var(--grassroots-radius-lg); }
-.rounded-xl { border-radius: var(--grassroots-radius-xl); }
+/* Utility classes removed to reduce bundle size; use component/page CSS */

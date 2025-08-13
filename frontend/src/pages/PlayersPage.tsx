@@ -440,8 +440,9 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
     const positionCategory = player.preferredPosition ? getPositionCategory(player.preferredPosition) : null;
     
     return (
-      <IonCol size="12" sizeMd="6" sizeLg="4" key={player.id}>
-        <IonCard className={`player-card ${positionCategory ? `player-card-${positionCategory}` : 'player-card-default'}`}>
+        <IonCol size="12" sizeMd="6" sizeLg="4" key={player.id}>
+          <div className="player-card-wrapper">
+          <IonCard className={`player-card ${positionCategory ? `player-card-${positionCategory}` : 'player-card-default'}`}>
           {/* Position stripe */}
           <div className="player-position-stripe"></div>
           
@@ -487,8 +488,9 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
               </div>
             </div>
           </IonCardContent>
-        </IonCard>
-      </IonCol>
+          </IonCard>
+          </div>
+        </IonCol>
     );
   };
 
@@ -520,8 +522,8 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
       <div key={sectionKey} className="position-section">
         {renderSectionHeader(sectionKey, title, players.length, icon)}
         {!isCollapsed && (
-          <IonGrid className="section-grid">
-            <IonRow>
+      <IonGrid className="section-grid players-grid">
+        <IonRow>
               {players.map(renderPlayerCard)}
             </IonRow>
           </IonGrid>

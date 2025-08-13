@@ -70,7 +70,9 @@
   transition: all 0.3s ease;
   overflow: hidden;
   background: var(--grassroots-surface);
-  margin-bottom: var(--grassroots-space-md);
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
   position: relative;
   min-height: 140px; /* Fixed height for consistency */
   display: flex;
@@ -93,21 +95,10 @@
 }
 
 /* Position-based stripe colors */
-.player-card-goalkeeper .player-position-stripe {
-  background: #10b981; /* Green for goalkeepers */
-}
-
-.player-card-defender .player-position-stripe {
-  background: #3182ce; /* Blue for defenders */
-}
-
-.player-card-midfielder .player-position-stripe {
-  background: #ed8936; /* Orange for midfielders */
-}
-
-.player-card-forward .player-position-stripe {
-  background: #e53e3e; /* Red for forwards */
-}
+.player-card-goalkeeper .player-position-stripe { background: var(--position-goalkeeper, var(--ion-color-emerald)); }
+.player-card-defender .player-position-stripe { background: var(--position-defender, var(--ion-color-indigo)); }
+.player-card-midfielder .player-position-stripe { background: var(--position-midfielder, var(--ion-color-amber)); }
+.player-card-forward .player-position-stripe { background: var(--position-forward, var(--ion-color-rose)); }
 
 /* Default stripe for players without position */
 .player-card-default .player-position-stripe {
@@ -135,21 +126,11 @@
   opacity: 0.25;
 }
 
-.player-card-goalkeeper:hover {
-  border-color: #10b981;
-}
-
-.player-card-defender:hover {
-  border-color: #3182ce;
-}
-
-.player-card-midfielder:hover {
-  border-color: #ed8936;
-}
-
-.player-card-forward:hover {
-  border-color: #e53e3e;
-}
+/* Position-based hover border colors (tokenized) */
+.player-card-goalkeeper:hover { border-color: var(--position-goalkeeper, var(--ion-color-emerald)); }
+.player-card-defender:hover { border-color: var(--position-defender, var(--ion-color-indigo)); }
+.player-card-midfielder:hover { border-color: var(--position-midfielder, var(--ion-color-amber)); }
+.player-card-forward:hover { border-color: var(--position-forward, var(--ion-color-rose)); }
 
 .player-card-default:hover {
   border-color: var(--ion-color-indigo);
@@ -235,6 +216,19 @@
   padding: 0;
 }
 
+/* Grid spacing fix: prevent overflow and wrapping */
+.players-grid ion-col,
+.players-grid .col {
+  padding: 0;
+}
+
+.player-card-wrapper {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: var(--grassroots-space-sm);
+}
+
 .section-grid ion-row {
   margin: 0;
 }
@@ -244,15 +238,7 @@
   overflow: hidden;
   transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
 }
-.players-grid {
-  padding: 0 var(--grassroots-space-md) var(--grassroots-space-xl);
-}
-
-.players-grid-container {
-  display: grid;
-  gap: var(--grassroots-space-md);
-  grid-template-columns: 1fr;
-}
+/* Removed unused players-grid and players-grid-container */
 
 /* Legacy player card styles removed - using new position-based styles above */
 
@@ -381,36 +367,6 @@
   margin-right: var(--grassroots-space-xs);
 }
 
-/* Empty State */
-.players-empty-state {
-  text-align: center;
-  padding: var(--grassroots-space-xl) var(--grassroots-space-md);
-  color: var(--grassroots-text-secondary);
-}
-
-.players-empty-icon {
-  font-size: 4rem;
-  color: var(--grassroots-text-tertiary);
-  margin-bottom: var(--grassroots-space-md);
-}
-
-.players-empty-title {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-weight: 600;
-  font-size: 1.25rem;
-  color: var(--grassroots-text-primary);
-  margin-bottom: var(--grassroots-space-sm);
-}
-
-.players-empty-subtitle {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-weight: 400;
-  font-size: 0.95rem;
-  color: var(--grassroots-text-secondary);
-  line-height: 1.5;
-  margin-bottom: var(--grassroots-space-lg);
-}
-
 /* Loading Skeletons */
 .player-skeleton {
   --background: var(--grassroots-surface-elevated);
@@ -459,32 +415,14 @@
 
 /* Responsive Design */
 @media (min-width: 768px) {
-  .players-grid-container {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
   .players-header {
     padding: var(--grassroots-space-xl) var(--grassroots-space-lg) var(--grassroots-space-lg);
-  }
-  
-  .players-grid {
-    padding: 0 var(--grassroots-space-lg) var(--grassroots-space-xl);
   }
 }
 
 @media (min-width: 1024px) {
-  .players-grid-container {
-    grid-template-columns: repeat(3, 1fr);
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-  
   .players-header {
     padding: var(--grassroots-space-xl) var(--grassroots-space-xl) var(--grassroots-space-lg);
-  }
-  
-  .players-grid {
-    padding: 0 var(--grassroots-space-xl) var(--grassroots-space-xl);
   }
 }
 
@@ -496,10 +434,6 @@
 
 .dark-theme .player-card:hover {
   border-color: var(--ion-color-indigo-tint);
-}
-
-.dark-theme .players-searchbar {
-  --background: var(--grassroots-surface-elevated-dark, #2d3748);
 }
 
 /* High Contrast Mode */
