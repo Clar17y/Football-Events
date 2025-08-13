@@ -1,0 +1,19 @@
+/* Shared brand header styles */
+.home-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: -0.025em;
+}
+
+.title-container {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-sm);
+}
+
+.title-icon {
+  font-size: 1.5rem;
+  color: var(--grassroots-text-on-dark);
+}
+

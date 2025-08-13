@@ -57,7 +57,7 @@ ion-modal[data-theme='player'],
   --theme-primary-rgb: var(--ion-color-indigo-rgb);
 }
 
-/* Dark mode adjustments */
+/* Dark mode adjustments: align with colors.css tokens */
 .dark-theme,
 .dark-theme [data-theme='team'],
 .dark-theme [data-theme='season'],
@@ -65,9 +65,9 @@ ion-modal[data-theme='player'],
 .dark-theme [data-theme='team'] *,
 .dark-theme [data-theme='season'] *,
 .dark-theme [data-theme='player'] * {
-  --theme-background: #1e1e1e !important;
-  --theme-surface: #2a2a2a !important;
-  --theme-surface-variant: #3a3a3a !important;
-  --theme-on-surface: #ffffff !important;
-  --theme-on-surface-variant: #888888 !important;
+  --theme-background: var(--grassroots-background) !important;
+  --theme-surface: var(--grassroots-surface) !important;
+  --theme-surface-variant: var(--grassroots-surface-variant) !important;
+  --theme-on-surface: var(--grassroots-text-primary) !important;
+  --theme-on-surface-variant: var(--grassroots-text-secondary) !important;
 }

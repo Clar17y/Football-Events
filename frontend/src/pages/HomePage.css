@@ -1,60 +1,5 @@
 /* ===== MATCHMASTER HOME PAGE STYLES ===== */
-
-/* Import Google Fonts for better readability */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
-/* Modern Sports App Color System - Inspired by DraftKings, FanDuel, ESPN */
-:root {
-  /* Primary Brand Colors - Deep Navy & Electric Blue */
-  --grassroots-primary: #1a202c;          /* Deep navy - professional, trustworthy */
-  --grassroots-primary-light: #2d3748;    /* Lighter navy for gradients */
-  --grassroots-accent: #3182ce;           /* Electric blue - action, energy */
-  --grassroots-accent-light: #4299e1;     /* Lighter blue for hover states */
-  
-  /* Success & Action Colors */
-  --grassroots-success: #38a169;          /* Green - wins, positive actions */
-  --grassroots-success-light: #48bb78;    /* Light green for backgrounds */
-  --grassroots-warning: #ed8936;          /* Orange - alerts, live events */
-  --grassroots-danger: #e53e3e;           /* Red - losses, critical actions */
-  
-  /* Surface & Background Colors */
-  --grassroots-surface: #ffffff;          /* Pure white backgrounds */
-  --grassroots-surface-elevated: #f7fafc; /* Slightly elevated surfaces */
-  --grassroots-surface-variant: #edf2f7;  /* Card backgrounds, dividers */
-  --grassroots-background: #f7fafc;       /* Main background */
-  
-  /* Text Colors - High Contrast */
-  --grassroots-text-primary: #1a202c;     /* Primary text - dark navy */
-  --grassroots-text-secondary: #4a5568;   /* Secondary text - readable gray */
-  --grassroots-text-tertiary: #718096;    /* Tertiary text - subtle gray */
-  --grassroots-text-on-dark: #ffffff;     /* White text on dark backgrounds */
-  --grassroots-text-on-accent: #ffffff;   /* White text on accent colors */
-  
-  /* Interactive Colors */
-  --grassroots-interactive: #3182ce;      /* Links, buttons */
-  --grassroots-interactive-hover: #2c5282; /* Hover states */
-  --grassroots-interactive-pressed: #2a4365; /* Pressed states */
-  
-  /* Shadows & Effects */
-  --grassroots-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
-  --grassroots-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-  --grassroots-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
-  --grassroots-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
-  
-  /* Border Radius */
-  --grassroots-radius-sm: 8px;
-  --grassroots-radius-md: 12px;
-  --grassroots-radius-lg: 16px;
-  --grassroots-radius-xl: 24px;
-  
-  /* Spacing System */
-  --grassroots-space-xs: 4px;
-  --grassroots-space-sm: 8px;
-  --grassroots-space-md: 16px;
-  --grassroots-space-lg: 24px;
-  --grassroots-space-xl: 32px;
-  --grassroots-space-2xl: 48px;
-}
+@import '../styles/brand-headers.css';
 
 /* ===== HEADER STYLES ===== */
 .home-toolbar {
@@ -64,23 +9,7 @@
   box-shadow: var(--grassroots-shadow-lg);
 }
 
-.home-title {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-weight: 700;
-  font-size: 1.25rem;
-  letter-spacing: -0.025em;
-}
-
-.title-container {
-  display: flex;
-  align-items: center;
-  gap: var(--grassroots-spacing-sm);
-}
-
-.title-icon {
-  font-size: 1.5rem;
-  color: var(--grassroots-text-on-dark);
-}
+/* Title styles moved to shared brand-headers.css */
 
 /* ===== CONTENT CONTAINER ===== */
 .home-content {
@@ -371,22 +300,87 @@
   }
 }
 
-/* ===== DARK MODE SUPPORT ===== */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --grassroots-surface: #1e293b;
-    --grassroots-surface-variant: #334155;
-    --grassroots-on-surface: #f1f5f9;
-    --grassroots-on-surface-variant: #cbd5e1;
-    --grassroots-shadow: rgba(0, 0, 0, 0.3);
-    --grassroots-shadow-elevated: rgba(0, 0, 0, 0.4);
-  }
-  
-  .home-content {
-    --background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
-  }
-  
-  .hero-section {
-    background: linear-gradient(135deg, var(--grassroots-surface) 0%, var(--grassroots-surface-variant) 100%);
-  }
+/* Dark mode is unified via body.dark-theme variable overrides */
+
+/* ===== QUICKSTART INPUTS - DARK THEME OVERRIDES ===== */
+/* Merged from HomePage.quickstart-dark.css */
+.dark-theme .quickstart-grid .form-label {
+  color: #ffffff !important;
+}
+
+/* Text fields (MUI) */
+.dark-theme .quickstart-grid .quickstart-input,
+.dark-theme .quickstart-grid .quickstart-input .MuiOutlinedInput-root,
+.dark-theme .quickstart-grid .quickstart-input .MuiInputBase-input,
+.dark-theme .quickstart-grid .quickstart-input .MuiInputAdornment-root {
+  color: #ffffff !important;
+}
+
+/* Placeholder text */
+.dark-theme .quickstart-grid .quickstart-input .MuiInputBase-input::placeholder {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+/* Outlined borders */
+.dark-theme .quickstart-grid .quickstart-input .MuiOutlinedInput-notchedOutline,
+.dark-theme .quickstart-grid .quickstart-input .MuiOutlinedInput-root .MuiOutlinedInput-notchedOutline,
+.dark-theme .quickstart-grid .quickstart-input .MuiOutlinedInput-root fieldset {
+  border-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.dark-theme .quickstart-grid .quickstart-input .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline,
+.dark-theme .quickstart-grid .quickstart-input .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline,
+.dark-theme .quickstart-grid .quickstart-input .MuiOutlinedInput-root.Mui-focused fieldset {
+  border-color: #ffffff !important;
+}
+
+/* Floating labels */
+.dark-theme .quickstart-grid .quickstart-input .MuiInputLabel-root,
+.dark-theme .quickstart-grid .quickstart-input .MuiFormLabel-root {
+  color: #ffffff !important;
+}
+
+.dark-theme .quickstart-grid .quickstart-input .MuiInputLabel-root.Mui-focused,
+.dark-theme .quickstart-grid .quickstart-input .MuiFormLabel-root.Mui-focused {
+  color: #ffffff !important;
+}
+
+/* Ensure any inline SVG icons inherit white */
+.dark-theme .quickstart-grid .quickstart-input .MuiSvgIcon-root {
+  color: #ffffff !important;
+}
+
+/* Native number input */
+.dark-theme .quickstart-grid input.quickstart-input[type='number'] {
+  color: #ffffff !important;
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.95) !important;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.dark-theme .quickstart-grid input.quickstart-input[type='number']:hover,
+.dark-theme .quickstart-grid input.quickstart-input[type='number']:focus {
+  border-color: #ffffff !important;
+  outline: none;
+}
+
+/* Extra targeting to ensure Date and Time fields match white text and outlines */
+.dark-theme .quickstart-grid .quickstart-input .MuiOutlinedInput-input,
+.dark-theme .quickstart-grid .quickstart-input .MuiInputBase-input {
+  color: #ffffff !important;
+  caret-color: #ffffff !important;
+}
+
+.dark-theme .quickstart-grid .quickstart-input .MuiOutlinedInput-root {
+  background-color: transparent !important;
+}
+
+.dark-theme .quickstart-grid .quickstart-input .MuiSvgIcon-root,
+.dark-theme .quickstart-grid .quickstart-input .MuiIconButton-root {
+  color: #ffffff !important;
+}
+
+.dark-theme .quickstart-grid .quickstart-input .MuiInputLabel-root.MuiInputLabel-shrink {
+  color: #ffffff !important;
 }

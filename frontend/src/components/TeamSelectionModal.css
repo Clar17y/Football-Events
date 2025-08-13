@@ -1,3 +1,5 @@
+@import './SelectionModalBase.css';
+
 /* ===== TEAM SELECTION MODAL STYLES ===== */
 /* Mobile-first design optimized for iPhone UX */
 
@@ -6,71 +8,7 @@
   --box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
-.team-selection-modal ion-modal {
-  --height: 90%;
-  --border-radius: 16px 16px 0 0;
-  --box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.1);
-  border-bottom: 2px solid var(--ion-color-light-shade, #e9ecef);
-}
-
-.dark-theme .team-selection-modal ion-modal {
-  border-bottom-color: #2a2a2a;
-}
-
-/* Header Styles */
-.team-selection-modal ion-toolbar {
-  --padding-start: 8px;
-  --padding-end: 8px;
-}
-
-.team-selection-modal .back-button,
-.team-selection-modal .close-button {
-  --color: white;
-  --padding-start: 12px;
-  --padding-end: 12px;
-  margin: 0;
-}
-
-.team-selection-modal ion-title {
-  font-weight: 600;
-  font-size: 1.1rem;
-}
-
-/* Content Styles */
-.team-selection-content {
-  --padding-top: 0;
-  --padding-bottom: env(safe-area-inset-bottom, 20px);
-}
-
-/* Search Container */
-.search-container {
-  padding: 16px;
-  background: var(--ion-color-light, #f8f9fa);
-  border-bottom: 1px solid var(--ion-color-light-shade, #e9ecef);
-}
-
-.dark-theme .search-container {
-  background: #1e1e1e;
-  border-bottom-color: #2a2a2a;
-}
-
-.team-search {
-  --background: var(--ion-color-light-tint, #ffffff);
-  --border-radius: 12px;
-  --box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  --color: var(--ion-color-dark, #000000);
-  --placeholder-color: var(--ion-color-medium, #92949c);
-  --icon-color: var(--ion-color-medium, #92949c);
-  margin: 0;
-  padding: 0;
-}
-
-.dark-theme .team-search {
-  --background: #2a2a2a;
-  --color: #ffffff;
-  --placeholder-color: #888888;
-  --icon-color: #888888;
-}
+/* Search styles moved to SelectionModalBase.css */
 
 /* Loading State */
 .loading-container {
@@ -87,49 +25,9 @@
   transform: scale(1.2);
 }
 
-/* Team List */
-.team-list {
-  padding: 0;
-  margin: 0;
-}
+/* Team list styles moved to base */
 
-/* Team Item */
-.team-item {
-  --padding-start: 20px;
-  --padding-end: 20px;
-  --padding-top: 16px;
-  --padding-bottom: 16px;
-  --min-height: 72px;
-  --background: transparent;
-  --border-color: transparent;
-  margin: 0;
-  border-bottom: 1px solid var(--ion-color-light-shade, #e9ecef);
-  transition: all 0.2s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.dark-theme .team-item {
-  border-bottom-color: #2a2a2a;
-}
-
-.team-item:hover {
-  --background: var(--ion-color-light-tint, #f8f9fa);
-}
-
-.dark-theme .team-item:hover {
-  --background: #2a2a2a;
-}
-
-.team-item.selected {
-  --background: rgba(63, 81, 181, 0.08);
-  border-left: 4px solid var(--ion-color-indigo);
-  --padding-start: 16px;
-}
-
-.dark-theme .team-item.selected {
-  --background: rgba(63, 81, 181, 0.15);
-}
+/* Team item styles moved to base */
 
 /* Team Avatar */
 .team-avatar {
@@ -165,34 +63,19 @@
 }
 
 .no-team-avatar {
-  background: var(--ion-color-medium, #92949c) !important;
-  color: white !important;
+  background: var(--ion-color-medium, var(--grassroots-text-secondary)) !important;
+  color: var(--grassroots-text-on-accent) !important;
 }
 
 .no-team-avatar ion-icon {
   font-size: 1.4rem;
 }
 
-/* Team Labels */
-.team-item ion-label {
-  margin: 0;
-}
-
-.team-name {
-  font-weight: 600;
-  font-size: 1rem;
-  color: var(--ion-color-dark, #000000);
-  margin: 0 0 4px 0;
-  line-height: 1.3;
-}
-
-.dark-theme .team-name {
-  color: #ffffff;
-}
+/* Team label styles largely covered by base; keep unique cases below */
 
 .team-description {
   font-size: 0.875rem;
-  color: var(--ion-color-medium, #92949c);
+  color: var(--ion-color-medium, var(--grassroots-text-secondary));
   margin: 0;
   line-height: 1.3;
   overflow: hidden;
@@ -201,80 +84,30 @@
 }
 
 .dark-theme .team-description {
-  color: #888888;
-}
-
-/* Selected Icon */
-.selected-icon {
-  color: var(--ion-color-indigo);
-  font-size: 1.2rem;
-  margin-left: auto;
-}
-
-/* No Results State */
-.no-results {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
-}
-
-.no-results h3 {
-  font-weight: 600;
-  font-size: 1.1rem;
-  margin: 0 0 8px 0;
-  color: var(--ion-color-medium, #92949c);
-}
-
-.no-results p {
-  font-size: 0.9rem;
-  margin: 0;
-  color: var(--ion-color-medium, #92949c);
-}
-
-/* Empty State */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 20px;
-  text-align: center;
-}
-
-.empty-icon {
-  font-size: 4rem;
-  color: var(--ion-color-light-shade, #e9ecef);
-  margin-bottom: 20px;
-}
-
-.dark-theme .empty-icon {
-  color: #2a2a2a;
+  color: var(--grassroots-text-tertiary);
 }
 
 .empty-state h3 {
   font-weight: 600;
   font-size: 1.2rem;
   margin: 0 0 8px 0;
-  color: var(--ion-color-medium, #92949c);
+  color: var(--ion-color-medium, var(--grassroots-text-secondary));
 }
 
 .empty-state p {
   font-size: 1rem;
   margin: 0;
-  color: var(--ion-color-medium, #92949c);
+  color: var(--ion-color-medium, var(--grassroots-text-secondary));
 }
 
 /* No Team Item Specific Styles */
 .no-team-item {
-  border-top: 1px solid var(--ion-color-light-shade, #e9ecef);
+  border-top: 1px solid var(--ion-color-light-shade, var(--grassroots-surface-variant));
   margin-bottom: 8px;
 }
 
 .dark-theme .no-team-item {
-  border-top-color: #2a2a2a;
+  border-top-color: var(--grassroots-surface-variant);
 }
 
 /* Responsive Adjustments */
@@ -282,9 +115,9 @@
   .team-item {
     --padding-start: 16px;
     --padding-end: 16px;
-    --padding-top: 18px;
-    --padding-bottom: 18px;
-    --min-height: 76px;
+    --padding-top: 8px;
+    --padding-bottom: 8px;
+    --min-height: 44px;
   }
   
   .team-item.selected {

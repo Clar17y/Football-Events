@@ -33,7 +33,6 @@ import { useGlobalStats } from '../hooks/useGlobalStats';
 import { useAuth } from '../contexts/AuthContext';
 import UserProfile from '../components/UserProfile';
 import './HomePage.css';
-import './HomePage.quickstart-dark.css';
 import { teamsApi } from '../services/api/teamsApi';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
