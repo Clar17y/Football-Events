@@ -1,14 +1,14 @@
 import { PrismaClient } from '@prisma/client';
-import { 
-  transformTeam, 
-  transformTeamCreateRequest, 
+import {
+  transformTeam,
+  transformTeamCreateRequest,
   transformTeamUpdateRequest,
-  transformTeams 
+  transformTeams
 } from '@shared/types';
-import type { 
-  Team, 
-  TeamCreateRequest, 
-  TeamUpdateRequest 
+import type {
+  Team,
+  TeamCreateRequest,
+  TeamUpdateRequest
 } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { createOrRestoreSoftDeleted, UniqueConstraintBuilders } from '../utils/softDeleteUtils';
@@ -17,6 +17,7 @@ export interface GetTeamsOptions {
   page: number;
   limit: number;
   search?: string;
+  includeOpponents?: boolean;
 }
 
 export interface PaginatedTeams {
@@ -57,13 +58,14 @@ export class TeamService {
   }
 
   async getTeams(userId: string, userRole: string, options: GetTeamsOptions): Promise<PaginatedTeams> {
-    const { page, limit, search } = options;
+    const { page, limit, search, includeOpponents } = options;
     const skip = (page - 1) * limit;
 
     // Build where clause for search and ownership
     const where: any = {
       is_deleted: false, // Exclude soft-deleted teams
-      is_opponent: false // Hide opponent teams from management lists by default
+      // Only filter out opponents if includeOpponents is not true
+      ...(includeOpponents ? {} : { is_opponent: false })
     };
 
     // Non-admin users can only see their own teams
@@ -115,9 +117,9 @@ export class TeamService {
   }
 
   async getTeamById(id: string, userId: string, userRole: string): Promise<Team | null> {
-    const where: any = { 
+    const where: any = {
       id,
-      is_deleted: false 
+      is_deleted: false
     };
 
     // Non-admin users can only see their own teams
@@ -142,10 +144,10 @@ export class TeamService {
     return team ? transformTeam(team) : null;
   }
 
-  async createTeam(data: TeamCreateRequest, userId: string): Promise<Team> {  
+  async createTeam(data: TeamCreateRequest, userId: string): Promise<Team> {
     return withPrismaErrorHandling(async () => {
       const transformedData = transformTeamCreateRequest(data, userId);
-      
+
       const team = await createOrRestoreSoftDeleted({
         prisma: this.prisma,
         model: 'team',
@@ -161,9 +163,9 @@ export class TeamService {
   async updateTeam(id: string, data: TeamUpdateRequest, userId: string, userRole: string): Promise<Team | null> {
     try {
       // First check if team exists and user has permission
-      const where: any = { 
+      const where: any = {
         id,
-        is_deleted: false 
+        is_deleted: false
       };
 
       // Non-admin users can only update their own teams
@@ -208,9 +210,9 @@ export class TeamService {
   async deleteTeam(id: string, userId: string, userRole: string): Promise<boolean> {
     try {
       // First check if team exists and user has permission
-      const where: any = { 
+      const where: any = {
         id,
-        is_deleted: false 
+        is_deleted: false
       };
 
       // Non-admin users can only delete their own teams
@@ -245,9 +247,9 @@ export class TeamService {
 
   async getTeamPlayers(teamId: string, userId: string, userRole: string): Promise<any[]> {
     // First check if user has access to this team
-    const teamWhere: any = { 
+    const teamWhere: any = {
       id: teamId,
-      is_deleted: false 
+      is_deleted: false
     };
 
     // Non-admin users can only access their own teams
@@ -263,7 +265,7 @@ export class TeamService {
     }
 
     const players = await this.prisma.player.findMany({
-      where: { 
+      where: {
         current_team: teamId,
         is_deleted: false // Exclude soft-deleted players
       },
@@ -289,9 +291,9 @@ export class TeamService {
 
   async getTeamSquad(teamId: string, userId: string, userRole: string, seasonId?: string): Promise<any | null> {
     // First check if user has access to this team
-    const teamWhere: any = { 
+    const teamWhere: any = {
       id: teamId,
-      is_deleted: false 
+      is_deleted: false
     };
 
     // Non-admin users can only access their own teams
@@ -299,7 +301,7 @@ export class TeamService {
       teamWhere.created_by_user_id = userId;
     }
 
-    const team = await this.prisma.team.findFirst({ 
+    const team = await this.prisma.team.findFirst({
       where: teamWhere,
       include: {
         created_by: {
@@ -312,7 +314,7 @@ export class TeamService {
         }
       }
     });
-    
+
     if (!team) {
       return null; // Team not found or access denied
     }
@@ -384,7 +386,7 @@ export class TeamService {
       });
 
       const matchIds = matches.map(m => m.match_id);
-      
+
       if (matchIds.length > 0) {
         const [totalGoals, totalEvents, totalLineups] = await Promise.all([
           this.prisma.event.count({

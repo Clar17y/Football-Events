@@ -64,6 +64,8 @@ export interface Match {
   competition?: string;
   homeTeamId: string;             // mapped from home_team_id
   awayTeamId: string;             // mapped from away_team_id
+  homeTeam?: Team;                // nested home team data
+  awayTeam?: Team;                // nested away team data
   venue?: string;
   durationMinutes: number;        // mapped from duration_mins
   periodFormat: string;           // mapped from period_format

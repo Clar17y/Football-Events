@@ -257,6 +257,46 @@ ion-item .formLabel * {
   box-shadow: var(--grassroots-shadow-sm);
 }
 
+/* Team Input Row */
+.teamInputRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--grassroots-space-sm) 0;
+}
+
+.teamInputText {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--theme-on-surface, var(--grassroots-text-primary));
+  flex: 1;
+}
+
+/* Team Preview */
+.teamPreview {
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-xs);
+  flex-shrink: 0;
+}
+
+.teamPreviewDot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--theme-surface-variant, var(--grassroots-surface-variant));
+  background-color: var(--theme-surface-variant, var(--grassroots-surface-variant));
+  flex-shrink: 0;
+}
+
+.teamPreviewLabel {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--theme-on-surface-variant, var(--grassroots-text-secondary));
+  user-select: none;
+}
+
 /* Dark mode: rely on global theme tokens in styles/theme-tokens.css */
 
 

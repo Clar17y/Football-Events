@@ -93,6 +93,15 @@ describe('Teams API Service', () => {
 
       expect(mockApiClient.get).toHaveBeenCalledWith('/teams?page=1&limit=25');
     });
+
+    it('should include opponents when includeOpponents is true', async () => {
+      const mockResponse = { data: { data: [], total: 0, page: 1, limit: 25, hasMore: false } };
+      mockApiClient.get.mockResolvedValue(mockResponse);
+
+      await teamsApi.getTeams({ includeOpponents: true });
+
+      expect(mockApiClient.get).toHaveBeenCalledWith('/teams?page=1&limit=25&includeOpponents=true');
+    });
   });
 
   describe('getTeamById', () => {

@@ -11,6 +11,7 @@ import type {
   MatchUpdateRequest 
 } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
+import { NaturalKeyResolver, NaturalKeyResolverError } from '../utils/naturalKeyResolver';
 import { createOrRestoreSoftDeleted, SoftDeletePatterns } from '../utils/softDeleteUtils';
 
 export interface GetMatchesOptions {
@@ -39,9 +40,11 @@ export class MatchService {
   public static QuickStartShape: any = {};
 
   private prisma: PrismaClient;
+  private nkr: NaturalKeyResolver;
 
   constructor() {
     this.prisma = new PrismaClient();
+    this.nkr = new NaturalKeyResolver(this.prisma);
   }
 
   async getMatches(userId: string, userRole: string, options: GetMatchesOptions): Promise<PaginatedMatches> {
@@ -130,6 +133,30 @@ export class MatchService {
               first_name: true,
               last_name: true
             }
+          },
+          homeTeam: {
+            select: {
+              id: true,
+              name: true,
+              home_kit_primary: true,
+              home_kit_secondary: true,
+              away_kit_primary: true,
+              away_kit_secondary: true,
+              logo_url: true,
+              is_opponent: true
+            }
+          },
+          awayTeam: {
+            select: {
+              id: true,
+              name: true,
+              home_kit_primary: true,
+              home_kit_secondary: true,
+              away_kit_primary: true,
+              away_kit_secondary: true,
+              logo_url: true,
+              is_opponent: true
+            }
           }
         }
       }),
@@ -177,6 +204,30 @@ export class MatchService {
             first_name: true,
             last_name: true
           }
+        },
+        homeTeam: {
+          select: {
+            id: true,
+            name: true,
+            home_kit_primary: true,
+            home_kit_secondary: true,
+            away_kit_primary: true,
+            away_kit_secondary: true,
+            logo_url: true,
+              is_opponent: true
+          }
+        },
+        awayTeam: {
+          select: {
+            id: true,
+            name: true,
+            home_kit_primary: true,
+            home_kit_secondary: true,
+            away_kit_primary: true,
+            away_kit_secondary: true,
+            logo_url: true,
+              is_opponent: true
+          }
         }
       }
     });
@@ -207,7 +258,7 @@ export class MatchService {
           data.awayTeamId, 
           new Date(data.kickoffTime)
         ),
-        createData: transformMatchCreateRequest(data),
+        createData: transformMatchCreateRequest(data, userId),
         userId,
         transformer: transformMatch,
         primaryKeyField: 'match_id'
@@ -250,6 +301,30 @@ export class MatchService {
               email: true,
               first_name: true,
               last_name: true
+            }
+          },
+          homeTeam: {
+            select: {
+              id: true,
+              name: true,
+              home_kit_primary: true,
+              home_kit_secondary: true,
+              away_kit_primary: true,
+              away_kit_secondary: true,
+              logo_url: true,
+              is_opponent: true
+            }
+          },
+          awayTeam: {
+            select: {
+              id: true,
+              name: true,
+              home_kit_primary: true,
+              home_kit_secondary: true,
+              away_kit_primary: true,
+              away_kit_secondary: true,
+              logo_url: true,
+              is_opponent: true
             }
           }
         }
@@ -345,6 +420,30 @@ export class MatchService {
             first_name: true,
             last_name: true
           }
+        },
+        homeTeam: {
+          select: {
+            id: true,
+            name: true,
+            home_kit_primary: true,
+            home_kit_secondary: true,
+            away_kit_primary: true,
+            away_kit_secondary: true,
+            logo_url: true,
+              is_opponent: true
+          }
+        },
+        awayTeam: {
+          select: {
+            id: true,
+            name: true,
+            home_kit_primary: true,
+            home_kit_secondary: true,
+            away_kit_primary: true,
+            away_kit_secondary: true,
+            logo_url: true,
+              is_opponent: true
+          }
         }
       }
     });
@@ -378,6 +477,30 @@ export class MatchService {
             email: true,
             first_name: true,
             last_name: true
+          }
+        },
+        homeTeam: {
+          select: {
+            id: true,
+            name: true,
+            home_kit_primary: true,
+            home_kit_secondary: true,
+            away_kit_primary: true,
+            away_kit_secondary: true,
+            logo_url: true,
+              is_opponent: true
+          }
+        },
+        awayTeam: {
+          select: {
+            id: true,
+            name: true,
+            home_kit_primary: true,
+            home_kit_secondary: true,
+            away_kit_primary: true,
+            away_kit_secondary: true,
+            logo_url: true,
+              is_opponent: true
           }
         }
       }
@@ -433,6 +556,30 @@ export class MatchService {
             first_name: true,
             last_name: true
           }
+        },
+        homeTeam: {
+          select: {
+            id: true,
+            name: true,
+            home_kit_primary: true,
+            home_kit_secondary: true,
+            away_kit_primary: true,
+            away_kit_secondary: true,
+            logo_url: true,
+              is_opponent: true
+          }
+        },
+        awayTeam: {
+          select: {
+            id: true,
+            name: true,
+            home_kit_primary: true,
+            home_kit_secondary: true,
+            away_kit_primary: true,
+            away_kit_secondary: true,
+            logo_url: true,
+              is_opponent: true
+          }
         }
       }
     });
@@ -487,6 +634,30 @@ export class MatchService {
             first_name: true,
             last_name: true
           }
+        },
+        homeTeam: {
+          select: {
+            id: true,
+            name: true,
+            home_kit_primary: true,
+            home_kit_secondary: true,
+            away_kit_primary: true,
+            away_kit_secondary: true,
+            logo_url: true,
+              is_opponent: true
+          }
+        },
+        awayTeam: {
+          select: {
+            id: true,
+            name: true,
+            home_kit_primary: true,
+            home_kit_secondary: true,
+            away_kit_primary: true,
+            away_kit_secondary: true,
+            logo_url: true,
+              is_opponent: true
+          }
         }
       }
     });
@@ -522,7 +693,8 @@ export class MatchService {
           name: true,
           home_kit_primary: true,
           home_kit_secondary: true,
-          logo_url: true
+          logo_url: true,
+              is_opponent: true
         }
       }),
       this.prisma.team.findUnique({
@@ -532,7 +704,8 @@ export class MatchService {
           name: true,
           away_kit_primary: true,
           away_kit_secondary: true,
-          logo_url: true
+          logo_url: true,
+              is_opponent: true
         }
       })
     ]);
@@ -715,6 +888,7 @@ export class MatchService {
       isHome,
       kickoffTime,
       seasonId,
+      seasonLabel,
       competition,
       venue
     } = payload || {};
@@ -725,28 +899,29 @@ export class MatchService {
       throw err;
     }
 
-    // Resolve my team
+    // Resolve my team via NaturalKeyResolver (fallback to create)
     let resolvedMyTeamId: string | null = myTeamId || null;
     if (!resolvedMyTeamId && myTeamName) {
-      const existing = await this.prisma.team.findFirst({
-        where: {
-          name: myTeamName,
-          created_by_user_id: userId,
-          is_deleted: false,
-          is_opponent: false
+      try {
+        resolvedMyTeamId = await this.nkr.resolveTeamByName(myTeamName, userId, userRole, { isOpponent: false });
+      } catch (err: any) {
+        if (err instanceof NaturalKeyResolverError && err.code === 'NOT_FOUND') {
+          const created = await this.prisma.team.create({
+            data: {
+              name: String(myTeamName).trim(),
+              is_opponent: false,
+              created_by_user_id: userId
+            }
+          });
+          resolvedMyTeamId = created.id;
+        } else if (err instanceof NaturalKeyResolverError && err.code === 'MULTIPLE_MATCHES') {
+          const e: any = new Error(`Multiple teams found for name: ${String(myTeamName).trim()}. Please use a unique team name.`);
+          e.statusCode = 409;
+          e.code = 'MULTIPLE_MATCHES';
+          throw e;
+        } else {
+          throw err;
         }
-      });
-      if (existing) {
-        resolvedMyTeamId = existing.id;
-      } else {
-        const created = await this.prisma.team.create({
-          data: {
-            name: myTeamName,
-            is_opponent: false,
-            created_by_user_id: userId
-          }
-        });
-        resolvedMyTeamId = created.id;
       }
     }
 
@@ -766,28 +941,29 @@ export class MatchService {
       }
     }
 
-    // Resolve opponent team (scoped to user)
+    // Resolve opponent team via NaturalKeyResolver (scoped to user, fallback to create)
     const oppName = (opponentName && String(opponentName).trim()) || 'Unknown Opponent';
     let resolvedOpponentTeamId: string | null = null;
-    const existingOpp = await this.prisma.team.findFirst({
-      where: {
-        name: oppName,
-        created_by_user_id: userId,
-        is_deleted: false,
-        is_opponent: true
+    try {
+      resolvedOpponentTeamId = await this.nkr.resolveTeamByName(oppName, userId, userRole, { isOpponent: true });
+    } catch (err: any) {
+      if (err instanceof NaturalKeyResolverError && err.code === 'NOT_FOUND') {
+        const createdOpp = await this.prisma.team.create({
+          data: {
+            name: oppName,
+            is_opponent: true,
+            created_by_user_id: userId
+          }
+        });
+        resolvedOpponentTeamId = createdOpp.id;
+      } else if (err instanceof NaturalKeyResolverError && err.code === 'MULTIPLE_MATCHES') {
+        const e: any = new Error(`Multiple opponent teams found for name: ${oppName}. Please use a unique team name.`);
+        e.statusCode = 409;
+        e.code = 'MULTIPLE_MATCHES';
+        throw e;
+      } else {
+        throw err;
       }
-    });
-    if (existingOpp) {
-      resolvedOpponentTeamId = existingOpp.id;
-    } else {
-      const createdOpp = await this.prisma.team.create({
-        data: {
-          name: oppName,
-          is_opponent: true,
-          created_by_user_id: userId
-        }
-      });
-      resolvedOpponentTeamId = createdOpp.id;
     }
 
     if (!resolvedMyTeamId || !resolvedOpponentTeamId) {
@@ -800,50 +976,67 @@ export class MatchService {
     const homeId = isHome ? resolvedMyTeamId : resolvedOpponentTeamId;
     const awayId = isHome ? resolvedOpponentTeamId : resolvedMyTeamId;
 
-    // Determine seasonId (fallback to current)
+    // Determine seasonId (support seasonLabel, fallback to current)
     let finalSeasonId: string | undefined = seasonId as string | undefined;
     if (!finalSeasonId) {
-      // Try to find current season for this user
-      const current = await this.prisma.seasons.findFirst({
-        where: { is_current: true, is_deleted: false, created_by_user_id: userId },
-        orderBy: { start_date: 'desc' }
-      });
-      if (current) {
-        finalSeasonId = current.season_id;
-      } else {
-        // Auto-create a default season based on current date (UK grassroots convention):
-        // Season runs Aug 1 -> Jun 30 of next year. Label: "YYYY-YYYY Season"
-        const now = new Date();
-        const m = now.getMonth(); // 0-11
-        const startYear = m >= 7 ? now.getFullYear() : now.getFullYear() - 1; // Aug (7) or later -> current year, else previous year
-        const endYear = startYear + 1;
-        const startDate = new Date(startYear, 7, 1); // Aug 1
-        const endDate = new Date(endYear, 5, 30);    // Jun 30
-        const label = `${startYear}-${endYear} Season`;
-
-        // Try to find-or-create by label scoped to user
-        let season = await this.prisma.seasons.findFirst({
-          where: { label, created_by_user_id: userId, is_deleted: false }
-        });
-        if (!season) {
-          season = await this.prisma.seasons.create({
-            data: {
-              label,
-              start_date: startDate,
-              end_date: endDate,
-              is_current: true,
-              description: 'Auto-created by Quick Start',
-              created_by_user_id: userId
-            }
-          });
-        } else if (!season.is_current) {
-          // Optionally mark it current
-          season = await this.prisma.seasons.update({
-            where: { season_id: season.season_id },
-            data: { is_current: true }
-          });
+      if (seasonLabel && String(seasonLabel).trim()) {
+        try {
+          finalSeasonId = await this.nkr.resolveSeasonByLabel(String(seasonLabel).trim(), userId, userRole);
+        } catch (err: any) {
+          if (err.code === 'NOT_FOUND') {
+            const e: any = new Error(`Season with label '${String(seasonLabel).trim()}' not found`);
+            e.statusCode = 404;
+            e.code = 'NOT_FOUND';
+            throw e;
+          }
+          if (err.code === 'MULTIPLE_MATCHES') {
+            const e: any = new Error(`Multiple seasons found for label '${String(seasonLabel).trim()}'`);
+            e.statusCode = 409;
+            e.code = 'MULTIPLE_MATCHES';
+            throw e;
+          }
+          throw err;
         }
-        finalSeasonId = season.season_id;
+      } else {
+        // Try to find current season for this user, else auto-create default
+        const current = await this.prisma.seasons.findFirst({
+          where: { is_current: true, is_deleted: false, created_by_user_id: userId },
+          orderBy: { start_date: 'desc' }
+        });
+        if (current) {
+          finalSeasonId = current.season_id;
+        } else {
+          // Auto-create based on current date (Aug 1 -> Jun 30 next year)
+          const now = new Date();
+          const m = now.getMonth();
+          const startYear = m >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+          const endYear = startYear + 1;
+          const startDate = new Date(startYear, 7, 1);
+          const endDate = new Date(endYear, 5, 30);
+          const label = `${startYear}-${endYear} Season`;
+
+          let season = await this.prisma.seasons.findFirst({
+            where: { label, created_by_user_id: userId, is_deleted: false }
+          });
+          if (!season) {
+            season = await this.prisma.seasons.create({
+              data: {
+                label,
+                start_date: startDate,
+                end_date: endDate,
+                is_current: true,
+                description: 'Auto-created by Quick Start',
+                created_by_user_id: userId
+              }
+            });
+          } else if (!season.is_current) {
+            season = await this.prisma.seasons.update({
+              where: { season_id: season.season_id },
+              data: { is_current: true }
+            });
+          }
+          finalSeasonId = season.season_id;
+        }
       }
     }
 

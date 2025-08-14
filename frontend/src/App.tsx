@@ -15,6 +15,7 @@ import HomePage from './pages/HomePage';
 import SeasonsPage from './pages/SeasonsPage';
 import TeamsPage from './pages/TeamsPage';
 import PlayersPage from './pages/PlayersPage';
+import MatchesPage from './pages/MatchesPage';
 import AwardsPage from './pages/AwardsPage';
 import StatisticsPage from './pages/StatisticsPage';
 // import MatchConsole from './pages/MatchConsole'; // Removed - will be redesigned
@@ -92,6 +93,12 @@ const AppRoutes: React.FC = () => {
           return <LoginPage onNavigate={handleNavigation} />;
         }
         return <PlayersPage onNavigate={handleNavigation} initialTeamFilter={teamFilter} />;
+      case 'matches':
+        if (!isAuthenticated) {
+          setCurrentPage('login');
+          return <LoginPage onNavigate={handleNavigation} />;
+        }
+        return <MatchesPage onNavigate={handleNavigation} />;
       case 'awards':
         if (!isAuthenticated) {
           setCurrentPage('login');

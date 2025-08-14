@@ -148,6 +148,14 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       description: 'Track individual player progress'
     },
     {
+      title: 'Matches',
+      subtitle: 'Schedule & results',
+      icon: trophy,
+      color: 'secondary',
+      route: '/matches',
+      description: 'Schedule matches and track results'
+    },
+    {
       title: 'Awards',
       subtitle: 'Recognition system',
       icon: ribbon,
@@ -483,7 +491,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                         const pageName = card.route.replace('/', '');
                         
                         // Check if route requires authentication
-                        const protectedRoutes = ['seasons', 'teams', 'players', 'awards'];
+                        const protectedRoutes = ['seasons', 'teams', 'players', 'matches', 'awards'];
                         if (protectedRoutes.includes(pageName) && !user) {
                           // Redirect to login for protected routes
                           navigate('login');
@@ -510,7 +518,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                             <IonLabel>Coming Soon</IonLabel>
                           </IonChip>
                         )}
-                        {!user && ['Seasons', 'Teams', 'Players', 'Awards'].includes(card.title) && (
+                        {!user && ['Seasons', 'Teams', 'Players', 'Matches', 'Awards'].includes(card.title) && (
                           <IonChip color="primary" className="login-required-chip">
                             <IonLabel>Sign In Required</IonLabel>
                           </IonChip>

@@ -16,6 +16,7 @@ export interface TeamsListParams {
   page?: number;
   limit?: number;
   search?: string;
+  includeOpponents?: boolean;
 }
 
 export interface TeamsListResponse extends PaginatedResponse<Team> {}
@@ -63,7 +64,7 @@ export const teamsApi = {
    * Get paginated list of user's teams with optional search
    */
   async getTeams(params: TeamsListParams = {}): Promise<TeamsListResponse> {
-    const { page = 1, limit = 25, search } = params;
+    const { page = 1, limit = 25, search, includeOpponents } = params;
     
     const queryParams = new URLSearchParams({
       page: page.toString(),
@@ -72,6 +73,10 @@ export const teamsApi = {
     
     if (search && search.trim()) {
       queryParams.append('search', search.trim());
+    }
+    
+    if (includeOpponents) {
+      queryParams.append('includeOpponents', 'true');
     }
     
     const response = await apiClient.get(`/teams?${queryParams.toString()}`);

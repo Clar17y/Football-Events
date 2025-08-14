@@ -113,6 +113,8 @@ export const transformMatch = (prismaMatch: PrismaMatch): Match => ({
   competition: prismaMatch.competition ?? undefined,
   homeTeamId: prismaMatch.home_team_id,
   awayTeamId: prismaMatch.away_team_id,
+  homeTeam: (prismaMatch as any).homeTeam ? transformTeam((prismaMatch as any).homeTeam) : undefined,
+  awayTeam: (prismaMatch as any).awayTeam ? transformTeam((prismaMatch as any).awayTeam) : undefined,
   venue: prismaMatch.venue ?? undefined,
   durationMinutes: prismaMatch.duration_mins,
   periodFormat: prismaMatch.period_format,

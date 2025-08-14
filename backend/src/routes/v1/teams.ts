@@ -21,7 +21,7 @@ router.get('/opponents', authenticateToken, asyncHandler(async (req, res) => {
 }));
 
 router.get('/', authenticateToken, asyncHandler(async (req, res) => {
-  const { page = 1, limit = 25, search } = req.query;
+  const { page = 1, limit = 25, search, includeOpponents } = req.query;
   
   const result = await teamService.getTeams(
     req.user!.id,
@@ -29,7 +29,8 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
     {
       page: Number(page),
       limit: Number(limit),
-      search: search as string
+      search: search as string,
+      includeOpponents: includeOpponents === 'true'
     }
   );
   
