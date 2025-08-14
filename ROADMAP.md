@@ -1,3 +1,5 @@
+> NOTE: This roadmap contains historical context and may be out of date. See documentation/ROADMAP_LIVE_MATCH_MVP_2025-08.md for the current plan focused on Live Match and mobile-first UX.
+
 ## Overview
 This document provides a high-level view of all planned improvements and their current status. Detailed documentation for each task can be found in the `documentation/` folder.
 
