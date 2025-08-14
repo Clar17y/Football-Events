@@ -67,8 +67,9 @@ export class NaturalKeyResolverError extends Error {
 export class NaturalKeyResolver {
   private prisma: PrismaClient;
 
-  constructor() {
-    this.prisma = new PrismaClient();
+  // Allow DI of Prisma to reuse existing client in services
+  constructor(prisma?: PrismaClient) {
+    this.prisma = prisma ?? new PrismaClient();
   }
 
   // ============================================================================
@@ -159,14 +160,19 @@ export class NaturalKeyResolver {
   // TEAM RESOLUTION
   // ============================================================================
 
-  async resolveTeamByName(teamName: string, userId: string, userRole: string): Promise<string> {
+  async resolveTeamByName(teamName: string, userId: string, userRole: string, opts?: { isOpponent?: boolean }): Promise<string> {
+    const name = (teamName ?? '').trim();
     const where: any = {
       name: {
-        equals: teamName,
+        equals: name,
         mode: 'insensitive' as const
       },
       is_deleted: false
     };
+
+    if (typeof opts?.isOpponent === 'boolean') {
+      where.is_opponent = opts.isOpponent;
+    }
 
     // Non-admin users can only access teams they created
     if (userRole !== 'ADMIN') {
@@ -180,33 +186,38 @@ export class NaturalKeyResolver {
 
     if (teams.length === 0) {
       throw new NaturalKeyResolverError(
-        `Team with name "${teamName}" not found or access denied`,
+        `Team with name "${name}" not found or access denied`,
         'NOT_FOUND',
         'Team',
-        { teamName }
+        { teamName: name, ...(opts && { isOpponent: opts.isOpponent }) }
       );
     }
 
     if (teams.length > 1) {
       throw new NaturalKeyResolverError(
-        `Multiple teams found with name "${teamName}". Please use unique team names or UUIDs.`,
+        `Multiple teams found with name "${name}". Please use unique team names or UUIDs.`,
         'MULTIPLE_MATCHES',
         'Team',
-        { teamName, matches: teams.map(t => ({ id: t.id, name: t.name })) }
+        { teamName: name, matches: teams.map(t => ({ id: t.id, name: t.name })) }
       );
     }
 
     return teams[0].id;
   }
 
-  async resolveMultipleTeams(teamNames: string[], userId: string, userRole: string): Promise<ResolvedTeamKeys[]> {
+  async resolveMultipleTeams(teamNames: string[], userId: string, userRole: string, opts?: { isOpponent?: boolean }): Promise<ResolvedTeamKeys[]> {
+    const names = teamNames.map(n => (n ?? '').trim());
     const where: any = {
       name: {
-        in: teamNames,
+        in: names,
         mode: 'insensitive' as const
       },
       is_deleted: false
     };
+
+    if (typeof opts?.isOpponent === 'boolean') {
+      where.is_opponent = opts.isOpponent;
+    }
 
     if (userRole !== 'ADMIN') {
       where.created_by_user_id = userId;
@@ -220,14 +231,14 @@ export class NaturalKeyResolver {
     const resolved: ResolvedTeamKeys[] = [];
     const teamMap = new Map(teams.map(t => [t.name.toLowerCase(), t]));
 
-    for (const teamName of teamNames) {
+    for (const teamName of names) {
       const team = teamMap.get(teamName.toLowerCase());
       if (!team) {
         throw new NaturalKeyResolverError(
           `Team with name "${teamName}" not found or access denied`,
           'NOT_FOUND',
           'Team',
-          { teamName }
+          { teamName, ...(opts && { isOpponent: opts.isOpponent }) }
         );
       }
       resolved.push({
@@ -418,6 +429,8 @@ export class NaturalKeyResolver {
   }
 
   async disconnect(): Promise<void> {
-    await this.prisma.$disconnect();
+    // Only disconnect if we created the client locally
+    // Note: We cannot reliably detect ownership; keep as no-op for injected clients
+    try { await this.prisma.$disconnect(); } catch {}
   }
 }

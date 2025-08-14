@@ -35,7 +35,7 @@ export const handlePrismaError = (error: PrismaError, entityName: string = 'enti
         statusCode: 409,
         error: 'Unique Constraint Violation',
         message: `A ${entityName} with this ${field} already exists`,
-        field: field,
+        field: field || "unknown",
         constraint: 'unique'
       };
 

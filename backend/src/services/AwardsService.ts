@@ -18,6 +18,7 @@ import type {
   MatchAwardUpdateRequest
 } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
+import { NaturalKeyResolver } from '../utils/naturalKeyResolver';
 import { createOrRestoreSoftDeleted, SoftDeletePatterns } from '../utils/softDeleteUtils';
 
 export interface GetAwardsOptions {
@@ -79,9 +80,11 @@ export interface BatchMatchAwardResult {
 
 export class AwardsService {
   private prisma: PrismaClient;
+  private nkr: NaturalKeyResolver;
 
   constructor() {
     this.prisma = new PrismaClient();
+    this.nkr = new NaturalKeyResolver(this.prisma);
   }
 
   // Season Awards (awards table)
@@ -175,13 +178,47 @@ export class AwardsService {
     return award ? transformAward(award) : null;
   }
 
-  async createAward(data: AwardCreateRequest, userId: string): Promise<Award> {
+  // Allow natural keys: seasonLabel, playerName
+  async createAward(data: AwardCreateRequest & { seasonLabel?: string; playerName?: string }, userId: string, userRole?: string): Promise<Award> {
     return withPrismaErrorHandling(async () => {
+      let seasonId = data.seasonId;
+      let playerId = data.playerId;
+      if (!seasonId && data.seasonLabel) {
+        try {
+          seasonId = await this.nkr.resolveSeasonByLabel(data.seasonLabel, userId, userRole || 'USER');
+        } catch (err: any) {
+          if (err && err.code) {
+            const e: any = new Error(err.message);
+            e.statusCode = err.code === 'NOT_FOUND' ? 404 : err.code === 'MULTIPLE_MATCHES' ? 409 : err.code === 'INVALID_INPUT' ? 400 : 400;
+            e.code = err.code;
+            throw e;
+          }
+          throw err;
+        }
+      }
+      if (!playerId && data.playerName) {
+        try {
+          playerId = await this.nkr.resolvePlayerByName(data.playerName, userId, userRole || 'USER');
+        } catch (err: any) {
+          if (err && err.code) {
+            const e: any = new Error(err.message);
+            e.statusCode = err.code === 'NOT_FOUND' ? 404 : err.code === 'MULTIPLE_MATCHES' ? 409 : err.code === 'INVALID_INPUT' ? 400 : 400;
+            e.code = err.code;
+            throw e;
+          }
+          throw err;
+        }
+      }
+
       const award = await createOrRestoreSoftDeleted({
         prisma: this.prisma,
         model: 'awards',
-        uniqueConstraints: SoftDeletePatterns.awardConstraint(data.playerId, data.seasonId, data.category),
-        createData: transformAwardCreateRequest(data),
+        uniqueConstraints: SoftDeletePatterns.awardConstraint(playerId!, seasonId!, data.category),
+        createData: transformAwardCreateRequest({
+          ...data,
+          seasonId: seasonId!,
+          playerId: playerId!
+        }),
         userId,
         transformer: transformAward,
         primaryKeyField: 'award_id'
@@ -352,13 +389,46 @@ export class AwardsService {
     return matchAward ? transformMatchAward(matchAward) : null;
   }
 
-  async createMatchAward(data: MatchAwardCreateRequest, userId: string): Promise<MatchAward> {
+  // Allow natural keys: playerName or match triple (homeTeamName, awayTeamName, kickoffTime)
+  async createMatchAward(data: MatchAwardCreateRequest & { playerName?: string; homeTeamName?: string; awayTeamName?: string; kickoffTime?: string }, userId: string, userRole?: string): Promise<MatchAward> {
     return withPrismaErrorHandling(async () => {
+      let matchId = data.matchId;
+      let playerId = data.playerId;
+      if (!matchId && data.homeTeamName && data.awayTeamName && data.kickoffTime) {
+        try {
+          matchId = await this.nkr.resolveMatchByTeamsAndTime(data.homeTeamName, data.awayTeamName, data.kickoffTime, userId, userRole || 'USER');
+        } catch (err: any) {
+          if (err && err.code) {
+            const e: any = new Error(err.message);
+            e.statusCode = err.code === 'NOT_FOUND' ? 404 : err.code === 'MULTIPLE_MATCHES' ? 409 : err.code === 'INVALID_INPUT' ? 400 : 400;
+            e.code = err.code;
+            throw e;
+          }
+          throw err;
+        }
+      }
+      if (!playerId && data.playerName) {
+        try {
+          playerId = await this.nkr.resolvePlayerByName(data.playerName, userId, userRole || 'USER');
+        } catch (err: any) {
+          if (err && err.code) {
+            const e: any = new Error(err.message);
+            e.statusCode = err.code === 'NOT_FOUND' ? 404 : err.code === 'MULTIPLE_MATCHES' ? 409 : err.code === 'INVALID_INPUT' ? 400 : 400;
+            e.code = err.code;
+            throw e;
+          }
+          throw err;
+        }
+      }
       const matchAward = await createOrRestoreSoftDeleted({
         prisma: this.prisma,
         model: 'match_awards',
-        uniqueConstraints: SoftDeletePatterns.matchAwardConstraint(data.playerId, data.matchId, data.category),
-        createData: transformMatchAwardCreateRequest(data),
+        uniqueConstraints: SoftDeletePatterns.matchAwardConstraint(playerId!, matchId!, data.category),
+        createData: transformMatchAwardCreateRequest({
+          ...data,
+          matchId: matchId!,
+          playerId: playerId!
+        }),
         userId,
         transformer: transformMatchAward,
         primaryKeyField: 'match_award_id'
@@ -530,7 +600,7 @@ export class AwardsService {
     if (operations.create && operations.create.length > 0) {
       for (const createData of operations.create) {
         try {
-          await this.createAward(createData, userId);
+          await this.createAward(createData as any, userId, userRole);
           result.created.success++;
         } catch (error: any) {
           result.created.failed++;
@@ -605,7 +675,7 @@ export class AwardsService {
     if (operations.create && operations.create.length > 0) {
       for (const createData of operations.create) {
         try {
-          await this.createMatchAward(createData, userId);
+          await this.createMatchAward(createData as any, userId, userRole);
           result.created.success++;
         } catch (error: any) {
           result.created.failed++;

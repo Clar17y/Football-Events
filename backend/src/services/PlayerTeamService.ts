@@ -64,7 +64,7 @@ export class PlayerTeamService {
 
   constructor() {
     this.prisma = new PrismaClient();
-    this.naturalKeyResolver = new NaturalKeyResolver();
+    this.naturalKeyResolver = new NaturalKeyResolver(this.prisma);
   }
 
   async getPlayerTeams(userId: string, userRole: string, options: GetPlayerTeamsOptions): Promise<PaginatedPlayerTeams> {
@@ -202,12 +202,17 @@ export class PlayerTeamService {
 
   async createPlayerTeam(data: PlayerTeamCreateRequest, userId: string, userRole: string): Promise<PlayerTeam> {
     return withPrismaErrorHandling(async () => {
+      // Resolve natural keys if provided
+      const resolvedInput = await this.resolveNaturalKeysForSingleRequest(data, userId, userRole);
+      const playerId = resolvedInput.playerId!;
+      const teamId = resolvedInput.teamId!;
+
       // Check if user can create relationship for this team and player
       if (userRole !== 'ADMIN') {
         const userTeamIds = await this.getUserTeamIds(userId);
         const userPlayerIds = await this.getUserPlayerIds(userId);
         
-        if (!userTeamIds.includes(data.teamId) && !userPlayerIds.includes(data.playerId)) {
+        if (!userTeamIds.includes(teamId) && !userPlayerIds.includes(playerId)) {
           const error = new Error('Access denied: You can only create relationships for teams you own or players you created') as any;
           error.statusCode = 403;
           throw error;
@@ -217,10 +222,10 @@ export class PlayerTeamService {
       // Check if player and team exist
       const [player, team] = await Promise.all([
         this.prisma.player.findFirst({
-          where: { id: data.playerId, is_deleted: false }
+          where: { id: playerId, is_deleted: false }
         }),
         this.prisma.team.findFirst({
-          where: { id: data.teamId, is_deleted: false }
+          where: { id: teamId, is_deleted: false }
         })
       ]);
 
@@ -236,11 +241,11 @@ export class PlayerTeamService {
       }
 
       // Check for overlapping active relationships before creating/restoring
-      const startDateObj = new Date(data.startDate);
+      const startDateObj = new Date(resolvedInput.startDate);
       const existingActiveRelationship = await this.prisma.player_teams.findFirst({
         where: {
-          player_id: data.playerId,
-          team_id: data.teamId,
+          player_id: playerId,
+          team_id: teamId,
           is_active: true,
           is_deleted: false,
           OR: [
@@ -257,19 +262,23 @@ export class PlayerTeamService {
       }
 
       // Transform the request using shared transformer
-      const baseCreateData = transformPlayerTeamCreateRequest(data, userId);
+      const baseCreateData = transformPlayerTeamCreateRequest({
+        ...resolvedInput,
+        playerId,
+        teamId
+      }, userId);
       
       const playerTeam = await createOrRestoreSoftDeleted({
         prisma: this.prisma,
         model: 'player_teams',
         uniqueConstraints: SoftDeletePatterns.playerTeamConstraint(
-          data.playerId,
-          data.teamId,
+          playerId,
+          teamId,
           startDateObj
         ),
         createData: {
           ...baseCreateData,
-          is_active: data.isActive ?? true
+          is_active: resolvedInput.isActive ?? true
         },
         userId,
         transformer: this.transformPlayerTeamWithServiceFields.bind(this)

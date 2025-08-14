@@ -96,6 +96,7 @@ export const matchQuickStartSchema = z.object({
   isHome: z.boolean({ required_error: 'isHome is required' }),
   kickoffTime: z.string().datetime().optional(),
   seasonId: z.string().uuid().optional(),
+  seasonLabel: z.string().max(50).trim().optional(),
   competition: z.string().max(100).optional(),
   venue: z.string().max(100).optional(),
   durationMinutes: z.number().int().min(1).max(200).optional(),
@@ -201,9 +202,13 @@ export const uuidParamSchema = z.object({
 });
 
 // Award validation schemas
-export const awardCreateSchema = z.object({
-  seasonId: z.string().uuid('Season ID must be a valid UUID'),
-  playerId: z.string().uuid('Player ID must be a valid UUID'),
+const awardCreateBaseSchema = z.object({
+  // IDs or natural keys
+  seasonId: z.string().uuid('Season ID must be a valid UUID').optional(),
+  seasonLabel: z.string().min(1, 'Season label is required if no seasonId provided').max(50).trim().optional(),
+  playerId: z.string().uuid('Player ID must be a valid UUID').optional(),
+  playerName: z.string().min(1, 'Player name is required if no playerId provided').max(100).trim().optional(),
+  // Common
   category: z.string()
     .min(1, 'Award category is required')
     .max(100, 'Award category must be less than 100 characters')
@@ -213,12 +218,36 @@ export const awardCreateSchema = z.object({
     .optional()
 });
 
-export const awardUpdateSchema = awardCreateSchema.partial();
+export const awardCreateSchema = awardCreateBaseSchema
+.refine(data => !!(data.seasonId || data.seasonLabel), {
+  message: 'Provide either seasonId or seasonLabel',
+  path: ['seasonId']
+})
+.refine(data => !!(data.playerId || data.playerName), {
+  message: 'Provide either playerId or playerName',
+  path: ['playerId']
+})
+.refine(data => !(data.seasonId && data.seasonLabel), {
+  message: 'Provide only one of seasonId or seasonLabel',
+  path: ['seasonId']
+})
+.refine(data => !(data.playerId && data.playerName), {
+  message: 'Provide only one of playerId or playerName',
+  path: ['playerId']
+});
+
+export const awardUpdateSchema = awardCreateBaseSchema.partial();
 
 // Match Award validation schemas
-export const matchAwardCreateSchema = z.object({
-  matchId: z.string().uuid('Match ID must be a valid UUID'),
-  playerId: z.string().uuid('Player ID must be a valid UUID'),
+const matchAwardCreateBaseSchema = z.object({
+  // IDs or natural keys
+  matchId: z.string().uuid('Match ID must be a valid UUID').optional(),
+  homeTeamName: z.string().min(1).trim().optional(),
+  awayTeamName: z.string().min(1).trim().optional(),
+  kickoffTime: z.string().datetime('Kickoff time must be a valid ISO date').optional(),
+  playerId: z.string().uuid('Player ID must be a valid UUID').optional(),
+  playerName: z.string().min(1).max(100).trim().optional(),
+  // Common
   category: z.string()
     .min(1, 'Award category is required')
     .max(100, 'Award category must be less than 100 characters')
@@ -228,7 +257,25 @@ export const matchAwardCreateSchema = z.object({
     .optional()
 });
 
-export const matchAwardUpdateSchema = matchAwardCreateSchema.partial();
+export const matchAwardCreateSchema = matchAwardCreateBaseSchema
+.refine(data => !!(data.matchId || (data.homeTeamName && data.awayTeamName && data.kickoffTime)), {
+  message: 'Provide either matchId or (homeTeamName, awayTeamName, kickoffTime)',
+  path: ['matchId']
+})
+.refine(data => !(data.matchId && (data.homeTeamName || data.awayTeamName || data.kickoffTime)), {
+  message: 'Provide only one of matchId or match natural keys',
+  path: ['matchId']
+})
+.refine(data => !!(data.playerId || data.playerName), {
+  message: 'Provide either playerId or playerName',
+  path: ['playerId']
+})
+.refine(data => !(data.playerId && data.playerName), {
+  message: 'Provide only one of playerId or playerName',
+  path: ['playerId']
+});
+
+export const matchAwardUpdateSchema = matchAwardCreateBaseSchema.partial();
 
 // Lineup validation schemas
 export const lineupCreateSchema = z.object({
