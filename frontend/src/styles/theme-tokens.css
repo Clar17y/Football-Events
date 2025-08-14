@@ -57,14 +57,29 @@ ion-modal[data-theme='player'],
   --theme-primary-rgb: var(--ion-color-indigo-rgb);
 }
 
+/* Match theme - Emerald colors */
+ion-page[data-theme='match'],
+ion-modal[data-theme='match'],
+.page[data-theme='match'],
+.modal[data-theme='match'],
+[data-theme='match'],
+[data-theme='match'] * {
+  --theme-primary: var(--ion-color-emerald);
+  --theme-primary-shade: var(--ion-color-emerald-shade);
+  --theme-primary-tint: var(--ion-color-emerald-tint);
+  --theme-primary-rgb: var(--ion-color-emerald-rgb);
+}
+
 /* Dark mode adjustments: align with colors.css tokens */
 .dark-theme,
 .dark-theme [data-theme='team'],
 .dark-theme [data-theme='season'],
 .dark-theme [data-theme='player'],
+.dark-theme [data-theme='match'],
 .dark-theme [data-theme='team'] *,
 .dark-theme [data-theme='season'] *,
-.dark-theme [data-theme='player'] * {
+.dark-theme [data-theme='player'] *,
+.dark-theme [data-theme='match'] * {
   --theme-background: var(--grassroots-background) !important;
   --theme-surface: var(--grassroots-surface) !important;
   --theme-surface-variant: var(--grassroots-surface-variant) !important;
