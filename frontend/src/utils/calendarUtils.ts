@@ -266,44 +266,56 @@ function createMatchIndicator(
   teamsCache: Map<string, Team> = new Map()
 ): CalendarMatchIndicator {
   const matchDate = dayjs(match.kickoffTime);
-  
-  // Get team data from cache or create placeholder
-  const homeTeamData = getTeamData(match.homeTeamId, teamsCache);
-  const awayTeamData = getTeamData(match.awayTeamId, teamsCache);
-  
-  // Create Team objects for the calendar indicator
+
+  // Prefer embedded team objects from the match; then try cache; then placeholder
+  const homeSource = match.homeTeam || teamsCache.get(match.homeTeamId);
+  const awaySource = match.awayTeam || teamsCache.get(match.awayTeamId);
+
   const homeTeam: Team = {
-    id: homeTeamData.id,
-    name: homeTeamData.name,
-    homeKitPrimary: homeTeamData.colors.homeKitPrimary || '#2dd4bf',
-    homeKitSecondary: homeTeamData.colors.homeKitSecondary || '#0d9488',
-    awayKitPrimary: homeTeamData.colors.awayKitPrimary || '#f59e0b',
-    awayKitSecondary: homeTeamData.colors.awayKitSecondary || '#d97706',
+    id: homeSource?.id || match.homeTeamId,
+    name: homeSource?.name || (match.homeTeamId ? `Team ${match.homeTeamId.slice(0, 8)}` : 'Unknown Team'),
+    homeKitPrimary: homeSource?.homeKitPrimary || '#2dd4bf',
+    homeKitSecondary: homeSource?.homeKitSecondary || '#0d9488',
+    awayKitPrimary: homeSource?.awayKitPrimary || '#f59e0b',
+    awayKitSecondary: homeSource?.awayKitSecondary || '#d97706',
     createdAt: match.createdAt,
     created_by_user_id: match.created_by_user_id,
     is_deleted: match.is_deleted,
-    is_opponent: false
+    is_opponent: typeof homeSource?.is_opponent === 'boolean' ? homeSource.is_opponent : false
   };
-  
+
   const awayTeam: Team = {
-    id: awayTeamData.id,
-    name: awayTeamData.name,
-    homeKitPrimary: awayTeamData.colors.homeKitPrimary || '#f59e0b',
-    homeKitSecondary: awayTeamData.colors.homeKitSecondary || '#d97706',
-    awayKitPrimary: awayTeamData.colors.awayKitPrimary || '#2dd4bf',
-    awayKitSecondary: awayTeamData.colors.awayKitSecondary || '#0d9488',
+    id: awaySource?.id || match.awayTeamId,
+    name: awaySource?.name || (match.awayTeamId ? `Team ${match.awayTeamId.slice(0, 8)}` : 'Unknown Team'),
+    homeKitPrimary: awaySource?.homeKitPrimary || '#f59e0b',
+    homeKitSecondary: awaySource?.homeKitSecondary || '#d97706',
+    awayKitPrimary: awaySource?.awayKitPrimary || '#2dd4bf',
+    awayKitSecondary: awaySource?.awayKitSecondary || '#0d9488',
     createdAt: match.createdAt,
     created_by_user_id: match.created_by_user_id,
     is_deleted: match.is_deleted,
-    is_opponent: true
+    is_opponent: typeof awaySource?.is_opponent === 'boolean' ? awaySource.is_opponent : true
   };
-  
-  const isHome = primaryTeamId ? match.homeTeamId === primaryTeamId : true;
-  const relevantTeam = isHome ? homeTeam : awayTeam;
-  
-  // Determine colors based on home/away status
+
+  // Determine whether this is a home game for YOUR TEAM.
+  // Prefer is_opponent flags; fallback to primaryTeamId compare when flags are unknown.
+  let isHome: boolean;
+  if (homeSource?.is_opponent === true) {
+    isHome = false; // home is opponent -> our team is away
+  } else if (awaySource?.is_opponent === true) {
+    isHome = true; // away is opponent -> our team is home
+  } else if (homeSource?.is_opponent === false) {
+    isHome = true;
+  } else if (awaySource?.is_opponent === false) {
+    isHome = false;
+  } else {
+    isHome = primaryTeamId ? match.homeTeamId === primaryTeamId : true;
+  }
+
+  const relevantTeam = isHome ? homeTeam : awayTeam; // YOUR TEAM for colors
+
   const colors = getMatchIndicatorColors(relevantTeam, isHome);
-  
+
   return {
     matchId: match.id,
     date: matchDate,

@@ -314,9 +314,49 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
       if (result) {
         showToast({ message: 'Match created successfully', severity: 'success' });
 
-        // Notify parent component
-        if (onMatchCreated) {
-          onMatchCreated(result);
+        // Enrich the created match with team objects using local knowledge
+        try {
+          const enriched = { ...result } as Match;
+          const myTeam = teams.find(t => t.id === formData.myTeamId) || null;
+          const opponentName = opponentText.trim();
+          const isHomeSel = formData.isHome;
+
+          // Attach MY TEAM object if available
+          if (myTeam) {
+            if (isHomeSel) {
+              enriched.homeTeam = myTeam;
+            } else {
+              enriched.awayTeam = myTeam;
+            }
+          }
+
+          // Attach OPPONENT team object with provided name if API did not include it
+          const opponentId = isHomeSel ? enriched.awayTeamId : enriched.homeTeamId;
+          if (opponentId && (!isHomeSel ? !enriched.homeTeam : !enriched.awayTeam)) {
+            const opponentTeam: Team = {
+              id: opponentId,
+              name: opponentName,
+              createdAt: new Date(),
+              created_by_user_id: '',
+              is_deleted: false,
+              is_opponent: true
+            } as Team;
+            if (isHomeSel) {
+              enriched.awayTeam = opponentTeam;
+            } else {
+              enriched.homeTeam = opponentTeam;
+            }
+          }
+
+          // Notify parent component with enriched match
+          if (onMatchCreated) {
+            onMatchCreated(enriched);
+          }
+        } catch {
+          // Fallback to raw result if enrichment fails for any reason
+          if (onMatchCreated) {
+            onMatchCreated(result);
+          }
         }
 
         // Reset form and close modal

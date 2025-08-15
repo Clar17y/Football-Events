@@ -138,12 +138,12 @@ const MatchesCalendar: React.FC<MatchesCalendarProps> = ({
           title={
             hasMultipleMatches
               ? `${matches.length} matches on this date. Click to select which match to view.`
-              : `${matches[0].isHome ? 'Home' : 'Away'} match: ${matches[0].homeTeam.name} vs ${matches[0].awayTeam.name} at ${matches[0].time}`
+              : `${matches[0].isHome ? 'Home' : 'Away'} game: ${matches[0].homeTeam.name} vs ${matches[0].awayTeam.name} at ${matches[0].time}`
           }
           aria-label={
             hasMultipleMatches
               ? `${matches.length} matches on this date. Click to select which match to view.`
-              : `${matches[0].isHome ? 'Home' : 'Away'} match: ${matches[0].homeTeam.name} vs ${matches[0].awayTeam.name} at ${matches[0].time}. Click to view details.`
+              : `${matches[0].isHome ? 'Home' : 'Away'} game: ${matches[0].homeTeam.name} vs ${matches[0].awayTeam.name} at ${matches[0].time}. Click to view details.`
           }
         >
           {displayMatches.map((match, index) => {

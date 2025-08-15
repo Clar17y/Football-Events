@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   IonPage,
   IonContent,
@@ -45,6 +45,15 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
       onNavigate(page);
     }
   };
+
+  // Derive the primary team (YOUR TEAM) for home/away determination
+  const primaryTeamId = useMemo(() => {
+    // Prefer the first non-opponent team available in the cache
+    for (const [, team] of teamsCache) {
+      if (!team.is_opponent) return team.id;
+    }
+    return undefined;
+  }, [teamsCache]);
 
   // Load teams data for the cache
   const loadTeams = async () => {
@@ -188,6 +197,18 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
       teamsInCache: teamsCache.size
     });
 
+    // Update teams cache optimistically with any embedded team data
+    setTeamsCache(prev => {
+      const next = new Map(prev);
+      if (match.homeTeam && match.homeTeam.id) {
+        next.set(match.homeTeam.id, match.homeTeam);
+      }
+      if (match.awayTeam && match.awayTeam.id) {
+        next.set(match.awayTeam.id, match.awayTeam);
+      }
+      return next;
+    });
+
     // Optimistic update: immediately add the new match to the existing array
     // This ensures the match appears on the calendar immediately without additional API calls
     setMatches(prev => {
@@ -200,27 +221,23 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
       // Ensure the match has proper team data from the cache
       const enrichedMatch = { ...match };
       
-      // If homeTeam is missing or incomplete, try to get it from cache
-      if (!enrichedMatch.homeTeam || !enrichedMatch.homeTeam.name || enrichedMatch.homeTeam.name.startsWith('Team ')) {
+      // Prefer embedded homeTeam; otherwise enrich from cache
+      if (!enrichedMatch.homeTeam || !enrichedMatch.homeTeam.name) {
         const homeTeamId = enrichedMatch.homeTeamId;
         const cachedHomeTeam = teamsCache.get(homeTeamId);
         if (cachedHomeTeam) {
           console.log("✅ Enriched homeTeam from cache:", cachedHomeTeam.name);
           enrichedMatch.homeTeam = cachedHomeTeam;
-        } else {
-          console.log("❌ Could not find homeTeam in cache for ID:", homeTeamId?.slice(0, 8));
         }
       }
       
-      // If awayTeam is missing or incomplete, try to get it from cache
-      if (!enrichedMatch.awayTeam || !enrichedMatch.awayTeam.name || enrichedMatch.awayTeam.name.startsWith('Team ')) {
+      // Prefer embedded awayTeam; otherwise enrich from cache
+      if (!enrichedMatch.awayTeam || !enrichedMatch.awayTeam.name) {
         const awayTeamId = enrichedMatch.awayTeamId;
         const cachedAwayTeam = teamsCache.get(awayTeamId);
         if (cachedAwayTeam) {
           console.log("✅ Enriched awayTeam from cache:", cachedAwayTeam.name);
           enrichedMatch.awayTeam = cachedAwayTeam;
-        } else {
-          console.log("❌ Could not find awayTeam in cache for ID:", awayTeamId?.slice(0, 8));
         }
       }
       
@@ -316,6 +333,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
               onMatchClick={handleMatchClick}
               loading={loading}
               teamsCache={teamsCache}
+              primaryTeamId={primaryTeamId}
             />
           </div>
 
