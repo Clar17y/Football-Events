@@ -71,7 +71,9 @@ router.get('/global', asyncHandler(async (req, res) => {
           OR: [
             { homeMatches: { some: { season_id: currentSeason.season_id } } },
             { awayMatches: { some: { season_id: currentSeason.season_id } } }
-          ]
+          ],
+          is_deleted: false,
+          is_opponent: false
         }
       }) : 0,
 

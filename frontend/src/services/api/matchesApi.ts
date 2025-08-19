@@ -4,7 +4,7 @@
  */
 
 import apiClient from './baseApi';
-import type { Match } from '@shared/types';
+import type { Match, MatchUpdateRequest } from '@shared/types';
 
 export interface QuickStartPayload {
   myTeamId?: string;
@@ -17,6 +17,7 @@ export interface QuickStartPayload {
   venue?: string;
   durationMinutes?: number;
   periodFormat?: 'quarter' | 'half' | 'whole';
+  notes?: string;
 }
 
 export interface MatchesListParams {
@@ -113,6 +114,19 @@ export const matchesApi = {
     if (teamId) params.append('teamId', teamId);
     const response = await apiClient.get<Match[]>(`/matches/recent?${params.toString()}`);
     return response.data as unknown as Match[];
+  },
+
+  /**
+   * Update an existing match
+   */
+  async updateMatch(id: string, matchData: MatchUpdateRequest): Promise<Match> {
+    // Remove undefined values to avoid overwriting fields unintentionally
+    const cleanData = Object.fromEntries(
+      Object.entries(matchData).filter(([_, value]) => value !== undefined)
+    );
+
+    const response = await apiClient.put<Match>(`/matches/${id}`, cleanData);
+    return response.data as unknown as Match;
   }
 };
 

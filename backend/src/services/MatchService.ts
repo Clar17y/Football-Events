@@ -890,7 +890,8 @@ export class MatchService {
       seasonId,
       seasonLabel,
       competition,
-      venue
+      venue,
+      notes
     } = payload || {};
 
     if (userRole !== 'ADMIN' && !myTeamId && !myTeamName) {
@@ -1056,7 +1057,8 @@ export class MatchService {
         period_format: (payload?.periodFormat === 'half' ? 'half' : payload?.periodFormat === 'whole' ? 'whole' : 'quarter'),
         our_score: 0,
         opponent_score: 0,
-        notes: null,
+        notes: notes ?? null,
+        created_by_user_id: userId
       },
       userId,
       transformer: transformMatch,

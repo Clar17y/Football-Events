@@ -49,18 +49,19 @@
   - Handle multiple matches on same date with appropriate selection mechanism
   - _Requirements: 2.1, 2.3, 2.1.1, 2.1.3, 2.1.4, 2.1.5_
 
-- [ ] 8. Build UpcomingMatchesList component
+- [x] 8. Build UpcomingMatchesList component
   - Create UpcomingMatchesList component with full-width collapsible match items
   - Implement chronological sorting with most recent first
   - Add expand/collapse functionality for match details
   - Style match items to span full page width (not cards)
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 9. Implement CompletedMatchesList component
+- [x] 9. Implement CompletedMatchesList component
+  - Leverage existing UpcomingMatchesList component and refactor to use the same styling through the whole page
   - Create CompletedMatchesList component with result indicators
   - Add win/loss/draw color coding (green/red/amber) based on match results
   - Implement immediate score visibility in collapsed state
-  - Add expandable details with stub link to match events
+  - Instead of "Live Match" button, change to "Show Match Events", this will take you to the Live Events page (to be created in future) showing the events of the match
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7_
 
 - [ ] 10. Add calendar-to-list navigation functionality

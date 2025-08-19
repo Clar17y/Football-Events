@@ -17,6 +17,8 @@ import {
 import PageHeader from '../components/PageHeader';
 import MatchesCalendar from '../components/MatchesCalendar';
 import CreateMatchModal from '../components/CreateMatchModal';
+import UpcomingMatchesList from '../components/UpcomingMatchesList';
+import CompletedMatchesList from '../components/CompletedMatchesList';
 import { matchesApi } from '../services/api/matchesApi';
 import { teamsApi } from '../services/api/teamsApi';
 import type { Match, Team } from '@shared/types';
@@ -36,6 +38,15 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [showErrorToast, setShowErrorToast] = useState(false);
   const [teamsCache, setTeamsCache] = useState<Map<string, Team>>(new Map());
+  
+  // UpcomingMatchesList state
+  const [expandedMatches, setExpandedMatches] = useState<Set<string>>(new Set());
+  
+  // CompletedMatchesList state
+  const [expandedCompletedMatches, setExpandedCompletedMatches] = useState<Set<string>>(new Set());
+  
+  // Edit match state
+  const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   
   // Ref to prevent multiple concurrent API calls
   const loadingRef = useRef(false);
@@ -156,7 +167,6 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
 
   const handleMatchClick = (matchId: string) => {
     // Scroll to match in the appropriate list section
-    // Since match lists aren't implemented yet, we'll use placeholder sections
     const matchElement = document.querySelector(`[data-match-id="${matchId}"]`);
     if (matchElement) {
       matchElement.scrollIntoView({
@@ -179,6 +189,55 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
         });
       }
     }
+  };
+
+  // UpcomingMatchesList event handlers
+  const handleToggleExpand = (matchId: string) => {
+    setExpandedMatches(prev => {
+      const next = new Set(prev);
+      if (next.has(matchId)) {
+        next.delete(matchId);
+      } else {
+        next.add(matchId);
+      }
+      return next;
+    });
+  };
+
+  const handleMatchSelect = (matchId: string) => {
+    // For now, just expand/collapse the match
+    // In the future, this could navigate to a detailed match view
+    handleToggleExpand(matchId);
+  };
+
+  const handleEditMatch = (match: Match) => {
+    setEditingMatch(match);
+    setCreateModalOpen(true);
+  };
+
+  // CompletedMatchesList event handlers
+  const handleToggleExpandCompleted = (matchId: string) => {
+    setExpandedCompletedMatches(prev => {
+      const next = new Set(prev);
+      if (next.has(matchId)) {
+        next.delete(matchId);
+      } else {
+        next.add(matchId);
+      }
+      return next;
+    });
+  };
+
+  const handleCompletedMatchSelect = (matchId: string) => {
+    // For now, just expand/collapse the match
+    // In the future, this could navigate to a detailed match view
+    handleToggleExpandCompleted(matchId);
+  };
+
+  const handleViewEvents = (match: Match) => {
+    // Stub for future Live Events page navigation
+    console.log('View events for match:', match.id);
+    // TODO: Navigate to Live Events page when implemented
   };
 
   const handleMatchCreated = (match: Match) => {
@@ -249,6 +308,27 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
     });
     
     // Clear any existing errors since we successfully created a match
+    setError(null);
+  };
+
+  const handleMatchUpdated = (updatedMatch: Match) => {
+    console.log("✏️ Match updated:", {
+      id: updatedMatch.id.slice(0, 8),
+      homeTeam: updatedMatch.homeTeam?.name,
+      awayTeam: updatedMatch.awayTeam?.name
+    });
+
+    // Update the match in the matches array
+    setMatches(prev => {
+      const updatedMatches = prev.map(match => 
+        match.id === updatedMatch.id ? updatedMatch : match
+      );
+      return updatedMatches.sort((a, b) => 
+        new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime()
+      );
+    });
+
+    // Clear any existing errors
     setError(null);
   };
 
@@ -337,20 +417,34 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
             />
           </div>
 
-          {/* Upcoming Matches Section - Placeholder */}
+          {/* Upcoming Matches Section */}
           <div className="matches-upcoming-section">
             <h2 className="section-title">Upcoming Matches</h2>
-            <div className="upcoming-matches-placeholder">
-              <p>Upcoming matches list will be implemented in future tasks</p>
-            </div>
+            <UpcomingMatchesList
+              matches={matches}
+              expandedMatches={expandedMatches}
+              onToggleExpand={handleToggleExpand}
+              onMatchSelect={handleMatchSelect}
+              onEditMatch={handleEditMatch}
+              loading={loading}
+              teamsCache={teamsCache}
+              primaryTeamId={primaryTeamId}
+            />
           </div>
 
-          {/* Completed Matches Section - Placeholder */}
+          {/* Completed Matches Section */}
           <div className="matches-completed-section">
             <h2 className="section-title">Completed Matches</h2>
-            <div className="completed-matches-placeholder">
-              <p>Completed matches list will be implemented in future tasks</p>
-            </div>
+            <CompletedMatchesList
+              matches={matches}
+              expandedMatches={expandedCompletedMatches}
+              onToggleExpand={handleToggleExpandCompleted}
+              onMatchSelect={handleCompletedMatchSelect}
+              onViewEvents={handleViewEvents}
+              loading={loading}
+              teamsCache={teamsCache}
+              primaryTeamId={primaryTeamId}
+            />
           </div>
 
           {/* Show empty state if no matches */}
@@ -363,9 +457,12 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
           onDidDismiss={() => {
             setCreateModalOpen(false);
             setSelectedDate(null);
+            setEditingMatch(null);
           }}
           preselectedDate={selectedDate || undefined}
           onMatchCreated={handleMatchCreated}
+          editingMatch={editingMatch}
+          onMatchUpdated={handleMatchUpdated}
         />
 
         {/* Error Toast */}

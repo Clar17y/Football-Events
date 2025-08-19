@@ -61,6 +61,8 @@ interface CreateMatchModalProps {
   onDidDismiss: () => void;
   preselectedDate?: Date;
   onMatchCreated?: (match: Match) => void;
+  editingMatch?: Match | null;
+  onMatchUpdated?: (match: Match) => void;
 }
 
 interface FormData {
@@ -90,7 +92,9 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
   isOpen,
   onDidDismiss,
   preselectedDate,
-  onMatchCreated
+  onMatchCreated,
+  editingMatch,
+  onMatchUpdated
 }) => {
   const { showToast } = useToast();
 
@@ -142,6 +146,56 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  // Initialize form data when editing a match
+  useEffect(() => {
+    if (editingMatch && isOpen) {
+      const kickoffDate = dayjs(editingMatch.kickoffTime);
+      const kickoffTime = dayjs(editingMatch.kickoffTime);
+      
+      // Determine which team is "my team" and which is opponent
+      const isHomeMatch = editingMatch.homeTeam && !editingMatch.homeTeam.is_opponent;
+      const myTeam = isHomeMatch ? editingMatch.homeTeam : editingMatch.awayTeam;
+      const opponentTeam = isHomeMatch ? editingMatch.awayTeam : editingMatch.homeTeam;
+      
+      // Initialize opponent input text when editing so button enablement works
+      setOpponentText(opponentTeam?.name || '');
+
+      setFormData({
+        myTeamId: myTeam?.id || '',
+        opponentName: opponentTeam?.name || '',
+        isHome: isHomeMatch,
+        kickoffDate,
+        kickoffTime,
+        seasonId: editingMatch.seasonId,
+        competition: editingMatch.competition || '',
+        venue: editingMatch.venue || '',
+        durationMinutes: editingMatch.durationMinutes,
+        periodFormat: editingMatch.periodFormat as 'quarter' | 'half' | 'whole',
+        notes: editingMatch.notes || ''
+      });
+    } else if (!editingMatch && isOpen) {
+      // Reset form for new match
+      const defaultKickoffIso = preselectedDate 
+        ? preselectedDate.toISOString()
+        : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString();
+      const defaultMiddayTime = dayjs().hour(12).minute(0).second(0).millisecond(0);
+      
+      setFormData({
+        myTeamId: '',
+        opponentName: '',
+        isHome: true,
+        kickoffDate: dayjs(defaultKickoffIso),
+        kickoffTime: defaultMiddayTime,
+        seasonId: '',
+        competition: '',
+        venue: '',
+        durationMinutes: 90,
+        periodFormat: 'half',
+        notes: ''
+      });
+    }
+  }, [editingMatch, isOpen, preselectedDate]);
 
   // Load teams when modal opens
   useEffect(() => {
@@ -297,65 +351,91 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
         return merged.toDate().toISOString();
       })();
 
-      const payload: QuickStartPayload = {
-        myTeamId: formData.myTeamId,
-        opponentName: opponentText.trim(),
-        isHome: formData.isHome,
-        kickoffTime: kickoffDateTime,
-        seasonId: formData.seasonId,
-        competition: formData.competition || undefined,
-        venue: formData.venue || undefined,
-        durationMinutes: formData.durationMinutes,
-        periodFormat: formData.periodFormat
-      };
+      let result: Match;
 
-      const result = await matchesApi.quickStart(payload);
+      if (editingMatch) {
+        // Update existing match
+        const updatePayload = {
+          seasonId: formData.seasonId,
+          kickoffTime: new Date(kickoffDateTime),
+          competition: formData.competition || undefined,
+          venue: formData.venue || undefined,
+          durationMinutes: formData.durationMinutes,
+          periodFormat: formData.periodFormat,
+          notes: formData.notes || undefined
+        };
+
+        result = await matchesApi.updateMatch(editingMatch.id, updatePayload);
+        showToast({ message: 'Match updated successfully', severity: 'success' });
+      } else {
+        // Create new match
+        const payload: QuickStartPayload = {
+          myTeamId: formData.myTeamId,
+          opponentName: opponentText.trim(),
+          isHome: formData.isHome,
+          kickoffTime: kickoffDateTime,
+          seasonId: formData.seasonId,
+          competition: formData.competition || undefined,
+          venue: formData.venue || undefined,
+          durationMinutes: formData.durationMinutes,
+          periodFormat: formData.periodFormat,
+          notes: formData.notes || undefined
+        };
+
+        result = await matchesApi.quickStart(payload);
+        showToast({ message: 'Match created successfully', severity: 'success' });
+      }
 
       if (result) {
-        showToast({ message: 'Match created successfully', severity: 'success' });
+        if (editingMatch) {
+          // For updates, just notify with the updated match
+          if (onMatchUpdated) {
+            onMatchUpdated(result);
+          }
+        } else {
+          // For new matches, enrich with team objects using local knowledge
+          try {
+            const enriched = { ...result } as Match;
+            const myTeam = teams.find(t => t.id === formData.myTeamId) || null;
+            const opponentName = opponentText.trim();
+            const isHomeSel = formData.isHome;
 
-        // Enrich the created match with team objects using local knowledge
-        try {
-          const enriched = { ...result } as Match;
-          const myTeam = teams.find(t => t.id === formData.myTeamId) || null;
-          const opponentName = opponentText.trim();
-          const isHomeSel = formData.isHome;
-
-          // Attach MY TEAM object if available
-          if (myTeam) {
-            if (isHomeSel) {
-              enriched.homeTeam = myTeam;
-            } else {
-              enriched.awayTeam = myTeam;
+            // Attach MY TEAM object if available
+            if (myTeam) {
+              if (isHomeSel) {
+                enriched.homeTeam = myTeam;
+              } else {
+                enriched.awayTeam = myTeam;
+              }
             }
-          }
 
-          // Attach OPPONENT team object with provided name if API did not include it
-          const opponentId = isHomeSel ? enriched.awayTeamId : enriched.homeTeamId;
-          if (opponentId && (!isHomeSel ? !enriched.homeTeam : !enriched.awayTeam)) {
-            const opponentTeam: Team = {
-              id: opponentId,
-              name: opponentName,
-              createdAt: new Date(),
-              created_by_user_id: '',
-              is_deleted: false,
-              is_opponent: true
-            } as Team;
-            if (isHomeSel) {
-              enriched.awayTeam = opponentTeam;
-            } else {
-              enriched.homeTeam = opponentTeam;
+            // Attach OPPONENT team object with provided name if API did not include it
+            const opponentId = isHomeSel ? enriched.awayTeamId : enriched.homeTeamId;
+            if (opponentId && (!isHomeSel ? !enriched.homeTeam : !enriched.awayTeam)) {
+              const opponentTeam: Team = {
+                id: opponentId,
+                name: opponentName,
+                createdAt: new Date(),
+                created_by_user_id: '',
+                is_deleted: false,
+                is_opponent: true
+              } as Team;
+              if (isHomeSel) {
+                enriched.awayTeam = opponentTeam;
+              } else {
+                enriched.homeTeam = opponentTeam;
+              }
             }
-          }
 
-          // Notify parent component with enriched match
-          if (onMatchCreated) {
-            onMatchCreated(enriched);
-          }
-        } catch {
-          // Fallback to raw result if enrichment fails for any reason
-          if (onMatchCreated) {
-            onMatchCreated(result);
+            // Notify parent component with enriched match
+            if (onMatchCreated) {
+              onMatchCreated(enriched);
+            }
+          } catch {
+            // Fallback to raw result if enrichment fails for any reason
+            if (onMatchCreated) {
+              onMatchCreated(result);
+            }
           }
         }
 
@@ -421,7 +501,7 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
     >
       <IonHeader>
         <IonToolbar color="emerald">
-          <IonTitle>Create New Match</IonTitle>
+          <IonTitle>{editingMatch ? 'Edit Match' : 'Create New Match'}</IonTitle>
           <IonButton
             fill="clear"
             slot="end"
@@ -795,7 +875,7 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
               ) : (
                 <>
                   <IonIcon icon={checkmark} slot="start" />
-                  Create Match
+                  {editingMatch ? 'Update Match' : 'Create Match'}
                 </>
               )}
             </IonButton>
