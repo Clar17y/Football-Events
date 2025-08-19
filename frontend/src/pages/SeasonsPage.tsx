@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import type { HTMLIonContentElement } from '@ionic/core/components';
 import { 
   IonPage, 
   IonContent,
@@ -104,6 +105,8 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
     loadMatchCounts();
   }, [seasons]);
 
+  const contentRef = useRef<HTMLIonContentElement | null>(null);
+
   const navigate = (page: string) => {
     if (onNavigate) {
       onNavigate(page);
@@ -114,6 +117,46 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
     await loadSeasons();
     event.detail.complete();
   };
+
+  // Deep-link: scroll/highlight ?seasonId=... once seasons are loaded
+  const deepLinkHandledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    const params = new URLSearchParams(window.location.search);
+    const seasonId = params.get('seasonId');
+    if (!seasonId || deepLinkHandledRef.current === seasonId) return;
+    const exists = seasons.some(s => s.id === seasonId);
+    if (!exists) return;
+
+    deepLinkHandledRef.current = seasonId;
+    const target = document.querySelector(`[data-season-id="${seasonId}"]`) as HTMLElement | null;
+    (async () => {
+      if (!target) return;
+      try {
+        const scrollEl = contentRef.current && (await (contentRef.current as any).getScrollElement?.());
+        if (scrollEl) {
+          const rect = target.getBoundingClientRect();
+          const srect = scrollEl.getBoundingClientRect();
+          const top = rect.top - srect.top + scrollEl.scrollTop - 80;
+          scrollEl.scrollTo({ top, behavior: 'smooth' });
+        } else {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      } finally {
+        target.classList.add('highlight-flash');
+        setTimeout(() => target.classList.remove('highlight-flash'), 1500);
+        setTimeout(() => target.focus(), 120);
+      }
+    })();
+
+    // Clean URL param
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('seasonId');
+      const qs = url.searchParams.toString();
+      window.history.replaceState({}, '', url.pathname + (qs ? `?${qs}` : ''));
+    } catch {}
+  }, [seasons, loading]);
 
   // Define season context menu items
   const seasonContextItems: ContextMenuItem[] = [
@@ -177,7 +220,10 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
     
     return (
       <IonCol size="12" sizeMd="6" sizeLg="4" key={season.id}>
-        <IonCard className={`season-card ${isActive ? 'season-card-active' : 'season-card-inactive'}`}>
+        <IonCard className={`season-card ${isActive ? 'season-card-active' : 'season-card-inactive'}`}
+          data-season-id={season.id}
+          tabIndex={-1}
+        >
           {/* Season status indicator */}
           <div className={`season-status-bar ${isActive ? 'active' : 'inactive'}`}></div>
           
@@ -280,7 +326,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
         }
       />
       
-      <IonContent>
+      <IonContent ref={contentRef}>
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
           <IonRefresherContent
             pullingIcon={refresh}

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import './styles/Highlight.css';
 import { setupIonicReact } from '@ionic/react';
 
 // Import authentication components

@@ -244,10 +244,58 @@
 .empty-subtitle { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--grassroots-text-secondary); margin: 0; line-height: 1.5; max-width: 300px; }
 
 /* Highlight animation for navigation from calendar */
-.match-highlighted { animation: highlightMatch 2s ease-out; }
+.match-highlighted {
+  /* Shorter, snappier flash */
+  animation: highlightMatch 1200ms ease-out;
+}
+
+/* Ensure visible border/shadow during highlight on cards */
+.upcoming-match-item.match-highlighted,
+.completed-match-item.match-highlighted {
+  border-color: var(--theme-primary, var(--ion-color-secondary)) !important;
+  box-shadow: 0 0 0 4px rgba(var(--theme-primary-rgb, var(--ion-color-secondary-rgb)), 0.18) !important;
+}
+
+/* Also tint the visible header area so the flash is obvious */
+.upcoming-match-item.match-highlighted .match-header,
+.completed-match-item.match-highlighted .match-header {
+  background: rgba(var(--theme-primary-rgb, var(--ion-color-secondary-rgb)), 0.12) !important;
+}
+
 @keyframes highlightMatch {
-  0% { background: var(--grassroots-primary-tint); border-color: var(--grassroots-primary); box-shadow: 0 0 20px rgba(37, 99, 235, 0.3); }
-  100% { background: var(--grassroots-surface); border-color: var(--grassroots-surface-variant); box-shadow: none; }
+  0% {
+    background: var(--theme-primary-tint, var(--ion-color-secondary-tint));
+    border-color: var(--theme-primary, var(--ion-color-secondary));
+    box-shadow: 0 0 0 4px rgba(var(--theme-primary-rgb, var(--ion-color-secondary-rgb)), 0.22);
+    transform: scale(1.015);
+  }
+  50% {
+    background: var(--theme-primary-tint, var(--ion-color-secondary-tint));
+    border-color: var(--theme-primary, var(--ion-color-secondary));
+    box-shadow: 0 0 0 4px rgba(var(--theme-primary-rgb, var(--ion-color-secondary-rgb)), 0.22);
+    transform: scale(1.01);
+  }
+  100% {
+    background: var(--grassroots-surface);
+    border-color: var(--grassroots-surface-variant);
+    box-shadow: none;
+    transform: scale(1);
+  }
+}
+
+/* Focus styles for programmatic focus */
+.upcoming-match-item:focus,
+.completed-match-item:focus {
+  outline: 2px solid var(--grassroots-primary);
+  outline-offset: 2px;
+}
+
+/* Section focus styles */
+.matches-upcoming-section:focus,
+.matches-completed-section:focus {
+  outline: 2px solid var(--grassroots-primary);
+  outline-offset: 4px;
+  border-radius: var(--grassroots-radius-md);
 }
 
 /* Responsive shared tweaks */

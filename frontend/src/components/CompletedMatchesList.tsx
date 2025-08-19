@@ -88,6 +88,7 @@ const CompletedMatchesList: React.FC<CompletedMatchesListProps> = ({
         key={match.id}
         className={`completed-match-item ${result.type}`}
         data-match-id={match.id}
+        tabIndex={-1}
         onClick={() => onMatchSelect(match.id)}
       >
         {/* Result Indicator */}

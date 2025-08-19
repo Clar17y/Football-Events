@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
+import type { HTMLIonContentElement } from '@ionic/core/components';
 import {
   IonPage,
   IonContent,
@@ -38,16 +39,16 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [showErrorToast, setShowErrorToast] = useState(false);
   const [teamsCache, setTeamsCache] = useState<Map<string, Team>>(new Map());
-  
+
   // UpcomingMatchesList state
   const [expandedMatches, setExpandedMatches] = useState<Set<string>>(new Set());
-  
+
   // CompletedMatchesList state
   const [expandedCompletedMatches, setExpandedCompletedMatches] = useState<Set<string>>(new Set());
-  
+
   // Edit match state
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
-  
+
   // Ref to prevent multiple concurrent API calls
   const loadingRef = useRef(false);
 
@@ -88,19 +89,19 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
     if (loadingRef.current) {
       return;
     }
-    
+
     loadingRef.current = true;
-    
+
     if (showLoadingState) {
       setLoading(true);
     }
     setError(null);
-    
+
     try {
       // Fetch all matches for the user (increased limit to get comprehensive data)
       const response = await matchesApi.getMatches({ limit: 500 });
       console.log("📊 Matches API Response:", response.data);
-      
+
       // Debug: Log each match with team info
       response.data.forEach((match, index) => {
         console.log(`🏈 Match ${index + 1}:`, {
@@ -121,17 +122,17 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
           } : 'No awayTeam data'
         });
       });
-      
+
       setMatches(response.data);
       setError(null);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load matches';
       setError(errorMessage);
       console.error('Error loading matches:', err);
-      
+
       // Show error toast for better user experience
       setShowErrorToast(true);
-      
+
       // Don't clear matches on error - keep existing data if available
       // This provides better UX when there's a temporary network issue
     } finally {
@@ -165,31 +166,129 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
     setCreateModalOpen(true);
   };
 
-  const handleMatchClick = (matchId: string) => {
-    // Scroll to match in the appropriate list section
-    const matchElement = document.querySelector(`[data-match-id="${matchId}"]`);
-    if (matchElement) {
-      matchElement.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center'
-      });
+  const contentRef = useRef<HTMLIonContentElement | null>(null);
 
-      // Add highlight animation
+  const handleMatchClick = async (matchId: string) => {
+    // Locate the match card in the lists (avoid matching the calendar indicators)
+    const matchMeta = matches.find(m => m.id === matchId);
+    const now = new Date();
+    const isUpcoming = matchMeta ? new Date(matchMeta.kickoffTime) >= now : undefined;
+    const upcomingSelector = `.upcoming-matches-list [data-match-id="${matchId}"]`;
+    const completedSelector = `.completed-matches-list [data-match-id="${matchId}"]`;
+    const preferredSelector = isUpcoming === undefined
+      ? `${upcomingSelector}, ${completedSelector}`
+      : isUpcoming
+        ? upcomingSelector
+        : completedSelector;
+
+    let matchElement = document.querySelector(preferredSelector) as HTMLElement | null;
+    if (!matchElement) {
+      matchElement = document.querySelector(`${upcomingSelector}, ${completedSelector}`) as HTMLElement | null;
+    }
+
+    if (matchElement) {
+      // Prefer scrolling the IonContent scroll container for cross-browser reliability
+      try {
+        if (contentRef.current && (contentRef.current as any).getScrollElement) {
+          const scrollEl = await (contentRef.current as any).getScrollElement();
+          if (scrollEl) {
+            const matchRect = matchElement.getBoundingClientRect();
+            const scrollRect = scrollEl.getBoundingClientRect();
+            const paddingOffset = 80; // provide visual context
+            const top = matchRect.top - scrollRect.top + scrollEl.scrollTop - paddingOffset;
+            scrollEl.scrollTo({ top, behavior: 'smooth' });
+          } else {
+            matchElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        } else {
+          matchElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      } catch (e) {
+        matchElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      // Clear any previous highlights so animation retriggers
+      document
+        .querySelectorAll('.upcoming-match-item.match-highlighted, .completed-match-item.match-highlighted')
+        .forEach(el => el.classList.remove('match-highlighted'));
+
+      // Add highlight animation to the visible match card
       matchElement.classList.add('match-highlighted');
+
+      // Ensure focus for accessibility
+      setTimeout(() => {
+        matchElement.focus();
+      }, 100);
+
+      // Remove highlight after 1.5s
       setTimeout(() => {
         matchElement.classList.remove('match-highlighted');
-      }, 2000);
+      }, 1500);
     } else {
-      // If match element not found, scroll to upcoming matches section as fallback
-      const upcomingSection = document.querySelector('.matches-upcoming-section');
-      if (upcomingSection) {
-        upcomingSection.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start'
-        });
+      // If match element not found, try to determine if it's upcoming or completed
+      const match = matches.find(m => m.id === matchId);
+      if (match) {
+        const now = new Date();
+        const isUpcoming = new Date(match.kickoffTime) >= now;
+
+        // Scroll to the appropriate section as fallback
+        const sectionSelector = isUpcoming ? '.matches-upcoming-section' : '.matches-completed-section';
+        const section = document.querySelector(sectionSelector) as HTMLElement;
+        if (section) {
+          section.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+
+          // Set focus to the section for accessibility
+          setTimeout(() => {
+            section.focus();
+          }, 100);
+        }
+      } else {
+        // Ultimate fallback - scroll to upcoming matches section
+        const upcomingSection = document.querySelector('.matches-upcoming-section') as HTMLElement;
+        if (upcomingSection) {
+          upcomingSection.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+
+          setTimeout(() => {
+            upcomingSection.focus();
+          }, 100);
+        }
       }
     }
   };
+
+  // Deep-link support: if URL has ?matchId=..., scroll/highlight after data loads
+  const deepLinkHandledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading) return; // wait until matches loaded
+
+    const params = new URLSearchParams(window.location.search);
+    const matchIdParam = params.get('matchId');
+    if (!matchIdParam) return;
+
+    // Avoid reprocessing the same id
+    if (deepLinkHandledRef.current === matchIdParam) return;
+
+    const exists = matches.some(m => m.id === matchIdParam);
+    if (!exists) return; // wait for it to exist in data
+
+    // Mark as handled and perform scroll/highlight
+    deepLinkHandledRef.current = matchIdParam;
+    handleMatchClick(matchIdParam);
+
+    // Clean URL so it doesn't retrigger on future renders
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('matchId');
+      const newSearch = url.searchParams.toString();
+      window.history.replaceState({}, '', url.pathname + (newSearch ? `?${newSearch}` : ''));
+    } catch {}
+  }, [loading, matches]);
 
   // UpcomingMatchesList event handlers
   const handleToggleExpand = (matchId: string) => {
@@ -276,10 +375,10 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
       if (existingMatch) {
         return prev;
       }
-      
+
       // Ensure the match has proper team data from the cache
       const enrichedMatch = { ...match };
-      
+
       // Prefer embedded homeTeam; otherwise enrich from cache
       if (!enrichedMatch.homeTeam || !enrichedMatch.homeTeam.name) {
         const homeTeamId = enrichedMatch.homeTeamId;
@@ -289,7 +388,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
           enrichedMatch.homeTeam = cachedHomeTeam;
         }
       }
-      
+
       // Prefer embedded awayTeam; otherwise enrich from cache
       if (!enrichedMatch.awayTeam || !enrichedMatch.awayTeam.name) {
         const awayTeamId = enrichedMatch.awayTeamId;
@@ -299,14 +398,14 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
           enrichedMatch.awayTeam = cachedAwayTeam;
         }
       }
-      
+
       // Add new match and sort by kickoff time for proper ordering
       const updatedMatches = [...prev, enrichedMatch];
-      return updatedMatches.sort((a, b) => 
+      return updatedMatches.sort((a, b) =>
         new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime()
       );
     });
-    
+
     // Clear any existing errors since we successfully created a match
     setError(null);
   };
@@ -320,10 +419,10 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
 
     // Update the match in the matches array
     setMatches(prev => {
-      const updatedMatches = prev.map(match => 
+      const updatedMatches = prev.map(match =>
         match.id === updatedMatch.id ? updatedMatch : match
       );
-      return updatedMatches.sort((a, b) => 
+      return updatedMatches.sort((a, b) =>
         new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime()
       );
     });
@@ -367,7 +466,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
         }
       />
 
-      <IonContent>
+      <IonContent ref={contentRef}>
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
           <IonRefresherContent
             pullingIcon={refresh}
@@ -393,9 +492,9 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
           {error && (
             <div className="error-message">
               <p>{error}</p>
-              <IonButton 
-                fill="clear" 
-                size="small" 
+              <IonButton
+                fill="clear"
+                size="small"
                 onClick={() => loadMatches()}
                 disabled={loading}
               >
@@ -418,7 +517,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
           </div>
 
           {/* Upcoming Matches Section */}
-          <div className="matches-upcoming-section">
+          <div className="matches-upcoming-section" tabIndex={-1}>
             <h2 className="section-title">Upcoming Matches</h2>
             <UpcomingMatchesList
               matches={matches}
@@ -433,7 +532,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
           </div>
 
           {/* Completed Matches Section */}
-          <div className="matches-completed-section">
+          <div className="matches-completed-section" tabIndex={-1}>
             <h2 className="section-title">Completed Matches</h2>
             <CompletedMatchesList
               matches={matches}

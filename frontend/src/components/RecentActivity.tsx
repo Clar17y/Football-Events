@@ -92,17 +92,21 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
 
         switch (activity.type) {
             case 'team':
-                onNavigate('teams', activity.entityId);
+                onNavigate(`teams?teamId=${encodeURIComponent(activity.entityId || '')}`);
                 break;
             case 'player':
-                onNavigate('players', activity.entityId);
+                onNavigate(`players?playerId=${encodeURIComponent(activity.entityId || '')}`);
                 break;
             case 'season':
-                onNavigate('seasons', activity.entityId);
+                onNavigate(`seasons?seasonId=${encodeURIComponent(activity.entityId || '')}`);
                 break;
             case 'match':
-                // For now, navigate to matches page since we don't have individual match pages yet
-                onNavigate('matches');
+                // Deep link to matches page with matchId so it can scroll/highlight
+                if (activity.entityId) {
+                    onNavigate(`matches?matchId=${encodeURIComponent(activity.entityId)}`);
+                } else {
+                    onNavigate('matches');
+                }
                 break;
             case 'award':
                 onNavigate('awards');

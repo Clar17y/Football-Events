@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import type { HTMLIonContentElement } from '@ionic/core/components';
 import { 
   IonPage, 
   IonContent,
@@ -119,6 +120,8 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
     loadTeamCounts();
   }, [teams]);
 
+  const contentRef = useRef<HTMLIonContentElement | null>(null);
+
   const navigate = (page: string) => {
     if (onNavigate) {
       onNavigate(page);
@@ -129,6 +132,46 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
     await loadTeams();
     event.detail.complete();
   };
+
+  // Deep-link: scroll/highlight ?teamId=... once teams are loaded
+  const deepLinkHandledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    const params = new URLSearchParams(window.location.search);
+    const teamId = params.get('teamId');
+    if (!teamId || deepLinkHandledRef.current === teamId) return;
+    const exists = teams.some(t => t.id === teamId);
+    if (!exists) return;
+
+    deepLinkHandledRef.current = teamId;
+    const target = document.querySelector(`.teams-grid [data-team-id="${teamId}"]`) as HTMLElement | null;
+    (async () => {
+      if (!target) return;
+      try {
+        const scrollEl = contentRef.current && (await (contentRef.current as any).getScrollElement?.());
+        if (scrollEl) {
+          const rect = target.getBoundingClientRect();
+          const srect = scrollEl.getBoundingClientRect();
+          const top = rect.top - srect.top + scrollEl.scrollTop - 80;
+          scrollEl.scrollTo({ top, behavior: 'smooth' });
+        } else {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      } finally {
+        target.classList.add('highlight-flash', 'highlight-target');
+        setTimeout(() => target.classList.remove('highlight-flash'), 1500);
+        setTimeout(() => target.focus(), 120);
+      }
+    })();
+
+    // Clean URL param
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('teamId');
+      const qs = url.searchParams.toString();
+      window.history.replaceState({}, '', url.pathname + (qs ? `?${qs}` : ''));
+    } catch {}
+  }, [teams, loading]);
 
   // Define team context menu items
   const teamContextItems: ContextMenuItem[] = [
@@ -210,6 +253,8 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
         <IonCard 
           className={`team-card ${hasTeamColors ? 'team-card-with-colors' : 'team-card-default'}`}
           style={teamCardStyle}
+          data-team-id={team.id}
+          tabIndex={-1}
         >
           {/* Team color stripes */}
           <div className="team-color-stripes">
@@ -346,7 +391,7 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
         }
       />
       
-      <IonContent>
+      <IonContent ref={contentRef}>
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
           <IonRefresherContent
             pullingIcon={refresh}

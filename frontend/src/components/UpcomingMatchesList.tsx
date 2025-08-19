@@ -88,6 +88,7 @@ const UpcomingMatchesList: React.FC<UpcomingMatchesListProps> = ({
         key={match.id}
         className="upcoming-match-item"
         data-match-id={match.id}
+        tabIndex={-1}
         onClick={() => onMatchSelect(match.id)}
       >
         {/* Match Header - Always Visible */}

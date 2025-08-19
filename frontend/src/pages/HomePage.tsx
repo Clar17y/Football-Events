@@ -124,28 +124,12 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
   const navigationCards = [
     {
-      title: 'Seasons',
-      subtitle: 'Manage your seasons',
-      icon: calendar,
-      color: 'primary',
-      route: '/seasons',
-      description: 'Create and organize your football seasons'
-    },
-    {
-      title: 'Teams',
-      subtitle: 'Team management',
-      icon: people,
-      color: 'teal',
-      route: '/teams',
-      description: 'Manage your teams and rosters'
-    },
-    {
-      title: 'Players',
-      subtitle: 'Player profiles',
-      icon: person,
-      color: 'indigo',
-      route: '/players',
-      description: 'Track individual player progress'
+      title: 'Live Match',
+      subtitle: 'Coming soon',
+      icon: play,
+      color: 'amber',
+      route: '#',
+      description: 'Live match console - being redesigned'
     },
     {
       title: 'Matches',
@@ -156,6 +140,22 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       description: 'Schedule matches and track results'
     },
     {
+      title: 'Players',
+      subtitle: 'Player profiles',
+      icon: person,
+      color: 'indigo',
+      route: '/players',
+      description: 'Track individual player progress'
+    },
+    {
+      title: 'Teams',
+      subtitle: 'Team management',
+      icon: people,
+      color: 'teal',
+      route: '/teams',
+      description: 'Manage your teams and rosters'
+    },
+    {
       title: 'Awards',
       subtitle: 'Recognition system',
       icon: ribbon,
@@ -164,12 +164,12 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       description: 'Celebrate achievements and milestones'
     },
     {
-      title: 'Live Match',
-      subtitle: 'Coming soon',
-      icon: play,
-      color: 'amber',
-      route: '#',
-      description: 'Live match console - being redesigned'
+      title: 'Seasons',
+      subtitle: 'Manage your seasons',
+      icon: calendar,
+      color: 'primary',
+      route: '/seasons',
+      description: 'Create and organize your football seasons'
     },
     {
       title: 'Statistics',

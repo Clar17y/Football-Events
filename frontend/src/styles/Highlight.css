@@ -1,0 +1,35 @@
+/* Generic highlight flash used after deep-link navigation */
+.highlight-flash {
+  animation: highlightFlash 1200ms ease-out;
+  /* Ensure the flash ring is visible above shadows */
+  position: relative;
+  z-index: 1;
+}
+
+/* Strong ring to make the flash obvious on cards */
+.highlight-flash {
+  box-shadow: 0 0 0 4px rgba(var(--theme-primary-rgb, var(--ion-color-secondary-rgb)), 0.2),
+              0 2px 12px rgba(0,0,0,0.15) !important;
+  border: 2px solid var(--theme-primary, var(--ion-color-secondary)) !important;
+}
+
+@keyframes highlightFlash {
+  0% {
+    transform: scale(1.01);
+    background: rgba(var(--theme-primary-rgb, var(--ion-color-secondary-rgb)), 0.12);
+  }
+  50% {
+    transform: scale(1.005);
+    background: rgba(var(--theme-primary-rgb, var(--ion-color-secondary-rgb)), 0.12);
+  }
+  100% {
+    transform: scale(1);
+    background: transparent;
+  }
+}
+
+/* Keep focus visible when we programmatically focus the card */
+.highlight-target:focus {
+  outline: 2px solid var(--theme-primary, var(--ion-color-secondary));
+  outline-offset: 2px;
+}
