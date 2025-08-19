@@ -51,6 +51,7 @@ import type { Player, Team } from '@shared/types';
 import './PageStyles.css';
 import './PlayersPage.css';
 import type { HTMLIonContentElement } from '@ionic/core/components';
+import useDeepLinkScrollHighlight from '../hooks/useDeepLinkScrollHighlight';
 
 interface PlayersPageProps {
   onNavigate?: (page: string) => void;
@@ -278,45 +279,17 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
     refreshPlayers(); // Refresh the list after editing
   };
 
-  // Deep-link: scroll/highlight ?playerId=... once players are loaded
-  const deepLinkHandledRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (loading) return;
-    const params = new URLSearchParams(window.location.search);
-    const playerId = params.get('playerId');
-    if (!playerId || deepLinkHandledRef.current === playerId) return;
-    const exists = players.some(p => p.id === playerId);
-    if (!exists) return;
+  // Deep-link: use shared hook to scroll/highlight players by ?playerId=...
+  useDeepLinkScrollHighlight({
+    param: 'playerId',
+    itemAttr: 'data-player-id',
+    listSelector: '.players-grid',
+    contentRef,
+    ready: !loading && players.length > 0,
+    offset: 80,
+  });
 
-    deepLinkHandledRef.current = playerId;
-    const target = document.querySelector(`.players-grid [data-player-id="${playerId}"]`) as HTMLElement | null;
-    (async () => {
-      if (!target) return;
-      try {
-        const scrollEl = contentRef.current && (await (contentRef.current as any).getScrollElement?.());
-        if (scrollEl) {
-          const rect = target.getBoundingClientRect();
-          const srect = scrollEl.getBoundingClientRect();
-          const top = rect.top - srect.top + scrollEl.scrollTop - 80;
-          scrollEl.scrollTo({ top, behavior: 'smooth' });
-        } else {
-          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      } finally {
-        target.classList.add('highlight-flash');
-        setTimeout(() => target.classList.remove('highlight-flash'), 1500);
-        setTimeout(() => target.focus(), 120);
-      }
-    })();
-
-    // Clean URL param
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('playerId');
-      const qs = url.searchParams.toString();
-      window.history.replaceState({}, '', url.pathname + (qs ? `?${qs}` : ''));
-    } catch {}
-  }, [players, loading]);
+  ;
 
   // Handle delete confirmation
   const handleDeleteConfirm = async () => {

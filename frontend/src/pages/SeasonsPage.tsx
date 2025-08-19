@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { HTMLIonContentElement } from '@ionic/core/components';
+import useDeepLinkScrollHighlight from '../hooks/useDeepLinkScrollHighlight';
 import { 
   IonPage, 
   IonContent,
@@ -118,45 +119,16 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
     event.detail.complete();
   };
 
-  // Deep-link: scroll/highlight ?seasonId=... once seasons are loaded
-  const deepLinkHandledRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (loading) return;
-    const params = new URLSearchParams(window.location.search);
-    const seasonId = params.get('seasonId');
-    if (!seasonId || deepLinkHandledRef.current === seasonId) return;
-    const exists = seasons.some(s => s.id === seasonId);
-    if (!exists) return;
+  // Deep-link: use shared hook to scroll/highlight by ?seasonId=...
+  useDeepLinkScrollHighlight({
+    param: 'seasonId',
+    itemAttr: 'data-season-id',
+    contentRef,
+    ready: !loading && seasons.length > 0,
+    offset: 80,
+  });
 
-    deepLinkHandledRef.current = seasonId;
-    const target = document.querySelector(`[data-season-id="${seasonId}"]`) as HTMLElement | null;
-    (async () => {
-      if (!target) return;
-      try {
-        const scrollEl = contentRef.current && (await (contentRef.current as any).getScrollElement?.());
-        if (scrollEl) {
-          const rect = target.getBoundingClientRect();
-          const srect = scrollEl.getBoundingClientRect();
-          const top = rect.top - srect.top + scrollEl.scrollTop - 80;
-          scrollEl.scrollTo({ top, behavior: 'smooth' });
-        } else {
-          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      } finally {
-        target.classList.add('highlight-flash');
-        setTimeout(() => target.classList.remove('highlight-flash'), 1500);
-        setTimeout(() => target.focus(), 120);
-      }
-    })();
-
-    // Clean URL param
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('seasonId');
-      const qs = url.searchParams.toString();
-      window.history.replaceState({}, '', url.pathname + (qs ? `?${qs}` : ''));
-    } catch {}
-  }, [seasons, loading]);
+  ;
 
   // Define season context menu items
   const seasonContextItems: ContextMenuItem[] = [

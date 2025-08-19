@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { HTMLIonContentElement } from '@ionic/core/components';
+import useDeepLinkScrollHighlight from '../hooks/useDeepLinkScrollHighlight';
 import { 
   IonPage, 
   IonContent,
@@ -133,45 +134,17 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
     event.detail.complete();
   };
 
-  // Deep-link: scroll/highlight ?teamId=... once teams are loaded
-  const deepLinkHandledRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (loading) return;
-    const params = new URLSearchParams(window.location.search);
-    const teamId = params.get('teamId');
-    if (!teamId || deepLinkHandledRef.current === teamId) return;
-    const exists = teams.some(t => t.id === teamId);
-    if (!exists) return;
+  // Deep-link: scroll/highlight teams by ?teamId=...
+  useDeepLinkScrollHighlight({
+    param: 'teamId',
+    itemAttr: 'data-team-id',
+    listSelector: '.teams-grid',
+    contentRef,
+    ready: !loading && teams.length > 0,
+    offset: 80,
+  });
 
-    deepLinkHandledRef.current = teamId;
-    const target = document.querySelector(`.teams-grid [data-team-id="${teamId}"]`) as HTMLElement | null;
-    (async () => {
-      if (!target) return;
-      try {
-        const scrollEl = contentRef.current && (await (contentRef.current as any).getScrollElement?.());
-        if (scrollEl) {
-          const rect = target.getBoundingClientRect();
-          const srect = scrollEl.getBoundingClientRect();
-          const top = rect.top - srect.top + scrollEl.scrollTop - 80;
-          scrollEl.scrollTo({ top, behavior: 'smooth' });
-        } else {
-          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      } finally {
-        target.classList.add('highlight-flash', 'highlight-target');
-        setTimeout(() => target.classList.remove('highlight-flash'), 1500);
-        setTimeout(() => target.focus(), 120);
-      }
-    })();
-
-    // Clean URL param
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('teamId');
-      const qs = url.searchParams.toString();
-      window.history.replaceState({}, '', url.pathname + (qs ? `?${qs}` : ''));
-    } catch {}
-  }, [teams, loading]);
+  // Deep-link logic handled by useDeepLinkScrollHighlight hook above
 
   // Define team context menu items
   const teamContextItems: ContextMenuItem[] = [

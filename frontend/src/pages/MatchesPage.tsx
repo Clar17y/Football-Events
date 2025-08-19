@@ -25,6 +25,7 @@ import { teamsApi } from '../services/api/teamsApi';
 import type { Match, Team } from '@shared/types';
 import './PageStyles.css';
 import './MatchesPage.css';
+import useDeepLinkScrollHighlight from '../hooks/useDeepLinkScrollHighlight';
 
 interface MatchesPageProps {
   onNavigate?: (page: string) => void;
@@ -262,33 +263,17 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
     }
   };
 
-  // Deep-link support: if URL has ?matchId=..., scroll/highlight after data loads
-  const deepLinkHandledRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (loading) return; // wait until matches loaded
-
-    const params = new URLSearchParams(window.location.search);
-    const matchIdParam = params.get('matchId');
-    if (!matchIdParam) return;
-
-    // Avoid reprocessing the same id
-    if (deepLinkHandledRef.current === matchIdParam) return;
-
-    const exists = matches.some(m => m.id === matchIdParam);
-    if (!exists) return; // wait for it to exist in data
-
-    // Mark as handled and perform scroll/highlight
-    deepLinkHandledRef.current = matchIdParam;
-    handleMatchClick(matchIdParam);
-
-    // Clean URL so it doesn't retrigger on future renders
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('matchId');
-      const newSearch = url.searchParams.toString();
-      window.history.replaceState({}, '', url.pathname + (newSearch ? `?${newSearch}` : ''));
-    } catch {}
-  }, [loading, matches]);
+  // Deep-link: handle ?matchId=... using the shared hook
+  useDeepLinkScrollHighlight({
+    param: 'matchId',
+    itemAttr: 'data-match-id',
+    listSelector: '.upcoming-matches-list, .completed-matches-list',
+    contentRef,
+    ready: !loading && matches.length > 0,
+    offset: 80,
+    highlightClass: 'match-highlighted',
+    durationMs: 1500,
+  });
 
   // UpcomingMatchesList event handlers
   const handleToggleExpand = (matchId: string) => {
