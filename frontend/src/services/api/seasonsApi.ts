@@ -66,10 +66,11 @@ export const seasonsApi = {
   async createSeason(seasonData: SeasonCreateRequest): Promise<SeasonResponse> {
     // Transform frontend data to match backend schema
     const backendData = {
-      label: seasonData.name,  // Backend expects 'label', not 'name'
-      startDate: seasonData.startDate ? seasonData.startDate.split('T')[0] : '', // Convert ISO to YYYY-MM-DD
-      endDate: seasonData.endDate ? seasonData.endDate.split('T')[0] : '',       // Convert ISO to YYYY-MM-DD
-      isCurrent: seasonData.isActive  // Backend expects 'isCurrent', not 'isActive'
+      label: seasonData.label,
+      startDate: seasonData.startDate ? seasonData.startDate.split('T')[0] : '', // Normalize to YYYY-MM-DD
+      endDate: seasonData.endDate ? seasonData.endDate.split('T')[0] : '',       // Normalize to YYYY-MM-DD
+      isCurrent: seasonData.isCurrent ?? false,
+      description: seasonData.description
     };
 
     const response = await apiClient.post('/seasons', backendData);
@@ -86,11 +87,12 @@ export const seasonsApi = {
   async updateSeason(id: string, seasonData: SeasonUpdateRequest): Promise<SeasonResponse> {
     // Transform frontend data to match backend schema
     const backendData = {
-      label: seasonData.name,  // Backend expects 'label', not 'name'
-      startDate: seasonData.startDate ? seasonData.startDate.split('T')[0] : undefined, // Convert ISO to YYYY-MM-DD
-      endDate: seasonData.endDate ? seasonData.endDate.split('T')[0] : undefined,       // Convert ISO to YYYY-MM-DD
-      isCurrent: seasonData.isActive  // Backend expects 'isCurrent', not 'isActive'
-    };
+      label: seasonData.label,
+      startDate: seasonData.startDate ? seasonData.startDate.split('T')[0] : undefined, // Normalize to YYYY-MM-DD
+      endDate: seasonData.endDate ? seasonData.endDate.split('T')[0] : undefined,       // Normalize to YYYY-MM-DD
+      isCurrent: seasonData.isCurrent,
+      description: seasonData.description
+    } as const;
 
     // Remove undefined values
     const cleanData = Object.fromEntries(
