@@ -397,6 +397,67 @@ export interface SeasonWithStats extends Season {
 }
 
 // ============================================================================
+// MATCH STATE AND PERIODS
+// ============================================================================
+
+export interface MatchState {
+  id: string;
+  matchId: string;                    // mapped from match_id
+  status: 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED' | 'POSTPONED';
+  currentPeriod?: number;             // mapped from current_period
+  currentPeriodType?: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT'; // mapped from current_period_type
+  matchStartedAt?: Date;              // mapped from match_started_at
+  matchEndedAt?: Date;                // mapped from match_ended_at
+  totalElapsedSeconds: number;        // mapped from total_elapsed_seconds
+  createdAt: Date;                    // mapped from created_at
+  updatedAt?: Date;                   // mapped from updated_at
+  // Authentication and soft delete fields
+  created_by_user_id: string;
+  deleted_at?: Date;
+  deleted_by_user_id?: string;
+  is_deleted: boolean;
+}
+
+export interface MatchPeriod {
+  id: string;
+  matchId: string;                    // mapped from match_id
+  periodNumber: number;               // mapped from period_number
+  periodType: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT'; // mapped from period_type
+  startedAt?: Date;                   // mapped from started_at
+  endedAt?: Date;                     // mapped from ended_at
+  durationSeconds?: number;           // mapped from duration_seconds
+  createdAt: Date;                    // mapped from created_at
+  updatedAt?: Date;                   // mapped from updated_at
+  // Authentication and soft delete fields
+  created_by_user_id: string;
+  deleted_at?: Date;
+  deleted_by_user_id?: string;
+  is_deleted: boolean;
+}
+
+// Request types for match state operations
+export interface StartMatchRequest {
+  matchId: string;
+}
+
+export interface PauseMatchRequest {
+  matchId: string;
+}
+
+export interface ResumeMatchRequest {
+  matchId: string;
+}
+
+export interface CompleteMatchRequest {
+  matchId: string;
+}
+
+export interface CancelMatchRequest {
+  matchId: string;
+  reason?: string;
+}
+
+// ============================================================================
 // UTILITY TYPES
 // ============================================================================
 

@@ -1,14 +1,18 @@
 import { Router } from 'express';
 import { MatchService } from '../../services/MatchService';
+import { MatchStateService } from '../../services/MatchStateService';
+import { MatchPeriodsService } from '../../services/MatchPeriodsService';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
 import { authenticateToken } from '../../middleware/auth';
-import { matchCreateSchema, matchUpdateSchema, matchQuickStartSchema } from '../../validation/schemas';
+import { matchCreateSchema, matchUpdateSchema, matchQuickStartSchema, matchCancelSchema, periodStartSchema, periodEndSchema } from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { extractApiError } from '../../utils/prismaErrorHandler';
 
 const router = Router();
 const matchService = new MatchService();
+const matchStateService = new MatchStateService();
+const matchPeriodsService = new MatchPeriodsService();
 
 // GET /api/v1/matches - List matches with pagination and filtering
 router.get('/', authenticateToken, asyncHandler(async (req, res) => {
@@ -260,6 +264,290 @@ router.post('/:id/quick-event', authenticateToken, validateUUID(), asyncHandler(
   }
   
   return res.status(201).json(event);
+}));
+
+// === MATCH STATE MANAGEMENT ENDPOINTS ===
+
+// POST /api/v1/matches/:id/start - Start a match
+router.post('/:id/start', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  try {
+    const matchState = await matchStateService.startMatch(
+      req.params['id']!,
+      req.user!.id,
+      req.user!.role
+    );
+    
+    return res.status(200).json({
+      success: true,
+      data: matchState
+    });
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        success: false,
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
+}));
+
+// POST /api/v1/matches/:id/pause - Pause a live match
+router.post('/:id/pause', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  try {
+    const matchState = await matchStateService.pauseMatch(
+      req.params['id']!,
+      req.user!.id,
+      req.user!.role
+    );
+    
+    return res.status(200).json({
+      success: true,
+      data: matchState
+    });
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        success: false,
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
+}));
+
+// POST /api/v1/matches/:id/resume - Resume a paused match
+router.post('/:id/resume', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  try {
+    const matchState = await matchStateService.resumeMatch(
+      req.params['id']!,
+      req.user!.id,
+      req.user!.role
+    );
+    
+    return res.status(200).json({
+      success: true,
+      data: matchState
+    });
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        success: false,
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
+}));
+
+// POST /api/v1/matches/:id/complete - Complete a match
+router.post('/:id/complete', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  try {
+    const matchState = await matchStateService.completeMatch(
+      req.params['id']!,
+      req.user!.id,
+      req.user!.role
+    );
+    
+    return res.status(200).json({
+      success: true,
+      data: matchState
+    });
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        success: false,
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
+}));
+
+// POST /api/v1/matches/:id/cancel - Cancel a match
+router.post('/:id/cancel', 
+  authenticateToken, 
+  validateUUID(), 
+  validateRequest(matchCancelSchema),
+  asyncHandler(async (req, res) => {
+  try {
+    const { reason = 'No reason provided' } = req.body;
+    
+    const matchState = await matchStateService.cancelMatch(
+      req.params['id']!,
+      reason,
+      req.user!.id,
+      req.user!.role
+    );
+    
+    return res.status(200).json({
+      success: true,
+      data: matchState
+    });
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        success: false,
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
+}));
+
+// GET /api/v1/matches/:id/state - Get current match state
+router.get('/:id/state', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  try {
+    const matchState = await matchStateService.getCurrentState(
+      req.params['id']!,
+      req.user!.id,
+      req.user!.role
+    );
+    
+    if (!matchState) {
+      return res.status(404).json({
+        success: false,
+        error: 'Match state not found',
+        message: `Match state for ID ${req.params['id']} does not exist or access denied`
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      data: matchState
+    });
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        success: false,
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
+}));
+
+// === MATCH PERIODS MANAGEMENT ENDPOINTS ===
+
+// POST /api/v1/matches/:id/periods/start - Start a new period
+router.post('/:id/periods/start', 
+  authenticateToken, 
+  validateUUID(), 
+  validateRequest(periodStartSchema),
+  asyncHandler(async (req, res) => {
+  try {
+    const { periodType = 'regular' } = req.body;
+    
+    const period = await matchPeriodsService.startPeriod(
+      req.params['id']!,
+      periodType,
+      req.user!.id,
+      req.user!.role
+    );
+    
+    return res.status(201).json({
+      success: true,
+      data: period
+    });
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        success: false,
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
+}));
+
+// POST /api/v1/matches/:id/periods/:periodId/end - End a period
+router.post('/:id/periods/:periodId/end', 
+  authenticateToken, 
+  validateUUID(), 
+  validateUUID('periodId'),
+  validateRequest(periodEndSchema),
+  asyncHandler(async (req, res) => {
+  try {
+    const period = await matchPeriodsService.endPeriod(
+      req.params['id']!,
+      req.params['periodId']!,
+      req.user!.id,
+      req.user!.role
+    );
+    
+    return res.status(200).json({
+      success: true,
+      data: period
+    });
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        success: false,
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
+}));
+
+// GET /api/v1/matches/:id/periods - Get all periods for a match
+router.get('/:id/periods', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  try {
+    const periods = await matchPeriodsService.getMatchPeriods(
+      req.params['id']!,
+      req.user!.id,
+      req.user!.role
+    );
+    
+    return res.status(200).json({
+      success: true,
+      data: periods
+    });
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        success: false,
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
 }));
 
 export default router;

@@ -14,6 +14,8 @@ import type {
   PrismaAward,
   PrismaMatchAward,
   PrismaPlayerTeam,
+  PrismaMatchState,
+  PrismaMatchPeriod,
   PrismaPlayerCreateInput,
   PrismaPlayerUpdateInput,
   PrismaTeamCreateInput,
@@ -46,6 +48,8 @@ import type {
   Award,
   MatchAward,
   PlayerTeam,
+  MatchState,
+  MatchPeriod,
   PlayerCreateRequest,
   PlayerUpdateRequest,
   TeamCreateRequest,
@@ -227,7 +231,7 @@ export const transformPlayerCreateRequest = (
   name: request.name,
   squad_number: request.squadNumber ?? null,
   preferred_pos: request.preferredPosition ?? null,
-  dob: request.dateOfBirth ? convertDDMMYYYYToISO(request.dateOfBirth) : null,
+  dob: request.dateOfBirth || null,
   notes: request.notes ?? null,
   created_by_user_id,
 });
@@ -241,7 +245,7 @@ export const transformPlayerUpdateRequest = (
   if (request.squadNumber !== undefined) update.squad_number = request.squadNumber;
   if (request.preferredPosition !== undefined) update.preferred_pos = request.preferredPosition;
   if (request.dateOfBirth !== undefined) {
-    update.dob = request.dateOfBirth ? convertDDMMYYYYToISO(request.dateOfBirth) : null;
+    update.dob = request.dateOfBirth || null;
   }
   if (request.notes !== undefined) update.notes = request.notes;
   
@@ -256,10 +260,10 @@ export const transformTeamCreateRequest = (
   const result = {
     name: request.name,
     is_opponent: (request as any).is_opponent ?? false,
-    home_kit_primary: request.homePrimary ?? null,
-    home_kit_secondary: request.homeSecondary ?? null,
-    away_kit_primary: request.awayPrimary ?? null,
-    away_kit_secondary: request.awaySecondary ?? null,
+    home_kit_primary: request.homeKitPrimary ?? null,
+    home_kit_secondary: request.homeKitSecondary ?? null,
+    away_kit_primary: request.awayKitPrimary ?? null,
+    away_kit_secondary: request.awayKitSecondary ?? null,
     logo_url: request.logoUrl ?? null,
     created_by_user_id,
   };
@@ -557,6 +561,51 @@ export const safeTransformMatchAward = (prismaMatchAward: PrismaMatchAward | nul
 
 export const safeTransformPlayerTeam = (prismaPlayerTeam: PrismaPlayerTeam | null): PlayerTeam | null =>
   prismaPlayerTeam ? transformPlayerTeam(prismaPlayerTeam) : null;
+
+export const transformMatchState = (prismaMatchState: PrismaMatchState): MatchState => ({
+  id: prismaMatchState.id,
+  matchId: prismaMatchState.match_id,
+  status: prismaMatchState.status as 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED' | 'POSTPONED',
+  currentPeriod: prismaMatchState.current_period || undefined,
+  currentPeriodType: prismaMatchState.current_period_type as 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT' | undefined,
+  matchStartedAt: prismaMatchState.match_started_at || undefined,
+  matchEndedAt: prismaMatchState.match_ended_at || undefined,
+  totalElapsedSeconds: prismaMatchState.total_elapsed_seconds,
+  createdAt: prismaMatchState.created_at,
+  updatedAt: prismaMatchState.updated_at || undefined,
+  created_by_user_id: prismaMatchState.created_by_user_id,
+  deleted_at: prismaMatchState.deleted_at || undefined,
+  deleted_by_user_id: prismaMatchState.deleted_by_user_id || undefined,
+  is_deleted: prismaMatchState.is_deleted,
+});
+
+export const transformMatchPeriod = (prismaMatchPeriod: PrismaMatchPeriod): MatchPeriod => ({
+  id: prismaMatchPeriod.id,
+  matchId: prismaMatchPeriod.match_id,
+  periodNumber: prismaMatchPeriod.period_number,
+  periodType: prismaMatchPeriod.period_type as 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT',
+  startedAt: prismaMatchPeriod.started_at || undefined,
+  endedAt: prismaMatchPeriod.ended_at || undefined,
+  durationSeconds: prismaMatchPeriod.duration_seconds || undefined,
+  createdAt: prismaMatchPeriod.created_at,
+  updatedAt: prismaMatchPeriod.updated_at || undefined,
+  created_by_user_id: prismaMatchPeriod.created_by_user_id,
+  deleted_at: prismaMatchPeriod.deleted_at || undefined,
+  deleted_by_user_id: prismaMatchPeriod.deleted_by_user_id || undefined,
+  is_deleted: prismaMatchPeriod.is_deleted,
+});
+
+export const transformMatchStates = (prismaMatchStates: PrismaMatchState[]): MatchState[] =>
+  prismaMatchStates.map(transformMatchState);
+
+export const transformMatchPeriods = (prismaMatchPeriods: PrismaMatchPeriod[]): MatchPeriod[] =>
+  prismaMatchPeriods.map(transformMatchPeriod);
+
+export const safeTransformMatchState = (prismaMatchState: PrismaMatchState | null): MatchState | null =>
+  prismaMatchState ? transformMatchState(prismaMatchState) : null;
+
+export const safeTransformMatchPeriod = (prismaMatchPeriod: PrismaMatchPeriod | null): MatchPeriod | null =>
+  prismaMatchPeriod ? transformMatchPeriod(prismaMatchPeriod) : null;
 
 /**
  * Transform with error handling

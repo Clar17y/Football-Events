@@ -390,3 +390,24 @@ export const playerBatchSchema = z.object({
   })).optional().default([]),
   delete: z.array(z.string().uuid('Player ID must be a valid UUID')).optional().default([])
 });
+
+// Match state management validation schemas
+export const matchCancelSchema = z.object({
+  reason: z.string()
+    .max(500, 'Cancellation reason must be less than 500 characters')
+    .optional()
+    .default('No reason provided')
+});
+
+// Match periods validation schemas
+export const periodStartSchema = z.object({
+  periodType: z.enum(['regular', 'extra_time', 'penalty_shootout'])
+    .optional()
+    .default('regular')
+});
+
+export const periodEndSchema = z.object({
+  reason: z.string()
+    .max(500, 'End reason must be less than 500 characters')
+    .optional()
+});

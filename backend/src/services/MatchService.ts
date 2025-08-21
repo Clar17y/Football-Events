@@ -264,6 +264,15 @@ export class MatchService {
         primaryKeyField: 'match_id'
       });
 
+      // Create initial match state record
+      await this.prisma.match_state.create({
+        data: {
+          match_id: match.id,
+          status: 'SCHEDULED',
+          created_by_user_id: userId
+        }
+      });
+
       return match;
     }, 'Match');
   }
@@ -358,15 +367,25 @@ export class MatchService {
         return false; // Match not found or no permission
       }
 
-      // Soft delete the match
-      await this.prisma.match.update({
-        where: { match_id: id },
-        data: {
-          is_deleted: true,
-          deleted_at: new Date(),
-          deleted_by_user_id: userId
-        }
-      });
+      // Soft delete the match and its match state
+      await this.prisma.$transaction([
+        this.prisma.match.update({
+          where: { match_id: id },
+          data: {
+            is_deleted: true,
+            deleted_at: new Date(),
+            deleted_by_user_id: userId
+          }
+        }),
+        this.prisma.match_state.updateMany({
+          where: { match_id: id, is_deleted: false },
+          data: {
+            is_deleted: true,
+            deleted_at: new Date(),
+            deleted_by_user_id: userId
+          }
+        })
+      ]);
 
       return true;
     } catch (error: any) {

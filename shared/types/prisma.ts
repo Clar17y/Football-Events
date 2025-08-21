@@ -17,6 +17,8 @@ export type {
   seasons as PrismaSeason,
   lineup as PrismaLineup,
   player_teams as PrismaPlayerTeam,
+  match_state as PrismaMatchState,
+  match_periods as PrismaMatchPeriod,
 } from '@prisma/client';
 
 // Position type (not in main schema)
