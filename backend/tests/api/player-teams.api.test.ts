@@ -1218,7 +1218,7 @@ describe('Player Teams API Integration', () => {
         .set(authHelper.getAuthHeader(testUser))
         .send({
           name: `Natural Key Team ${Date.now()}`,
-          homePrimary: '#FF0000'
+          homeKitPrimary: '#FF0000'
         })
         .expect(201);
       
@@ -1445,7 +1445,7 @@ describe('Player Teams API Integration', () => {
         .set(authHelper.getAuthHeader(testUser))
         .send({
           name: `Active Players Test Team ${Date.now()}`,
-          homePrimary: '#FF0000'
+          homeKitPrimary: '#FF0000'
         })
         .expect(201);
       
@@ -1558,7 +1558,7 @@ describe('Player Teams API Integration', () => {
         .set(authHelper.getAuthHeader(testUser))
         .send({
           name: `Empty Team ${Date.now()}`,
-          homePrimary: '#00FF00'
+          homeKitPrimary: '#00FF00'
         })
         .expect(201);
 

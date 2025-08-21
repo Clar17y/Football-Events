@@ -6,16 +6,16 @@ export const teamCreateSchema = z.object({
     .min(1, 'Team name is required')
     .max(100, 'Team name must be less than 100 characters')
     .trim(),
-  homePrimary: z.string()
+  homeKitPrimary: z.string()
     .regex(/^#[0-9A-F]{6}$/i, 'Home primary color must be a valid hex color')
     .optional(),
-  homeSecondary: z.string()
+  homeKitSecondary: z.string()
     .regex(/^#[0-9A-F]{6}$/i, 'Home secondary color must be a valid hex color')
     .optional(),
-  awayPrimary: z.string()
+  awayKitPrimary: z.string()
     .regex(/^#[0-9A-F]{6}$/i, 'Away primary color must be a valid hex color')
     .optional(),
-  awaySecondary: z.string()
+  awayKitSecondary: z.string()
     .regex(/^#[0-9A-F]{6}$/i, 'Away secondary color must be a valid hex color')
     .optional(),
   logoUrl: z.string()

@@ -156,10 +156,10 @@ describe('Teams API Service', () => {
 
       expect(mockApiClient.post).toHaveBeenCalledWith('/teams', {
         name: 'New Team',
-        homePrimary: '#FF0000',
-        homeSecondary: '#FFFFFF',
-        awayPrimary: '#0000FF',
-        awaySecondary: '#FFFFFF',
+        homeKitPrimary: '#FF0000',
+        homeKitSecondary: '#FFFFFF',
+        awayKitPrimary: '#0000FF',
+        awayKitSecondary: '#FFFFFF',
         logoUrl: 'https://example.com/logo.png'
       });
 
@@ -188,12 +188,7 @@ describe('Teams API Service', () => {
       const result = await teamsApi.createTeam(teamData);
 
       expect(mockApiClient.post).toHaveBeenCalledWith('/teams', {
-        name: 'Minimal Team',
-        homePrimary: undefined,
-        homeSecondary: undefined,
-        awayPrimary: undefined,
-        awaySecondary: undefined,
-        logoUrl: undefined
+        name: 'Minimal Team'
       });
 
       expect(result.data.name).toBe('Minimal Team');
@@ -226,7 +221,7 @@ describe('Teams API Service', () => {
 
       expect(mockApiClient.put).toHaveBeenCalledWith('/teams/team-1', {
         name: 'Updated Team Name',
-        homePrimary: '#00FF00'
+        homeKitPrimary: '#00FF00'
       });
 
       expect(result).toEqual({

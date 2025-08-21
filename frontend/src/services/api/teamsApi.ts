@@ -98,17 +98,8 @@ export const teamsApi = {
    * Create a new team
    */
   async createTeam(teamData: TeamCreateRequest): Promise<TeamResponse> {
-    // Transform frontend camelCase to backend snake_case
-    const backendData = {
-      name: teamData.name,
-      homePrimary: teamData.homeKitPrimary,
-      homeSecondary: teamData.homeKitSecondary,
-      awayPrimary: teamData.awayKitPrimary,
-      awaySecondary: teamData.awayKitSecondary,
-      logoUrl: teamData.logoUrl
-    };
-
-    const response = await apiClient.post('/teams', backendData);
+    // Send data as-is using shared types (homeKit*/awayKit*)
+    const response = await apiClient.post('/teams', teamData);
     return {
       data: response.data as Team,
       success: true,
@@ -120,19 +111,9 @@ export const teamsApi = {
    * Update an existing team
    */
   async updateTeam(id: string, teamData: TeamUpdateRequest): Promise<TeamResponse> {
-    // Transform frontend camelCase to backend snake_case
-    const backendData = {
-      name: teamData.name,
-      homePrimary: teamData.homeKitPrimary,
-      homeSecondary: teamData.homeKitSecondary,
-      awayPrimary: teamData.awayKitPrimary,
-      awaySecondary: teamData.awayKitSecondary,
-      logoUrl: teamData.logoUrl
-    };
-
-    // Remove undefined values
+    // Remove undefined values while preserving shared type keys
     const cleanData = Object.fromEntries(
-      Object.entries(backendData).filter(([_, value]) => value !== undefined)
+      Object.entries(teamData).filter(([_, value]) => value !== undefined)
     );
 
     const response = await apiClient.put(`/teams/${id}`, cleanData);
