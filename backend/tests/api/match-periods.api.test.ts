@@ -438,7 +438,85 @@ describe('Match Periods API Integration', () => {
         .send({ periodType: 'invalid_type' })
         .expect(400);
 
-      expect(response.body.error).toBeTruthy();
+      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.details[0].message).toContain('Invalid enum value');
+    });
+
+    it('should validate period start notes length', async () => {
+      const longNotes = 'x'.repeat(501); // Exceeds 500 character limit
+      
+      const response = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/start`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ 
+          periodType: 'regular',
+          notes: longNotes 
+        })
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.details[0].message).toContain('Period start notes must be less than 500 characters');
+    });
+
+    it('should validate period end reason length', async () => {
+      // First start a period
+      const startResponse = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/start`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ periodType: 'regular' })
+        .expect(201);
+
+      const periodId = startResponse.body.data.id;
+      const longReason = 'x'.repeat(501); // Exceeds 500 character limit
+      
+      const response = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/${periodId}/end`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ reason: longReason })
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.details[0].message).toContain('End reason must be less than 500 characters');
+    });
+
+    it('should validate period end duration', async () => {
+      // First start a period
+      const startResponse = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/start`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ periodType: 'regular' })
+        .expect(201);
+
+      const periodId = startResponse.body.data.id;
+      
+      const response = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/${periodId}/end`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ actualDurationSeconds: -100 }) // Invalid negative duration
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.details[0].message).toContain('Duration cannot be negative');
+    });
+
+    it('should validate period end duration maximum', async () => {
+      // First start a period
+      const startResponse = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/start`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ periodType: 'regular' })
+        .expect(201);
+
+      const periodId = startResponse.body.data.id;
+      
+      const response = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/${periodId}/end`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ actualDurationSeconds: 7201 }) // Exceeds 2 hours
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.details[0].message).toContain('Duration cannot exceed 2 hours');
     });
 
     it('should validate UUID format in match ID', async () => {

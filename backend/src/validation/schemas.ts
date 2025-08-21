@@ -392,6 +392,38 @@ export const playerBatchSchema = z.object({
 });
 
 // Match state management validation schemas
+export const matchStartSchema = z.object({
+  notes: z.string()
+    .max(500, 'Start notes must be less than 500 characters')
+    .optional()
+});
+
+export const matchPauseSchema = z.object({
+  reason: z.string()
+    .max(500, 'Pause reason must be less than 500 characters')
+    .optional()
+});
+
+export const matchResumeSchema = z.object({
+  notes: z.string()
+    .max(500, 'Resume notes must be less than 500 characters')
+    .optional()
+});
+
+export const matchCompleteSchema = z.object({
+  finalScore: z.object({
+    home: z.number()
+      .int('Home score must be an integer')
+      .min(0, 'Home score cannot be negative'),
+    away: z.number()
+      .int('Away score must be an integer')
+      .min(0, 'Away score cannot be negative')
+  }).optional(),
+  notes: z.string()
+    .max(500, 'Completion notes must be less than 500 characters')
+    .optional()
+});
+
 export const matchCancelSchema = z.object({
   reason: z.string()
     .max(500, 'Cancellation reason must be less than 500 characters')
@@ -399,15 +431,32 @@ export const matchCancelSchema = z.object({
     .default('No reason provided')
 });
 
+export const matchPostponeSchema = z.object({
+  reason: z.string()
+    .min(1, 'Postponement reason is required')
+    .max(500, 'Postponement reason must be less than 500 characters'),
+  newKickoffTime: z.string()
+    .datetime('New kickoff time must be a valid ISO date')
+    .optional()
+});
+
 // Match periods validation schemas
 export const periodStartSchema = z.object({
   periodType: z.enum(['regular', 'extra_time', 'penalty_shootout'])
     .optional()
-    .default('regular')
+    .default('regular'),
+  notes: z.string()
+    .max(500, 'Period start notes must be less than 500 characters')
+    .optional()
 });
 
 export const periodEndSchema = z.object({
   reason: z.string()
     .max(500, 'End reason must be less than 500 characters')
+    .optional(),
+  actualDurationSeconds: z.number()
+    .int('Duration must be an integer')
+    .min(0, 'Duration cannot be negative')
+    .max(7200, 'Duration cannot exceed 2 hours')
     .optional()
 });

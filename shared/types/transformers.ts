@@ -35,6 +35,10 @@ import type {
   PrismaMatchAwardUpdateInput,
   PrismaPlayerTeamCreateInput,
   PrismaPlayerTeamUpdateInput,
+  PrismaMatchStateCreateInput,
+  PrismaMatchStateUpdateInput,
+  PrismaMatchPeriodCreateInput,
+  PrismaMatchPeriodUpdateInput,
 } from './prisma';
 
 import type {
@@ -69,6 +73,16 @@ import type {
   MatchAwardUpdateRequest,
   PlayerTeamCreateRequest,
   PlayerTeamUpdateRequest,
+  StartMatchRequest,
+  PauseMatchRequest,
+  ResumeMatchRequest,
+  CompleteMatchRequest,
+  CancelMatchRequest,
+  StartPeriodRequest,
+  EndPeriodRequest,
+  MatchStateResponse,
+  MatchStatusResponse,
+  LiveMatchesResponse,
 } from './frontend';
 
 // ============================================================================
@@ -462,6 +476,68 @@ export const transformPlayerTeamUpdateRequest = (
 };
 
 // ============================================================================
+// MATCH STATE AND PERIOD TRANSFORMERS
+// ============================================================================
+
+export const transformStartMatchRequest = (
+  request: StartMatchRequest,
+  created_by_user_id: string
+): PrismaMatchStateCreateInput => ({
+  match_id: request.matchId,
+  status: 'live',
+  match_started_at: new Date(),
+  total_elapsed_seconds: 0,
+  created_by_user_id,
+});
+
+export const transformStartPeriodRequest = (
+  request: StartPeriodRequest,
+  created_by_user_id: string
+): PrismaMatchPeriodCreateInput => ({
+  match_id: request.matchId,
+  period_number: request.periodNumber,
+  period_type: request.periodType?.toLowerCase() || 'regular',
+  started_at: new Date(),
+  created_by_user_id,
+});
+
+export const transformMatchStateToResponse = (
+  matchState: MatchState,
+  currentPeriod?: MatchPeriod,
+  allPeriods: MatchPeriod[] = []
+): MatchStateResponse => ({
+  matchState,
+  currentPeriod,
+  allPeriods,
+});
+
+export const transformMatchStateToStatusResponse = (
+  matchState: MatchState,
+  currentPeriodElapsedSeconds?: number
+): MatchStatusResponse => ({
+  matchId: matchState.matchId,
+  status: matchState.status,
+  currentPeriod: matchState.currentPeriod,
+  currentPeriodType: matchState.currentPeriodType,
+  totalElapsedSeconds: matchState.totalElapsedSeconds,
+  currentPeriodElapsedSeconds,
+  isLive: matchState.status === 'LIVE',
+});
+
+export const transformToLiveMatchesResponse = (
+  liveMatches: Array<{
+    matchId: string;
+    homeTeam: string;
+    awayTeam: string;
+    status: 'LIVE' | 'PAUSED';
+    currentPeriod?: number;
+    totalElapsedSeconds: number;
+  }>
+): LiveMatchesResponse => ({
+  matches: liveMatches,
+});
+
+// ============================================================================
 // ARRAY TRANSFORMERS
 // ============================================================================
 
@@ -565,9 +641,9 @@ export const safeTransformPlayerTeam = (prismaPlayerTeam: PrismaPlayerTeam | nul
 export const transformMatchState = (prismaMatchState: PrismaMatchState): MatchState => ({
   id: prismaMatchState.id,
   matchId: prismaMatchState.match_id,
-  status: prismaMatchState.status as 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED' | 'POSTPONED',
+  status: prismaMatchState.status.toUpperCase() as 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED' | 'POSTPONED',
   currentPeriod: prismaMatchState.current_period || undefined,
-  currentPeriodType: prismaMatchState.current_period_type as 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT' | undefined,
+  currentPeriodType: prismaMatchState.current_period_type ? prismaMatchState.current_period_type.toUpperCase() as 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT' : undefined,
   matchStartedAt: prismaMatchState.match_started_at || undefined,
   matchEndedAt: prismaMatchState.match_ended_at || undefined,
   totalElapsedSeconds: prismaMatchState.total_elapsed_seconds,
@@ -583,7 +659,7 @@ export const transformMatchPeriod = (prismaMatchPeriod: PrismaMatchPeriod): Matc
   id: prismaMatchPeriod.id,
   matchId: prismaMatchPeriod.match_id,
   periodNumber: prismaMatchPeriod.period_number,
-  periodType: prismaMatchPeriod.period_type as 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT',
+  periodType: prismaMatchPeriod.period_type.toUpperCase() as 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT',
   startedAt: prismaMatchPeriod.started_at || undefined,
   endedAt: prismaMatchPeriod.ended_at || undefined,
   durationSeconds: prismaMatchPeriod.duration_seconds || undefined,

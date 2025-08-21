@@ -5,7 +5,19 @@ import { MatchPeriodsService } from '../../services/MatchPeriodsService';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
 import { authenticateToken } from '../../middleware/auth';
-import { matchCreateSchema, matchUpdateSchema, matchQuickStartSchema, matchCancelSchema, periodStartSchema, periodEndSchema } from '../../validation/schemas';
+import { 
+  matchCreateSchema, 
+  matchUpdateSchema, 
+  matchQuickStartSchema, 
+  matchStartSchema,
+  matchPauseSchema,
+  matchResumeSchema,
+  matchCompleteSchema,
+  matchCancelSchema,
+  matchPostponeSchema,
+  periodStartSchema, 
+  periodEndSchema 
+} from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { extractApiError } from '../../utils/prismaErrorHandler';
 
@@ -32,6 +44,35 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   );
   
   return res.json(result);
+}));
+
+// === MATCH STATUS QUERY ENDPOINTS (must be before /:id routes) ===
+
+// GET /api/v1/matches/live - Get all live matches
+router.get('/live', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const liveMatches = await matchStateService.getLiveMatches(
+      req.user!.id,
+      req.user!.role
+    );
+    
+    return res.status(200).json({
+      success: true,
+      data: liveMatches
+    });
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        success: false,
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
 }));
 
 // POST /api/v1/matches - Create new match
@@ -111,6 +152,42 @@ router.get('/recent', authenticateToken, asyncHandler(async (req, res) => {
     }
   );
   return res.json(matches);
+}));
+
+// GET /api/v1/matches/:id/status - Get match status for display
+router.get('/:id/status', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  try {
+    const matchStatus = await matchStateService.getMatchStatus(
+      req.params['id']!,
+      req.user!.id,
+      req.user!.role
+    );
+    
+    if (!matchStatus) {
+      return res.status(404).json({
+        success: false,
+        error: 'Match not found',
+        message: `Match with ID ${req.params['id']} does not exist or access denied`
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      data: matchStatus
+    });
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        success: false,
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
 }));
 
 // GET /api/v1/matches/:id - Get match by ID
@@ -269,7 +346,13 @@ router.post('/:id/quick-event', authenticateToken, validateUUID(), asyncHandler(
 // === MATCH STATE MANAGEMENT ENDPOINTS ===
 
 // POST /api/v1/matches/:id/start - Start a match
-router.post('/:id/start', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+// Note: Starting a match will also automatically create the first
+// regular period if no periods exist yet for the match.
+router.post('/:id/start', 
+  authenticateToken, 
+  validateUUID(), 
+  validateRequest(matchStartSchema),
+  asyncHandler(async (req, res) => {
   try {
     const matchState = await matchStateService.startMatch(
       req.params['id']!,
@@ -297,7 +380,11 @@ router.post('/:id/start', authenticateToken, validateUUID(), asyncHandler(async 
 }));
 
 // POST /api/v1/matches/:id/pause - Pause a live match
-router.post('/:id/pause', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+router.post('/:id/pause', 
+  authenticateToken, 
+  validateUUID(), 
+  validateRequest(matchPauseSchema),
+  asyncHandler(async (req, res) => {
   try {
     const matchState = await matchStateService.pauseMatch(
       req.params['id']!,
@@ -325,7 +412,11 @@ router.post('/:id/pause', authenticateToken, validateUUID(), asyncHandler(async 
 }));
 
 // POST /api/v1/matches/:id/resume - Resume a paused match
-router.post('/:id/resume', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+router.post('/:id/resume', 
+  authenticateToken, 
+  validateUUID(), 
+  validateRequest(matchResumeSchema),
+  asyncHandler(async (req, res) => {
   try {
     const matchState = await matchStateService.resumeMatch(
       req.params['id']!,
@@ -353,7 +444,11 @@ router.post('/:id/resume', authenticateToken, validateUUID(), asyncHandler(async
 }));
 
 // POST /api/v1/matches/:id/complete - Complete a match
-router.post('/:id/complete', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+router.post('/:id/complete', 
+  authenticateToken, 
+  validateUUID(), 
+  validateRequest(matchCompleteSchema),
+  asyncHandler(async (req, res) => {
   try {
     const matchState = await matchStateService.completeMatch(
       req.params['id']!,
@@ -549,5 +644,7 @@ router.get('/:id/periods', authenticateToken, validateUUID(), asyncHandler(async
     throw error;
   }
 }));
+
+
 
 export default router;

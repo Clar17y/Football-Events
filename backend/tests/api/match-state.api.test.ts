@@ -175,11 +175,11 @@ describe('Match State API Integration', () => {
     console.log('Match State API Tests: Database disconnected and cleanup completed');
   });
 
-  beforeEach(async () => {
+  afterEach(async () => {
     // Reset match states before each test
     if (createdMatchIds.length > 0) {
       await prisma.match_state.deleteMany({
-        where: { match_id: { in: createdMatchIds.filter(id => id) } }
+        where: { match_id: { in: createdMatchIds } }
       });
     }
   });
@@ -328,8 +328,21 @@ describe('Match State API Integration', () => {
 
   describe('Invalid State Transitions', () => {
     it('should reject pausing a scheduled match', async () => {
+      const testMatchResponse = await request(app)
+      .post('/api/v1/matches')
+      .set(authHelper.getAuthHeader(testUser))
+      .send({
+        seasonId: testSeasonId,
+        kickoffTime: new Date().toISOString(),
+        homeTeamId: testTeamId,
+        awayTeamId: otherUserTeamId,
+        competition: 'Test League',
+        venue: 'Test Stadium'
+      });
+      const newMatchId = testMatchResponse.body.id;
+
       const response = await apiRequest
-        .post(`/api/v1/matches/${testMatchId}/pause`)
+        .post(`/api/v1/matches/${newMatchId}/pause`)
         .set(authHelper.getAuthHeader(testUser))
         .expect(400);
 
@@ -406,6 +419,148 @@ describe('Match State API Integration', () => {
     });
   });
 
+  describe('Match Status Query Endpoints', () => {
+    it('should get live matches for user', async () => {
+      // Start a match to make it live
+      await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/start`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      const response = await apiRequest
+        .get('/api/v1/matches/live')
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBe(true);
+      expect(response.body.data.length).toBeGreaterThan(0);
+      expect(response.body.data[0].status).toBe('LIVE');
+      expect(response.body.data[0].matchId).toBe(testMatchId);
+    });
+
+    it('should return empty array when no live matches exist', async () => {
+      const response = await apiRequest
+        .get('/api/v1/matches/live')
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      console.log(JSON.stringify(response.body, null, 2));
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBe(true);
+      expect(response.body.data.length).toBe(0);
+    });
+
+    it('should get match status with full details', async () => {
+      // Start the match first
+      await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/start`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      const response = await apiRequest
+        .get(`/api/v1/matches/${testMatchId}/status`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.matchId).toBe(testMatchId);
+      expect(response.body.data.homeTeam).toBeDefined();
+      expect(response.body.data.awayTeam).toBeDefined();
+      expect(response.body.data.state).toBeDefined();
+      expect(response.body.data.state.status).toBe('LIVE');
+      expect(response.body.data.kickoffTime).toBeDefined();
+      expect(response.body.data.competition).toBe('Test League');
+      expect(response.body.data.venue).toBe('Test Stadium');
+    });
+
+    it('should return 404 for non-existent match status', async () => {
+      const invalidId = randomUUID();
+      const response = await apiRequest
+        .get(`/api/v1/matches/${invalidId}/status`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(403);
+
+      expect(response.body.message).toContain('Access denied');
+    });
+
+    it('should require authentication for live matches endpoint', async () => {
+      const response = await apiRequest
+        .get('/api/v1/matches/live')
+        .expect(401);
+
+      expect(response.body.error).toBe('Access token required');
+    });
+
+    it('should require authentication for match status endpoint', async () => {
+      const response = await apiRequest
+        .get(`/api/v1/matches/${testMatchId}/status`)
+        .expect(401);
+
+      expect(response.body.error).toBe('Access token required');
+    });
+
+    it('should allow admin to see all live matches', async () => {
+      // Start matches for both users
+      await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/start`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      await apiRequest
+        .post(`/api/v1/matches/${otherUserMatchId}/start`)
+        .set(authHelper.getAuthHeader(otherUser))
+        .expect(200);
+
+      // Admin should see both matches
+      const response = await apiRequest
+        .get('/api/v1/matches/live')
+        .set(authHelper.getAuthHeader(adminUser))
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBe(true);
+      expect(response.body.data.length).toBe(2);
+      
+      const matchIds = response.body.data.map((match: any) => match.matchId);
+      expect(matchIds).toContain(testMatchId);
+      expect(matchIds).toContain(otherUserMatchId);
+    });
+
+    it('should only show user-accessible live matches for non-admin users', async () => {
+      // Start matches for both users
+      await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/start`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      await apiRequest
+        .post(`/api/v1/matches/${otherUserMatchId}/start`)
+        .set(authHelper.getAuthHeader(otherUser))
+        .expect(200);
+
+      // Regular user should only see their own match
+      const response = await apiRequest
+        .get('/api/v1/matches/live')
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBe(true);
+      expect(response.body.data.length).toBe(1);
+      expect(response.body.data[0].matchId).toBe(testMatchId);
+    });
+
+    it('should validate UUID format for match status endpoint', async () => {
+      const response = await apiRequest
+        .get('/api/v1/matches/invalid-uuid/status')
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(400);
+
+      expect(response.body.error).toContain('Invalid UUID');
+    });
+  });
+
   describe('Input Validation', () => {
     it('should validate UUID format in match ID', async () => {
       const response = await apiRequest
@@ -427,6 +582,105 @@ describe('Match State API Integration', () => {
 
       expect(response.body.error).toBe('Validation Error');
       expect(response.body.details[0].message).toContain('Cancellation reason must be less than 500 characters');
+    });
+
+    it('should validate match start notes length', async () => {
+      const longNotes = 'x'.repeat(501); // Exceeds 500 character limit
+      
+      const response = await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/start`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ notes: longNotes })
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.details[0].message).toContain('Start notes must be less than 500 characters');
+    });
+
+    it('should validate match pause reason length', async () => {
+      // First start the match
+      await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/start`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      const longReason = 'x'.repeat(501); // Exceeds 500 character limit
+      
+      const response = await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/pause`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ reason: longReason })
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.details[0].message).toContain('Pause reason must be less than 500 characters');
+    });
+
+    it('should validate match resume notes length', async () => {
+      // First start and pause the match
+      await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/start`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+      
+      await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/pause`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      const longNotes = 'x'.repeat(501); // Exceeds 500 character limit
+      
+      const response = await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/resume`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ notes: longNotes })
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.details[0].message).toContain('Resume notes must be less than 500 characters');
+    });
+
+    it('should validate match complete final score', async () => {
+      // First start the match
+      await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/start`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      const invalidScore = {
+        finalScore: {
+          home: -1, // Invalid negative score
+          away: 2
+        }
+      };
+      
+      const response = await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/complete`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send(invalidScore)
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.details[0].message).toContain('Home score cannot be negative');
+    });
+
+    it('should validate match complete notes length', async () => {
+      // First start the match
+      await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/start`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      const longNotes = 'x'.repeat(501); // Exceeds 500 character limit
+      
+      const response = await apiRequest
+        .post(`/api/v1/matches/${testMatchId}/complete`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({ notes: longNotes })
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation Error');
+      expect(response.body.details[0].message).toContain('Completion notes must be less than 500 characters');
     });
   });
 

@@ -457,6 +457,46 @@ export interface CancelMatchRequest {
   reason?: string;
 }
 
+// Period management request types
+export interface StartPeriodRequest {
+  matchId: string;
+  periodNumber: number;
+  periodType?: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT';
+}
+
+export interface EndPeriodRequest {
+  matchId: string;
+  periodId: string;
+}
+
+// API response types for match state operations
+export interface MatchStateResponse {
+  matchState: MatchState;
+  currentPeriod?: MatchPeriod;
+  allPeriods: MatchPeriod[];
+}
+
+export interface MatchStatusResponse {
+  matchId: string;
+  status: 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED' | 'POSTPONED';
+  currentPeriod?: number;
+  currentPeriodType?: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT';
+  totalElapsedSeconds: number;
+  currentPeriodElapsedSeconds?: number;
+  isLive: boolean;
+}
+
+export interface LiveMatchesResponse {
+  matches: Array<{
+    matchId: string;
+    homeTeam: string;
+    awayTeam: string;
+    status: 'LIVE' | 'PAUSED';
+    currentPeriod?: number;
+    totalElapsedSeconds: number;
+  }>;
+}
+
 // ============================================================================
 // UTILITY TYPES
 // ============================================================================

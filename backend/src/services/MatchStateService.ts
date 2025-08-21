@@ -21,6 +21,7 @@ const safeTransformMatchState = (prismaMatchState: any): any =>
   prismaMatchState ? transformMatchState(prismaMatchState) : null;
 import type { MatchState } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
+import { cache, CacheKeys, CacheTTL } from '../utils/cache';
 
 export interface MatchStateTransitionOptions {
   reason?: string;
@@ -90,40 +91,76 @@ export class MatchStateService {
         throw error;
       }
 
-      // Get or create match state
-      let matchState = await this.prisma.match_state.findFirst({
-        where: { match_id: matchId, is_deleted: false }
-      });
+      // Perform state transition and initial period creation atomically
+      const updatedState = await this.prisma.$transaction(async (tx) => {
+        // Get or create match state
+        let matchState = await tx.match_state.findFirst({
+          where: { match_id: matchId, is_deleted: false }
+        });
 
-      if (!matchState) {
-        // Create initial match state
-        matchState = await this.prisma.match_state.create({
+        if (!matchState) {
+          // Create initial match state
+          matchState = await tx.match_state.create({
+            data: {
+              match_id: matchId,
+              status: 'SCHEDULED',
+              created_by_user_id: userId
+            }
+          });
+        }
+
+        // Validate state transition
+        if (!this.validateStateTransition(matchState.status, 'LIVE')) {
+          const error = new Error(`Cannot start match: invalid transition from ${matchState.status} to LIVE`) as any;
+          error.statusCode = 400;
+          throw error;
+        }
+
+        // Update match state to LIVE
+        let liveState = await tx.match_state.update({
+          where: { id: matchState.id },
           data: {
-            match_id: matchId,
-            status: 'SCHEDULED',
-            created_by_user_id: userId
+            status: 'LIVE',
+            match_started_at: new Date(),
+            updated_at: new Date()
           }
         });
-      }
 
-      // Validate state transition
-      if (!this.validateStateTransition(matchState.status, 'LIVE')) {
-        const error = new Error(`Cannot start match: invalid transition from ${matchState.status} to LIVE`) as any;
-        error.statusCode = 400;
-        throw error;
-      }
+        // If no periods exist yet for this match, create the first regular period
+        const existingPeriodsCount = await tx.match_periods.count({
+          where: { match_id: matchId, is_deleted: false }
+        });
 
-      // Update match state to live
-      const updatedMatchState = await this.prisma.match_state.update({
-        where: { id: matchState.id },
-        data: {
-          status: 'LIVE',
-          match_started_at: new Date(),
-          updated_at: new Date()
+        if (existingPeriodsCount === 0) {
+          // Create first regular period (period_number = 1)
+          await tx.match_periods.create({
+            data: {
+              match_id: matchId,
+              period_number: 1,
+              period_type: 'REGULAR',
+              started_at: new Date(),
+              created_by_user_id: userId
+            }
+          });
+
+          // Reflect current period on match_state
+          liveState = await tx.match_state.update({
+            where: { id: liveState.id },
+            data: {
+              current_period: 1,
+              current_period_type: 'REGULAR',
+              updated_at: new Date()
+            }
+          });
         }
+
+        return liveState;
       });
 
-      return transformMatchState(updatedMatchState);
+      // Invalidate cache for this match
+      this.invalidateMatchCache(matchId, userId, userRole);
+
+      return transformMatchState(updatedState);
     }, 'MatchState');
   }
 
@@ -132,7 +169,7 @@ export class MatchStateService {
    */
   async pauseMatch(matchId: string, userId: string, userRole: string, _options?: MatchStateTransitionOptions): Promise<MatchState> {
     return withPrismaErrorHandling(async () => {
-      // Validate user permission
+      // Validate user permission first
       const hasPermission = await this.validateUserPermission(matchId, userId, userRole);
       if (!hasPermission) {
         const error = new Error('Access denied: You do not have permission to pause this match') as any;
@@ -140,20 +177,15 @@ export class MatchStateService {
         throw error;
       }
 
-      // Get or create match state
+      // Get existing match state (don't create if it doesn't exist for pause operation)
       let matchState = await this.prisma.match_state.findFirst({
         where: { match_id: matchId, is_deleted: false }
       });
 
       if (!matchState) {
-        // Create initial match state as scheduled
-        matchState = await this.prisma.match_state.create({
-          data: {
-            match_id: matchId,
-            status: 'SCHEDULED',
-            created_by_user_id: userId
-          }
-        });
+        const error = new Error('Match state not found - cannot pause a match that has not been started') as any;
+        error.statusCode = 404;
+        throw error;
       }
 
       // Validate state transition
@@ -172,6 +204,9 @@ export class MatchStateService {
         }
       });
 
+      // Invalidate cache for this match
+      this.invalidateMatchCache(matchId, userId, userRole);
+
       return transformMatchState(updatedMatchState);
     }, 'MatchState');
   }
@@ -181,7 +216,7 @@ export class MatchStateService {
    */
   async resumeMatch(matchId: string, userId: string, userRole: string): Promise<MatchState> {
     return withPrismaErrorHandling(async () => {
-      // Validate user permission
+      // Validate user permission first
       const hasPermission = await this.validateUserPermission(matchId, userId, userRole);
       if (!hasPermission) {
         const error = new Error('Access denied: You do not have permission to resume this match') as any;
@@ -189,37 +224,71 @@ export class MatchStateService {
         throw error;
       }
 
-      // Get or create match state
-      let matchState = await this.prisma.match_state.findFirst({
-        where: { match_id: matchId, is_deleted: false }
-      });
+      const updatedMatchState = await this.prisma.$transaction(async (tx) => {
+        // Get or create match state (resume can start a match if it's scheduled)
+        let matchState = await tx.match_state.findFirst({
+          where: { match_id: matchId, is_deleted: false }
+        });
 
-      if (!matchState) {
-        // Create initial match state as scheduled
-        matchState = await this.prisma.match_state.create({
+        if (!matchState) {
+          // Create initial match state as scheduled (resume can act like start)
+          matchState = await tx.match_state.create({
+            data: {
+              match_id: matchId,
+              status: 'SCHEDULED',
+              created_by_user_id: userId
+            }
+          });
+        }
+
+        // Validate state transition
+        if (!this.validateStateTransition(matchState.status, 'LIVE')) {
+          const error = new Error(`Cannot resume match: invalid transition from ${matchState.status} to LIVE`) as any;
+          error.statusCode = 400;
+          throw error;
+        }
+
+        // Update match state to live
+        let liveState = await tx.match_state.update({
+          where: { id: matchState.id },
           data: {
-            match_id: matchId,
-            status: 'SCHEDULED',
-            created_by_user_id: userId
+            status: 'LIVE',
+            updated_at: new Date()
           }
         });
-      }
 
-      // Validate state transition
-      if (!this.validateStateTransition(matchState.status, 'LIVE')) {
-        const error = new Error(`Cannot resume match: invalid transition from ${matchState.status} to LIVE`) as any;
-        error.statusCode = 400;
-        throw error;
-      }
+        // If there are no periods yet, create the first regular period
+        const periodsCount = await tx.match_periods.count({
+          where: { match_id: matchId, is_deleted: false }
+        });
 
-      // Update match state to live
-      const updatedMatchState = await this.prisma.match_state.update({
-        where: { id: matchState.id },
-        data: {
-          status: 'LIVE',
-          updated_at: new Date()
+        if (periodsCount === 0) {
+          await tx.match_periods.create({
+            data: {
+              match_id: matchId,
+              period_number: 1,
+              period_type: 'REGULAR',
+              started_at: new Date(),
+              created_by_user_id: userId
+            }
+          });
+
+          // Reflect current period on match_state
+          liveState = await tx.match_state.update({
+            where: { id: liveState.id },
+            data: {
+              current_period: 1,
+              current_period_type: 'REGULAR',
+              updated_at: new Date()
+            }
+          });
         }
+
+        return liveState;
       });
+
+      // Invalidate cache for this match
+      this.invalidateMatchCache(matchId, userId, userRole);
 
       return transformMatchState(updatedMatchState);
     }, 'MatchState');
@@ -238,35 +307,67 @@ export class MatchStateService {
         throw error;
       }
 
-      // Get current match state
-      const matchState = await this.prisma.match_state.findFirst({
-        where: { match_id: matchId, is_deleted: false }
-      });
+      const updatedState = await this.prisma.$transaction(async (tx) => {
+        // Get current match state
+        const matchState = await tx.match_state.findFirst({
+          where: { match_id: matchId, is_deleted: false }
+        });
 
-      if (!matchState) {
-        const error = new Error('Match state not found') as any;
-        error.statusCode = 404;
-        throw error;
-      }
-
-      // Validate state transition
-      if (!this.validateStateTransition(matchState.status, 'COMPLETED')) {
-        const error = new Error(`Cannot complete match: invalid transition from ${matchState.status} to COMPLETED`) as any;
-        error.statusCode = 400;
-        throw error;
-      }
-
-      // Update match state to completed
-      const updatedMatchState = await this.prisma.match_state.update({
-        where: { id: matchState.id },
-        data: {
-          status: 'COMPLETED',
-          match_ended_at: new Date(),
-          updated_at: new Date()
+        if (!matchState) {
+          const error = new Error('Match state not found') as any;
+          error.statusCode = 404;
+          throw error;
         }
+
+        // Validate state transition
+        if (!this.validateStateTransition(matchState.status, 'COMPLETED')) {
+          const error = new Error(`Cannot complete match: invalid transition from ${matchState.status} to COMPLETED`) as any;
+          error.statusCode = 400;
+          throw error;
+        }
+
+        // If a period is currently active, end it before completing the match
+        const activePeriod = await tx.match_periods.findFirst({
+          where: {
+            match_id: matchId,
+            started_at: { not: null },
+            ended_at: null,
+            is_deleted: false
+          }
+        });
+
+        if (activePeriod && activePeriod.started_at) {
+          const endTime = new Date();
+          const durationMs = endTime.getTime() - activePeriod.started_at.getTime();
+          const durationSeconds = Math.ceil(durationMs / 1000);
+
+          await tx.match_periods.update({
+            where: { id: activePeriod.id },
+            data: {
+              ended_at: endTime,
+              duration_seconds: durationSeconds,
+              updated_at: new Date()
+            }
+          });
+        }
+
+        // Update match state to completed
+        const updatedMatchState = await tx.match_state.update({
+          where: { id: matchState.id },
+          data: {
+            status: 'COMPLETED',
+            match_ended_at: new Date(),
+            updated_at: new Date()
+          }
+        });
+
+        return updatedMatchState;
       });
 
-      return transformMatchState(updatedMatchState);
+      // Invalidate cache for this match
+      this.invalidateMatchCache(matchId, userId, userRole);
+
+      return transformMatchState(updatedState);
     }, 'MatchState');
   }
 
@@ -275,7 +376,7 @@ export class MatchStateService {
    */
   async cancelMatch(matchId: string, _reason: string, userId: string, userRole: string): Promise<MatchState> {
     return withPrismaErrorHandling(async () => {
-      // Validate user permission
+      // Validate user permission first
       const hasPermission = await this.validateUserPermission(matchId, userId, userRole);
       if (!hasPermission) {
         const error = new Error('Access denied: You do not have permission to cancel this match') as any;
@@ -283,13 +384,13 @@ export class MatchStateService {
         throw error;
       }
 
-      // Get or create match state
+      // Get or create match state (cancel can work on any match)
       let matchState = await this.prisma.match_state.findFirst({
         where: { match_id: matchId, is_deleted: false }
       });
 
       if (!matchState) {
-        // Create initial match state
+        // Create initial match state for cancellation
         matchState = await this.prisma.match_state.create({
           data: {
             match_id: matchId,
@@ -316,6 +417,9 @@ export class MatchStateService {
         }
       });
 
+      // Invalidate cache for this match
+      this.invalidateMatchCache(matchId, userId, userRole);
+
       return transformMatchState(updatedMatchState);
     }, 'MatchState');
   }
@@ -325,6 +429,20 @@ export class MatchStateService {
    */
   async getCurrentState(matchId: string, userId: string, userRole: string): Promise<MatchState | null> {
     return withPrismaErrorHandling(async () => {
+      // Check cache first
+      const cacheKey = CacheKeys.matchState(matchId);
+      const cachedState = cache.get<MatchState>(cacheKey);
+      if (cachedState) {
+        // Still need to validate permission for cached data
+        const hasPermission = await this.validateUserPermission(matchId, userId, userRole);
+        if (!hasPermission) {
+          const error = new Error('Access denied: You do not have permission to view this match state') as any;
+          error.statusCode = 403;
+          throw error;
+        }
+        return cachedState;
+      }
+
       // Validate user permission
       const hasPermission = await this.validateUserPermission(matchId, userId, userRole);
       if (!hasPermission) {
@@ -341,7 +459,14 @@ export class MatchStateService {
         }
       });
 
-      return safeTransformMatchState(matchState);
+      const transformedState = safeTransformMatchState(matchState);
+      
+      // Cache the result if it exists
+      if (transformedState) {
+        cache.set(cacheKey, transformedState, CacheTTL.MATCH_STATE);
+      }
+
+      return transformedState;
     }, 'MatchState');
   }
 
@@ -350,6 +475,20 @@ export class MatchStateService {
    */
   async getMatchStatus(matchId: string, userId: string, userRole: string): Promise<any> {
     return withPrismaErrorHandling(async () => {
+      // Check cache first
+      const cacheKey = CacheKeys.matchStatus(matchId);
+      const cachedStatus = cache.get<any>(cacheKey);
+      if (cachedStatus) {
+        // Still need to validate permission for cached data
+        const hasPermission = await this.validateUserPermission(matchId, userId, userRole);
+        if (!hasPermission) {
+          const error = new Error('Access denied: You do not have permission to view this match status') as any;
+          error.statusCode = 403;
+          throw error;
+        }
+        return cachedStatus;
+      }
+
       // Validate user permission
       const hasPermission = await this.validateUserPermission(matchId, userId, userRole);
       if (!hasPermission) {
@@ -389,7 +528,7 @@ export class MatchStateService {
         return null;
       }
 
-      return {
+      const matchStatus = {
         matchId: match.match_id,
         kickoffTime: match.kickoff_ts,
         competition: match.competition,
@@ -400,6 +539,11 @@ export class MatchStateService {
         opponentScore: match.opponent_score,
         state: match.match_state ? transformMatchState(match.match_state) : null
       };
+
+      // Cache the result
+      cache.set(cacheKey, matchStatus, CacheTTL.MATCH_STATUS);
+
+      return matchStatus;
     }, 'MatchStatus');
   }
 
@@ -408,6 +552,13 @@ export class MatchStateService {
    */
   async getLiveMatches(userId: string, userRole: string): Promise<MatchState[]> {
     return withPrismaErrorHandling(async () => {
+      // Check cache first
+      const cacheKey = CacheKeys.liveMatches(userId, userRole);
+      const cachedMatches = cache.get<MatchState[]>(cacheKey);
+      if (cachedMatches) {
+        return cachedMatches;
+      }
+
       const where: any = {
         is_deleted: false,
         status: 'LIVE'
@@ -435,7 +586,12 @@ export class MatchStateService {
         orderBy: { match_started_at: 'desc' }
       });
 
-      return liveMatchStates.map(transformMatchState);
+      const transformedMatches = liveMatchStates.map(transformMatchState);
+      
+      // Cache the result with shorter TTL for live data
+      cache.set(cacheKey, transformedMatches, CacheTTL.LIVE_MATCHES);
+
+      return transformedMatches;
     }, 'MatchState');
   }
 
@@ -443,6 +599,13 @@ export class MatchStateService {
    * Get all team IDs that belong to a user
    */
   private async getUserTeamIds(userId: string): Promise<string[]> {
+    // Check cache first
+    const cacheKey = CacheKeys.userTeams(userId);
+    const cachedTeamIds = cache.get<string[]>(cacheKey);
+    if (cachedTeamIds) {
+      return cachedTeamIds;
+    }
+
     const teams = await this.prisma.team.findMany({
       where: { 
         created_by_user_id: userId,
@@ -451,6 +614,28 @@ export class MatchStateService {
       select: { id: true }
     });
 
-    return teams.map(team => team.id);
+    const teamIds = teams.map(team => team.id);
+    
+    // Cache team IDs with longer TTL since they don't change frequently
+    cache.set(cacheKey, teamIds, CacheTTL.USER_TEAMS);
+
+    return teamIds;
+  }
+
+  /**
+   * Invalidate cache entries for a match
+   */
+  private invalidateMatchCache(matchId: string, userId: string, userRole: string): void {
+    // Invalidate specific match caches
+    cache.delete(CacheKeys.matchState(matchId));
+    cache.delete(CacheKeys.matchStatus(matchId));
+    
+    // Invalidate live matches cache for this user
+    cache.delete(CacheKeys.liveMatches(userId, userRole));
+    
+    // If admin, also invalidate admin live matches cache
+    if (userRole === 'ADMIN') {
+      cache.delete(CacheKeys.liveMatches('admin', 'ADMIN'));
+    }
   }
 }

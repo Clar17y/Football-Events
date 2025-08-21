@@ -206,3 +206,40 @@ export type PrismaPlayerTeamUpdateInput = {
   deleted_by_user_id?: string | null;
   is_deleted?: boolean;
 };
+
+// Match State input types
+export type PrismaMatchStateCreateInput = {
+  match_id: string;
+  status?: string;
+  current_period?: number | null;
+  current_period_type?: string | null;
+  match_started_at?: Date | null;
+  match_ended_at?: Date | null;
+  total_elapsed_seconds?: number;
+  created_by_user_id: string;
+};
+
+export type PrismaMatchStateUpdateInput = {
+  status?: string;
+  current_period?: number | null;
+  current_period_type?: string | null;
+  match_started_at?: Date | null;
+  match_ended_at?: Date | null;
+  total_elapsed_seconds?: number;
+};
+
+// Match Period input types
+export type PrismaMatchPeriodCreateInput = {
+  match_id: string;
+  period_number: number;
+  period_type?: string;
+  started_at?: Date | null;
+  ended_at?: Date | null;
+  duration_seconds?: number | null;
+  created_by_user_id: string;
+};
+
+export type PrismaMatchPeriodUpdateInput = {
+  ended_at?: Date | null;
+  duration_seconds?: number | null;
+};
