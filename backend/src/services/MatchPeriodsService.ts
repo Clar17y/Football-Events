@@ -235,6 +235,17 @@ export class MatchPeriodsService {
         }
       });
 
+      // Persist the cumulative total on match_state for fast reads
+      const completed = await this.prisma.match_periods.findMany({
+        where: { match_id: matchId, ended_at: { not: null }, is_deleted: false },
+        select: { duration_seconds: true }
+      });
+      const sum = completed.reduce((acc, p) => acc + (p.duration_seconds || 0), 0);
+      await this.prisma.match_state.updateMany({
+        where: { match_id: matchId, is_deleted: false },
+        data: { total_elapsed_seconds: sum, updated_at: new Date() }
+      });
+
       return transformMatchPeriod(updatedPeriod);
     }, 'MatchPeriod');
   }

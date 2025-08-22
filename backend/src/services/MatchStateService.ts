@@ -177,31 +177,49 @@ export class MatchStateService {
         throw error;
       }
 
-      // Get existing match state (don't create if it doesn't exist for pause operation)
-      let matchState = await this.prisma.match_state.findFirst({
-        where: { match_id: matchId, is_deleted: false }
-      });
+      const updatedMatchState = await this.prisma.$transaction(async (tx) => {
+        // Get existing match state (don't create if it doesn't exist for pause operation)
+        const matchState = await tx.match_state.findFirst({
+          where: { match_id: matchId, is_deleted: false }
+        });
 
-      if (!matchState) {
-        const error = new Error('Match state not found - cannot pause a match that has not been started') as any;
-        error.statusCode = 404;
-        throw error;
-      }
-
-      // Validate state transition
-      if (!this.validateStateTransition(matchState.status, 'PAUSED')) {
-        const error = new Error(`Cannot pause match: invalid transition from ${matchState.status} to PAUSED`) as any;
-        error.statusCode = 400;
-        throw error;
-      }
-
-      // Update match state to paused
-      const updatedMatchState = await this.prisma.match_state.update({
-        where: { id: matchState.id },
-        data: {
-          status: 'PAUSED',
-          updated_at: new Date()
+        if (!matchState) {
+          const error = new Error('Match state not found - cannot pause a match that has not been started') as any;
+          error.statusCode = 404;
+          throw error;
         }
+
+        // Validate state transition
+        if (!this.validateStateTransition(matchState.status, 'PAUSED')) {
+          const error = new Error(`Cannot pause match: invalid transition from ${matchState.status} to PAUSED`) as any;
+          error.statusCode = 400;
+          throw error;
+        }
+
+        // Calculate total elapsed: completed periods + current active period up to now
+        const completed = await tx.match_periods.findMany({
+          where: { match_id: matchId, ended_at: { not: null }, is_deleted: false },
+          select: { duration_seconds: true }
+        });
+        const active = await tx.match_periods.findFirst({
+          where: { match_id: matchId, started_at: { not: null }, ended_at: null, is_deleted: false },
+          select: { started_at: true }
+        });
+        let total = completed.reduce((sum, p) => sum + (p.duration_seconds || 0), 0);
+        if (active?.started_at) {
+          const now = Date.now();
+          total += Math.ceil((now - active.started_at.getTime()) / 1000);
+        }
+
+        // Update match state to paused and persist total
+        return await tx.match_state.update({
+          where: { id: matchState.id },
+          data: {
+            status: 'PAUSED',
+            total_elapsed_seconds: total,
+            updated_at: new Date()
+          }
+        });
       });
 
       // Invalidate cache for this match
@@ -351,12 +369,20 @@ export class MatchStateService {
           });
         }
 
-        // Update match state to completed
+        // Recalculate final total from completed periods
+        const completed = await tx.match_periods.findMany({
+          where: { match_id: matchId, ended_at: { not: null }, is_deleted: false },
+          select: { duration_seconds: true }
+        });
+        const finalTotal = completed.reduce((sum, p) => sum + (p.duration_seconds || 0), 0);
+
+        // Update match state to completed and persist total
         const updatedMatchState = await tx.match_state.update({
           where: { id: matchState.id },
           data: {
             status: 'COMPLETED',
             match_ended_at: new Date(),
+            total_elapsed_seconds: finalTotal,
             updated_at: new Date()
           }
         });

@@ -264,9 +264,17 @@ export class MatchService {
         primaryKeyField: 'match_id'
       });
 
-      // Create initial match state record
-      await this.prisma.match_state.create({
-        data: {
+      // Ensure initial match state record exists (handles restored/soft-deleted records)
+      await this.prisma.match_state.upsert({
+        where: { match_id: match.id },
+        update: {
+          status: 'SCHEDULED',
+          is_deleted: false,
+          deleted_at: null,
+          deleted_by_user_id: null,
+          updated_at: new Date(),
+        },
+        create: {
           match_id: match.id,
           status: 'SCHEDULED',
           created_by_user_id: userId
@@ -1083,6 +1091,28 @@ export class MatchService {
       transformer: transformMatch,
       primaryKeyField: 'match_id'
     });
+
+    // Ensure initial match_state exists (SCHEDULED) for the new/restored match
+    try {
+      await this.prisma.match_state.upsert({
+        where: { match_id: match.id },
+        update: {
+          status: 'SCHEDULED',
+          is_deleted: false,
+          deleted_at: null,
+          deleted_by_user_id: null,
+          updated_at: new Date(),
+        },
+        create: {
+          match_id: match.id,
+          status: 'SCHEDULED',
+          created_by_user_id: userId,
+        }
+      });
+    } catch (err) {
+      // Log and proceed; state can be created later by start/resume actions
+      console.warn('createQuickStartMatch: failed to ensure match_state for', match.id, err);
+    }
 
     return match;
   }

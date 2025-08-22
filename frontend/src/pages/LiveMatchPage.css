@@ -1,0 +1,59 @@
+/* Live Match Page styles */
+
+.event-section {
+  margin-top: 12px;
+}
+
+.event-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.event-btn {
+  --border-radius: 10px;
+  --padding-start: 12px;
+  --padding-end: 12px;
+  font-weight: 600;
+}
+
+.event-btn--rose {
+  --background: var(--position-forward, var(--ion-color-rose));
+  --background-hover: var(--position-forward, var(--ion-color-rose));
+  --background-activated: var(--position-forward, var(--ion-color-rose));
+  --color: #fff;
+}
+
+.event-btn--indigo {
+  --background: var(--position-defender, var(--ion-color-indigo));
+  --background-hover: var(--position-defender, var(--ion-color-indigo));
+  --background-activated: var(--position-defender, var(--ion-color-indigo));
+  --color: #fff;
+}
+
+.event-btn--emerald {
+  --background: var(--position-goalkeeper, var(--ion-color-emerald));
+  --background-hover: var(--position-goalkeeper, var(--ion-color-emerald));
+  --background-activated: var(--position-goalkeeper, var(--ion-color-emerald));
+  --color: #fff;
+}
+
+.event-btn--amber {
+  --background: var(--position-midfielder, var(--ion-color-amber));
+  --background-hover: var(--position-midfielder, var(--ion-color-amber));
+  --background-activated: var(--position-midfielder, var(--ion-color-amber));
+  --color: #000;
+}
+
+.team-toggle {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.team-btn {
+  --padding-start: 16px;
+  --padding-end: 16px;
+  font-size: 1rem;
+  font-weight: 700;
+}

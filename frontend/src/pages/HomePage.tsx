@@ -125,11 +125,11 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const navigationCards = [
     {
       title: 'Live Match',
-      subtitle: 'Coming soon',
+      subtitle: 'Manage your match day',
       icon: play,
       color: 'amber',
-      route: '#',
-      description: 'Live match console - being redesigned'
+      route: '/live',
+      description: 'Live match console for event tracking'
     },
     {
       title: 'Matches',
@@ -513,7 +513,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                           </div>
                         </div>
                         <p className="nav-card-description">{card.description}</p>
-                        {(card.title === 'Statistics' || card.title === 'Live Match') && (
+                        {(card.title === 'Statistics') && (
                           <IonChip color="medium" className="coming-soon-chip">
                             <IonLabel>Coming Soon</IonLabel>
                           </IonChip>

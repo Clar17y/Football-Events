@@ -264,29 +264,42 @@ export class TeamService {
       throw error;
     }
 
-    const players = await this.prisma.player.findMany({
+    // Resolve players via player_teams relation (active memberships)
+    const playerTeams = await this.prisma.player_teams.findMany({
       where: {
-        current_team: teamId,
-        is_deleted: false // Exclude soft-deleted players
+        team_id: teamId,
+        is_deleted: false,
+        is_active: true,
+        player: { is_deleted: false },
       },
-      orderBy: [
-        { squad_number: 'asc' },
-        { name: 'asc' }
-      ],
       include: {
-        created_by: {
+        player: {
           select: {
             id: true,
-            email: true,
-            first_name: true,
-            last_name: true
+            name: true,
+            squad_number: true,
+            preferred_pos: true,
           }
         }
-      }
+      },
+      orderBy: [
+        { player: { squad_number: 'asc' } },
+        { player: { name: 'asc' } }
+      ]
     });
 
-    // TODO: Transform players when PlayerService is implemented
-    return players;
+    // Map to a lightweight roster shape used by the frontend
+    const roster = playerTeams
+      .filter(pt => !!pt.player)
+      .map(pt => ({
+        id: pt.player!.id,
+        name: pt.player!.name,
+        squadNumber: pt.player!.squad_number ?? undefined,
+        preferredPosition: pt.player!.preferred_pos ?? undefined,
+        isActive: pt.is_active,
+      }));
+
+    return roster;
   }
 
   async getTeamSquad(teamId: string, userId: string, userRole: string, seasonId?: string): Promise<any | null> {

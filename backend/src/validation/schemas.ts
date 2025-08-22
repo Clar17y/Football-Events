@@ -147,6 +147,7 @@ export const eventCreateSchema = z.object({
     .optional(),
   playerId: z.string()
     .uuid('Player ID must be a valid UUID')
+    .nullable()
     .optional(),
   periodNumber: z.number()
     .int('Period number must be an integer')
@@ -162,8 +163,8 @@ export const eventCreateSchema = z.object({
     .optional(),
   sentiment: z.number()
     .int('Sentiment must be an integer')
-    .min(-2, 'Sentiment must be between -2 and 2')
-    .max(2, 'Sentiment must be between -2 and 2')
+    .min(-3, 'Sentiment must be between -3 and 3')
+    .max(3, 'Sentiment must be between -3 and 3')
     .optional()
 });
 
@@ -173,11 +174,11 @@ export const eventUpdateSchema = z.object({
     'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal'
   ]).optional(),
   teamId: z.string().uuid().optional(),
-  playerId: z.string().uuid().optional(),
+  playerId: z.string().uuid().nullable().optional(),
   periodNumber: z.number().int().min(1).max(4).optional(),
   clockMs: z.number().int().min(0).optional(),
   notes: z.string().max(500).optional(),
-  sentiment: z.number().int().min(-2).max(2).optional()
+  sentiment: z.number().int().min(-3).max(3).optional()
 });
 
 // Pagination and query schemas

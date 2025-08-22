@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import './styles/Highlight.css';
 import { setupIonicReact } from '@ionic/react';
 
@@ -19,6 +19,7 @@ import PlayersPage from './pages/PlayersPage';
 import MatchesPage from './pages/MatchesPage';
 import AwardsPage from './pages/AwardsPage';
 import StatisticsPage from './pages/StatisticsPage';
+import LiveMatchPage from './pages/LiveMatchPage';
 // import MatchConsole from './pages/MatchConsole'; // Removed - will be redesigned
 
 setupIonicReact();
@@ -26,6 +27,35 @@ setupIonicReact();
 const AppRoutes: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const [currentPage, setCurrentPage] = useState('home');
+  const [currentMatchId, setCurrentMatchId] = useState<string | null>(null);
+
+  // On initial load and back/forward, parse URL path to set page state
+  useEffect(() => {
+    const applyLocation = () => {
+      const { pathname } = window.location;
+      // Normalize pathname without trailing slash
+      const path = pathname.replace(/\/$/, '');
+      if (path === '/live' || path === 'live') {
+        setCurrentPage('live');
+        setCurrentMatchId(null);
+        return;
+      }
+      if (path.startsWith('/live/')) {
+        const id = path.split('/')[2];
+        setCurrentMatchId(id || null);
+        setCurrentPage('live');
+        return;
+      }
+      // Map known routes from path
+      const page = path.replace(/^\//, '') || 'home';
+      setCurrentPage(page);
+    };
+
+    applyLocation();
+    const onPop = () => applyLocation();
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   // Parse URL parameters for team filtering
   const parseUrlParams = () => {
@@ -50,6 +80,22 @@ const AppRoutes: React.FC = () => {
       setCurrentPage(page);
       // Update URL without page reload
       window.history.pushState({}, '', `?${params}`);
+    } else if (pageOrUrl.startsWith('/live/') || pageOrUrl.startsWith('live/')) {
+      // Handle live match navigation with ID: /live/:id or live/:id
+      const parts = pageOrUrl.split('/');
+      const id = parts[2] || parts[1];
+      if (id) {
+        setCurrentMatchId(id);
+      }
+      setCurrentPage('live');
+      // Reflect in URL for shareability
+      const path = pageOrUrl.startsWith('/') ? pageOrUrl : `/${pageOrUrl}`;
+      window.history.pushState({}, '', path);
+    } else if (pageOrUrl === '/live' || pageOrUrl === 'live') {
+      // Live without explicit ID
+      setCurrentMatchId(null);
+      setCurrentPage('live');
+      window.history.pushState({}, '', '/live');
     } else {
       // Handle simple page navigation
       setCurrentPage(pageOrUrl);
@@ -78,36 +124,34 @@ const AppRoutes: React.FC = () => {
         return <RegisterPage onNavigate={handleNavigation} />;
       case 'seasons':
         if (!isAuthenticated) {
-          setCurrentPage('login');
           return <LoginPage onNavigate={handleNavigation} />;
         }
         return <SeasonsPage onNavigate={handleNavigation} />;
       case 'teams':
         if (!isAuthenticated) {
-          setCurrentPage('login');
           return <LoginPage onNavigate={handleNavigation} />;
         }
         return <TeamsPage onNavigate={handleNavigation} />;
       case 'players':
         if (!isAuthenticated) {
-          setCurrentPage('login');
           return <LoginPage onNavigate={handleNavigation} />;
         }
         return <PlayersPage onNavigate={handleNavigation} initialTeamFilter={teamFilter} />;
       case 'matches':
         if (!isAuthenticated) {
-          setCurrentPage('login');
           return <LoginPage onNavigate={handleNavigation} />;
         }
         return <MatchesPage onNavigate={handleNavigation} />;
       case 'awards':
         if (!isAuthenticated) {
-          setCurrentPage('login');
           return <LoginPage onNavigate={handleNavigation} />;
         }
         return <AwardsPage onNavigate={handleNavigation} />;
       case 'statistics':
         return <StatisticsPage onNavigate={handleNavigation} />;
+      case 'live':
+        // Pass currentMatchId (may be null to select nearest upcoming)
+        return <LiveMatchPage onNavigate={handleNavigation} matchId={currentMatchId || undefined} />;
       case 'home':
       default:
         return <HomePage onNavigate={handleNavigation} />;

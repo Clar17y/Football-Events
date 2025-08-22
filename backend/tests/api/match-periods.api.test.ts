@@ -91,11 +91,10 @@ describe('Match Periods API Integration', () => {
       .expect(201)
       .then(res => res.body);
 
-    // Start the match to enable period management
-    await request(app)
-      .post(`/api/v1/matches/${testMatch.id}/start`)
-      .set(authHelper.getAuthHeader(testUser))
-      .expect(200);
+    // Note: Do NOT start the match here.
+    // Starting a match now auto-creates the first period.
+    // These tests exercise period endpoints independently, so we leave
+    // the match in SCHEDULED state and start/end periods explicitly.
   });
 
   afterEach(async () => {
