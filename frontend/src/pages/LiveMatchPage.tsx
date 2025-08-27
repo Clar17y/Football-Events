@@ -878,10 +878,10 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     );
   };
 
-  // Load initial timeline when auth + match selected (and update when periods change)
+  // Load/refresh timeline for coach (auth only). Rebuild when periods change to keep system rows in sync.
   useEffect(() => {
     const run = async () => {
-      if (!isAuthenticated || !selectedId) { setEventFeed([]); return; }
+      if (!isAuthenticated || !selectedId) { return; }
       try {
         const list = await eventsApi.getByMatch(selectedId);
         const feed: FeedItem[] = (list as any as MatchEvent[]).map(ev => ({ 
@@ -897,7 +897,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           sentiment: ev.sentiment,
           event: ev 
         }));
-        setEventFeed(sortFeed(feed));
+        // Derive system rows from known periods for coach view
+        const systemFromPeriods: FeedItem[] = periods.flatMap((p: any) => {
+          const out: FeedItem[] = [];
+          if (p.startedAt) out.push({ id: `ps-${p.id}`, kind: 'system', label: periodStartLabel(p), createdAt: new Date(p.startedAt), periodNumber: p.periodNumber, periodType: p.periodType });
+          if (p.endedAt) out.push({ id: `pe-${p.id}`, kind: 'system', label: periodEndLabel(p), createdAt: new Date(p.endedAt), periodNumber: p.periodNumber, periodType: p.periodType });
+          return out;
+        });
+        setEventFeed(sortFeed([...feed, ...systemFromPeriods]));
         // Preload rosters for both teams to resolve player names
         const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
         const promises: Promise<any>[] = [];
