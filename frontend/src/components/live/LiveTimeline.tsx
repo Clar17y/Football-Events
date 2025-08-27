@@ -36,18 +36,35 @@ export interface LiveTimelineProps {
   emptyMessage?: string;
   showDelete?: boolean;
   onDelete?: (item: FeedItem) => void;
+  durationMinutes?: number;
+  periodFormat?: 'quarter' | 'half' | 'whole' | string;
 }
 
-const minuteLabel = (ev: any): string => {
-  if (typeof ev?.clockMs === 'number') {
-    const mm = Math.floor(ev.clockMs / 60000);
-    return `${mm}'`;
+const minuteLabel = (ev: any, durationMinutes?: number, periodFormat?: string): string => {
+  // If we don't have a clock value, fall back to time string
+  if (typeof ev?.clockMs !== 'number') {
+    const d = ev?.createdAt ? new Date(ev.createdAt) : new Date();
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
-  const d = ev?.createdAt ? new Date(ev.createdAt) : new Date();
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dur = Math.max(1, Number(durationMinutes || 0));
+  const fmt = String(periodFormat || '').toLowerCase();
+  const regCount = fmt.includes('half') ? 2 : fmt.includes('quarter') ? 4 : 1;
+  const regPerMs = Math.round((dur * 60000) / regCount);
+  let base = 0;
+  if (ev?.periodType === 'REGULAR') {
+    base = (Math.max(1, Number(ev.periodNumber || 1)) - 1) * regPerMs;
+  } else if (ev?.periodType === 'EXTRA_TIME') {
+    const etPerMs = 15 * 60000; // default per ET period
+    base = (dur * 60000) + (Math.max(1, Number(ev.periodNumber || 1)) - 1) * etPerMs;
+  } else if (ev?.periodType === 'PENALTY_SHOOTOUT') {
+    base = (dur * 60000) + 2 * 15 * 60000; // regulation + ET1+ET2 (approx)
+  }
+  const totalMs = base + (ev.clockMs || 0);
+  const mm = Math.floor(totalMs / 60000);
+  return `${mm}'`;
 };
 
-const LiveTimeline: React.FC<LiveTimelineProps> = ({ feed, currentMatch, playerNameMap = {}, emptyMessage, showDelete, onDelete }) => {
+const LiveTimeline: React.FC<LiveTimelineProps> = ({ feed, currentMatch, playerNameMap = {}, emptyMessage, showDelete, onDelete, durationMinutes, periodFormat }) => {
   if (!feed || feed.length === 0) {
     return <IonText color="medium">{emptyMessage || 'Timeline will be populated as events and match updates occur.'}</IonText>;
   }
@@ -69,11 +86,11 @@ const LiveTimeline: React.FC<LiveTimelineProps> = ({ feed, currentMatch, playerN
     <div>
       {orderedPeriods.map((pn) => (
           <div key={pn} style={{ marginBottom: 8 }}>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 4 }}>{groupTitle(pn)}</div>
+            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 4 }}>{groupTitle(pn, periodFormat)}</div>
           {groups.get(pn)!.map((item) => (
             <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--ion-color-step-150, rgba(0,0,0,.06))' }}>
               {item.kind === 'event' && item.event ? (
-                <IonChip style={{ height: 20 }} color={chipColor(item.event.kind)}><IonLabel style={{ fontSize: 12 }}>{minuteLabel(item.event)}</IonLabel></IonChip>
+                <IonChip style={{ height: 20 }} color={chipColor(item.event.kind)}><IonLabel style={{ fontSize: 12 }}>{minuteLabel(item.event, durationMinutes, periodFormat)}</IonLabel></IonChip>
               ) : (
                 <IonChip style={{ height: 20 }} color="tertiary"><IonLabel style={{ fontSize: 12 }}>—</IonLabel></IonChip>
               )}
@@ -145,10 +162,13 @@ function chipColor(kind?: string): any {
 }
 
 export default LiveTimeline;
-function groupTitle(key: string): string {
+function groupTitle(key: string, periodFormat?: string): string {
   const [type, numStr] = key.split(':');
   const n = parseInt(numStr || '1', 10);
   if (type === 'EXTRA_TIME') return `Extra Time ${n}`;
   if (type === 'PENALTY_SHOOTOUT') return 'Penalty Shootout';
-  return `Period ${n}`;
+  const fmt = String(periodFormat || '').toLowerCase();
+  if (fmt.includes('half')) return n === 1 ? '1st Half' : n === 2 ? '2nd Half' : `Half ${n}`;
+  if (fmt.includes('quarter')) return n === 1 ? '1st Quarter' : n === 2 ? '2nd Quarter' : n === 3 ? '3rd Quarter' : n === 4 ? '4th Quarter' : `Quarter ${n}`;
+  return `Regulation`;
 }

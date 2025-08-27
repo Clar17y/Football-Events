@@ -46,6 +46,7 @@ export async function buildSnapshot(matchId: string) {
       match_id: true,
       kickoff_ts: true,
       period_format: true,
+      duration_mins: true,
       competition: true,
       venue: true,
       homeTeam: { select: { id: true, name: true } },
@@ -111,6 +112,7 @@ export async function buildSnapshot(matchId: string) {
     competition: match?.competition || null,
     venue: match?.venue || null,
     periodFormat: match?.period_format || null,
+    durationMinutes: match?.duration_mins ?? null,
   };
 
   return {

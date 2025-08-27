@@ -989,19 +989,21 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             </IonCol>
           </IonRow>
 
-          {/* Period clock (shown for both coach and viewer) */}
-          <IonRow>
-            <IonCol size="12">
-              <IonCard>
-                <IonCardContent>
-                  <PeriodClock timerMs={timerMs} periodLabel={getPeriodLabel()} stoppageLabel={getStoppageMmSs()} />
-                </IonCardContent>
-              </IonCard>
-            </IonCol>
-          </IonRow>
+          {/* Period clock (hide when completed) */}
+          {matchState?.status !== 'COMPLETED' && (
+            <IonRow>
+              <IonCol size="12">
+                <IonCard>
+                  <IonCardContent>
+                    <PeriodClock timerMs={timerMs} periodLabel={getPeriodLabel()} stoppageLabel={getStoppageMmSs()} />
+                  </IonCardContent>
+                </IonCard>
+              </IonCol>
+            </IonRow>
+          )}
 
-          {/* Controls area (enabled only for authenticated users and not in viewer mode) */}
-          {!viewerToken && (
+          {/* Controls area (enabled only for authenticated users and not in viewer mode, hidden when completed) */}
+          {!viewerToken && matchState?.status !== 'COMPLETED' && (
           <IonRow>
             <IonCol size="12">
               <IonCard>
@@ -1060,8 +1062,8 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           </IonRow>
           )}
         </IonGrid>
-        {/* Events Quick Add */}
-        {currentMatch && !viewerToken && (
+        {/* Events Quick Add (hidden when completed) */}
+        {currentMatch && !viewerToken && matchState?.status !== 'COMPLETED' && (
           <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {/* Team selector */}
             <div className="team-toggle">
@@ -1132,6 +1134,17 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                 Events are available only during live play.
               </IonText>
             )}
+          </div>
+        )}
+
+        {/* Completed note */}
+        {matchState?.status === 'COMPLETED' && (
+          <div style={{ padding: '0 16px 12px' }}>
+            <IonCard>
+              <IonCardContent>
+                <IonText color="medium">Match completed.</IonText>
+              </IonCardContent>
+            </IonCard>
           </div>
         )}
 
@@ -1235,6 +1248,8 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                       }
                     })();
                   }}
+                  durationMinutes={currentMatch?.durationMinutes as any}
+                  periodFormat={(currentMatch?.periodFormat as any) || (viewerSummary as any)?.periodFormat}
                 />
               ) : (
                 <IonText color="medium">Sign in to view live timeline. Public feed coming soon.</IonText>
