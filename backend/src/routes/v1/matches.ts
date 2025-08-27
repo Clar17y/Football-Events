@@ -5,6 +5,11 @@ import { MatchPeriodsService } from '../../services/MatchPeriodsService';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
 import { authenticateToken } from '../../middleware/auth';
+import { authenticateViewerOrUser } from '../../middleware/viewerAuth';
+import { requireMatchCreator } from '../../middleware/matchCreator';
+import { signViewerToken } from '../../utils/viewerTokens';
+import { generateShortCode } from '../../utils/code';
+import { sseHub } from '../../utils/sse';
 import { 
   matchCreateSchema, 
   matchUpdateSchema, 
@@ -648,3 +653,158 @@ router.get('/:id/periods', authenticateToken, validateUUID(), asyncHandler(async
 
 
 export default router;
+// ===== Viewer Sharing & Public Read/SSE Endpoints =====
+
+// POST /api/v1/matches/:id/share - Mint viewer token (auth required)
+router.post('/:id/share', authenticateToken, validateUUID(), requireMatchCreator('id'), asyncHandler(async (req, res) => {
+  const { expiresInMinutes } = req.body || {};
+  const minutes = typeof expiresInMinutes === 'number' ? expiresInMinutes : 480;
+  const matchId = req.params['id']!;
+  const { token, expiresAt } = signViewerToken(matchId, minutes);
+
+  // Create or mint a short code
+  const { PrismaClient } = await import('@prisma/client');
+  const prisma = new PrismaClient();
+  const expiresAtDate = new Date(expiresAt);
+  let code = '';
+  for (let i = 0; i < 5; i++) {
+    code = generateShortCode(10);
+    const exists = await prisma.viewer_links.findFirst({ where: { code } });
+    if (!exists) break;
+  }
+  if (!code) {
+    // Fallback if collision persists
+    code = `${generateShortCode(6)}${Date.now().toString(36).slice(-4)}`;
+  }
+  await prisma.viewer_links.create({
+    data: {
+      code,
+      match_id: matchId,
+      expires_at: expiresAtDate,
+      created_by_user_id: req.user!.id,
+    }
+  });
+
+  // Build absolute frontend URL for sharing
+  const envBase = process.env.FRONTEND_URL && String(process.env.FRONTEND_URL);
+  const origin = req.get('origin');
+  const hostBase = `${req.protocol}://${req.get('host')}`; // final fallback (API host)
+  const base = (envBase || origin || hostBase).replace(/\/$/, '');
+  const shareUrl = `${base}/live/${matchId}?code=${code}`;
+
+  return res.status(200).json({ viewer_token: token, expiresAt, code, shareUrl });
+}));
+
+// DELETE /api/v1/matches/:id/share - Revoke viewer link(s) for this match (creator only)
+router.delete('/:id/share', authenticateToken, validateUUID(), requireMatchCreator('id'), asyncHandler(async (req, res) => {
+  const { code } = req.query as { code?: string };
+  const matchId = req.params['id']!;
+  const { PrismaClient } = await import('@prisma/client');
+  const prisma = new PrismaClient();
+
+  const where: any = {
+    match_id: matchId,
+    is_deleted: false,
+  };
+  if (code) where.code = code;
+
+  const now = new Date();
+  const result = await prisma.viewer_links.updateMany({
+    where,
+    data: {
+      is_deleted: true,
+      deleted_at: now,
+      deleted_by_user_id: req.user!.id,
+      updated_at: now,
+    }
+  });
+
+  return res.status(200).json({ success: true, revoked: result.count });
+}));
+
+// GET /api/v1/matches/:id/share - List active (non-deleted, non-expired) viewer links (creator only)
+router.get('/:id/share', authenticateToken, validateUUID(), requireMatchCreator('id'), asyncHandler(async (req, res) => {
+  const matchId = req.params['id']!;
+  const { PrismaClient } = await import('@prisma/client');
+  const prisma = new PrismaClient();
+
+  const now = new Date();
+  const rows = await prisma.viewer_links.findMany({
+    where: {
+      match_id: matchId,
+      is_deleted: false,
+      expires_at: { gt: now },
+    },
+    select: {
+      code: true,
+      expires_at: true,
+      created_at: true,
+    },
+    orderBy: { created_at: 'desc' }
+  });
+
+  console.log(`[Viewer Links] Retrieved ${rows.length} active links for match ${matchId}`);
+
+  return res.status(200).json({
+    success: true,
+    data: rows.map(r => ({ code: r.code, expiresAt: r.expires_at.toISOString() }))
+  });
+}));
+// (no-op helper removed; shareUrl now built as absolute using FRONTEND_URL/origin)
+
+// GET /api/v1/matches/:id/summary?view= - Public read with viewer token
+router.get('/:id/summary', authenticateViewerOrUser('id'), validateUUID(), requireMatchCreator('id'), asyncHandler(async (req, res) => {
+  const { buildSnapshot } = sseHub;
+  const snapshot = await buildSnapshot(req.params['id']!);
+  return res.status(200).json(snapshot.summary);
+}));
+
+// GET /api/v1/matches/:id/periods-public?view=
+router.get('/:id/periods-public', authenticateViewerOrUser('id'), validateUUID(), requireMatchCreator('id'), asyncHandler(async (req, res) => {
+  const { buildSnapshot } = sseHub;
+  const snapshot = await buildSnapshot(req.params['id']!);
+  return res.status(200).json({ periods: snapshot.periods });
+}));
+
+// GET /api/v1/matches/:id/timeline-public?view=
+router.get('/:id/timeline-public', authenticateViewerOrUser('id'), validateUUID(), requireMatchCreator('id'), asyncHandler(async (req, res) => {
+  const { buildSnapshot } = sseHub;
+  const { summary, periods, events } = await buildSnapshot(req.params['id']!);
+
+  // Merge periods and events into simple timeline
+  const markers = periods.flatMap((p: any) => {
+    const items: any[] = [];
+    if (p.startedAt) items.push({ type: 'period_started', period: p, at: p.startedAt });
+    if (p.endedAt) items.push({ type: 'period_ended', period: p, at: p.endedAt });
+    return items;
+  });
+  const gameplay = events.map((e: any) => ({ type: 'event', event: e, at: e.createdAt }));
+  const timeline = [...markers, ...gameplay].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  return res.status(200).json({ summary, timeline });
+}));
+
+// GET /api/v1/matches/:id/stream?view=
+router.get('/:id/stream', authenticateViewerOrUser('id'), validateUUID(), requireMatchCreator('id'), asyncHandler(async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  // @ts-ignore - flushHeaders may not exist depending on server
+  res.flushHeaders?.();
+  // Write a leading comment to establish the stream promptly
+  res.write(`: connected\n\n`);
+
+  const matchId = req.params['id']!;
+  sseHub.subscribe(matchId, res);
+  console.log(`[SSE] Client connected for match ${matchId} (total: ?)`);
+
+  // Initial snapshot
+  const payload = await sseHub.buildSnapshot(matchId);
+  sseHub.send(res, 'snapshot', payload);
+
+  req.on('close', () => {
+    sseHub.unsubscribe(matchId, res);
+    try { res.end(); } catch {}
+    console.log(`[SSE] Client disconnected for match ${matchId}`);
+  });
+}));

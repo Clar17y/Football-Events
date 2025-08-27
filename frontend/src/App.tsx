@@ -97,10 +97,10 @@ const AppRoutes: React.FC = () => {
       setCurrentPage('live');
       window.history.pushState({}, '', '/live');
     } else {
-      // Handle simple page navigation
+      // Handle simple page navigation and reflect in URL path
       setCurrentPage(pageOrUrl);
-      // Clear URL parameters
-      window.history.pushState({}, '', window.location.pathname);
+      const newPath = pageOrUrl === 'home' ? '/' : `/${pageOrUrl}`;
+      window.history.pushState({}, '', newPath);
     }
   };
 
@@ -116,7 +116,7 @@ const AppRoutes: React.FC = () => {
   // Simple page navigation without router
   const renderCurrentPage = () => {
     const teamFilter = parseUrlParams();
-    
+
     switch (currentPage) {
       case 'login':
         return <LoginPage onNavigate={handleNavigation} />;

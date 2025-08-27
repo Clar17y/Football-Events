@@ -4,6 +4,8 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { validateRequest } from '../../middleware/validation';
 import { validateUUID } from '../../middleware/uuidValidation';
 import { authenticateToken } from '../../middleware/auth';
+import { authenticateViewerOrUser } from '../../middleware/viewerAuth';
+import { requireMatchCreator } from '../../middleware/matchCreator';
 import { 
   eventCreateSchema, 
   eventUpdateSchema, 
@@ -82,7 +84,73 @@ router.delete('/:id', authenticateToken, validateUUID(), asyncHandler(async (req
 }));
 
 // GET /api/v1/events/match/:matchId - Get events for specific match
-router.get('/match/:matchId', authenticateToken, validateUUID('matchId'), asyncHandler(async (req, res) => {
+router.get('/match/:matchId', authenticateViewerOrUser('matchId'), validateUUID('matchId'), requireMatchCreator('matchId'), asyncHandler(async (req, res) => {
+  // If viewer token present, return sanitized events without requiring user context
+  if (req.viewer?.matchId) {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+    const matchId = req.params['matchId']!;
+    const match = await prisma.match.findUnique({
+      where: { match_id: matchId },
+      select: {
+        home_team_id: true,
+        away_team_id: true,
+        homeTeam: { select: { name: true } },
+        awayTeam: { select: { name: true } },
+      }
+    });
+    const raw = await prisma.event.findMany({
+      where: { match_id: matchId, is_deleted: false },
+      orderBy: [{ clock_ms: 'asc' }, { created_at: 'asc' }],
+      select: {
+        id: true,
+        kind: true,
+        team_id: true,
+        player_id: true,
+        period_number: true,
+        clock_ms: true,
+        sentiment: true,
+        created_at: true,
+      }
+    });
+    const periods = await prisma.match_periods.findMany({
+      where: { match_id: matchId, is_deleted: false },
+      select: { period_type: true, started_at: true, ended_at: true }
+    });
+    const uniquePlayerIds = Array.from(new Set(raw.map(e => e.player_id).filter(Boolean))) as string[];
+    const players = uniquePlayerIds.length > 0 ? await prisma.player.findMany({ where: { id: { in: uniquePlayerIds } }, select: { id: true, name: true } }) : [];
+    const playerMap = new Map(players.map(p => [p.id, p.name]));
+    const events = raw.map(e => {
+      // infer periodType by timestamps
+      let periodType: string | undefined = undefined;
+      const t = e.created_at ? e.created_at.getTime() : undefined;
+      if (t != null) {
+        for (const p of periods) {
+          const start = p.started_at ? p.started_at.getTime() : undefined;
+          const end = p.ended_at ? p.ended_at.getTime() : undefined;
+          if (start != null && t >= start && (end == null || t <= end)) {
+            periodType = p.period_type as any;
+            break;
+          }
+        }
+      }
+      return ({
+        id: e.id,
+        kind: e.kind,
+        teamId: e.team_id,
+        teamName: e.team_id ? (e.team_id === match?.home_team_id ? match?.homeTeam?.name : e.team_id === match?.away_team_id ? match?.awayTeam?.name : undefined) : undefined,
+        playerId: e.player_id,
+        playerName: e.player_id ? (playerMap.get(e.player_id) || undefined) : undefined,
+        periodNumber: e.period_number,
+        periodType,
+        clockMs: e.clock_ms ?? 0,
+        sentiment: e.sentiment ?? 0,
+        createdAt: e.created_at?.toISOString?.() || null,
+      });
+    });
+    return res.json({ events });
+  }
+  // Authenticated user path
   const events = await eventService.getEventsByMatch(req.params['matchId']!, req.user!.id, req.user!.role);
   return res.json(events);
 }));

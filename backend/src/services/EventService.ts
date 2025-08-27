@@ -230,7 +230,54 @@ export class EventService {
       }
     });
 
-    return transformEvent(eventWithIncludes!);
+    const transformed = transformEvent(eventWithIncludes!);
+    // Broadcast to SSE subscribers (include teamName and playerName)
+    try {
+      const { sseHub } = await import('../utils/sse');
+      // Resolve teamName from match teams
+      const matchInfo = await this.prisma.match.findUnique({
+        where: { match_id: data.matchId },
+        select: {
+          home_team_id: true,
+          away_team_id: true,
+          homeTeam: { select: { name: true } },
+          awayTeam: { select: { name: true } },
+        }
+      });
+      let teamName: string | undefined = undefined;
+      if (matchInfo && transformed.teamId) {
+        teamName = transformed.teamId === matchInfo.home_team_id ? matchInfo.homeTeam?.name : transformed.teamId === matchInfo.away_team_id ? matchInfo.awayTeam?.name : undefined;
+      }
+      // Resolve playerName if present
+      let playerName: string | undefined = undefined;
+      if (transformed.playerId) {
+        const player = await this.prisma.player.findUnique({ where: { id: transformed.playerId }, select: { name: true } });
+        playerName = player?.name;
+      }
+      // Determine periodType from active period if available
+      let periodType: string | undefined = undefined;
+      try {
+        const active = await this.prisma.match_periods.findFirst({
+          where: { match_id: data.matchId, started_at: { not: null }, ended_at: null, is_deleted: false },
+          select: { period_type: true }
+        });
+        periodType = active?.period_type;
+      } catch {}
+      sseHub.broadcast(data.matchId, 'event_created', { event: {
+        id: transformed.id,
+        kind: transformed.kind,
+        teamId: transformed.teamId || null,
+        teamName,
+        playerId: transformed.playerId || null,
+        playerName,
+        periodType,
+        periodNumber: transformed.periodNumber || null,
+        clockMs: transformed.clockMs || 0,
+        sentiment: transformed.sentiment || 0,
+        createdAt: transformed.createdAt,
+      }});
+    } catch {}
+    return transformed;
   }
 
   async updateEvent(id: string, data: EventUpdateRequest, userId: string, userRole: string): Promise<Event | null> {
@@ -322,7 +369,7 @@ export class EventService {
       }
 
       // Soft delete the event
-      await this.prisma.event.update({
+      const deleted = await this.prisma.event.update({
         where: { id },
         data: {
           is_deleted: true,
@@ -330,7 +377,11 @@ export class EventService {
           deleted_by_user_id: userId
         }
       });
-
+      // Fire SSE deletion
+      try {
+        const { sseHub } = await import('../utils/sse');
+        sseHub.broadcast(deleted.match_id, 'event_deleted', { id });
+      } catch {}
       return true;
     } catch (error: any) {
       if (error.code === 'P2025') {

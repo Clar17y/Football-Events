@@ -169,6 +169,16 @@ export class MatchPeriodsService {
         });
       }
 
+      // Broadcast SSE
+      try {
+        const { sseHub } = await import('../utils/sse');
+        sseHub.broadcast(matchId, 'period_started', { period: {
+          id: (newPeriod as any).id,
+          periodNumber: (newPeriod as any).periodNumber,
+          periodType: (newPeriod as any).periodType,
+          startedAt: (newPeriod as any).startedAt,
+        }});
+      } catch {}
       return newPeriod;
     }, 'MatchPeriod');
   }
@@ -246,7 +256,19 @@ export class MatchPeriodsService {
         data: { total_elapsed_seconds: sum, updated_at: new Date() }
       });
 
-      return transformMatchPeriod(updatedPeriod);
+      const transformed = transformMatchPeriod(updatedPeriod);
+      // Broadcast SSE
+      try {
+        const { sseHub } = await import('../utils/sse');
+        sseHub.broadcast(matchId, 'period_ended', { period: {
+          id: transformed.id,
+          periodNumber: transformed.periodNumber,
+          periodType: transformed.periodType,
+          endedAt: transformed.endedAt,
+          durationSeconds: transformed.durationSeconds,
+        }});
+      } catch {}
+      return transformed;
     }, 'MatchPeriod');
   }
 

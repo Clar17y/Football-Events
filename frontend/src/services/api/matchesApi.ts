@@ -173,6 +173,20 @@ export const matchesApi = {
     const response = await apiClient.post<MatchPeriod>(`/matches/${id}/periods/${periodId}/end`, payload || {});
     return response.data as unknown as MatchPeriod;
   },
+  // === Viewer Sharing ===
+  async shareViewerToken(id: string, expiresInMinutes: number = 480): Promise<{ viewer_token: string; expiresAt: string; code?: string; shareUrl?: string }> {
+    const response = await apiClient.post<{ viewer_token: string; expiresAt: string; code?: string; shareUrl?: string }>(`/matches/${id}/share`, { expiresInMinutes });
+    return response.data as unknown as { viewer_token: string; expiresAt: string; code?: string; shareUrl?: string };
+  },
+  async revokeViewerToken(id: string, code?: string): Promise<{ success: true; revoked: number }> {
+    const params = code ? `?code=${encodeURIComponent(code)}` : '';
+    const response = await apiClient.delete<{ success: true; revoked: number }>(`/matches/${id}/share${params}`);
+    return response.data as unknown as { success: true; revoked: number };
+  },
+  async getActiveViewerLinks(id: string): Promise<{ code: string; expiresAt: string }[]> {
+    const response = await apiClient.get<{ success: true; data: { code: string; expiresAt: string }[] }>(`/matches/${id}/share`);
+    return response.data as any || [];
+  },
 };
 
 export default matchesApi;

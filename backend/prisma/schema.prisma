@@ -45,6 +45,8 @@ model User {
   match_states_deleted match_state[]  @relation("MatchStateDeletedBy")
   match_periods_created match_periods[] @relation("MatchPeriodCreatedBy")
   match_periods_deleted match_periods[] @relation("MatchPeriodDeletedBy")
+  viewer_links_created viewer_links[] @relation("ViewerLinkCreatedBy")
+  viewer_links_deleted viewer_links[] @relation("ViewerLinkDeletedBy")
 
   @@map("users")
   @@schema("grassroots")
@@ -124,6 +126,7 @@ model Match {
   match_awards       match_awards[]
   match_state        match_state?
   match_periods      match_periods[]
+  viewer_links       viewer_links[]
   awayTeam           Team           @relation("AwayTeam", fields: [away_team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   created_by         User           @relation("MatchCreatedBy", fields: [created_by_user_id], references: [id])
   deleted_by         User?          @relation("MatchDeletedBy", fields: [deleted_by_user_id], references: [id])
@@ -295,6 +298,7 @@ model match_state {
   match_started_at      DateTime?   @db.Timestamptz(6)
   match_ended_at        DateTime?   @db.Timestamptz(6)
   total_elapsed_seconds Int         @default(0)
+  active_since          DateTime?   @db.Timestamptz(6)
   created_at            DateTime    @default(now()) @db.Timestamptz(6)
   updated_at            DateTime?   @db.Timestamptz(6)
   created_by_user_id    String      @db.Uuid
@@ -331,6 +335,26 @@ model match_periods {
 
   @@unique([match_id, period_number, period_type])
   @@map("match_periods")
+  @@schema("grassroots")
+}
+
+model viewer_links {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code               String    @unique
+  match_id           String    @db.Uuid
+  expires_at         DateTime  @db.Timestamptz(6)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime? @db.Timestamptz(6)
+  created_by_user_id String    @db.Uuid
+  deleted_at         DateTime?
+  deleted_by_user_id String?   @db.Uuid
+  is_deleted         Boolean   @default(false)
+
+  match              Match     @relation(fields: [match_id], references: [match_id], onDelete: Cascade)
+  created_by         User      @relation("ViewerLinkCreatedBy", fields: [created_by_user_id], references: [id])
+  deleted_by         User?     @relation("ViewerLinkDeletedBy", fields: [deleted_by_user_id], references: [id])
+
+  @@map("viewer_links")
   @@schema("grassroots")
 }
 

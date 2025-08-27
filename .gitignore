@@ -83,6 +83,11 @@ tools/
 vc.exe
 
 # Temporary development files
+backend/scripts/*.js
+frontend/scripts/*.js
+shared/tests/*.js
+*.d.ts
+*.map
 tmp_code_*
 tmp_rovodev_*
 

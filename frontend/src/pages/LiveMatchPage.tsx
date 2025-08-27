@@ -35,8 +35,12 @@ import {
   handLeftOutline,
 } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader';
+import LiveHeader from '../components/live/LiveHeader';
+import PeriodClock from '../components/live/PeriodClock';
+import LiveTimeline from '../components/live/LiveTimeline';
 import './LiveMatchPage.css';
 import matchesApi from '../services/api/matchesApi';
+import viewerApi from '../services/api/viewerApi';
 import eventsApi from '../services/api/eventsApi';
 import teamsApi from '../services/api/teamsApi';
 import { useAuth } from '../contexts/AuthContext';
@@ -54,6 +58,13 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | undefined>(matchId);
   const { isAuthenticated } = useAuth();
+  const [viewerToken, setViewerToken] = useState<string | null>(null);
+  const [viewerParam, setViewerParam] = useState<'view' | 'code' | null>(null);
+  const esRef = useRef<EventSource | null>(null);
+  const [sseConnected, setSseConnected] = useState(false);
+  const prevStatusRef = useRef<string | null>(null);
+  const [viewerExpired, setViewerExpired] = useState(false);
+  const retryRef = useRef<number>(0);
 
   // Live state
   const [matchState, setMatchState] = useState<MatchState | null>(null);
@@ -61,11 +72,22 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const [timerMs, setTimerMs] = useState<number>(0);
   const timerRef = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
+  const [viewerTeams, setViewerTeams] = useState<{ homeId?: string; awayId?: string; homeName?: string; awayName?: string } | null>(null);
+  const [viewerSummary, setViewerSummary] = useState<{ competition?: string | null; venue?: string | null } | null>(null);
+  const [activeShareCode, setActiveShareCode] = useState<string | null>(null);
 
-  // Load upcoming matches for switcher
+  // Load upcoming matches for switcher (skip in viewer mode)
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
+      // Skip fetching upcoming when using viewer token (public)
+      const params = new URLSearchParams(window.location.search);
+      const hasViewer = params.has('view') || params.has('code');
+      if (hasViewer) {
+        setLoading(false);
+        setError(null);
+        return;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -86,11 +108,38 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     return () => { cancelled = true; };
   }, []);
 
+  // Query active viewer link on load (for creator UI state)
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!isAuthenticated || !selectedId) return;
+      try {
+        const links = await matchesApi.getActiveViewerLinks(selectedId);
+        console.log('Active viewer links', links);
+        if (cancelled) return;
+        setActiveShareCode(links.length > 0 ? links[0].code : null);
+      } catch {
+        // ignore
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [isAuthenticated, selectedId]);
+
+  // Read viewer token or code from URL (if present)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get('view');
+    const c = params.get('code');
+    if (t) { setViewerToken(t); setViewerParam('view'); }
+    else if (c) { setViewerToken(c); setViewerParam('code'); }
+  }, []);
+
   // Load server match state + periods when a match is selected (authorized only)
   useEffect(() => {
     let cancelled = false;
     const fetchLive = async () => {
-      if (!isAuthenticated || !selectedId) {
+      if (!isAuthenticated || !selectedId || viewerToken) {
         setMatchState(null);
         setPeriods([]);
         return;
@@ -121,7 +170,161 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     };
     fetchLive();
     return () => { cancelled = true; };
-  }, [isAuthenticated, selectedId]);
+  }, [isAuthenticated, selectedId, viewerToken]);
+
+  // Viewer mode: load snapshot and open SSE
+  useEffect(() => {
+    let cancelled = false;
+    const openSSE = () => {
+      if (!selectedId || !viewerToken || !viewerParam) return;
+      if (viewerExpired) return;
+      try {
+        esRef.current?.close();
+        const es = viewerApi.openEventSource(selectedId, { name: viewerParam, value: viewerToken });
+        esRef.current = es;
+        es.onopen = () => { setSseConnected(true); retryRef.current = 0; };
+        es.onerror = async () => {
+          setSseConnected(false);
+          es.close();
+          // Check token validity once; if expired, stop retrying and inform user
+          const check = await viewerApi.checkToken(selectedId, { name: viewerParam!, value: viewerToken! });
+          if (!check.ok && (check.status === 401 || check.status === 403)) {
+            setViewerExpired(true);
+            try { (window as any).__toastApi?.current?.showError?.('Viewer link expired. Please ask the coach for a new link.'); } catch {}
+            return; // do not retry
+          }
+          // Exponential backoff retry
+          const attempt = (retryRef.current || 0) + 1;
+          retryRef.current = attempt;
+          const delay = Math.min(30000, Math.pow(2, Math.min(attempt, 6)) * 1000); // 2s,4s,8s,... up to 30s
+          setTimeout(openSSE, delay);
+        };
+        es.addEventListener('snapshot', (ev: MessageEvent) => {
+          try {
+            const data = JSON.parse(ev.data);
+            if (!cancelled) {
+              const s = data.summary as any;
+              setPeriods(data.periods || []);
+              setViewerTeams({ homeId: s.homeTeam?.id, awayId: s.awayTeam?.id, homeName: s.homeTeam?.name, awayName: s.awayTeam?.name });
+              setViewerSummary({ competition: s.competition, venue: s.venue, periodFormat: s.periodFormat });
+              setMatchState({
+                id: 'viewer',
+                matchId: s.matchId,
+                status: s.status,
+                currentPeriod: s.currentPeriod || undefined,
+                currentPeriodType: s.currentPeriodType || undefined,
+                totalElapsedSeconds: s.totalElapsedSeconds || 0,
+                matchStartedAt: undefined,
+                matchEndedAt: undefined,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                created_by_user_id: '',
+                is_deleted: false,
+              } as any);
+              // Build initial feed
+              const feedEvents: FeedItem[] = (data.events || []).map((ev: any) => ({
+                id: ev.id,
+                kind: 'event',
+                label: labelForEvent(ev.kind),
+                createdAt: new Date(ev.createdAt || Date.now()),
+                periodNumber: ev.periodNumber || undefined,
+                periodType: ev.periodType || undefined,
+                clockMs: ev.clockMs || 0,
+                teamId: ev.teamId || undefined,
+                playerId: ev.playerId || undefined,
+                sentiment: ev.sentiment || 0,
+                event: ev,
+              }));
+              // System items from existing periods
+              const systemFromPeriods: FeedItem[] = (data.periods || []).flatMap((p: any) => {
+                const out: FeedItem[] = [];
+                if (p.startedAt) out.push({ id: `ps-${p.id}`, kind: 'system', label: periodStartLabel(p), createdAt: new Date(p.startedAt), periodNumber: p.periodNumber });
+                if (p.endedAt) out.push({ id: `pe-${p.id}`, kind: 'system', label: periodEndLabel(p), createdAt: new Date(p.endedAt), periodNumber: p.periodNumber });
+                return out;
+              });
+              setEventFeed(sortFeed([...feedEvents, ...systemFromPeriods]));
+              // Compute base and control clock
+              const base = computeBaseMs({
+                status: s.status,
+                currentPeriod: s.currentPeriod,
+              } as any, data.periods || []);
+              setTimerMs(base);
+              if (s.status === 'LIVE') startTicking(); else stopTicking();
+              prevStatusRef.current = s.status || null;
+            }
+          } catch {}
+        });
+        es.addEventListener('event_created', (ev: MessageEvent) => {
+          try {
+            const d = JSON.parse(ev.data);
+            const e = d.event;
+            setEventFeed(prev => sortFeed([{ id: e.id, kind: 'event', label: labelForEvent(e.kind), createdAt: new Date(e.createdAt || Date.now()), periodNumber: e.periodNumber || undefined, periodType: e.periodType || inferPeriodType(new Date(e.createdAt || Date.now())), clockMs: e.clockMs || 0, teamId: e.teamId || undefined, playerId: e.playerId || undefined, sentiment: e.sentiment || 0, event: e }, ...prev]));
+          } catch {}
+        });
+        es.addEventListener('event_deleted', (ev: MessageEvent) => {
+          try { const d = JSON.parse(ev.data); setEventFeed(prev => prev.filter(i => i.id !== d.id)); } catch {}
+        });
+        es.addEventListener('period_started', (ev: MessageEvent) => {
+          try { 
+            const d = JSON.parse(ev.data); 
+            setPeriods(prev => [...prev, d.period]); 
+            setTimerMs(0);
+            startTicking();
+            setEventFeed(prev => sortFeed([{ id: `ps-${d.period.id}`, kind: 'system', label: periodStartLabel(d.period), createdAt: new Date(), periodNumber: d.period.periodNumber }, ...prev]));
+          } catch {}
+        });
+        es.addEventListener('period_ended', (ev: MessageEvent) => {
+          try { 
+            const d = JSON.parse(ev.data); 
+            setPeriods(prev => prev.map(p => p.id === d.period.id ? d.period : p)); 
+            stopTicking();
+            setTimerMs(0);
+            setEventFeed(prev => sortFeed([{ id: `pe-${d.period.id}`, kind: 'system', label: periodEndLabel(d.period), createdAt: new Date(), periodNumber: d.period.periodNumber }, ...prev]));
+          } catch {}
+        });
+        es.addEventListener('state_changed', (ev: MessageEvent) => {
+          try { 
+            const d = JSON.parse(ev.data); 
+            setMatchState(prev => prev ? ({ ...prev, ...d }) as any : prev as any);
+            if (typeof d.totalElapsedSeconds === 'number') {
+              // Recompute base from totalElapsedSeconds and current ended periods
+              const endedMs = (periods || []).reduce((acc, p: any) => acc + ((p.endedAt && p.durationSeconds) ? p.durationSeconds * 1000 : 0), 0);
+              const base = Math.max(0, d.totalElapsedSeconds * 1000 - endedMs);
+              setTimerMs(base);
+            }
+            if (d.status === 'LIVE') startTicking(); else stopTicking();
+            const prev = prevStatusRef.current;
+            if (prev && prev !== d.status) {
+              if (d.status === 'PAUSED') setEventFeed(prevFeed => sortFeed([{ id: `sys-${Date.now()}-paused`, kind: 'system', label: 'Paused', createdAt: new Date(), periodNumber: d.currentPeriod }, ...prevFeed]));
+              if (d.status === 'LIVE' && prev === 'PAUSED') setEventFeed(prevFeed => sortFeed([{ id: `sys-${Date.now()}-resumed`, kind: 'system', label: 'Resumed', createdAt: new Date(), periodNumber: d.currentPeriod }, ...prevFeed]));
+              if (d.status === 'COMPLETED') setEventFeed(prevFeed => sortFeed([{ id: `sys-${Date.now()}-ft`, kind: 'system', label: 'Full Time', createdAt: new Date(), periodNumber: d.currentPeriod }, ...prevFeed]));
+            }
+            prevStatusRef.current = d.status;
+          } catch {}
+        });
+      } catch {}
+    };
+    const load = async () => {
+      if (!selectedId || !viewerToken || !viewerParam) return;
+      if (viewerExpired) return;
+      try {
+        const [summary] = await Promise.all([
+          viewerApi.getSummary(selectedId, { name: viewerParam, value: viewerToken }),
+        ]);
+        if (cancelled) return;
+        setMatchState({
+          id: 'viewer', matchId: summary.matchId, status: summary.status,
+          currentPeriod: summary.currentPeriod || undefined, currentPeriodType: summary.currentPeriodType || undefined,
+          createdAt: new Date(), is_deleted: false,
+        } as any);
+        setViewerTeams({ homeId: summary.homeTeam?.id, awayId: summary.awayTeam?.id, homeName: summary.homeTeam?.name, awayName: summary.awayTeam?.name });
+        setViewerSummary({ competition: summary.competition, venue: summary.venue, periodFormat: (summary as any).periodFormat });
+      } catch {}
+      openSSE();
+    };
+    load();
+    return () => { cancelled = true; esRef.current?.close(); };
+  }, [selectedId, viewerToken, viewerParam, viewerExpired]);
 
   const computeBaseMs = (state: MatchState | null, list: MatchPeriod[]): number => {
     if (!state) return 0;
@@ -188,7 +391,42 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     }
   };
 
-  const teamName = (team?: { name?: string } | null) => team?.name || 'TBD';
+  const teamName = (team?: { name?: string } | null) => team?.name || viewerTeams?.homeName || 'TBD';
+
+  const handleShareLink = async () => {
+    try {
+      if (!selectedId) return;
+      const res = await matchesApi.shareViewerToken(selectedId, 480);
+      // Normalize to absolute URL (server should send absolute using FRONTEND_URL/origin)
+      let shareUrl = res.shareUrl || `${window.location.origin}/live/${selectedId}?${res.code ? `code=${encodeURIComponent(res.code)}` : `view=${encodeURIComponent(res.viewer_token)}`}`;
+      try {
+        const u = new URL(shareUrl, window.location.origin);
+        shareUrl = u.href;
+      } catch {}
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        try { (window as any).__toastApi?.current?.showSuccess?.('Share link copied to clipboard'); } catch {}
+      } catch {
+        // Fallback prompt
+        const ok = window.prompt('Copy this share link:', shareUrl);
+        if (ok !== null) { try { (window as any).__toastApi?.current?.showSuccess?.('Share link ready'); } catch {} }
+      }
+      if (res.code) setActiveShareCode(res.code);
+    } catch (e: any) {
+      try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to create share link'); } catch {}
+    }
+  };
+
+  const handleUnshareLink = async () => {
+    try {
+      if (!selectedId) return;
+      await matchesApi.revokeViewerToken(selectedId, activeShareCode || undefined);
+      setActiveShareCode(null);
+      try { (window as any).__toastApi?.current?.showSuccess?.('Viewer link revoked'); } catch {}
+    } catch (e: any) {
+      try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to revoke link'); } catch {}
+    }
+  };
 
   const regPeriodsCount = (m?: Match) => {
     const fmt = (m?.periodFormat || '').toLowerCase();
@@ -205,7 +443,16 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     const fmt = (currentMatch?.periodFormat || '').toLowerCase();
     const open = currentOpenPeriod;
     const latest = open || [...periods].sort((a, b) => (a.startedAt && b.startedAt ? new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime() : (b.periodNumber - a.periodNumber)))[0];
-
+    // Completed always wins
+    if (matchState?.status === 'COMPLETED') return 'FT';
+    // If paused and no open period, show break/half time
+    if (matchState?.status === 'PAUSED') {
+      if (fmt.includes('half')) {
+        return endedRegularCount >= 2 ? 'Full Time' : 'Half Time';
+      }
+      if (fmt.includes('quarter')) return 'Quarter Break';
+      return 'Break';
+    }
     // Scheduled, no periods yet
     if (!open && (!latest || !latest.startedAt)) {
       return matchState?.status === 'SCHEDULED' ? 'Pre‑Kickoff' : 'Break';
@@ -233,18 +480,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       return 'Penalties';
     }
 
-    // Fallbacks for paused/no open period
-    if (matchState?.status === 'PAUSED') {
-      if (fmt.includes('half')) {
-        // Between halves or after 2nd half
-        return endedRegularCount >= 2 ? 'Full Time' : 'Half Time';
-      }
-      if (fmt.includes('quarter')) {
-        return 'Quarter Break';
-      }
-      return 'Break';
-    }
-    if (matchState?.status === 'COMPLETED') return 'FT';
+    // Default fallbacks
     return 'Live';
   };
 
@@ -554,6 +790,25 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     return { home, away };
   };
   const labelForEvent = (k: string) => k.replace('_',' ').replace(/\b\w/g, c => c.toUpperCase());
+  const pf = () => (currentMatch?.periodFormat || viewerSummary?.periodFormat || '').toLowerCase();
+  const periodStartLabel = (p: any) => {
+    const fmt = pf();
+    if (p.periodType === 'EXTRA_TIME') return `Extra Time Kick Off — ET${p.periodNumber}`;
+    if (p.periodType === 'PENALTY_SHOOTOUT') return 'Penalty Shootout';
+    if (fmt.includes('half')) return p.periodNumber === 1 ? 'Kick Off — 1st Half' : 'Kick Off — 2nd Half';
+    if (fmt.includes('quarter')) return `Kick Off — Q${p.periodNumber}`;
+    if (fmt.includes('whole')) return 'Match Kick Off';
+    return `Kick Off — Period ${p.periodNumber}`;
+  };
+  const periodEndLabel = (p: any) => {
+    const fmt = pf();
+    if (p.periodType === 'EXTRA_TIME') return `End of ET${p.periodNumber}`;
+    if (p.periodType === 'PENALTY_SHOOTOUT') return 'End of Shootout';
+    if (fmt.includes('half')) return p.periodNumber === 1 ? 'End of 1st Half' : 'End of 2nd Half';
+    if (fmt.includes('quarter')) return `End of Q${p.periodNumber}`;
+    if (fmt.includes('whole')) return 'Full Time';
+    return `End of Period ${p.periodNumber}`;
+  };
   const pushSystem = (label: string, periodNumber?: number) => {
     setEventFeed(prev => sortFeed([{ id: crypto.randomUUID(), kind: 'system', label, createdAt: new Date(), periodNumber }, ...prev]));
   };
@@ -623,13 +878,25 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     );
   };
 
-  // Load initial timeline when auth + match selected
+  // Load initial timeline when auth + match selected (and update when periods change)
   useEffect(() => {
     const run = async () => {
       if (!isAuthenticated || !selectedId) { setEventFeed([]); return; }
       try {
         const list = await eventsApi.getByMatch(selectedId);
-        const feed: FeedItem[] = (list as any as MatchEvent[]).map(ev => ({ id: ev.id, kind: 'event', label: labelForEvent(ev.kind), createdAt: new Date(ev.createdAt), periodNumber: ev.periodNumber ?? undefined, clockMs: ev.clockMs ?? undefined, teamId: ev.teamId ?? undefined, playerId: ev.playerId ?? undefined, sentiment: ev.sentiment, event: ev }));
+        const feed: FeedItem[] = (list as any as MatchEvent[]).map(ev => ({ 
+          id: ev.id,
+          kind: 'event',
+          label: labelForEvent(ev.kind),
+          createdAt: new Date(ev.createdAt),
+          periodNumber: ev.periodNumber ?? undefined,
+          periodType: inferPeriodType(new Date(ev.createdAt)),
+          clockMs: ev.clockMs ?? undefined,
+          teamId: ev.teamId ?? undefined,
+          playerId: ev.playerId ?? undefined,
+          sentiment: ev.sentiment,
+          event: ev 
+        }));
         setEventFeed(sortFeed(feed));
         // Preload rosters for both teams to resolve player names
         const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
@@ -645,7 +912,20 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       }
     };
     run();
-  }, [isAuthenticated, selectedId]);
+  }, [isAuthenticated, selectedId, periods]);
+
+  const inferPeriodType = (dt: Date | null): 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT' | undefined => {
+    if (!dt) return undefined;
+    const t = dt.getTime();
+    for (const p of periods) {
+      const start = p.startedAt ? new Date(p.startedAt).getTime() : undefined;
+      const end = p.endedAt ? new Date(p.endedAt).getTime() : undefined;
+      if (start != null && t >= start && (end == null || t <= end)) {
+        return p.periodType as any;
+      }
+    }
+    return undefined;
+  };
 
   return (
     <IonPage>
@@ -663,50 +943,33 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               {error && (
                 <IonText color="danger">{error}</IonText>
               )}
-              {!loading && !error && currentMatch && (
+              {!loading && !error && (currentMatch || viewerToken) && (
                 <IonCard>
                   <IonCardContent>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <IonButton fill="clear" onClick={() => navigateMatch(-1)} disabled={currentIndex <= 0}>
-                        <IonIcon icon={chevronBackOutline} />
-                      </IonButton>
-
-                      <div style={{ flex: 1, textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-                          <div style={{ minWidth: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 18, fontWeight: 700 }}>
-                            {teamName(currentMatch.homeTeam)}
-                          </div>
-                          <div style={{ fontSize: 22, fontWeight: 800 }}>
-                            {matchState?.status === 'SCHEDULED' ? 'vs' : `${computeScore(eventFeed, currentMatch).home} - ${computeScore(eventFeed, currentMatch).away}`}
-                          </div>
-                          <div style={{ minWidth: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 18, fontWeight: 700 }}>
-                            {teamName(currentMatch.awayTeam)}
-                          </div>
-                        </div>
-                        <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          {matchState && (
-                            <IonChip color={
-                              matchState.status === 'LIVE' ? 'success' :
-                              matchState.status === 'PAUSED' ? 'warning' :
-                              matchState.status === 'COMPLETED' ? 'tertiary' : 'medium'
-                            } style={{ height: 22 }}>
-                              <IonLabel style={{ fontSize: 12 }}>{matchState.status}</IonLabel>
-                            </IonChip>
-                          )}
-                          <span style={{ fontSize: 12, opacity: 0.7 }}>
-                            {currentMatch.venue || 'Venue TBC'} • {currentMatch.competition || 'Competition'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <IonButton fill="clear" onClick={() => navigateMatch(1)} disabled={currentIndex === -1 || currentIndex >= upcoming.length - 1}>
-                        <IonIcon icon={chevronForwardOutline} />
-                      </IonButton>
-                    </div>
+                    <LiveHeader
+                      homeName={currentMatch?.homeTeam?.name || viewerTeams?.homeName || 'Home'}
+                      awayName={currentMatch?.awayTeam?.name || viewerTeams?.awayName || 'Away'}
+                      status={matchState?.status}
+                      homeScore={(() => { const m = currentMatch || (viewerTeams ? ({ homeTeamId: viewerTeams.homeId, awayTeamId: viewerTeams.awayId } as any) : undefined); const sc = computeScore(eventFeed, m); return sc.home; })()}
+                      awayScore={(() => { const m = currentMatch || (viewerTeams ? ({ homeTeamId: viewerTeams.homeId, awayTeamId: viewerTeams.awayId } as any) : undefined); const sc = computeScore(eventFeed, m); return sc.away; })()}
+                      venue={currentMatch?.venue || viewerSummary?.venue || null}
+                      competition={currentMatch?.competition || viewerSummary?.competition || null}
+                      showPrev={!viewerToken}
+                      showNext={!viewerToken}
+                      onPrev={() => navigateMatch(-1)}
+                      onNext={() => navigateMatch(1)}
+                      prevDisabled={currentIndex <= 0}
+                      nextDisabled={currentIndex === -1 || currentIndex >= upcoming.length - 1}
+                      showShare={!!(isAuthenticated && selectedId && !viewerToken)}
+                      onShare={activeShareCode ? handleUnshareLink : handleShareLink}
+                      shareLabel={activeShareCode ? 'Unshare' : 'Share'}
+                      shareColor={activeShareCode ? 'danger' : undefined}
+                      showReconnect={!!(viewerToken && !sseConnected)}
+                    />
                   </IonCardContent>
                 </IonCard>
               )}
-              {!loading && !error && !currentMatch && (
+              {!loading && !error && !currentMatch && !viewerToken && (
                 <IonCard>
                   <IonCardContent>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -719,25 +982,24 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             </IonCol>
           </IonRow>
 
-          {/* Controls area (enabled only for authenticated users) */}
+          {/* Period clock (shown for both coach and viewer) */}
+          <IonRow>
+            <IonCol size="12">
+              <IonCard>
+                <IonCardContent>
+                  <PeriodClock timerMs={timerMs} periodLabel={getPeriodLabel()} stoppageLabel={getStoppageMmSs()} />
+                </IonCardContent>
+              </IonCard>
+            </IonCol>
+          </IonRow>
+
+          {/* Controls area (enabled only for authenticated users and not in viewer mode) */}
+          {!viewerToken && (
           <IonRow>
             <IonCol size="12">
               <IonCard>
                 <IonCardContent>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-                      <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }}>
-                        {new Date(timerMs).toISOString().substr(14, 5)}
-                      </div>
-                      <IonText color="medium" style={{ fontSize: 14, fontWeight: 600 }}>
-                        {getPeriodLabel()}
-                      </IonText>
-                      {getStoppageMmSs() && (
-                        <IonChip color="warning" style={{ height: 18 }}>
-                          <IonLabel style={{ fontSize: 12 }}>{getStoppageMmSs()}</IonLabel>
-                        </IonChip>
-                      )}
-                    </div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                       {/* Primary context-aware action */}
                       {(() => {
@@ -789,9 +1051,10 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               </IonCard>
             </IonCol>
           </IonRow>
+          )}
         </IonGrid>
         {/* Events Quick Add */}
-        {currentMatch && (
+        {currentMatch && !viewerToken && (
           <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {/* Team selector */}
             <div className="team-toggle">
@@ -947,8 +1210,25 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           <IonCard>
             <IonCardContent>
               <div style={{ fontWeight: 700, marginBottom: 8 }}>Live Timeline</div>
-              {isAuthenticated && selectedId ? (
-                renderTimeline()
+              {(isAuthenticated || viewerToken) && selectedId ? (
+                <LiveTimeline 
+                  feed={eventFeed as any} 
+                  currentMatch={currentMatch as any} 
+                  playerNameMap={playerNameMap}
+                  showDelete={!!(isAuthenticated && !viewerToken)}
+                  onDelete={(item) => {
+                    if (item.kind !== 'event') return;
+                    (async () => {
+                      try {
+                        await eventsApi.delete(item.id);
+                        setEventFeed(prev => prev.filter(i => i.id !== item.id));
+                        try { (window as any).__toastApi?.current?.showSuccess?.('Event deleted'); } catch {}
+                      } catch (e: any) {
+                        try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to delete event'); } catch {}
+                      }
+                    })();
+                  }}
+                />
               ) : (
                 <IonText color="medium">Sign in to view live timeline. Public feed coming soon.</IonText>
               )}

@@ -122,6 +122,7 @@ export class MatchStateService {
           data: {
             status: 'LIVE',
             match_started_at: new Date(),
+            active_since: new Date(),
             updated_at: new Date()
           }
         });
@@ -149,6 +150,7 @@ export class MatchStateService {
             data: {
               current_period: 1,
               current_period_type: 'REGULAR',
+              active_since: new Date(),
               updated_at: new Date()
             }
           });
@@ -160,7 +162,32 @@ export class MatchStateService {
       // Invalidate cache for this match
       this.invalidateMatchCache(matchId, userId, userRole);
 
-      return transformMatchState(updatedState);
+      const result = transformMatchState(updatedState);
+      // Broadcast SSE state change
+      try {
+        const { sseHub } = await import('../utils/sse');
+        sseHub.broadcast(matchId, 'state_changed', {
+          status: result.status,
+          currentPeriod: result.currentPeriod,
+          currentPeriodType: result.currentPeriodType,
+          matchStartedAt: result.matchStartedAt,
+          totalElapsedSeconds: result.totalElapsedSeconds,
+        });
+        // Also broadcast period_started if there's an active period
+        const active = await this.prisma.match_periods.findFirst({
+          where: { match_id: matchId, started_at: { not: null }, ended_at: null, is_deleted: false },
+          select: { id: true, period_number: true, period_type: true, started_at: true }
+        });
+        if (active) {
+          sseHub.broadcast(matchId, 'period_started', { period: {
+            id: active.id,
+            periodNumber: active.period_number,
+            periodType: active.period_type,
+            startedAt: active.started_at?.toISOString?.() || null,
+          }});
+        }
+      } catch {}
+      return result;
     }, 'MatchState');
   }
 
@@ -196,27 +223,20 @@ export class MatchStateService {
           throw error;
         }
 
-        // Calculate total elapsed: completed periods + current active period up to now
-        const completed = await tx.match_periods.findMany({
-          where: { match_id: matchId, ended_at: { not: null }, is_deleted: false },
-          select: { duration_seconds: true }
-        });
-        const active = await tx.match_periods.findFirst({
-          where: { match_id: matchId, started_at: { not: null }, ended_at: null, is_deleted: false },
-          select: { started_at: true }
-        });
-        let total = completed.reduce((sum, p) => sum + (p.duration_seconds || 0), 0);
-        if (active?.started_at) {
-          const now = Date.now();
-          total += Math.ceil((now - active.started_at.getTime()) / 1000);
-        }
+        // Calculate delta since last active_since and add to existing total
+        const now = Date.now();
+        const currentState = await tx.match_state.findFirst({ where: { id: matchState.id } });
+        const baseTotal = currentState?.total_elapsed_seconds || 0;
+        const lastActive = currentState?.active_since ? currentState.active_since.getTime() : null;
+        const delta = lastActive ? Math.max(0, Math.ceil((now - lastActive) / 1000)) : 0;
 
-        // Update match state to paused and persist total
+        // Update match state to paused and persist total, clear active_since
         return await tx.match_state.update({
           where: { id: matchState.id },
           data: {
             status: 'PAUSED',
-            total_elapsed_seconds: total,
+            total_elapsed_seconds: baseTotal + delta,
+            active_since: null,
             updated_at: new Date()
           }
         });
@@ -225,7 +245,17 @@ export class MatchStateService {
       // Invalidate cache for this match
       this.invalidateMatchCache(matchId, userId, userRole);
 
-      return transformMatchState(updatedMatchState);
+      const result = transformMatchState(updatedMatchState);
+      try {
+        const { sseHub } = await import('../utils/sse');
+        sseHub.broadcast(matchId, 'state_changed', {
+          status: result.status,
+          currentPeriod: result.currentPeriod,
+          currentPeriodType: result.currentPeriodType,
+          totalElapsedSeconds: result.totalElapsedSeconds,
+        });
+      } catch {}
+      return result;
     }, 'MatchState');
   }
 
@@ -266,11 +296,12 @@ export class MatchStateService {
           throw error;
         }
 
-        // Update match state to live
+        // Update match state to live and set active_since
         let liveState = await tx.match_state.update({
           where: { id: matchState.id },
           data: {
             status: 'LIVE',
+            active_since: new Date(),
             updated_at: new Date()
           }
         });
@@ -308,7 +339,17 @@ export class MatchStateService {
       // Invalidate cache for this match
       this.invalidateMatchCache(matchId, userId, userRole);
 
-      return transformMatchState(updatedMatchState);
+      const result = transformMatchState(updatedMatchState);
+      try {
+        const { sseHub } = await import('../utils/sse');
+        sseHub.broadcast(matchId, 'state_changed', {
+          status: result.status,
+          currentPeriod: result.currentPeriod,
+          currentPeriodType: result.currentPeriodType,
+          totalElapsedSeconds: result.totalElapsedSeconds,
+        });
+      } catch {}
+      return result;
     }, 'MatchState');
   }
 
@@ -393,7 +434,18 @@ export class MatchStateService {
       // Invalidate cache for this match
       this.invalidateMatchCache(matchId, userId, userRole);
 
-      return transformMatchState(updatedState);
+      const result = transformMatchState(updatedState);
+      try {
+        const { sseHub } = await import('../utils/sse');
+        sseHub.broadcast(matchId, 'state_changed', {
+          status: result.status,
+          currentPeriod: result.currentPeriod,
+          currentPeriodType: result.currentPeriodType,
+          matchEndedAt: result.matchEndedAt,
+          totalElapsedSeconds: result.totalElapsedSeconds,
+        });
+      } catch {}
+      return result;
     }, 'MatchState');
   }
 
@@ -446,7 +498,18 @@ export class MatchStateService {
       // Invalidate cache for this match
       this.invalidateMatchCache(matchId, userId, userRole);
 
-      return transformMatchState(updatedMatchState);
+      const result = transformMatchState(updatedMatchState);
+      try {
+        const { sseHub } = await import('../utils/sse');
+        sseHub.broadcast(matchId, 'state_changed', {
+          status: result.status,
+          currentPeriod: result.currentPeriod,
+          currentPeriodType: result.currentPeriodType,
+          matchEndedAt: result.matchEndedAt,
+          totalElapsedSeconds: result.totalElapsedSeconds,
+        });
+      } catch {}
+      return result;
     }, 'MatchState');
   }
 
