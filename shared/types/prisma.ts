@@ -83,8 +83,8 @@ export type PrismaMatchCreateInput = {
   venue?: string | null;
   duration_mins?: number;
   period_format?: string;
-  our_score?: number;
-  opponent_score?: number;
+  home_score?: number;
+  away_score?: number;
   notes?: string | null;
   created_by_user_id: string;
 };
@@ -98,8 +98,8 @@ export type PrismaMatchUpdateInput = {
   venue?: string | null;
   duration_mins?: number;
   period_format?: string;
-  our_score?: number;
-  opponent_score?: number;
+  home_score?: number;
+  away_score?: number;
   notes?: string | null;
 };
 

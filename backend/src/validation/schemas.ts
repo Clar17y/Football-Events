@@ -115,8 +115,8 @@ export const matchCreateSchema = z.object({
   venue: z.string().max(100).optional(),
   durationMinutes: z.number().int().min(1).max(200).optional(),
   periodFormat: z.enum(['quarter', 'half', 'third']).optional(),
-  ourScore: z.number().int().min(0).optional(),
-  opponentScore: z.number().int().min(0).optional(),
+  homeScore: z.number().int().min(0).optional(),
+  awayScore: z.number().int().min(0).optional(),
   notes: z.string().max(1000).optional()
 });
 
@@ -129,8 +129,8 @@ export const matchUpdateSchema = z.object({
   venue: z.string().max(100).optional(),
   durationMinutes: z.number().int().min(1).max(200).optional(),
   periodFormat: z.enum(['quarter', 'half', 'third']).optional(),
-  ourScore: z.number().int().min(0).optional(),
-  opponentScore: z.number().int().min(0).optional(),
+  homeScore: z.number().int().min(0).optional(),
+  awayScore: z.number().int().min(0).optional(),
   notes: z.string().max(1000).optional()
 });
 

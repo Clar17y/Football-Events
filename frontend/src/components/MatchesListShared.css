@@ -292,6 +292,7 @@
 
 /* Section focus styles */
 .matches-upcoming-section:focus,
+.matches-live-section:focus,
 .matches-completed-section:focus {
   outline: 2px solid var(--grassroots-primary);
   outline-offset: 4px;

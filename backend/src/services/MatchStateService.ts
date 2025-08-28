@@ -163,6 +163,11 @@ export class MatchStateService {
       this.invalidateMatchCache(matchId, userId, userRole);
 
       const result = transformMatchState(updatedState);
+      // Final score recompute/persist
+      try {
+        const { ScoreService } = await import('./ScoreService');
+        await ScoreService.recomputeAndPersistScore(this.prisma as any, matchId);
+      } catch {}
       // Broadcast SSE state change
       try {
         const { sseHub } = await import('../utils/sse');
@@ -435,6 +440,11 @@ export class MatchStateService {
       this.invalidateMatchCache(matchId, userId, userRole);
 
       const result = transformMatchState(updatedState);
+      // Final score recompute/persist
+      try {
+        const { ScoreService } = await import('./ScoreService');
+        await ScoreService.recomputeAndPersistScore(this.prisma as any, matchId);
+      } catch {}
       try {
         const { sseHub } = await import('../utils/sse');
         sseHub.broadcast(matchId, 'state_changed', {
@@ -624,8 +634,8 @@ export class MatchStateService {
         venue: match.venue,
         homeTeam: match.homeTeam,
         awayTeam: match.awayTeam,
-        ourScore: match.our_score,
-        opponentScore: match.opponent_score,
+        homeScore: (match as any).home_score,
+        awayScore: (match as any).away_score,
         state: match.match_state ? transformMatchState(match.match_state) : null
       };
 
@@ -681,6 +691,77 @@ export class MatchStateService {
       cache.set(cacheKey, transformedMatches, CacheTTL.LIVE_MATCHES);
 
       return transformedMatches;
+    }, 'MatchState');
+  }
+
+  /**
+   * Get paginated match statuses for matches the user can access
+   */
+  async getMatchStatuses(
+    userId: string,
+    userRole: string,
+    options: { page: number; limit: number; matchIds?: string[] }
+  ): Promise<{ data: any[]; pagination: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean } }> {
+    return withPrismaErrorHandling(async () => {
+      const { page, limit } = options;
+      const skip = (page - 1) * limit;
+
+      const whereMatch: any = { is_deleted: false };
+
+      if (options.matchIds && options.matchIds.length) {
+        whereMatch.match_id = { in: options.matchIds };
+      } else if (userRole !== 'ADMIN') {
+        const userTeamIds = await this.getUserTeamIds(userId);
+        whereMatch.OR = [
+          { created_by_user_id: userId },
+          { home_team_id: { in: userTeamIds } },
+          { away_team_id: { in: userTeamIds } },
+        ];
+      }
+
+      const [matches, total] = await Promise.all([
+        this.prisma.match.findMany({
+          where: whereMatch,
+          orderBy: { kickoff_ts: 'desc' },
+          skip,
+          take: limit,
+          include: {
+            match_state: { where: { is_deleted: false } },
+            homeTeam: { select: { id: true, name: true } },
+            awayTeam: { select: { id: true, name: true } },
+          }
+        }),
+        this.prisma.match.count({ where: whereMatch })
+      ]);
+
+      const items = matches.map(m => ({
+        matchId: m.match_id,
+        kickoffTime: m.kickoff_ts,
+        competition: m.competition,
+        venue: m.venue,
+        homeTeam: m.homeTeam,
+        awayTeam: m.awayTeam,
+        homeScore: (m as any).home_score,
+        awayScore: (m as any).away_score,
+        status: m.match_state?.status || 'SCHEDULED',
+        currentPeriod: m.match_state?.current_period || undefined,
+        currentPeriodType: (m.match_state?.current_period_type || undefined) as any,
+        totalElapsedSeconds: m.match_state?.total_elapsed_seconds || 0,
+        isLive: m.match_state?.status === 'LIVE',
+      }));
+
+      const totalPages = Math.ceil(total / limit);
+      return {
+        data: items,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        }
+      };
     }, 'MatchState');
   }
 

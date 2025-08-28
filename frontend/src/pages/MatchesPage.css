@@ -89,6 +89,10 @@
 }
 
 /* Upcoming Matches Section */
+.matches-live-section {
+  margin-bottom: var(--grassroots-space-xl);
+}
+
 .matches-upcoming-section {
   margin-bottom: var(--grassroots-space-xl);
 }

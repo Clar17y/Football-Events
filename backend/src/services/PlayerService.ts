@@ -181,28 +181,25 @@ export class PlayerService {
       eventsByPlayer[event.player_id!].push(event);
     });
 
-    // Clean sheets per player via lineup x matches where opponent_score = 0
-    const cleanSheetsGrouped = await this.prisma.lineup.groupBy({
-      by: ['player_id'],
+    // Build a match lookup to compute clean sheets using home/away scores.
+    // Gather all unique match IDs from all players' lineup rows
+    const allMatchIds = Array.from(new Set(players.flatMap(p => p.lineup.map(l => l.match_id))));
+    const matches = await this.prisma.match.findMany({
       where: {
-        is_deleted: false,
-        player_id: { in: playerIds },
-        matches: {
-          is: {
-            is_deleted: false,
-            opponent_score: 0,
-          }
-        }
+        match_id: { in: allMatchIds },
+        is_deleted: false
       },
-      _count: { _all: true }
+      select: {
+        match_id: true,
+        home_team_id: true,
+        away_team_id: true,
+        // Use new columns
+        home_score: true,
+        away_score: true,
+      }
     });
-    const cleanSheetsByPlayer: Record<string, number> = {};
-    cleanSheetsGrouped.forEach(row => {
-      // @ts-ignore _count shape depending on Prisma version
-      const count = (row as any)._count?._all ?? 0;
-      // @ts-ignore player_id present in groupBy output
-      cleanSheetsByPlayer[(row as any).player_id] = count;
-    });
+    const matchById = new Map<string, typeof matches[number]>();
+    matches.forEach(m => matchById.set(m.match_id, m));
 
     // Transform players and populate currentTeam and stats for each
     const transformedPlayers = players.map(player => {
@@ -225,6 +222,21 @@ export class PlayerService {
       const interceptions = playerEvents.filter(e => e.kind === 'interception').length;
       const keyPasses = playerEvents.filter(e => e.kind === 'key_pass').length;
       
+      // Compute clean sheets for this player:
+      // A clean sheet occurs when the opponent scored 0 from the player's team perspective
+      const activeTeamIds: string[] = (player.player_teams || []).map(pt => (pt as any).team?.id).filter(Boolean);
+      const playerMatchIds = Array.from(new Set(player.lineup.map(l => l.match_id)));
+      let cleanSheets = 0;
+      for (const mid of playerMatchIds) {
+        const m = matchById.get(mid);
+        if (!m) continue;
+        if (activeTeamIds.includes(m.home_team_id)) {
+          if ((m as any).away_score === 0) cleanSheets++;
+        } else if (activeTeamIds.includes(m.away_team_id)) {
+          if ((m as any).home_score === 0) cleanSheets++;
+        }
+      }
+
       // Add stats object
       transformedPlayer.stats = {
         matches: matchesPlayed,
@@ -234,10 +246,10 @@ export class PlayerService {
         tackles: tackles,
         interceptions: interceptions,
         keyPasses: keyPasses,
-        cleanSheets: cleanSheetsByPlayer[player.id] || 0
+        cleanSheets: cleanSheets
       };
       
-      console.log(`[PlayerService] getPlayers - Player: ${player.name}, Teams: ${activeTeamNames.join(', ')}, Matches: ${matchesPlayed}, Goals: ${goals}, CleanSheets: ${cleanSheetsByPlayer[player.id] || 0}`);
+      console.log(`[PlayerService] getPlayers - Player: ${player.name}, Teams: ${activeTeamNames.join(', ')}, Matches: ${matchesPlayed}, Goals: ${goals}, CleanSheets: ${cleanSheets}`);
       
       return transformedPlayer;
     });

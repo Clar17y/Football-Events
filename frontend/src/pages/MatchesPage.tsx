@@ -20,9 +20,10 @@ import MatchesCalendar from '../components/MatchesCalendar';
 import CreateMatchModal from '../components/CreateMatchModal';
 import UpcomingMatchesList from '../components/UpcomingMatchesList';
 import CompletedMatchesList from '../components/CompletedMatchesList';
+import LiveMatchesList from '../components/LiveMatchesList';
 import { matchesApi } from '../services/api/matchesApi';
 import { teamsApi } from '../services/api/teamsApi';
-import type { Match, Team } from '@shared/types';
+import type { Match, Team, MatchState } from '@shared/types';
 import './PageStyles.css';
 import './MatchesPage.css';
 import useDeepLinkScrollHighlight from '../hooks/useDeepLinkScrollHighlight';
@@ -40,6 +41,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [showErrorToast, setShowErrorToast] = useState(false);
   const [teamsCache, setTeamsCache] = useState<Map<string, Team>>(new Map());
+  const [matchStates, setMatchStates] = useState<MatchState[]>([]);
 
   // UpcomingMatchesList state
   const [expandedMatches, setExpandedMatches] = useState<Set<string>>(new Set());
@@ -126,6 +128,17 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
 
       setMatches(response.data);
       setError(null);
+      // Fetch match states for status-driven sections
+      try {
+        const ids = (response.data || []).map(m => m.id);
+        const states = await matchesApi.getMatchStates(1, 500, ids);
+        const allStates = (states.data || []) as any[];
+        console.log('🧭 Match states loaded:', allStates.length, allStates.slice(0, 3));
+        setMatchStates(allStates as any);
+      } catch (e) {
+        console.warn('Failed to load match states', e);
+        setMatchStates([]);
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load matches';
       setError(errorMessage);
@@ -149,6 +162,16 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
     loadMatches();
     loadTeams();
   }, []);
+
+  useEffect(() => {
+    console.log('📈 Matches loaded:', matches.length);
+    if (matchStates.length) {
+      const statusCounts = matchStates.reduce((acc: any, s) => { acc[s.status] = (acc[s.status]||0)+1; return acc; }, {});
+      console.log('📊 MatchStates counts by status:', statusCounts);
+    } else {
+      console.log('📊 MatchStates empty; UI will use date-based fallback');
+    }
+  }, [matches, matchStates]);
 
   const handleRefresh = async (event: CustomEvent) => {
     try {
@@ -319,9 +342,25 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
   };
 
   const handleViewEvents = (match: Match) => {
-    // Stub for future Live Events page navigation
-    console.log('View events for match:', match.id);
-    // TODO: Navigate to Live Events page when implemented
+    if (onNavigate) onNavigate(`/live/${match.id}`);
+  };
+
+  const handleLiveMatch = (match: Match) => {
+    if (onNavigate) onNavigate(`/live/${match.id}`);
+  };
+
+  const handleDeleteMatch = async (match: Match) => {
+    const confirmed = window.confirm('Delete this match? This cannot be undone.');
+    if (!confirmed) return;
+    try {
+      await matchesApi.deleteMatch(match.id);
+      // Refresh lists and calendar
+      await loadMatches(false);
+    } catch (e) {
+      console.error('Failed to delete match', e);
+      setShowErrorToast(true);
+      setError('Failed to delete match');
+    }
   };
 
   const handleMatchCreated = (match: Match) => {
@@ -501,30 +540,81 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
             />
           </div>
 
-          {/* Upcoming Matches Section */}
+          {/* Live Matches Section below calendar, styled like lists */}
+          {(() => {
+            const statesMap = new Map(matchStates.map(s => [s.matchId, s]));
+            const liveIds = new Set(matchStates.filter(s => s.status === 'LIVE' || s.status === 'PAUSED').map(s => s.matchId));
+            const liveMatches = matches.filter(m => liveIds.has(m.id));
+            if (liveMatches.length === 0) return null;
+            return (
+              <div className="matches-live-section" tabIndex={-1}>
+                <h2 className="section-title">Live Matches</h2>
+                <LiveMatchesList
+                  matches={liveMatches}
+                  statesMap={statesMap}
+                  onMatchSelect={handleCompletedMatchSelect}
+                  onOpenLive={handleLiveMatch}
+                  primaryTeamId={primaryTeamId}
+                />
+              </div>
+            );
+          })()}
+
+          {/* Upcoming Matches Section (SCHEDULED/POSTPONED) */}
           <div className="matches-upcoming-section" tabIndex={-1}>
             <h2 className="section-title">Upcoming Matches</h2>
             <UpcomingMatchesList
-              matches={matches}
+              matches={(() => {
+                if (!matchStates.length) {
+                  const now = new Date();
+                  const fallback = matches.filter(m => new Date(m.kickoffTime) >= now);
+                  console.log('⚠️ Using fallback upcoming filter by date. Count:', fallback.length);
+                  return fallback;
+                }
+                const states = new Map(matchStates.map(s => [s.matchId, s]));
+                const list = matches.filter(m => {
+                  const st = states.get(m.id) as any;
+                  return st?.status === 'SCHEDULED' || st?.status === 'POSTPONED';
+                });
+                console.log('✅ Upcoming by status. Count:', list.length);
+                return list;
+              })()}
               expandedMatches={expandedMatches}
               onToggleExpand={handleToggleExpand}
               onMatchSelect={handleMatchSelect}
               onEditMatch={handleEditMatch}
+              onLiveMatch={handleLiveMatch}
+              onDeleteMatch={handleDeleteMatch}
               loading={loading}
               teamsCache={teamsCache}
               primaryTeamId={primaryTeamId}
             />
           </div>
 
-          {/* Completed Matches Section */}
+          {/* Completed Matches Section (COMPLETED/CANCELLED) */}
           <div className="matches-completed-section" tabIndex={-1}>
             <h2 className="section-title">Completed Matches</h2>
             <CompletedMatchesList
-              matches={matches}
+              matches={(() => {
+                if (!matchStates.length) {
+                  const now = new Date();
+                  const fallback = matches.filter(m => new Date(m.kickoffTime) < now);
+                  console.log('⚠️ Using fallback completed filter by date. Count:', fallback.length);
+                  return fallback;
+                }
+                const states = new Map(matchStates.map(s => [s.matchId, s]));
+                const list = matches.filter(m => {
+                  const st = states.get(m.id) as any;
+                  return st?.status === 'COMPLETED' || st?.status === 'CANCELLED';
+                });
+                console.log('✅ Completed by status. Count:', list.length);
+                return list;
+              })()}
               expandedMatches={expandedCompletedMatches}
               onToggleExpand={handleToggleExpandCompleted}
               onMatchSelect={handleCompletedMatchSelect}
               onViewEvents={handleViewEvents}
+              onDeleteMatch={handleDeleteMatch}
               loading={loading}
               teamsCache={teamsCache}
               primaryTeamId={primaryTeamId}

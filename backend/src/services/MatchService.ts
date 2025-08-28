@@ -1082,8 +1082,8 @@ export class MatchService {
         venue: venue ?? null,
         duration_mins: payload?.durationMinutes ?? 50,
         period_format: (payload?.periodFormat === 'half' ? 'half' : payload?.periodFormat === 'whole' ? 'whole' : 'quarter'),
-        our_score: 0,
-        opponent_score: 0,
+        home_score: 0,
+        away_score: 0,
         notes: notes ?? null,
         created_by_user_id: userId
       },

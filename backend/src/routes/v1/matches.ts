@@ -53,6 +53,35 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
 
 // === MATCH STATUS QUERY ENDPOINTS (must be before /:id routes) ===
 
+// GET /api/v1/matches/states - Get match states with pagination
+router.get('/states', authenticateToken, asyncHandler(async (req, res) => {
+  try {
+    const { page = '1', limit = '25', matchIds } = req.query as any;
+    const idsArray = typeof matchIds === 'string' && matchIds.trim().length
+      ? matchIds.split(',').map((s: string) => s.trim()).filter((s: string) => s.length)
+      : [];
+    const result = await matchStateService.getMatchStatuses(
+      req.user!.id,
+      req.user!.role,
+      { page: parseInt(page), limit: parseInt(limit), matchIds: idsArray }
+    );
+
+    return res.status(200).json({ success: true, ...result });
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        success: false,
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
+}));
+
 // GET /api/v1/matches/live - Get all live matches
 router.get('/live', authenticateToken, asyncHandler(async (req, res) => {
   try {

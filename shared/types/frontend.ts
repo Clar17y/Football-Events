@@ -69,8 +69,11 @@ export interface Match {
   venue?: string;
   durationMinutes: number;        // mapped from duration_mins
   periodFormat: string;           // mapped from period_format
-  ourScore: number;               // mapped from our_score
-  opponentScore: number;          // mapped from opponent_score
+  homeScore: number;              // mapped from home_score
+  awayScore: number;              // mapped from away_score
+  // Deprecated: kept temporarily for compatibility in some UI components
+  ourScore?: number;              // mapped from our_score
+  opponentScore?: number;         // mapped from opponent_score
   notes?: string;
   createdAt: Date;
   updatedAt?: Date;
@@ -203,8 +206,8 @@ export interface MatchUpdateRequest {
   venue?: string;
   durationMinutes?: number;
   periodFormat?: string;
-  ourScore?: number;
-  opponentScore?: number;
+  homeScore?: number;
+  awayScore?: number;
   notes?: string;
 }
 

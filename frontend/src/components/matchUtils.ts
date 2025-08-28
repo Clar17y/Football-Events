@@ -78,11 +78,19 @@ export const formatMatchDateTime = (
   return { dateStr, timeStr };
 };
 
-export const getMatchResult = (match: Match) => {
-  const ourScore = match.ourScore || 0;
-  const opponentScore = match.opponentScore || 0;
+export const getMatchResult = (match: Match, primaryTeamId?: string) => {
+  const isHome = isHomeMatch(match, primaryTeamId);
+  const ourScore = isHome ? (match as any).homeScore || 0 : (match as any).awayScore || 0;
+  const opponentScore = isHome ? (match as any).awayScore || 0 : (match as any).homeScore || 0;
   if (ourScore > opponentScore) return { type: 'win' as const, color: 'success' as const };
   if (ourScore < opponentScore) return { type: 'loss' as const, color: 'danger' as const };
   return { type: 'draw' as const, color: 'warning' as const };
 };
 
+
+export const getPerspectiveScores = (match: Match, primaryTeamId?: string) => {
+  const isHome = isHomeMatch(match, primaryTeamId);
+  const home = (match as any).homeScore || 0;
+  const away = (match as any).awayScore || 0;
+  return { our: isHome ? home : away, opponent: isHome ? away : home };
+};

@@ -277,6 +277,11 @@ export class EventService {
         createdAt: transformed.createdAt,
       }});
     } catch {}
+    // Recompute and persist match score (home/away)
+    try {
+      const { ScoreService } = await import('./ScoreService');
+      await ScoreService.recomputeAndPersistScore(this.prisma as any, data.matchId);
+    } catch {}
     return transformed;
   }
 
@@ -381,6 +386,11 @@ export class EventService {
       try {
         const { sseHub } = await import('../utils/sse');
         sseHub.broadcast(deleted.match_id, 'event_deleted', { id });
+      } catch {}
+      // Recompute and persist score
+      try {
+        const { ScoreService } = await import('./ScoreService');
+        await ScoreService.recomputeAndPersistScore(this.prisma as any, deleted.match_id);
       } catch {}
       return true;
     } catch (error: any) {

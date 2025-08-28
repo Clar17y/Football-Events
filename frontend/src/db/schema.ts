@@ -73,10 +73,10 @@ export interface EnhancedMatch {
   duration_mins: number;
   /** Period format: 'half' or 'quarter' */
   period_format: 'half' | 'quarter';
-  /** Our team's score */
-  our_score: number;
-  /** Opponent's score */
-  opponent_score: number;
+  /** Home team's score */
+  home_score: number;
+  /** Away team's score */
+  away_score: number;
   /** Match notes */
   notes?: string;
   /** Client timestamps */

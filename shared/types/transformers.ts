@@ -136,8 +136,11 @@ export const transformMatch = (prismaMatch: PrismaMatch): Match => ({
   venue: prismaMatch.venue ?? undefined,
   durationMinutes: prismaMatch.duration_mins,
   periodFormat: prismaMatch.period_format,
-  ourScore: prismaMatch.our_score,
-  opponentScore: prismaMatch.opponent_score,
+  homeScore: (prismaMatch as any).home_score ?? 0,
+  awayScore: (prismaMatch as any).away_score ?? 0,
+  // deprecated fields for compatibility (will be removed after full migration)
+  ourScore: (prismaMatch as any).our_score ?? undefined,
+  opponentScore: (prismaMatch as any).opponent_score ?? undefined,
   notes: prismaMatch.notes ?? undefined,
   createdAt: prismaMatch.created_at,
   updatedAt: prismaMatch.updated_at ?? undefined,
@@ -329,8 +332,8 @@ export const transformMatchUpdateRequest = (
   if (request.venue !== undefined) update.venue = request.venue;
   if (request.durationMinutes !== undefined) update.duration_mins = request.durationMinutes;
   if (request.periodFormat !== undefined) update.period_format = request.periodFormat;
-  if (request.ourScore !== undefined) update.our_score = request.ourScore;
-  if (request.opponentScore !== undefined) update.opponent_score = request.opponentScore;
+  if (request.homeScore !== undefined) update.home_score = request.homeScore;
+  if (request.awayScore !== undefined) update.away_score = request.awayScore;
   if (request.notes !== undefined) update.notes = request.notes;
   
   return update;

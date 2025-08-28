@@ -80,8 +80,8 @@ export interface StoredMatch {
   venue?: string;
   duration_mins: number;
   period_format: string;
-  our_score: number;
-  opponent_score: number;
+  home_score: number;
+  away_score: number;
   notes?: string;
   // Legacy fields for compatibility
   date?: Timestamp;

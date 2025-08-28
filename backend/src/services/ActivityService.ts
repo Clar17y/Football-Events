@@ -195,8 +195,8 @@ export class ActivityService {
           awayTeam: match.awayTeam.name,
           kickoffTime: match.kickoff_ts,
           seasonLabel: match.seasons.label,
-          ourScore: match.our_score,
-          opponentScore: match.opponent_score
+          homeScore: (match as any).home_score,
+          awayScore: (match as any).away_score
         }
       });
     });

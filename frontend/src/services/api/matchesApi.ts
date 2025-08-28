@@ -158,12 +158,34 @@ export const matchesApi = {
     const response = await apiClient.post<MatchState>(`/matches/${id}/resume`);
     return response.data as unknown as MatchState;
   },
-  async completeMatch(id: string, finalScore?: { ourScore: number; opponentScore: number }, notes?: string): Promise<MatchState> {
+  async completeMatch(id: string, finalScore?: { home: number; away: number }, notes?: string): Promise<MatchState> {
     const body: any = {};
     if (finalScore) body.finalScore = finalScore;
     if (notes) body.notes = notes;
     const response = await apiClient.post<MatchState>(`/matches/${id}/complete`, body);
     return response.data as unknown as MatchState;
+  },
+
+  /**
+   * Live matches (match_state status = LIVE)
+   */
+  async getLiveMatches(): Promise<MatchState[]> {
+    const response = await apiClient.get(`/matches/live`);
+    const body = response.data as any;
+    return (body?.data ?? body) as MatchState[];
+  },
+
+  /**
+   * Match states with pagination
+   */
+  async getMatchStates(page = 1, limit = 500, matchIds?: string[]): Promise<{ data: Array<MatchState & { matchId: string }>; pagination?: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean } }> {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (matchIds && matchIds.length) params.append('matchIds', matchIds.join(','));
+    const response = await apiClient.get(`/matches/states?${params.toString()}`);
+    const body: any = response.data;
+    const data = body?.data ?? body;
+    const pagination = body?.pagination;
+    return { data, pagination } as any;
   },
   async startPeriod(id: string, periodType?: 'regular' | 'extra_time' | 'penalty_shootout'): Promise<MatchPeriod> {
     const response = await apiClient.post<MatchPeriod>(`/matches/${id}/periods/start`, periodType ? { periodType } : undefined);
@@ -172,6 +194,12 @@ export const matchesApi = {
   async endPeriod(id: string, periodId: string, payload?: { reason?: string; actualDurationSeconds?: number }): Promise<MatchPeriod> {
     const response = await apiClient.post<MatchPeriod>(`/matches/${id}/periods/${periodId}/end`, payload || {});
     return response.data as unknown as MatchPeriod;
+  },
+  /**
+   * Delete a match (soft delete)
+   */
+  async deleteMatch(id: string): Promise<void> {
+    await apiClient.delete(`/matches/${id}`);
   },
   // === Viewer Sharing ===
   async shareViewerToken(id: string, expiresInMinutes: number = 480): Promise<{ viewer_token: string; expiresAt: string; code?: string; shareUrl?: string }> {

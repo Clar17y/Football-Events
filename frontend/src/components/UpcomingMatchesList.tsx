@@ -29,6 +29,8 @@ interface UpcomingMatchesListProps {
   onToggleExpand: (matchId: string) => void;
   onMatchSelect: (matchId: string) => void;
   onEditMatch?: (match: Match) => void;
+  onLiveMatch?: (match: Match) => void;
+  onDeleteMatch?: (match: Match) => void;
   loading?: boolean;
   teamsCache?: Map<string, Team>;
   primaryTeamId?: string;
@@ -40,16 +42,15 @@ const UpcomingMatchesList: React.FC<UpcomingMatchesListProps> = ({
   onToggleExpand,
   onMatchSelect,
   onEditMatch,
+  onLiveMatch,
+  onDeleteMatch,
   loading = false,
   teamsCache = new Map(),
   primaryTeamId
 }) => {
-  // Filter and sort upcoming matches chronologically (most recent first)
+  // Sort upcoming matches chronologically (earliest first)
   const upcomingMatches = useMemo(() => {
-    const now = new Date();
-    return matches
-      .filter(match => new Date(match.kickoffTime) >= now)
-      .sort((a, b) => new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime());
+    return [...matches].sort((a, b) => new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime());
   }, [matches]);
 
   
@@ -209,10 +210,9 @@ const UpcomingMatchesList: React.FC<UpcomingMatchesListProps> = ({
                     <IonButton
                       fill="outline"
                       size="small"
-                      color="medium"
-                      disabled
+                      color="primary"
                       className="live-match-button"
-                      title="Coming Soon"
+                      onClick={(e) => { e.stopPropagation(); onLiveMatch && onLiveMatch(match); }}
                     >
                       <IonIcon icon={play} slot="start" />
                       Live Match
@@ -232,6 +232,18 @@ const UpcomingMatchesList: React.FC<UpcomingMatchesListProps> = ({
                       >
                         <IonIcon icon={create} slot="start" />
                         Edit Match
+                      </IonButton>
+                    </IonCol>
+                  )}
+                  {onDeleteMatch && (
+                    <IonCol size="auto">
+                      <IonButton
+                        fill="outline"
+                        size="small"
+                        color="danger"
+                        onClick={(e) => { e.stopPropagation(); onDeleteMatch(match); }}
+                      >
+                        Delete Match
                       </IonButton>
                     </IonCol>
                   )}

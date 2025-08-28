@@ -413,8 +413,8 @@ describe('Matches API Integration', () => {
       // Update the match
       const updateData = { 
         competition: 'Updated Competition',
-        ourScore: 2,
-        opponentScore: 1
+        homeScore: 2,
+        awayScore: 1
       };
       const response = await apiRequest
         .put(`/api/v1/matches/${matchResponse.body.id}`)
@@ -423,7 +423,8 @@ describe('Matches API Integration', () => {
         .expect(200);
       
       expect(response.body.competition).toBe(updateData.competition);
-      expect(response.body.ourScore).toBe(updateData.ourScore);
+      expect(response.body.homeScore).toBe(updateData.homeScore);
+      expect(response.body.awayScore).toBe(updateData.awayScore);
       console.log('Match creator can update match');
     });
 

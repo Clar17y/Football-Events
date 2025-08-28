@@ -20,7 +20,7 @@ import {
 } from 'ionicons/icons';
 import type { Match, Team } from '@shared/types';
 import './MatchesListShared.css';
-import { isHomeMatch as isHomeMatchFn, getMatchColors, formatMatchDateTime, getMatchResult } from './matchUtils';
+import { isHomeMatch as isHomeMatchFn, getMatchColors, formatMatchDateTime, getMatchResult, getPerspectiveScores } from './matchUtils';
 
 interface CompletedMatchesListProps {
   matches: Match[];
@@ -28,6 +28,7 @@ interface CompletedMatchesListProps {
   onToggleExpand: (matchId: string) => void;
   onMatchSelect: (matchId: string) => void;
   onViewEvents?: (match: Match) => void;
+  onDeleteMatch?: (match: Match) => void;
   loading?: boolean;
   teamsCache?: Map<string, Team>;
   primaryTeamId?: string;
@@ -39,16 +40,14 @@ const CompletedMatchesList: React.FC<CompletedMatchesListProps> = ({
   onToggleExpand,
   onMatchSelect,
   onViewEvents,
+  onDeleteMatch,
   loading = false,
   teamsCache = new Map(),
   primaryTeamId
 }) => {
-  // Filter and sort completed matches chronologically (most recent first)
+  // Sort completed matches chronologically (most recent first)
   const completedMatches = useMemo(() => {
-    const now = new Date();
-    return matches
-      .filter(match => new Date(match.kickoffTime) < now)
-      .sort((a, b) => new Date(b.kickoffTime).getTime() - new Date(a.kickoffTime).getTime());
+    return [...matches].sort((a, b) => new Date(b.kickoffTime).getTime() - new Date(a.kickoffTime).getTime());
   }, [matches]);
 
   
@@ -127,9 +126,11 @@ const CompletedMatchesList: React.FC<CompletedMatchesListProps> = ({
               <IonCol size="auto" className="match-summary-col">
                 <div className="match-summary">
                   <div className="match-score">
+                    {(() => { const s = getPerspectiveScores(match, primaryTeamId); return (
                     <span className={`score-display ${result.type}`}>
-                      {match.ourScore || 0} - {match.opponentScore || 0}
+                      {s.our} - {s.opponent}
                     </span>
+                    ); })()}
                     <span className={`result-indicator ${result.type}`}>
                       {result.type === 'win' ? 'W' : result.type === 'loss' ? 'L' : 'D'}
                     </span>
@@ -222,20 +223,28 @@ const CompletedMatchesList: React.FC<CompletedMatchesListProps> = ({
                       fill="outline"
                       size="small"
                       color="medium"
-                      disabled
                       className="show-events-button"
-                      title="Coming Soon - Live Events page will be created in future"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (onViewEvents) {
-                          onViewEvents(match);
-                        }
+                        if (onViewEvents) onViewEvents(match);
                       }}
                     >
                       <IonIcon icon={eye} slot="start" />
                       Show Match Events
                     </IonButton>
                   </IonCol>
+                  {onDeleteMatch && (
+                    <IonCol size="auto">
+                      <IonButton
+                        fill="outline"
+                        size="small"
+                        color="danger"
+                        onClick={(e) => { e.stopPropagation(); onDeleteMatch(match); }}
+                      >
+                        Delete Match
+                      </IonButton>
+                    </IonCol>
+                  )}
                 </IonRow>
               </IonGrid>
             </div>

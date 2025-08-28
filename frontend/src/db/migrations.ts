@@ -169,8 +169,8 @@ async function migrateMatchesToEnhanced(db: GrassrootsDB): Promise<void> {
       away_team_id: oldMatch.away_team_id,
       duration_mins: settings.duration_mins || 50,
       period_format: settings.period_format || 'quarter',
-      our_score: 0, // Will be calculated from events
-      opponent_score: 0, // Will be calculated from events
+      home_score: 0, // Will be calculated from events
+      away_score: 0, // Will be calculated from events
       updated_at: oldMatch.updated_at || oldMatch.created_at || now,
       
       // Authentication and soft delete fields

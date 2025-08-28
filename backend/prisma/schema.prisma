@@ -112,8 +112,8 @@ model Match {
   venue              String?
   duration_mins      Int            @default(50)
   period_format      String         @default("quarter")
-  our_score          Int            @default(0)
-  opponent_score     Int            @default(0)
+  home_score         Int            @default(0)
+  away_score         Int            @default(0)
   notes              String?
   created_at         DateTime       @default(now()) @db.Timestamptz(6)
   updated_at         DateTime?      @db.Timestamptz(6)

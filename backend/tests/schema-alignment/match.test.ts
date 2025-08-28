@@ -43,8 +43,8 @@ describe('Match Schema Alignment Tests', () => {
     }),
     updateSampleData: () => ({
       venue: 'Updated Stadium',
-      ourScore: 2,
-      opponentScore: 1
+      homeScore: 2,
+      awayScore: 1
     }),
     transformCreate: (data) => transformMatchCreateRequest(data, testUserId),
     transformUpdate: transformMatchUpdateRequest,
@@ -195,8 +195,8 @@ describe('Match Schema Alignment Tests', () => {
       expect(createdMatch.venue).toBe('Old Trafford');
       expect(createdMatch.duration_mins).toBe(90);
       expect(createdMatch.period_format).toBe('half');
-      expect(createdMatch.our_score).toBe(0); // Default value
-      expect(createdMatch.opponent_score).toBe(0); // Default value
+      expect((createdMatch as any).home_score).toBe(0); // Default value
+      expect((createdMatch as any).away_score).toBe(0); // Default value
       expect(createdMatch.notes).toBe('Important derby match');
       expect(createdMatch.created_at).toBeInstanceOf(Date);
       expect(createdMatch.updated_at).toBeNull();
@@ -214,8 +214,8 @@ describe('Match Schema Alignment Tests', () => {
       expect(transformedMatch.venue).toBe('Old Trafford');
       expect(transformedMatch.durationMinutes).toBe(90);
       expect(transformedMatch.periodFormat).toBe('half');
-      expect(transformedMatch.ourScore).toBe(0);
-      expect(transformedMatch.opponentScore).toBe(0);
+      expect(transformedMatch.homeScore).toBe(0);
+      expect(transformedMatch.awayScore).toBe(0);
       expect(transformedMatch.notes).toBe('Important derby match');
       expect(transformedMatch.createdAt).toBe(createdMatch.created_at);
       expect(transformedMatch.updatedAt).toBeUndefined();
@@ -306,8 +306,8 @@ describe('Match Schema Alignment Tests', () => {
       // Update using frontend interface
       const updateData: MatchUpdateRequest = {
         venue: 'Updated Stadium',
-        ourScore: 3,
-        opponentScore: 1,
+        homeScore: 3,
+        awayScore: 1,
         notes: 'Great victory!'
       };
 
@@ -315,8 +315,8 @@ describe('Match Schema Alignment Tests', () => {
 
       expect(prismaUpdateInput).toEqual({
         venue: 'Updated Stadium',
-        our_score: 3,
-        opponent_score: 1,
+        home_score: 3,
+        away_score: 1,
         notes: 'Great victory!'
       });
 
@@ -330,8 +330,8 @@ describe('Match Schema Alignment Tests', () => {
       const transformedUpdated = transformMatch(updatedMatch);
 
       expect(transformedUpdated.venue).toBe('Updated Stadium'); // Updated
-      expect(transformedUpdated.ourScore).toBe(3); // Updated
-      expect(transformedUpdated.opponentScore).toBe(1); // Updated
+      expect(transformedUpdated.homeScore).toBe(3); // Updated
+      expect(transformedUpdated.awayScore).toBe(1); // Updated
       expect(transformedUpdated.notes).toBe('Great victory!'); // Updated
       expect(transformedUpdated.seasonId).toBe(testSeasonId); // Unchanged
       // Note: updated_at is not automatically set in current schema
@@ -351,9 +351,9 @@ describe('Match Schema Alignment Tests', () => {
 
       // Test various score scenarios
       const scoreUpdates = [
-        { ourScore: 1, opponentScore: 0 },
-        { ourScore: 2, opponentScore: 2 },
-        { ourScore: 0, opponentScore: 3 }
+        { homeScore: 1, awayScore: 0 },
+        { homeScore: 2, awayScore: 2 },
+        { homeScore: 0, awayScore: 3 }
       ];
 
       for (const scores of scoreUpdates) {
@@ -366,8 +366,8 @@ describe('Match Schema Alignment Tests', () => {
         });
 
         const transformedMatch = transformMatch(updatedMatch);
-        expect(transformedMatch.ourScore).toBe(scores.ourScore);
-        expect(transformedMatch.opponentScore).toBe(scores.opponentScore);
+        expect(transformedMatch.homeScore).toBe((scores as any).homeScore);
+        expect(transformedMatch.awayScore).toBe((scores as any).awayScore);
       }
     });
   });
@@ -529,8 +529,8 @@ describe('Match Schema Alignment Tests', () => {
       expect(transformedMatch.venue).toBe(createdMatch.venue);
       expect(transformedMatch.durationMinutes).toBe(createdMatch.duration_mins);
       expect(transformedMatch.periodFormat).toBe(createdMatch.period_format);
-      expect(transformedMatch.ourScore).toBe(createdMatch.our_score);
-      expect(transformedMatch.opponentScore).toBe(createdMatch.opponent_score);
+      expect(transformedMatch.homeScore).toBe((createdMatch as any).home_score);
+      expect(transformedMatch.awayScore).toBe((createdMatch as any).away_score);
       expect(transformedMatch.notes).toBeUndefined(); // Notes not entered
       expect(transformedMatch.createdAt).toBe(createdMatch.created_at);
     });
@@ -614,14 +614,14 @@ describe('Match Schema Alignment Tests', () => {
 
       // Test extreme scores
       const extremeScores = [
-        { ourScore: 0, opponentScore: 0 },   // Draw
-        { ourScore: 10, opponentScore: 0 },  // High score
-        { ourScore: 0, opponentScore: 15 },  // High opponent score
-        { ourScore: 99, opponentScore: 99 }  // Very high scores
+        { homeScore: 0, awayScore: 0 },   // Draw
+        { homeScore: 10, awayScore: 0 },  // High score
+        { homeScore: 0, awayScore: 15 },  // High opponent score
+        { homeScore: 99, awayScore: 99 }  // Very high scores
       ];
 
       for (const scores of extremeScores) {
-        const updateData: MatchUpdateRequest = scores;
+        const updateData: MatchUpdateRequest = scores as any;
         const prismaUpdateInput = transformMatchUpdateRequest(updateData);
         
         const updatedMatch = await prisma.match.update({
@@ -630,8 +630,8 @@ describe('Match Schema Alignment Tests', () => {
         });
 
         const transformedMatch = transformMatch(updatedMatch);
-        expect(transformedMatch.ourScore).toBe(scores.ourScore);
-        expect(transformedMatch.opponentScore).toBe(scores.opponentScore);
+        expect(transformedMatch.homeScore).toBe((scores as any).homeScore);
+        expect(transformedMatch.awayScore).toBe((scores as any).awayScore);
       }
     });
   });
