@@ -4,6 +4,8 @@
 
 The Live Match Management Backend System provides the foundational real-time match state tracking and control functionality for grassroots football matches. This backend system enables the core data management and API infrastructure needed to track match progress through different periods, manage timing, and maintain accurate records of match state transitions. The system builds upon the existing matches infrastructure to add dynamic state management capabilities that will support future frontend interfaces and user controls.
 
+**Note**: This specification covers only the backend infrastructure. A separate specification will be needed for the frontend user interface components, live match control pages, and real-time display features.
+
 ## Requirements
 
 ### Requirement 1
@@ -92,15 +94,15 @@ The Live Match Management Backend System provides the foundational real-time mat
 
 ### Requirement 8
 
-**User Story:** As a coach, I want the live match system to integrate with the existing matches page, so that I can see live match status alongside scheduled and completed matches.
+**User Story:** As a frontend developer, I want APIs that provide match status information, so that I can integrate live match data with user interfaces.
 
 #### Acceptance Criteria
 
-1. WHEN viewing the matches page THEN the system SHALL display current match status for each match
-2. WHEN a match is live THEN the system SHALL show "Live" status with current period information
-3. WHEN a match is paused THEN the system SHALL show "Paused" status with elapsed time
-4. WHEN a match is completed THEN the system SHALL show "Completed" status with final score
-5. WHEN displaying match status THEN the system SHALL use appropriate visual indicators and colors
+1. WHEN querying match status THEN the system SHALL provide current match state information via API
+2. WHEN a match is live THEN the system SHALL return "live" status with current period information
+3. WHEN a match is paused THEN the system SHALL return "paused" status with elapsed time data
+4. WHEN a match is completed THEN the system SHALL return "completed" status with final timing data
+5. WHEN providing status data THEN the system SHALL include all necessary information for frontend display
 
 ### Requirement 9
 

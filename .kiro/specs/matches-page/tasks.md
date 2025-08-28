@@ -64,11 +64,12 @@
   - Instead of "Live Match" button, change to "Show Match Events", this will take you to the Live Events page (to be created in future) showing the events of the match
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7_
 
-- [ ] 10. Add calendar-to-list navigation functionality
+- [x] 10. Add calendar-to-list navigation functionality
   - Implement scroll-to-match functionality when calendar match indicators are clicked
   - Add match highlighting/flashing animation when navigated to from calendar
   - Handle navigation for both upcoming and completed matches sections
   - Ensure smooth scrolling and proper focus management
+  - This functionality can be implemented in the "Recent Activity" list when clicking a match there
   - _Requirements: 2.1.1, 2.1.2_
 
 - [ ] 11. Integrate filtering and organization features
