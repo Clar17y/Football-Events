@@ -490,31 +490,7 @@ const VisualPitchInterface: React.FC<VisualPitchInterfaceProps> = ({
                   </text>
                 )}
 
-                {/* Remove button (when not readonly) */}
-                {!readonly && (
-                  <g
-                    className="remove-button"
-                    transform="translate(2, -2)"
-                    onClick={(e) => handlePlayerRemove(player.id, e as any)}
-                  >
-                    <circle
-                      cx="0"
-                      cy="0"
-                      r="1.6"
-                      className="remove-button-bg"
-                    />
-                    <text
-                      x="0"
-                      y="0.3"
-                      className="remove-button-icon"
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fontSize="1.4"
-                    >
-                      ×
-                    </text>
-                  </g>
-                )}
+
 
                 {/* Player name tooltip */}
                 <title>{player.name}</title>

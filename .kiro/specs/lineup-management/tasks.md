@@ -53,16 +53,25 @@
   - Implement touch and mouse event handling for cross-platform support
   - _Requirements: 2.1, 2.2, 2.3, 2.7, 2.8_
 
-- [ ] 4.2 Create PlayerSelectionPanel component
+- [x] 4.2 Create PlayerSelectionPanel component
   - Implement player list grouped by preferred positions
   - Add drag initiation functionality for player positioning
   - Create player selection state management and visual indicators
   - _Requirements: 1.2, 2.1_
 
 - [ ] 4.3 Create PositionSelectorModal component
-  - Implement modal interface for position selection during substitutions
-  - Add position filtering based on pitch areas and available positions
-  - Create quick selection interface with position previews
+  - Create modal component with overlay and centered dialog for position selection
+  - Implement position grid layout showing available positions (GK, CB, LB, RB, CM, LM, RM, CAM, ST, etc.)
+  - Add position filtering logic to show only valid positions based on current formation and pitch areas
+  - Create visual position previews with mini pitch diagrams showing where each position is located
+  - Implement click handlers for position selection with immediate feedback
+  - Add search/filter functionality to quickly find specific positions
+  - Create keyboard navigation support (arrow keys, enter to select, escape to close)
+  - Add loading states for when position data is being fetched
+  - Implement error handling for failed position calculations or network issues
+  - Create responsive design that works on mobile and desktop
+  - Add accessibility features (ARIA labels, focus management, screen reader support)
+  - Integrate with existing modal patterns and styling from the application
   - _Requirements: 3.3, 3.4_
 
 - [ ] 5. Lineup Management Page Implementation

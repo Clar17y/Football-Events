@@ -15,7 +15,7 @@ import {
   IonBackButton,
   IonText
 } from '@ionic/react';
-import { VisualPitchInterface, PlayerWithPosition, FormationData, PitchPosition } from '../components/lineup';
+import { VisualPitchInterface, PlayerSelectionPanel, PlayerWithPosition, FormationData, PitchPosition } from '../components/lineup';
 import './LineupDemoPage.css';
 
 const LineupDemoPage: React.FC = () => {
@@ -51,6 +51,8 @@ const LineupDemoPage: React.FC = () => {
     { id: '28', name: 'Whit WM',        squadNumber: 27, preferredPosition: 'WM' },
     { id: '29', name: 'Wes WB',         squadNumber: 28, preferredPosition: 'WB' },
     { id: '30', name: 'Finn FB',        squadNumber: 29, preferredPosition: 'FB' },
+    { id: '31', name: 'Alex Unknown',   squadNumber: 31 }, // No preferred position
+    { id: '32', name: 'Jordan Flex',    squadNumber: 32 }, // No preferred position
   ]);
 
   const [formation, setFormation] = useState<FormationData>({
@@ -63,6 +65,7 @@ const LineupDemoPage: React.FC = () => {
 
   const [readonly, setReadonly] = useState(false);
   const [computedFormation, setComputedFormation] = useState<string>('');
+  const [showPlayerPanel, setShowPlayerPanel] = useState(true);
 
   // Simple heuristic formation detector from current on-pitch positions
   const computeFormationString = (onPitch: PlayerWithPosition[]): string => {
@@ -190,6 +193,23 @@ const LineupDemoPage: React.FC = () => {
     !formation.players.some(fp => fp.id === player.id)
   );
 
+  // Get selected players (those on the pitch)
+  const selectedPlayers = useMemo(() => {
+    return new Set(formation.players.map(p => p.id));
+  }, [formation.players]);
+
+  const handlePlayerSelect = (player: PlayerWithPosition) => {
+    // Use the existing addPlayerToPitch function
+    addPlayerToPitch(player);
+  };
+
+  const handlePlayerRemoveFromPanel = (player: PlayerWithPosition) => {
+    // Remove player from formation
+    setFormation(prev => ({
+      players: prev.players.filter(p => p.id !== player.id)
+    }));
+  };
+
   const handleComputeFormation = () => {
     setComputedFormation(computeFormationString(formation.players));
   };
@@ -205,6 +225,12 @@ const LineupDemoPage: React.FC = () => {
           <IonButtons slot="end">
             <IonButton 
               fill="clear" 
+              onClick={() => setShowPlayerPanel(!showPlayerPanel)}
+            >
+              {showPlayerPanel ? 'Hide Panel' : 'Show Panel'}
+            </IonButton>
+            <IonButton 
+              fill="clear" 
               onClick={() => setReadonly(!readonly)}
             >
               {readonly ? 'Edit' : 'View'}
@@ -217,25 +243,43 @@ const LineupDemoPage: React.FC = () => {
         <div className="demo-container">
           <div className="demo-header">
             <IonText>
-              <h2>Visual Pitch Interface Demo</h2>
+              <h2>Lineup Management Demo</h2>
               <p>
                 {readonly 
                   ? 'Viewing mode - players cannot be moved or removed'
-                  : 'Drag players to position them on the pitch. Click the × to remove players.'
+                  : showPlayerPanel 
+                    ? 'Tap players from the panel below to add them to the pitch. Tap selected players to remove them.'
+                    : 'Drag players to position them on the pitch. Click the × to remove players.'
                 }
               </p>
             </IonText>
           </div>
 
-          <div className="pitch-section">
-            <VisualPitchInterface
-              players={players}
-              formation={formation}
-              onPlayerMove={handlePlayerMove}
-              onPlayerRemove={handlePlayerRemove}
-              readonly={readonly}
-              maxPlayers={11}
-            />
+          <div className="demo-layout">
+            <div className="pitch-section">
+              <VisualPitchInterface
+                players={players}
+                formation={formation}
+                onPlayerMove={handlePlayerMove}
+                onPlayerRemove={handlePlayerRemove}
+                readonly={readonly}
+                maxPlayers={11}
+              />
+            </div>
+            
+            {showPlayerPanel && (
+              <div className="player-panel-section">
+                <PlayerSelectionPanel
+                  players={players}
+                  onPlayerSelect={handlePlayerSelect}
+                  onPlayerRemove={handlePlayerRemoveFromPanel}
+                  selectedPlayers={selectedPlayers}
+                  maxPlayers={11}
+                  readonly={readonly}
+                  searchable={true}
+                />
+              </div>
+            )}
           </div>
 
           {!readonly && availablePlayers.length > 0 && (
@@ -265,10 +309,14 @@ const LineupDemoPage: React.FC = () => {
               <h4>Features Demonstrated:</h4>
               <ul>
                 <li>SVG-based football pitch with proper proportions</li>
+                <li>Player selection panel with position grouping</li>
+                <li>Click-to-add functionality for easy player selection</li>
                 <li>Drag and drop functionality for player positioning</li>
                 <li>Real-time position feedback and zone highlighting</li>
+                <li>Player search and filtering</li>
                 <li>Touch and mouse event handling</li>
                 <li>Player removal functionality</li>
+                <li>Selection state management</li>
                 <li>Readonly mode support</li>
                 <li>Player count indicator</li>
                 <li>Responsive design</li>

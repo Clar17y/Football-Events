@@ -37,9 +37,21 @@
   color: var(--grassroots-text-tertiary);
 }
 
-.pitch-section {
+.demo-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   margin-bottom: 24px;
-  height: 400px;
+}
+
+.pitch-section {
+  min-height: 400px;
+  order: 1;
+}
+
+.player-panel-section {
+  min-height: 300px;
+  order: 2;
 }
 
 .available-players {
@@ -113,14 +125,19 @@
   color: var(--grassroots-text-tertiary);
 }
 
-/* Responsive adjustments */
+/* Keep panel underneath on all screen sizes */
+
 @media (max-width: 768px) {
   .demo-container {
     padding: 12px;
   }
 
+  .player-panel-section {
+    min-height: 250px;
+  }
+
   .pitch-section {
-    height: 300px;
+    min-height: 300px;
   }
 
   .player-buttons {
@@ -133,7 +150,11 @@
 }
 
 @media (max-width: 480px) {
+  .player-panel-section {
+    min-height: 200px;
+  }
+
   .pitch-section {
-    height: 250px;
+    min-height: 250px;
   }
 }
