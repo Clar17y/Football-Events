@@ -20,6 +20,7 @@ import MatchesPage from './pages/MatchesPage';
 import AwardsPage from './pages/AwardsPage';
 import StatisticsPage from './pages/StatisticsPage';
 import LiveMatchPage from './pages/LiveMatchPage';
+import LineupDemoPage from './pages/LineupDemoPage';
 // import MatchConsole from './pages/MatchConsole'; // Removed - will be redesigned
 
 setupIonicReact();
@@ -152,6 +153,8 @@ const AppRoutes: React.FC = () => {
       case 'live':
         // Pass currentMatchId (may be null to select nearest upcoming)
         return <LiveMatchPage onNavigate={handleNavigation} matchId={currentMatchId || undefined} />;
+      case 'lineup-demo':
+        return <LineupDemoPage />;
       case 'home':
       default:
         return <HomePage onNavigate={handleNavigation} />;

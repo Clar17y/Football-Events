@@ -288,4 +288,92 @@ router.post('/batch-by-match', authenticateToken, asyncHandler(async (req, res) 
   });
 }));
 
+// GET /api/v1/lineups/match/:matchId/current - Get current lineup for a match
+router.get('/match/:matchId/current', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const { currentTime } = req.query;
+  const currentTimeMinutes = currentTime ? parseFloat(currentTime as string) : 0;
+  
+  if (currentTime && isNaN(currentTimeMinutes)) {
+    return res.status(400).json({
+      error: 'Invalid current time',
+      message: 'Current time must be a valid number'
+    });
+  }
+
+  const currentLineup = await lineupService.getCurrentLineup(
+    req.params['matchId']!, 
+    currentTimeMinutes, 
+    req.user!.id, 
+    req.user!.role
+  );
+  
+  return res.json(currentLineup);
+}));
+
+// GET /api/v1/lineups/match/:matchId/active-at/:timeMinutes - Get active players at specific time
+router.get('/match/:matchId/active-at/:timeMinutes', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const timeMinutes = parseFloat(req.params['timeMinutes']!);
+  
+  if (isNaN(timeMinutes)) {
+    return res.status(400).json({
+      error: 'Invalid time',
+      message: 'Time must be a valid number'
+    });
+  }
+
+  const activePlayers = await lineupService.getActivePlayersAtTime(
+    req.params['matchId']!, 
+    timeMinutes, 
+    req.user!.id, 
+    req.user!.role
+  );
+  
+  return res.json(activePlayers);
+}));
+
+// POST /api/v1/lineups/match/:matchId/substitute - Make a substitution
+router.post('/match/:matchId/substitute', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const { playerOffId, playerOnId, position, currentTime, substitutionReason } = req.body;
+  
+  if (!playerOffId || !playerOnId || !position || currentTime === undefined) {
+    return res.status(400).json({
+      error: 'Validation Error',
+      message: 'playerOffId, playerOnId, position, and currentTime are required'
+    });
+  }
+
+  if (typeof currentTime !== 'number' || currentTime < 0) {
+    return res.status(400).json({
+      error: 'Validation Error',
+      message: 'currentTime must be a non-negative number'
+    });
+  }
+
+  try {
+    const substitutionResult = await lineupService.makeSubstitution(
+      req.params['matchId']!,
+      playerOffId,
+      playerOnId,
+      position,
+      currentTime,
+      req.user!.id,
+      req.user!.role,
+      substitutionReason
+    );
+    
+    return res.status(201).json(substitutionResult);
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
+}));
+
 export default router;

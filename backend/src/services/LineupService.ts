@@ -9,7 +9,10 @@ import {
 import type { 
   Lineup, 
   LineupCreateRequest, 
-  LineupUpdateRequest 
+  LineupUpdateRequest,
+  LineupWithDetails,
+  PlayerWithPosition,
+  SubstitutionResult
 } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { createOrRestoreSoftDeleted, SoftDeletePatterns } from '../utils/softDeleteUtils';
@@ -618,6 +621,386 @@ export class LineupService {
   private isCompleteLineupData(data: LineupUpdateRequest): boolean {
     // Check if we have the minimum required fields to create a lineup
     return !!(data.position);
+  }
+
+  /**
+   * Get the current lineup for a match at a specific time
+   * Returns players who are currently on the pitch based on start_min and end_min
+   */
+  async getCurrentLineup(matchId: string, currentTime: number, userId: string, userRole: string): Promise<LineupWithDetails[]> {
+    // First check if user has access to the match
+    const matchWhere: any = { 
+      match_id: matchId,
+      is_deleted: false 
+    };
+
+    // Non-admin users can only access their own matches
+    if (userRole !== 'ADMIN') {
+      matchWhere.created_by_user_id = userId;
+    }
+
+    const match = await this.prisma.match.findFirst({ where: matchWhere });
+    if (!match) {
+      return []; // Match not found or no permission - return empty array
+    }
+
+    const lineups = await this.prisma.lineup.findMany({
+      where: {
+        match_id: matchId,
+        is_deleted: false,
+        start_min: { lte: currentTime },
+        OR: [
+          { end_min: null }, // Still on pitch
+          { end_min: { gt: currentTime } } // End time is after current time
+        ]
+      },
+      include: {
+        players: {
+          select: {
+            id: true,
+            name: true,
+            squad_number: true,
+            preferred_pos: true,
+            dob: true,
+            notes: true,
+            created_at: true,
+            updated_at: true,
+            created_by_user_id: true,
+            deleted_at: true,
+            deleted_by_user_id: true,
+            is_deleted: true
+          }
+        }
+      },
+      orderBy: [
+        { start_min: 'desc' } // Get most recent lineup entry for each player
+      ]
+    });
+
+    // Transform to LineupWithDetails
+    return lineups.map(lineup => ({
+      ...transformLineup(lineup),
+      player: {
+        id: lineup.players.id,
+        name: lineup.players.name,
+        squadNumber: lineup.players.squad_number,
+        preferredPosition: lineup.players.preferred_pos,
+        dateOfBirth: lineup.players.dob,
+        notes: lineup.players.notes,
+        createdAt: lineup.players.created_at,
+        updatedAt: lineup.players.updated_at,
+        createdByUserId: lineup.players.created_by_user_id,
+        deletedAt: lineup.players.deleted_at,
+        deletedByUserId: lineup.players.deleted_by_user_id,
+        isDeleted: lineup.players.is_deleted
+      }
+    }));
+  }
+
+  /**
+   * Get all players who were active at a specific time in the match
+   */
+  async getActivePlayersAtTime(matchId: string, timeMinutes: number, userId: string, userRole: string): Promise<PlayerWithPosition[]> {
+    // First check if user has access to the match
+    const matchWhere: any = { 
+      match_id: matchId,
+      is_deleted: false 
+    };
+
+    // Non-admin users can only access their own matches
+    if (userRole !== 'ADMIN') {
+      matchWhere.created_by_user_id = userId;
+    }
+
+    const match = await this.prisma.match.findFirst({ where: matchWhere });
+    if (!match) {
+      return []; // Match not found or no permission - return empty array
+    }
+
+    const lineups = await this.prisma.lineup.findMany({
+      where: {
+        match_id: matchId,
+        is_deleted: false,
+        start_min: { lte: timeMinutes },
+        OR: [
+          { end_min: null }, // Still on pitch
+          { end_min: { gt: timeMinutes } } // End time is after specified time
+        ]
+      },
+      include: {
+        players: {
+          select: {
+            id: true,
+            name: true,
+            squad_number: true,
+            preferred_pos: true,
+            dob: true,
+            notes: true,
+            created_at: true,
+            updated_at: true,
+            created_by_user_id: true,
+            deleted_at: true,
+            deleted_by_user_id: true,
+            is_deleted: true
+          }
+        }
+      },
+      orderBy: [
+        { start_min: 'desc' }
+      ]
+    });
+
+    // Transform to PlayerWithPosition, removing duplicates (keep most recent lineup entry per player)
+    const playerMap = new Map<string, PlayerWithPosition>();
+    
+    lineups.forEach(lineup => {
+      if (!playerMap.has(lineup.player_id)) {
+        playerMap.set(lineup.player_id, {
+          id: lineup.players.id,
+          name: lineup.players.name,
+          squadNumber: lineup.players.squad_number,
+          preferredPosition: lineup.players.preferred_pos,
+          dateOfBirth: lineup.players.dob,
+          notes: lineup.players.notes,
+          createdAt: lineup.players.created_at,
+          updatedAt: lineup.players.updated_at,
+          createdByUserId: lineup.players.created_by_user_id,
+          deletedAt: lineup.players.deleted_at,
+          deletedByUserId: lineup.players.deleted_by_user_id,
+          isDeleted: lineup.players.is_deleted,
+          position: {
+            code: lineup.position,
+            name: lineup.position // Using position code as name for now
+          }
+        });
+      }
+    });
+
+    return Array.from(playerMap.values());
+  }
+
+  /**
+   * Make a substitution by taking a player off and putting another player on
+   * Creates timeline events and updates lineup records with precise timing
+   */
+  async makeSubstitution(
+    matchId: string, 
+    playerOffId: string, 
+    playerOnId: string, 
+    position: string, 
+    currentTime: number, 
+    userId: string, 
+    userRole: string,
+    substitutionReason?: string
+  ): Promise<SubstitutionResult> {
+    return withPrismaErrorHandling(async () => {
+      // First check if user has access to the match
+      const matchWhere: any = { 
+        match_id: matchId,
+        is_deleted: false 
+      };
+
+      // Non-admin users can only make substitutions for their own matches
+      if (userRole !== 'ADMIN') {
+        matchWhere.created_by_user_id = userId;
+      }
+
+      const match = await this.prisma.match.findFirst({ where: matchWhere });
+      if (!match) {
+        const error = new Error('Match not found or access denied');
+        (error as any).code = 'MATCH_ACCESS_DENIED';
+        (error as any).statusCode = 403;
+        throw error;
+      }
+
+      // Use a transaction to ensure data consistency
+      const result = await this.prisma.$transaction(async (tx) => {
+        // 1. Find the current lineup record for the player being substituted off
+        const currentLineup = await tx.lineup.findFirst({
+          where: {
+            match_id: matchId,
+            player_id: playerOffId,
+            is_deleted: false,
+            start_min: { lte: currentTime },
+            end_min: null // Player is currently on pitch
+          },
+          include: {
+            players: {
+              select: {
+                id: true,
+                name: true,
+                squad_number: true,
+                preferred_pos: true,
+                dob: true,
+                notes: true,
+                created_at: true,
+                updated_at: true,
+                created_by_user_id: true,
+                deleted_at: true,
+                deleted_by_user_id: true,
+                is_deleted: true
+              }
+            }
+          }
+        });
+
+        if (!currentLineup) {
+          const error = new Error('Player is not currently on the pitch');
+          (error as any).code = 'PLAYER_NOT_ON_PITCH';
+          (error as any).statusCode = 400;
+          throw error;
+        }
+
+        // 2. Update the current lineup record to set end_min (player off)
+        const updatedLineupOff = await tx.lineup.update({
+          where: { id: currentLineup.id },
+          data: {
+            end_min: currentTime,
+            updated_at: new Date(),
+            substitution_reason: substitutionReason
+          },
+          include: {
+            players: {
+              select: {
+                id: true,
+                name: true,
+                squad_number: true,
+                preferred_pos: true,
+                dob: true,
+                notes: true,
+                created_at: true,
+                updated_at: true,
+                created_by_user_id: true,
+                deleted_at: true,
+                deleted_by_user_id: true,
+                is_deleted: true
+              }
+            }
+          }
+        });
+
+        // 3. Create new lineup record for the player coming on
+        const newLineup = await tx.lineup.create({
+          data: {
+            match_id: matchId,
+            player_id: playerOnId,
+            start_min: currentTime,
+            end_min: null,
+            position: position as any, // Cast to position_code enum
+            created_by_user_id: userId,
+            substitution_reason: substitutionReason
+          },
+          include: {
+            players: {
+              select: {
+                id: true,
+                name: true,
+                squad_number: true,
+                preferred_pos: true,
+                dob: true,
+                notes: true,
+                created_at: true,
+                updated_at: true,
+                created_by_user_id: true,
+                deleted_at: true,
+                deleted_by_user_id: true,
+                is_deleted: true
+              }
+            }
+          }
+        });
+
+        // 4. Create timeline events for the substitution
+        const playerOffEvent = await tx.event.create({
+          data: {
+            match_id: matchId,
+            kind: 'ball_out', // Using ball_out as closest available event type for substitution
+            player_id: playerOffId,
+            team_id: match.home_team_id, // Assuming home team for now - this should be determined properly
+            notes: `${updatedLineupOff.players.name} substituted off`,
+            clock_ms: Math.round(currentTime * 60 * 1000), // Convert minutes to milliseconds
+            created_by_user_id: userId
+          }
+        });
+
+        const playerOnEvent = await tx.event.create({
+          data: {
+            match_id: matchId,
+            kind: 'ball_out', // Using ball_out as closest available event type for substitution
+            player_id: playerOnId,
+            team_id: match.home_team_id, // Assuming home team for now - this should be determined properly
+            notes: `${newLineup.players.name} substituted on`,
+            clock_ms: Math.round(currentTime * 60 * 1000), // Convert minutes to milliseconds
+            created_by_user_id: userId
+          }
+        });
+
+        return {
+          updatedLineupOff,
+          newLineup,
+          events: [playerOffEvent, playerOnEvent]
+        };
+      });
+
+      // Transform the results to the expected format
+      const playerOffLineup: LineupWithDetails = {
+        ...transformLineup(result.updatedLineupOff),
+        player: {
+          id: result.updatedLineupOff.players.id,
+          name: result.updatedLineupOff.players.name,
+          squadNumber: result.updatedLineupOff.players.squad_number,
+          preferredPosition: result.updatedLineupOff.players.preferred_pos,
+          dateOfBirth: result.updatedLineupOff.players.dob,
+          notes: result.updatedLineupOff.players.notes,
+          createdAt: result.updatedLineupOff.players.created_at,
+          updatedAt: result.updatedLineupOff.players.updated_at,
+          createdByUserId: result.updatedLineupOff.players.created_by_user_id,
+          deletedAt: result.updatedLineupOff.players.deleted_at,
+          deletedByUserId: result.updatedLineupOff.players.deleted_by_user_id,
+          isDeleted: result.updatedLineupOff.players.is_deleted
+        }
+      };
+
+      const playerOnLineup: LineupWithDetails = {
+        ...transformLineup(result.newLineup),
+        player: {
+          id: result.newLineup.players.id,
+          name: result.newLineup.players.name,
+          squadNumber: result.newLineup.players.squad_number,
+          preferredPosition: result.newLineup.players.preferred_pos,
+          dateOfBirth: result.newLineup.players.dob,
+          notes: result.newLineup.players.notes,
+          createdAt: result.newLineup.players.created_at,
+          updatedAt: result.newLineup.players.updated_at,
+          createdByUserId: result.newLineup.players.created_by_user_id,
+          deletedAt: result.newLineup.players.deleted_at,
+          deletedByUserId: result.newLineup.players.deleted_by_user_id,
+          isDeleted: result.newLineup.players.is_deleted
+        }
+      };
+
+      return {
+        playerOff: playerOffLineup,
+        playerOn: playerOnLineup,
+        timelineEvents: result.events.map(event => ({
+          id: event.id,
+          matchId: event.match_id,
+          createdAt: event.created_at,
+          periodNumber: event.period_number,
+          clockMs: event.clock_ms,
+          kind: event.kind,
+          teamId: event.team_id,
+          playerId: event.player_id,
+          notes: event.notes,
+          sentiment: event.sentiment,
+          updatedAt: event.updated_at,
+          createdByUserId: event.created_by_user_id,
+          deletedAt: event.deleted_at,
+          deletedByUserId: event.deleted_by_user_id,
+          isDeleted: event.is_deleted
+        }))
+      };
+    }, 'Substitution');
   }
 
   async disconnect(): Promise<void> {

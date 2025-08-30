@@ -47,6 +47,8 @@ model User {
   match_periods_deleted match_periods[] @relation("MatchPeriodDeletedBy")
   viewer_links_created viewer_links[] @relation("ViewerLinkCreatedBy")
   viewer_links_deleted viewer_links[] @relation("ViewerLinkDeletedBy")
+  default_lineups_created default_lineups[] @relation("DefaultLineupCreatedBy")
+  default_lineups_deleted default_lineups[] @relation("DefaultLineupDeletedBy")
 
   @@map("users")
   @@schema("grassroots")
@@ -71,6 +73,7 @@ model Team {
   awayMatches        Match[]        @relation("AwayTeam")
   homeMatches        Match[]        @relation("HomeTeam")
   player_teams       player_teams[]
+  default_lineups    default_lineups[]
   created_by         User           @relation("TeamCreatedBy", fields: [created_by_user_id], references: [id])
   deleted_by         User?          @relation("TeamDeletedBy", fields: [deleted_by_user_id], references: [id])
 
@@ -184,22 +187,25 @@ model awards {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model lineup {
-  match_id           String        @db.Uuid
-  player_id          String        @db.Uuid
-  start_min          Float         @default(0)
-  end_min            Float?
-  created_at         DateTime      @default(now()) @db.Timestamptz(6)
-  updated_at         DateTime?     @db.Timestamptz(6)
-  created_by_user_id String        @db.Uuid
-  deleted_at         DateTime?
-  deleted_by_user_id String?       @db.Uuid
-  is_deleted         Boolean       @default(false)
-  position           position_code
-  id                 String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  created_by         User          @relation("LineupCreatedBy", fields: [created_by_user_id], references: [id])
-  deleted_by         User?         @relation("LineupDeletedBy", fields: [deleted_by_user_id], references: [id])
-  matches            Match         @relation(fields: [match_id], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
-  players            Player        @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  match_id            String        @db.Uuid
+  player_id           String        @db.Uuid
+  start_min           Float         @default(0)
+  end_min             Float?
+  created_at          DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?     @db.Timestamptz(6)
+  created_by_user_id  String        @db.Uuid
+  deleted_at          DateTime?
+  deleted_by_user_id  String?       @db.Uuid
+  is_deleted          Boolean       @default(false)
+  position            position_code
+  id                  String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pitch_x             Decimal?      @db.Decimal(5,2)
+  pitch_y             Decimal?      @db.Decimal(5,2)
+  substitution_reason String?       @db.VarChar(100)
+  created_by          User          @relation("LineupCreatedBy", fields: [created_by_user_id], references: [id])
+  deleted_by          User?         @relation("LineupDeletedBy", fields: [deleted_by_user_id], references: [id])
+  matches             Match         @relation(fields: [match_id], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
+  players             Player        @relation(fields: [player_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([match_id, player_id, start_min])
   @@schema("grassroots")
@@ -355,6 +361,41 @@ model viewer_links {
   deleted_by         User?     @relation("ViewerLinkDeletedBy", fields: [deleted_by_user_id], references: [id])
 
   @@map("viewer_links")
+  @@schema("grassroots")
+}
+
+model default_lineups {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  team_id            String    @db.Uuid
+  formation_data     Json
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime? @db.Timestamptz(6)
+  created_by_user_id String    @db.Uuid
+  deleted_at         DateTime?
+  deleted_by_user_id String?   @db.Uuid
+  is_deleted         Boolean   @default(false)
+
+  team               Team      @relation(fields: [team_id], references: [id], onDelete: Cascade)
+  created_by         User      @relation("DefaultLineupCreatedBy", fields: [created_by_user_id], references: [id])
+  deleted_by         User?     @relation("DefaultLineupDeletedBy", fields: [deleted_by_user_id], references: [id])
+
+  @@unique([team_id, created_by_user_id])
+  @@map("default_lineups")
+  @@schema("grassroots")
+}
+
+model position_zones {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  position_code position_code
+  zone_name     String        @db.VarChar(50)
+  min_x         Decimal       @db.Decimal(5,2)
+  max_x         Decimal       @db.Decimal(5,2)
+  min_y         Decimal       @db.Decimal(5,2)
+  max_y         Decimal       @db.Decimal(5,2)
+  priority      Int           @default(1)
+  created_at    DateTime      @default(now()) @db.Timestamptz(6)
+
+  @@map("position_zones")
   @@schema("grassroots")
 }
 

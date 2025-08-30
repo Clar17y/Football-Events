@@ -292,12 +292,34 @@ export const lineupCreateSchema = z.object({
   position: z.string()
     .min(1, 'Position is required')
     .max(10, 'Position code must be less than 10 characters')
-    .trim()
+    .trim(),
+  pitchX: z.number()
+    .min(0, 'Pitch X coordinate must be between 0 and 100')
+    .max(100, 'Pitch X coordinate must be between 0 and 100')
+    .optional(),
+  pitchY: z.number()
+    .min(0, 'Pitch Y coordinate must be between 0 and 100')
+    .max(100, 'Pitch Y coordinate must be between 0 and 100')
+    .optional(),
+  substitutionReason: z.string()
+    .max(100, 'Substitution reason must be less than 100 characters')
+    .optional()
 });
 
 export const lineupUpdateSchema = z.object({
   endMinute: z.number().min(0).max(300).optional(),
-  position: z.string().min(1).max(10).trim().optional()
+  position: z.string().min(1).max(10).trim().optional(),
+  pitchX: z.number()
+    .min(0, 'Pitch X coordinate must be between 0 and 100')
+    .max(100, 'Pitch X coordinate must be between 0 and 100')
+    .optional(),
+  pitchY: z.number()
+    .min(0, 'Pitch Y coordinate must be between 0 and 100')
+    .max(100, 'Pitch Y coordinate must be between 0 and 100')
+    .optional(),
+  substitutionReason: z.string()
+    .max(100, 'Substitution reason must be less than 100 characters')
+    .optional()
 });
 
 // Batch operation schemas
@@ -390,6 +412,55 @@ export const playerBatchSchema = z.object({
     data: playerUpdateSchema
   })).optional().default([]),
   delete: z.array(z.string().uuid('Player ID must be a valid UUID')).optional().default([])
+});
+
+// Default lineup validation schemas
+const formationPlayerSchema = z.object({
+  playerId: z.string().uuid('Player ID must be a valid UUID'),
+  position: z.string()
+    .min(1, 'Position is required')
+    .max(10, 'Position code must be less than 10 characters')
+    .trim(),
+  pitchX: z.number()
+    .min(0, 'Pitch X coordinate must be between 0 and 100')
+    .max(100, 'Pitch X coordinate must be between 0 and 100'),
+  pitchY: z.number()
+    .min(0, 'Pitch Y coordinate must be between 0 and 100')
+    .max(100, 'Pitch Y coordinate must be between 0 and 100')
+});
+
+export const defaultLineupCreateSchema = z.object({
+  teamId: z.string().uuid('Team ID must be a valid UUID'),
+  formation: z.array(formationPlayerSchema)
+    .min(1, 'Formation must contain at least one player')
+    .max(11, 'Formation cannot contain more than 11 players')
+    .refine(
+      (formation) => {
+        const playerIds = formation.map(p => p.playerId);
+        const uniquePlayerIds = new Set(playerIds);
+        return playerIds.length === uniquePlayerIds.size;
+      },
+      {
+        message: 'Formation cannot contain duplicate players'
+      }
+    )
+});
+
+export const defaultLineupUpdateSchema = z.object({
+  formation: z.array(formationPlayerSchema)
+    .min(1, 'Formation must contain at least one player')
+    .max(11, 'Formation cannot contain more than 11 players')
+    .refine(
+      (formation) => {
+        const playerIds = formation.map(p => p.playerId);
+        const uniquePlayerIds = new Set(playerIds);
+        return playerIds.length === uniquePlayerIds.size;
+      },
+      {
+        message: 'Formation cannot contain duplicate players'
+      }
+    )
+    .optional()
 });
 
 // Match state management validation schemas

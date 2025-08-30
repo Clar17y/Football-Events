@@ -272,6 +272,14 @@ export const SoftDeletePatterns = {
     match_id: matchId,
     player_id: playerId,
     start_min: startMinute
+  }),
+
+  /**
+   * Default lineup constraint pattern (team + user)
+   */
+  defaultLineup: (teamId: string, userId: string) => ({
+    team_id: teamId,
+    created_by_user_id: userId
   })
 };
 

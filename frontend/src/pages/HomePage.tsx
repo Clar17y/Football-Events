@@ -178,6 +178,14 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       color: 'purple',
       route: '/statistics',
       description: 'Coming soon - detailed analytics'
+    },
+    {
+      title: 'Lineup Demo',
+      subtitle: 'Visual pitch interface',
+      icon: football,
+      color: 'success',
+      route: '/lineup-demo',
+      description: 'Demo of the new visual lineup management system'
     }
   ];
 

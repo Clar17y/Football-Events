@@ -12,6 +12,8 @@ import awardsRouter from './awards';
 import statsRouter from './stats';
 import authRouter from './auth';
 import activityRouter from './activity';
+import defaultLineupsRouter from './default-lineups';
+import positionsRouter from './positions';
 
 const v1Router = Router();
 
@@ -31,6 +33,8 @@ v1Router.get('/', (_req, res) => {
       matches: '/api/v1/matches',
       events: '/api/v1/events',
       lineups: '/api/v1/lineups',
+      defaultLineups: '/api/v1/default-lineups',
+      positions: '/api/v1/positions',
       awards: '/api/v1/awards',
       stats: '/api/v1/stats',
       auth: '/api/v1/auth',
@@ -50,6 +54,8 @@ v1Router.use('/seasons', seasonsRouter);
 v1Router.use('/matches', matchesRouter);
 v1Router.use('/events', eventsRouter);
 v1Router.use('/lineups', lineupsRouter);
+v1Router.use('/default-lineups', defaultLineupsRouter);
+v1Router.use('/positions', positionsRouter);
 v1Router.use('/awards', awardsRouter);
 v1Router.use('/stats', statsRouter);
 v1Router.use('/auth', authRouter);

@@ -47,5 +47,6 @@ export type {
   LineupWithDetails,
   MatchWithFullDetails,
   PlayerWithPosition,
+  SubstitutionResult,
   SeasonWithStats,
 } from './frontend';

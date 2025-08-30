@@ -393,6 +393,12 @@ export interface PlayerWithPosition extends Player {
   position?: Position;
 }
 
+export interface SubstitutionResult {
+  playerOff: LineupWithDetails;
+  playerOn: LineupWithDetails;
+  timelineEvents: Event[];
+}
+
 export interface SeasonWithStats extends Season {
   matchCount: number;
   playerCount: number;

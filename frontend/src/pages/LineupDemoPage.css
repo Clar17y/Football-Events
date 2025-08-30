@@ -1,0 +1,139 @@
+/**
+ * Lineup Demo Page Styles
+ */
+
+.lineup-demo-content {
+  --padding-top: 0;
+  --padding-bottom: 0;
+}
+
+.demo-container {
+  padding: 16px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.demo-header {
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.demo-header h2 {
+  margin: 0 0 8px 0;
+  color: var(--ion-color-dark, var(--grassroots-text-primary));
+}
+
+.demo-header p {
+  margin: 0;
+  color: var(--ion-color-medium, var(--grassroots-text-secondary));
+  font-size: 0.9rem;
+}
+
+.dark-theme .demo-header h2 {
+  color: var(--grassroots-text-on-dark);
+}
+
+.dark-theme .demo-header p {
+  color: var(--grassroots-text-tertiary);
+}
+
+.pitch-section {
+  margin-bottom: 24px;
+  height: 400px;
+}
+
+.available-players {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: var(--ion-color-light, var(--grassroots-surface-elevated));
+  border-radius: 12px;
+}
+
+.dark-theme .available-players {
+  background: var(--grassroots-surface);
+}
+
+.available-players h3 {
+  margin: 0 0 8px 0;
+  color: var(--ion-color-dark, var(--grassroots-text-primary));
+}
+
+.available-players p {
+  margin: 0 0 12px 0;
+  color: var(--ion-color-medium, var(--grassroots-text-secondary));
+  font-size: 0.9rem;
+}
+
+.dark-theme .available-players h3 {
+  color: var(--grassroots-text-on-dark);
+}
+
+.dark-theme .available-players p {
+  color: var(--grassroots-text-tertiary);
+}
+
+.player-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.demo-info {
+  padding: 16px;
+  background: var(--ion-color-light-tint, var(--grassroots-surface-elevated));
+  border-radius: 12px;
+  border-left: 4px solid var(--ion-color-indigo);
+}
+
+.dark-theme .demo-info {
+  background: var(--grassroots-surface-variant);
+}
+
+.demo-info h4 {
+  margin: 0 0 12px 0;
+  color: var(--ion-color-dark, var(--grassroots-text-primary));
+}
+
+.demo-info ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.demo-info li {
+  margin-bottom: 4px;
+  color: var(--ion-color-medium, var(--grassroots-text-secondary));
+  font-size: 0.9rem;
+}
+
+.dark-theme .demo-info h4 {
+  color: var(--grassroots-text-on-dark);
+}
+
+.dark-theme .demo-info li {
+  color: var(--grassroots-text-tertiary);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .demo-container {
+    padding: 12px;
+  }
+
+  .pitch-section {
+    height: 300px;
+  }
+
+  .player-buttons {
+    flex-direction: column;
+  }
+
+  .demo-info {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .pitch-section {
+    height: 250px;
+  }
+}
