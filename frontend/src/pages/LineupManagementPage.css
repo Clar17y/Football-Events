@@ -1,0 +1,333 @@
+/**
+ * Lineup Management Page Styles
+ * Provides layout and styling for the main lineup management interface
+ */
+
+@import './PageStyles.css';
+
+.lineup-management-content {
+  --background: var(--grassroots-background);
+  /* Page-scoped primary color override to SKY */
+  --ion-color-primary: var(--ion-color-sky);
+  --ion-color-primary-rgb: var(--ion-color-sky-rgb);
+  --ion-color-primary-contrast: var(--ion-color-sky-contrast);
+  --ion-color-primary-contrast-rgb: var(--ion-color-sky-contrast-rgb);
+  --ion-color-primary-shade: var(--ion-color-sky-shade);
+  --ion-color-primary-tint: var(--ion-color-sky-tint);
+}
+
+/* Removed lineup-management-container wrapper */
+
+/* Page Header */
+/* Colored header band with SKY theme */
+.page-header-with-color.sky {
+  padding: var(--grassroots-space-lg) var(--grassroots-space-md);
+  margin: 0;
+  color: white;
+  background: var(--ion-color-sky);
+}
+
+.lineup-header {
+  padding: var(--grassroots-space-lg) var(--grassroots-space-md) var(--grassroots-space-md);
+  background: linear-gradient(135deg, var(--grassroots-surface) 0%, var(--grassroots-surface-elevated) 100%);
+  border-bottom: 1px solid var(--grassroots-surface-variant);
+}
+
+.lineup-title-section {
+  margin-bottom: var(--grassroots-space-md);
+}
+
+.lineup-main-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 700;
+  font-size: 2rem;
+  letter-spacing: -0.025em;
+  color: white;
+  margin: 0;
+}
+
+.lineup-subtitle {
+  color: var(--grassroots-text-secondary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1rem;
+  margin: var(--grassroots-space-sm) 0 0 0;
+  line-height: 1.5;
+}
+
+/* Loading State */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 50vh;
+  gap: 16px;
+}
+
+.loading-container ion-spinner {
+  --color: var(--ion-color-primary);
+  transform: scale(1.5);
+}
+
+/* Team Selection Section */
+.team-selection-section {
+  padding: 0 var(--grassroots-space-md);
+  margin-bottom: var(--grassroots-space-md);
+}
+
+.team-selector-container {
+  display: flex;
+  justify-content: center;
+}
+
+.team-selector-button {
+  --border-radius: 8px;
+  --padding-start: 16px;
+  --padding-end: 16px;
+  min-width: 200px;
+  max-width: 400px;
+  width: 100%;
+}
+
+/* Main Layout */
+.main-layout {
+  display: flex;
+  flex: 1;
+  gap: 16px;
+  min-height: 0; /* Allow flex children to shrink */
+  padding: 0 var(--grassroots-space-md);
+}
+
+/* Content container to mirror matches-content */
+.lineup-content {
+  padding: var(--grassroots-space-md);
+}
+
+/* Pitch Section */
+.pitch-section {
+  flex: 2;
+  min-width: 0; /* Allow flex child to shrink */
+  background: var(--grassroots-surface);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: var(--grassroots-shadow-md);
+  border: 1px solid var(--grassroots-surface-variant);
+  position: relative;
+  z-index: 1; /* ensure above adjacent panel visuals */
+}
+
+/* Save Button Container */
+.save-button-container {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--grassroots-surface-variant);
+  position: relative;
+  z-index: 2;
+}
+
+/* Save Layout Button: make dirty (unsaved) state very obvious */
+.save-layout-button.dirty {
+  opacity: 1 !important; /* ensure fully opaque */
+  --background: var(--ion-color-success);
+  --background-hover: var(--ion-color-success-shade);
+  --background-activated: var(--ion-color-success-shade);
+  --color: var(--ion-color-success-contrast);
+  --box-shadow: 0 6px 16px rgba(var(--ion-color-success-rgb), 0.35);
+  --border-radius: 10px;
+}
+
+.save-layout-button.dirty:hover {
+  transform: translateY(-1px);
+  filter: brightness(0.98);
+}
+
+.save-layout-button.dirty:focus {
+  outline: 3px solid var(--ion-color-success);
+  outline-offset: 2px;
+}
+
+/* Player Panel Section */
+.player-panel-section {
+  flex: 1;
+  min-width: 300px;
+  background: var(--grassroots-surface);
+  border-radius: 8px;
+  box-shadow: var(--grassroots-shadow-md);
+  border: 1px solid var(--grassroots-surface-variant);
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 0;
+}
+
+/* Team Squad Header */
+.team-squad-header {
+  padding: var(--grassroots-space-md);
+  color: white;
+  margin: 0;
+}
+
+.squad-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+  color: white;
+  text-align: center;
+  letter-spacing: -0.025em;
+}
+
+/* Player Panel Content */
+.player-panel-content {
+  flex: 1;
+  padding: 16px;
+  overflow: visible; /* allow full expansion */
+}
+
+/* Remove status section - not needed per requirements */
+
+/* Error Container */
+.error-container {
+  background: var(--ion-color-danger-tint);
+  border: 1px solid var(--ion-color-danger);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px;
+}
+
+.error-container p {
+  margin: 0;
+  text-align: center;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .lineup-management-container {
+    gap: 12px;
+  }
+
+  .main-layout {
+    flex-direction: column;
+    gap: 12px;
+    padding: 0 var(--grassroots-space-sm);
+  }
+
+  .pitch-section {
+    flex: none;
+    min-height: 400px;
+  }
+
+  .player-panel-section {
+    flex: none;
+    min-width: unset;
+  }
+
+  .team-selection-section {
+    padding: 0 var(--grassroots-space-sm);
+  }
+
+  .page-main-title {
+    font-size: 1.5rem;
+  }
+}
+
+/* Tablet Responsive - Always put Team Squad under Pitch Interface */
+@media (max-width: 1024px) {
+  .main-layout {
+    flex-direction: column;
+  }
+
+  .pitch-section {
+    flex: none;
+    min-height: 500px;
+  }
+
+  .player-panel-section {
+    flex: none;
+    min-width: unset;
+  }
+}
+
+/* Large Screen Optimizations */
+@media (min-width: 1200px) {
+  .lineup-content {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .pitch-section {
+    max-width: 900px;
+  }
+}
+
+/* Dark Theme Support */
+.dark-theme .lineup-management-content {
+  --background: var(--grassroots-background);
+}
+
+.dark-theme .pitch-section,
+.dark-theme .player-panel-section {
+  background: var(--grassroots-surface);
+  box-shadow: var(--grassroots-shadow-md);
+  border-color: var(--grassroots-surface-variant);
+}
+
+/* Loading States for Individual Sections */
+.section-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  opacity: 0.7;
+}
+
+.section-loading ion-spinner {
+  --color: var(--ion-color-medium);
+}
+
+/* Save Button States */
+ion-button[disabled] {
+  opacity: 0.5;
+}
+
+ion-button[color="medium"] {
+  --color: var(--ion-color-medium);
+  --background: var(--ion-color-light-shade);
+}
+
+/* Dirty State Indicator */
+.dirty-indicator {
+  color: var(--ion-color-warning);
+  font-weight: 500;
+}
+
+/* Team Selection */
+.header-section ion-select {
+  --placeholder-color: var(--ion-color-medium);
+}
+
+/* Accessibility Improvements */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .header-section,
+  .pitch-section,
+  .player-panel-section,
+  .status-section {
+    border: 2px solid var(--ion-color-dark);
+  }
+}
+
+/* Focus Indicators */
+ion-button:focus,
+ion-select:focus {
+  outline: 2px solid var(--ion-color-primary);
+  outline-offset: 2px;
+}

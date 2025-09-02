@@ -156,6 +156,14 @@
   --ion-color-emerald-shade: #047857;
   --ion-color-emerald-tint: #10b981;
 
+  /* Sky - fresh blue-cyan for lineup page */
+  --ion-color-sky: #0ea5e9;
+  --ion-color-sky-rgb: 14, 165, 233;
+  --ion-color-sky-contrast: #ffffff;
+  --ion-color-sky-contrast-rgb: 255, 255, 255;
+  --ion-color-sky-shade: #0284c7;
+  --ion-color-sky-tint: #38bdf8;
+
   /* ===== SEMANTIC ROLE COLORS ===== */
   /* Player position colors (used in cards/stripes/badges) */
   --position-goalkeeper: var(--ion-color-emerald); /* green */
@@ -219,6 +227,15 @@
   --ion-color-contrast-rgb: var(--ion-color-emerald-contrast-rgb);
   --ion-color-shade: var(--ion-color-emerald-shade);
   --ion-color-tint: var(--ion-color-emerald-tint);
+}
+
+.ion-color-sky {
+  --ion-color-base: var(--ion-color-sky);
+  --ion-color-base-rgb: var(--ion-color-sky-rgb);
+  --ion-color-contrast: var(--ion-color-sky-contrast);
+  --ion-color-contrast-rgb: var(--ion-color-sky-contrast-rgb);
+  --ion-color-shade: var(--ion-color-sky-shade);
+  --ion-color-tint: var(--ion-color-sky-tint);
 }
 
 /* ===== DARK MODE SUPPORT ===== */

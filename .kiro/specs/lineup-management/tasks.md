@@ -59,7 +59,8 @@
   - Create player selection state management and visual indicators
   - _Requirements: 1.2, 2.1_
 
-- [ ] 4.3 Create PositionSelectorModal component
+- [x] 4.3 Create PositionSelectorModal component
+
   - Create modal component with overlay and centered dialog for position selection
   - Implement position grid layout showing available positions (GK, CB, LB, RB, CM, LM, RM, CAM, ST, etc.)
   - Add position filtering logic to show only valid positions based on current formation and pitch areas
@@ -75,23 +76,54 @@
   - _Requirements: 3.3, 3.4_
 
 - [ ] 5. Lineup Management Page Implementation
-- [ ] 5.1 Create LineupManagementPage main component
-  - Implement team selection dropdown with oldest team as default
-  - Create mode switching between default and match-specific lineups
-  - Add save/load functionality for formation data
-  - Integrate with existing navigation and authentication patterns
+- [x] 5.1 Create LineupManagementPage main component
+  - Create page structure mirroring LineupDemoPage with IonPage, IonHeader, IonToolbar, IonContent
+  - Implement team selection dropdown using GET /api/v1/teams (non-deleted teams user created) with oldest team (created_at) as default
+  - Add localStorage integration to remember last selected team on page refresh
+  - Create page layout with: Header bar, Pitch view section, Team selector dropdown + Save button, Player selection panel
+  - Integrate VisualPitchInterface and PlayerSelectionPanel components from demo page
+  - Add navigation integration with IonBackButton and existing app navigation patterns
+  - Implement team roster loading via GET /api/v1/teams/:id/players when team is selected
+  - Add loading state that shows until both team data and default lineup are loaded (whole page ready)
+  - Create "Save Layout" button that calls the default lineup API to persist formation
+  - Auto-load existing default lineup for selected team when available
   - _Requirements: 1.1, 1.2, 5.1, 5.2_
 
-- [ ] 5.2 Implement formation state management
-  - Create Redux/context state for current formation data
-  - Add dirty state tracking and unsaved changes warnings
-  - Implement auto-save functionality for formation drafts
+- [x] 5.1.1 Fix issues with LineupManagementPage
+
+  - The page should have the MatchMaster header like every other page, containing the back arrow and the dark mode theme toggle
+  - The "Lineup Management" header background should then be inside the page, with the same format as every other (Like Matches)
+  - The "Lineup Management" page header should match the color of the Ion Card on the home page. We have a lot of repeated colors on the homepage, suggest another color that could be used and works well in light or dark mode
+  - The "Team Squad" header should be the same background color as the main page header
+  - The "Team Squad" section should always be under the Pitch Interface no matter how wide the screen is
+  - The "Team" selector is poor. It should be a simple drop down list that states the name of the team and the number of players assigned to that team. We could re-use the selector from the player page as it shows the current number of players in each team and has the colors of each team shown and is a good style. The downside is it's not a filter, it's a selector so would need some refactoring to use in both places
+  - The current page appears to be constantly in dark mode, even when you haven't entered the page in dark mode. The "dark mode" feature of it also seems to neglect the background of the pitch interfacew and the "team squad" section
+  - The player list just doesn't work at the moment, a team that has 2 players assigned shows 0 available
+  - There is a 400 bad request for default-lineups when testing it. Presumably because a default lineup for the team does not exist. We should account for the case where it's the first time you go to set a default lineup. This causes the load for players to also fail as they are wrapped in same promise.
+  - The "Save Layout" button should be under the pitch interface
+  - The "status-section" saying the number of players on the pitch isn't necessary... it's on the pitch interface
+
+
+- [ ] 5.2 Implement formation state management with React Context
+  - Create React Context for managing current formation data (players, positions, team selection)
+  - Implement dirty state tracking to detect when formation has been modified from saved state
+  - Add unsaved changes warning prompt when user tries to navigate away or change teams
+  - Create context methods for: loading default lineup, updating player positions, adding/removing players
+  - Implement manual save-only workflow (no auto-save) - changes only persist when user clicks Save
+  - Add loading states for team data fetching and default lineup loading (page-level loading until ready)
+  - Create error states for failed API calls (team loading, player loading, lineup saving)
   - _Requirements: 1.4, 5.2, 5.3_
 
 - [ ] 5.3 Add formation validation and error handling
-  - Implement client-side validation for formation completeness
-  - Add error handling for network failures and conflicts
-  - Create user feedback for validation errors and save status
+  - Implement minimum 1 player validation (grey out save button if no players on pitch)
+  - Implement maximum 11 player validation (prevent adding more than 11 players)
+  - Keep save button always enabled (except during loading states)
+  - Add network error handling for team API calls, player API calls, and default lineup save operations
+  - Create user feedback using toast messages for validation errors and save status
+  - Add save status feedback using toast messages (success/error messages after save attempts)
+  - Implement simple overwrite strategy for concurrent saves (latest save wins)
+  - Add graceful handling of missing default lineup data (empty pitch state)
+  - Create error recovery options (retry failed saves, reload team data)
   - _Requirements: 1.4, 5.4_
 
 - [ ] 6. Live Match Integration

@@ -130,6 +130,7 @@ router.get('/:id/players', authenticateToken, validateUUID(), asyncHandler(async
       req.user!.id,
       req.user!.role
     );
+    
     return res.json(players);
   } catch (error: any) {
     if (error.message === 'Team not found or access denied') {

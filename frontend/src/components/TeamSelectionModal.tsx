@@ -43,6 +43,8 @@ interface TeamSelectionModalProps {
   noTeamLabel?: string; // Custom label for the 'no team' option
   title?: string;
   allowMultiple?: boolean; // Enable multiple selection mode
+  hideNoTeamOption?: boolean; // Hide the "No Team" row when not meaningful
+  color?: 'indigo' | 'sky' | 'teal' | 'purple' | 'amber' | 'rose' | 'emerald' | string; // Ionic color token
 }
 
 const TeamSelectionModal: React.FC<TeamSelectionModalProps> = ({
@@ -54,7 +56,9 @@ const TeamSelectionModal: React.FC<TeamSelectionModalProps> = ({
   noTeamSelected = false,
   noTeamLabel,
   title = 'Select Team',
-  allowMultiple = false
+  allowMultiple = false,
+  hideNoTeamOption = false,
+  color = 'indigo'
 }) => {
   const { teams, loadTeams, loading } = useTeams();
   const noTeamText = noTeamLabel || 'Players without an active team';
@@ -156,7 +160,7 @@ const TeamSelectionModal: React.FC<TeamSelectionModalProps> = ({
       data-theme="player"
     >
       <IonHeader>
-        <IonToolbar color="indigo">
+        <IonToolbar color={color as any}>
           <IonButton
             fill="clear"
             slot="start"
@@ -191,29 +195,31 @@ const TeamSelectionModal: React.FC<TeamSelectionModalProps> = ({
 
         {loading ? (
           <div className="loading-container">
-            <IonSpinner name="crescent" color="indigo" />
+            <IonSpinner name="crescent" color={color as any} />
             <IonText color="medium">Loading teams...</IonText>
           </div>
         ) : (
           <IonList className="team-list">
-            {/* No Team Option (filter context) */}
-            <IonItem
-              button
-              onClick={handleNoTeamSelect}
-              className={`team-item no-team-item ${noTeamSelected ? 'selected' : ''}`}
-            >
-              <div className="team-avatar no-team-avatar">
-                <IonIcon icon={people} />
-              </div>
-              <IonLabel>
-                <h2 className="team-name">No Team</h2>
-                <p className="team-description">{noTeamText}</p>
-              </IonLabel>
-              {noTeamSelected && (
-                <IonIcon icon={checkmark} slot="end" className="selected-icon" />
-              )}
-              <IonRippleEffect />
-            </IonItem>
+            {/* No Team Option (only when explicitly allowed) */}
+            {!hideNoTeamOption && (
+              <IonItem
+                button
+                onClick={handleNoTeamSelect}
+                className={`team-item no-team-item ${noTeamSelected ? 'selected' : ''}`}
+              >
+                <div className="team-avatar no-team-avatar">
+                  <IonIcon icon={people} />
+                </div>
+                <IonLabel>
+                  <h2 className="team-name">No Team</h2>
+                  <p className="team-description">{noTeamText}</p>
+                </IonLabel>
+                {noTeamSelected && (
+                  <IonIcon icon={checkmark} slot="end" className="selected-icon" />
+                )}
+                <IonRippleEffect />
+              </IonItem>
+            )}
 
             {/* Team Options */}
             {filteredTeams.map((team) => {
@@ -301,7 +307,7 @@ const TeamSelectionModal: React.FC<TeamSelectionModalProps> = ({
           }}>
             <IonButton 
               expand="block" 
-              color="indigo" 
+              color={color as any} 
               onClick={onDidDismiss}
               disabled={loading}
             >

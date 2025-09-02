@@ -14,6 +14,7 @@ export interface ApiError {
 export class ApiClient {
   private baseURL: string;
   private token: string | null = null;
+  private reqSeq: number = 0;
 
   constructor(baseURL: string = (() => {
     // Smart API URL detection - works for both PC and mobile automatically
@@ -111,6 +112,16 @@ export class ApiClient {
     } catch (error) {
       throw new Error(`Failed to parse response: ${error}`);
     }
+
+    // Debug parsed response
+    try {
+      const debug = (typeof localStorage !== 'undefined' && localStorage.getItem('DEBUG_API') === '1') || (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV);
+      if (debug) {
+        const preview = typeof data === 'string' ? data.slice(0, 512) : data;
+        // eslint-disable-next-line no-console
+        console.debug('[api] Response parsed', { status: response.status, ok: response.ok, url: response.url, data: preview });
+      }
+    } catch {}
 
     if (!response.ok) {
       const apiError: ApiError = {
@@ -289,7 +300,25 @@ export class ApiClient {
       // Proactive refresh to implement sliding session
       await proactiveRefreshIfNeeded();
 
+      // Debug outbound request
+      try {
+        const debug = (typeof localStorage !== 'undefined' && localStorage.getItem('DEBUG_API') === '1') || (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV);
+        if (debug) {
+          const id = ++this.reqSeq;
+          const bodyPreview = typeof (options.body as any) === 'string' ? (options.body as string).slice(0, 512) : options.body;
+          // eslint-disable-next-line no-console
+          console.debug('[api] Request', { id, method: options.method || 'GET', url, body: bodyPreview });
+        }
+      } catch {}
+
       const response = await fetch(url, buildConfig(options));
+      try {
+        const debug = (typeof localStorage !== 'undefined' && localStorage.getItem('DEBUG_API') === '1') || (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV);
+        if (debug) {
+          // eslint-disable-next-line no-console
+          console.debug('[api] Fetch completed', { url, status: response.status, ok: response.ok });
+        }
+      } catch {}
       if (response.status === 401) {
         // Try refresh logic and retry once
         const result = await attemptRefreshAndRetry(response);

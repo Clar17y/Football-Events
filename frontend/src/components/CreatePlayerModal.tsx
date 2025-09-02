@@ -639,6 +639,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
           selectedTeams={formData.currentTeams}
           title="Select Team(s)"
           allowMultiple={true}
+          hideNoTeamOption={true}
         />
 
       </IonContent>

@@ -140,6 +140,14 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       description: 'Schedule matches and track results'
     },
     {
+      title: 'Lineup Management',
+      subtitle: 'Create team formations',
+      icon: football,
+      color: 'sky',
+      route: '/lineup-management',
+      description: 'Create and manage default team lineups with visual pitch interface'
+    },
+    {
       title: 'Players',
       subtitle: 'Player profiles',
       icon: person,
@@ -178,14 +186,6 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       color: 'purple',
       route: '/statistics',
       description: 'Coming soon - detailed analytics'
-    },
-    {
-      title: 'Lineup Demo',
-      subtitle: 'Visual pitch interface',
-      icon: football,
-      color: 'success',
-      route: '/lineup-demo',
-      description: 'Demo of the new visual lineup management system'
     }
   ];
 
@@ -499,7 +499,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                         const pageName = card.route.replace('/', '');
                         
                         // Check if route requires authentication
-                        const protectedRoutes = ['seasons', 'teams', 'players', 'matches', 'awards'];
+                        const protectedRoutes = ['seasons', 'teams', 'players', 'matches', 'awards', 'lineup-management'];
                         if (protectedRoutes.includes(pageName) && !user) {
                           // Redirect to login for protected routes
                           navigate('login');
@@ -526,7 +526,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                             <IonLabel>Coming Soon</IonLabel>
                           </IonChip>
                         )}
-                        {!user && ['Seasons', 'Teams', 'Players', 'Matches', 'Awards'].includes(card.title) && (
+                        {!user && ['Seasons', 'Teams', 'Players', 'Matches', 'Awards', 'Lineup Management'].includes(card.title) && (
                           <IonChip color="primary" className="login-required-chip">
                             <IonLabel>Sign In Required</IonLabel>
                           </IonChip>

@@ -16,6 +16,7 @@ import {
   IonText
 } from '@ionic/react';
 import { VisualPitchInterface, PlayerSelectionPanel, PlayerWithPosition, FormationData, PitchPosition } from '../components/lineup';
+import PositionSelectorModal from '../components/lineup/PositionSelectorModal';
 import './LineupDemoPage.css';
 
 const LineupDemoPage: React.FC = () => {
@@ -66,6 +67,10 @@ const LineupDemoPage: React.FC = () => {
   const [readonly, setReadonly] = useState(false);
   const [computedFormation, setComputedFormation] = useState<string>('');
   const [showPlayerPanel, setShowPlayerPanel] = useState(true);
+  
+  // Position selector modal state
+  const [showPositionModal, setShowPositionModal] = useState(false);
+  const [selectedPlayerForPosition, setSelectedPlayerForPosition] = useState<PlayerWithPosition | null>(null);
 
   // Simple heuristic formation detector from current on-pitch positions
   const computeFormationString = (onPitch: PlayerWithPosition[]): string => {
@@ -214,6 +219,26 @@ const LineupDemoPage: React.FC = () => {
     setComputedFormation(computeFormationString(formation.players));
   };
 
+  // Position selector modal handlers
+  const handleShowPositionSelector = (player: PlayerWithPosition) => {
+    setSelectedPlayerForPosition(player);
+    setShowPositionModal(true);
+  };
+
+  const handlePositionSelect = (positionCode: string) => {
+    if (selectedPlayerForPosition) {
+      console.log(`Selected position ${positionCode} for player ${selectedPlayerForPosition.name}`);
+      // In a real implementation, this would update the player's position or create a substitution
+    }
+    setShowPositionModal(false);
+    setSelectedPlayerForPosition(null);
+  };
+
+  const handleClosePositionModal = () => {
+    setShowPositionModal(false);
+    setSelectedPlayerForPosition(null);
+  };
+
   return (
     <IonPage data-theme="player">
       <IonHeader>
@@ -310,6 +335,7 @@ const LineupDemoPage: React.FC = () => {
               <ul>
                 <li>SVG-based football pitch with proper proportions</li>
                 <li>Player selection panel with position grouping</li>
+                <li>Position selector modal with visual pitch previews</li>
                 <li>Click-to-add functionality for easy player selection</li>
                 <li>Drag and drop functionality for player positioning</li>
                 <li>Real-time position feedback and zone highlighting</li>
@@ -319,6 +345,7 @@ const LineupDemoPage: React.FC = () => {
                 <li>Selection state management</li>
                 <li>Readonly mode support</li>
                 <li>Player count indicator</li>
+                <li>Keyboard navigation and accessibility</li>
                 <li>Responsive design</li>
               </ul>
               <div style={{ marginTop: 12 }}>
@@ -331,9 +358,34 @@ const LineupDemoPage: React.FC = () => {
                   </p>
                 )}
               </div>
+              
+              <div style={{ marginTop: 12 }}>
+                <h5>Position Selector Modal Demo:</h5>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {players.slice(0, 5).map(player => (
+                    <IonButton
+                      key={player.id}
+                      size="small"
+                      fill="outline"
+                      onClick={() => handleShowPositionSelector(player)}
+                    >
+                      Select Position for {player.name}
+                    </IonButton>
+                  ))}
+                </div>
+              </div>
             </IonText>
           </div>
         </div>
+        
+        {/* Position Selector Modal */}
+        <PositionSelectorModal
+          isOpen={showPositionModal}
+          onClose={handleClosePositionModal}
+          onPositionSelect={handlePositionSelect}
+          playerName={selectedPlayerForPosition?.name || ''}
+          availablePositions={['GK', 'CB', 'LB', 'RB', 'CM', 'LM', 'RM', 'CAM', 'ST']} // Demo with limited positions
+        />
       </IonContent>
     </IonPage>
   );

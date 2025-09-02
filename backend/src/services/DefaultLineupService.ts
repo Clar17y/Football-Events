@@ -1,6 +1,5 @@
 import { PrismaClient } from '@prisma/client';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
-import { createOrRestoreSoftDeleted, SoftDeletePatterns } from '../utils/softDeleteUtils';
 
 // ============================================================================
 // TYPES AND INTERFACES
@@ -183,21 +182,59 @@ export class DefaultLineupService {
         throw error;
       }
 
-      // Use soft delete pattern for upsert
-      const defaultLineup = await createOrRestoreSoftDeleted({
-        prisma: this.prisma,
-        model: 'default_lineups',
-        uniqueConstraints: SoftDeletePatterns.defaultLineup(teamId, userId),
-        createData: {
+      // Upsert semantics: update existing default lineup if present, otherwise create
+      // 1) Try update existing (non-deleted)
+      const existing = await this.prisma.default_lineups.findFirst({
+        where: {
+          team_id: teamId,
+          created_by_user_id: userId,
+          is_deleted: false
+        }
+      });
+
+      if (existing) {
+        const updated = await this.prisma.default_lineups.update({
+          where: { id: existing.id },
+          data: {
+            formation_data: formation,
+            updated_at: new Date()
+          }
+        });
+        return this.transformDefaultLineup(updated);
+      }
+
+      // 2) If a soft-deleted record exists, restore it and update
+      const softDeleted = await this.prisma.default_lineups.findFirst({
+        where: {
+          team_id: teamId,
+          created_by_user_id: userId,
+          is_deleted: true
+        }
+      });
+
+      if (softDeleted) {
+        const restored = await this.prisma.default_lineups.update({
+          where: { id: softDeleted.id },
+          data: {
+            is_deleted: false,
+            deleted_at: null,
+            deleted_by_user_id: null,
+            formation_data: formation,
+            updated_at: new Date()
+          }
+        });
+        return this.transformDefaultLineup(restored);
+      }
+
+      // 3) Create new default lineup
+      const created = await this.prisma.default_lineups.create({
+        data: {
           team_id: teamId,
           formation_data: formation,
           created_by_user_id: userId
-        },
-        userId,
-        transformer: this.transformDefaultLineup.bind(this)
+        }
       });
-
-      return defaultLineup;
+      return this.transformDefaultLineup(created);
     }, 'DefaultLineup');
   }
 
@@ -205,7 +242,7 @@ export class DefaultLineupService {
    * Get default lineup for a team
    */
   async getDefaultLineup(teamId: string, userId: string): Promise<DefaultLineupData | null> {
-    // Check if user has access to the team
+    // Authorize: user must own the team
     const team = await this.prisma.team.findFirst({
       where: {
         id: teamId,
@@ -218,12 +255,16 @@ export class DefaultLineupService {
       return null; // Team not found or no access
     }
 
+    // Retrieve the latest default lineup for this team, regardless of creator
     const defaultLineup = await this.prisma.default_lineups.findFirst({
       where: {
         team_id: teamId,
-        created_by_user_id: userId,
         is_deleted: false
-      }
+      },
+      orderBy: [
+        { updated_at: 'desc' },
+        { created_at: 'desc' }
+      ]
     });
 
     return defaultLineup ? this.transformDefaultLineup(defaultLineup) : null;

@@ -1,0 +1,388 @@
+/* ===== POSITION SELECTOR MODAL STYLES ===== */
+/* Modal for selecting player positions with visual pitch previews */
+
+.position-selector-modal {
+  --width: 100%;
+  --max-width: 800px;
+  --height: 100%;
+  --max-height: 90vh;
+  --border-radius: var(--grassroots-radius-lg);
+}
+
+.position-selector-content {
+  --background: var(--grassroots-background);
+  --padding-top: 0;
+  --padding-bottom: 0;
+  --padding-start: 0;
+  --padding-end: 0;
+}
+
+.position-selector-container {
+  padding: var(--grassroots-space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--grassroots-space-md);
+  min-height: 100%;
+}
+
+/* Search Section */
+.search-section {
+  background: var(--grassroots-surface);
+  border-radius: var(--grassroots-radius-md);
+  padding: var(--grassroots-space-sm);
+  box-shadow: var(--grassroots-shadow-sm);
+  border: 1px solid var(--grassroots-surface-variant);
+}
+
+.position-search {
+  --background: transparent;
+  --color: var(--grassroots-text-primary);
+  --placeholder-color: var(--grassroots-text-secondary);
+  --icon-color: var(--grassroots-text-secondary);
+  --clear-button-color: var(--grassroots-text-secondary);
+  margin: 0;
+  padding: 0;
+}
+
+/* Loading State */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--grassroots-space-md);
+  padding: var(--grassroots-space-xl);
+  text-align: center;
+}
+
+.loading-state ion-spinner {
+  --color: var(--ion-color-primary);
+  width: 32px;
+  height: 32px;
+}
+
+.loading-state p {
+  color: var(--grassroots-text-secondary);
+  font-weight: 500;
+  margin: 0;
+}
+
+/* Error State */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--grassroots-space-md);
+  padding: var(--grassroots-space-xl);
+  text-align: center;
+}
+
+.error-state ion-icon {
+  color: var(--ion-color-danger);
+  opacity: 0.6;
+}
+
+.error-state h3 {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1.2rem;
+}
+
+.error-state p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* Positions Container */
+.positions-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--grassroots-space-lg);
+}
+
+/* Category Sections */
+.position-category {
+  background: var(--grassroots-surface);
+  border-radius: var(--grassroots-radius-md);
+  padding: var(--grassroots-space-md);
+  box-shadow: var(--grassroots-shadow-sm);
+  border: 1px solid var(--grassroots-surface-variant);
+}
+
+.category-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--grassroots-text-primary);
+  margin: 0 0 var(--grassroots-space-md) 0;
+  padding-bottom: var(--grassroots-space-xs);
+  border-bottom: 2px solid var(--grassroots-surface-variant);
+}
+
+.position-grid {
+  padding: 0;
+  margin: 0;
+}
+
+/* Position Items */
+.position-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--grassroots-space-sm);
+  padding: var(--grassroots-space-md);
+  border-radius: var(--grassroots-radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  background: var(--grassroots-background);
+  box-shadow: var(--grassroots-shadow-sm);
+  position: relative;
+  min-height: 120px;
+  justify-content: space-between;
+}
+
+.position-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--grassroots-shadow-md);
+  border-color: var(--ion-color-primary-tint);
+  background: var(--ion-color-primary-tint);
+  background: rgba(var(--ion-color-primary-rgb), 0.05);
+}
+
+.position-item.focused {
+  border-color: var(--ion-color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--ion-color-primary-rgb), 0.3);
+  outline: none;
+}
+
+.position-item:active {
+  transform: translateY(0);
+  box-shadow: var(--grassroots-shadow-sm);
+}
+
+/* Position Preview (Mini Pitch) */
+.position-preview {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mini-pitch {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--grassroots-radius-sm);
+  background: var(--grassroots-surface-variant);
+  padding: 4px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.mini-pitch-svg {
+  width: 100%;
+  height: 100%;
+  color: var(--grassroots-text-secondary);
+}
+
+/* Position Info */
+.position-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--grassroots-space-xs);
+  text-align: center;
+  flex: 1;
+}
+
+.position-code {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--grassroots-text-primary);
+  letter-spacing: 0.05em;
+}
+
+.position-name {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--grassroots-text-secondary);
+  line-height: 1.2;
+}
+
+/* No Results State */
+.no-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--grassroots-space-md);
+  padding: var(--grassroots-space-xl);
+  text-align: center;
+}
+
+.no-results ion-icon {
+  color: var(--grassroots-text-secondary);
+  opacity: 0.6;
+}
+
+.no-results h3 {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1.2rem;
+  color: var(--grassroots-text-primary);
+}
+
+.no-results p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--grassroots-text-secondary);
+}
+
+/* Instructions */
+.instructions {
+  background: var(--grassroots-surface-variant);
+  border-radius: var(--grassroots-radius-sm);
+  padding: var(--grassroots-space-sm);
+  margin-top: auto;
+}
+
+.instructions p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .position-selector-modal {
+    --max-height: 100vh;
+    --border-radius: 0;
+  }
+  
+  .position-selector-container {
+    padding: var(--grassroots-space-sm);
+    gap: var(--grassroots-space-sm);
+  }
+  
+  .position-category {
+    padding: var(--grassroots-space-sm);
+  }
+  
+  .category-title {
+    font-size: 1rem;
+  }
+  
+  .position-item {
+    padding: var(--grassroots-space-sm);
+    min-height: 100px;
+  }
+  
+  .position-preview {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .position-code {
+    font-size: 0.9rem;
+  }
+  
+  .position-name {
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .position-item {
+    min-height: 80px;
+    padding: var(--grassroots-space-xs);
+  }
+  
+  .position-preview {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .position-code {
+    font-size: 0.85rem;
+  }
+  
+  .position-name {
+    font-size: 0.7rem;
+  }
+}
+
+/* Dark Theme Support */
+.dark-theme .position-category,
+.dark-theme .search-section {
+  background: var(--grassroots-surface);
+  border-color: var(--grassroots-surface-variant);
+}
+
+.dark-theme .position-item {
+  background: var(--grassroots-background);
+  border-color: var(--grassroots-surface-variant);
+}
+
+.dark-theme .position-item:hover {
+  background: rgba(var(--ion-color-primary-rgb), 0.1);
+}
+
+.dark-theme .mini-pitch {
+  background: var(--grassroots-surface);
+}
+
+.dark-theme .instructions {
+  background: var(--grassroots-surface);
+}
+
+/* Accessibility */
+.position-item:focus {
+  outline: 2px solid var(--ion-color-primary);
+  outline-offset: 2px;
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .position-item {
+    border-width: 3px;
+  }
+  
+  .mini-pitch {
+    border: 2px solid var(--grassroots-text-primary);
+  }
+  
+  .position-code {
+    font-weight: 800;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .position-item {
+    transition: none;
+  }
+  
+  .position-item:hover {
+    transform: none;
+  }
+}
+
+/* Large screens - more columns */
+@media (min-width: 1200px) {
+  .position-selector-modal {
+    --max-width: 1000px;
+  }
+}
+
+/* Print styles */
+@media print {
+  .position-selector-modal {
+    display: none;
+  }
+}

@@ -40,7 +40,7 @@ router.post('/', authenticateToken, validateRequest(defaultLineupCreateSchema), 
 }));
 
 // GET /api/v1/default-lineups/:teamId - Get default lineup for a specific team
-router.get('/:teamId', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+router.get('/:teamId', authenticateToken, validateUUID('teamId'), asyncHandler(async (req, res) => {
   const teamId = req.params['teamId']!;
   const defaultLineup = await defaultLineupService.getDefaultLineup(teamId, req.user!.id);
   
@@ -61,7 +61,7 @@ router.get('/:teamId', authenticateToken, validateUUID(), asyncHandler(async (re
 // PUT /api/v1/default-lineups/:teamId - Update default lineup for a specific team
 router.put('/:teamId', 
   authenticateToken, 
-  validateUUID(), 
+  validateUUID('teamId'), 
   validateRequest(defaultLineupUpdateSchema), 
   asyncHandler(async (req, res) => {
     try {
@@ -100,7 +100,7 @@ router.put('/:teamId',
 );
 
 // DELETE /api/v1/default-lineups/:teamId - Delete default lineup for a specific team
-router.delete('/:teamId', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+router.delete('/:teamId', authenticateToken, validateUUID('teamId'), asyncHandler(async (req, res) => {
   const teamId = req.params['teamId']!;
   const deleted = await defaultLineupService.deleteDefaultLineup(teamId, req.user!.id);
   
@@ -128,7 +128,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
 // POST /api/v1/default-lineups/:teamId/apply-to-match - Apply default lineup to a specific match
 router.post('/:teamId/apply-to-match', 
   authenticateToken, 
-  validateUUID(), 
+  validateUUID('teamId'), 
   asyncHandler(async (req, res) => {
     try {
       const teamId = req.params['teamId']!;

@@ -21,6 +21,7 @@ import AwardsPage from './pages/AwardsPage';
 import StatisticsPage from './pages/StatisticsPage';
 import LiveMatchPage from './pages/LiveMatchPage';
 import LineupDemoPage from './pages/LineupDemoPage';
+import LineupManagementPage from './pages/LineupManagementPage';
 // import MatchConsole from './pages/MatchConsole'; // Removed - will be redesigned
 
 setupIonicReact();
@@ -155,6 +156,11 @@ const AppRoutes: React.FC = () => {
         return <LiveMatchPage onNavigate={handleNavigation} matchId={currentMatchId || undefined} />;
       case 'lineup-demo':
         return <LineupDemoPage />;
+      case 'lineup-management':
+        if (!isAuthenticated) {
+          return <LoginPage onNavigate={handleNavigation} />;
+        }
+        return <LineupManagementPage onNavigate={handleNavigation} />;
       case 'home':
       default:
         return <HomePage onNavigate={handleNavigation} />;

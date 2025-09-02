@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { buildFormationSummary } from '../../lib/formationCore';
 import { IonIcon } from '@ionic/react';
 import { person, close } from 'ionicons/icons';
 import './VisualPitchInterface.css';
@@ -519,23 +520,13 @@ const VisualPitchInterface: React.FC<VisualPitchInterfaceProps> = ({
         {(() => {
           const withPos = formation.players.filter(p => p.position);
           if (withPos.length === 0) return null;
-          const isGK = (p: PlayerWithPosition) => p.position && (p.position.x <= 12 && p.position.y >= 35 && p.position.y <= 65);
-
-          // Count bins using live drag position for the dragged player if present
-          let D = 0, DM = 0, AM = 0, F = 0;
-          for (const p of withPos) {
+          const list = withPos.map(p => {
             const useLive = draggedPlayer === p.id && liveDragPosRef.current;
             const pos = useLive ? liveDragPosRef.current! : p.position!;
-            if (isGK({ ...p, position: pos })) continue;
-            const x = pos.x;
-            if (x < 36) D += 1; else if (x < 50) DM += 1; else if (x < 70) AM += 1; else F += 1;
-          }
-          const parts = (DM > 0 && AM > 0)
-            ? [D, DM, AM, F]
-            : [D, DM + AM, F];
-          const filtered = parts.filter(n => n > 0);
-          const formationStr = filtered.join('-');
-          return <span>Formation: <strong>{formationStr}</strong></span>;
+            return { id: p.id, x: pos.x, y: pos.y, preferredPosition: p.preferredPosition };
+          });
+          const summary = buildFormationSummary(list);
+          return <span>Formation: <strong>{summary.labelOutfield}</strong></span>;
         })()}
       </div>
     </div>

@@ -71,6 +71,7 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
             case 'match': return football;
             case 'award': return ribbon;
             case 'event': return play;
+            case 'lineup': return football;
             default: return trophy;
         }
     };
@@ -83,6 +84,7 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
             case 'award': return 'rose';        // Rose - matches awards page
             case 'match': return 'amber';       // Amber - matches live/active sections
             case 'event': return 'secondary';   // Green - for match events
+            case 'lineup': return 'sky';        // Sky - matches lineup management
             default: return 'medium';
         }
     };
@@ -117,6 +119,12 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
                     onNavigate(`live/${activity.metadata.matchId}`);
                 }
                 break;
+            case 'lineup': {
+                const teamId = activity.metadata?.teamId || activity.entityId;
+                if (teamId) onNavigate(`lineup-management?teamId=${encodeURIComponent(teamId)}`);
+                else onNavigate('lineup-management');
+                break;
+            }
         }
     };
 

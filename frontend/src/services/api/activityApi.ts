@@ -2,7 +2,7 @@ import apiClient from './baseApi';
 
 export interface ActivityItem {
   id: string;
-  type: 'team' | 'player' | 'season' | 'match' | 'award' | 'event';
+  type: 'team' | 'player' | 'season' | 'match' | 'award' | 'event' | 'lineup';
   action: string;
   description: string;
   entityId: string;
