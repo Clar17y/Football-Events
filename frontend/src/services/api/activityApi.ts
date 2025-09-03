@@ -5,6 +5,7 @@ export interface ActivityItem {
   type: 'team' | 'player' | 'season' | 'match' | 'award' | 'event' | 'lineup';
   action: string;
   description: string;
+  title?: string;
   entityId: string;
   entityName: string;
   createdAt: string;

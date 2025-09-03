@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     IonCard,
     IonCardContent,
@@ -22,7 +22,19 @@ import {
     ribbon,
     play,
     time,
-    refresh
+    refresh,
+    chevronDown,
+    chevronUp,
+    footballOutline,
+    swapHorizontalOutline,
+    navigateOutline,
+    shieldCheckmarkOutline,
+    handLeftOutline,
+    bodyOutline,
+    alertCircleOutline,
+    flagOutline,
+    flashOutline,
+    exitOutline
 } from 'ionicons/icons';
 import { useRecentActivity } from '../hooks/useRecentActivity';
 import { ActivityItem } from '../services/api/activityApi';
@@ -44,6 +56,46 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
     const { user } = useAuth();
     const { isDarkMode } = useTheme();
     const { activities, loading, error, pagination, refresh, goToPage } = useRecentActivity({ limit, days });
+    const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+    const isGroup = (a: ActivityItem) => a.type === 'event' && a.action === 'period_summary' && !!(a as any).metadata?.children?.length;
+    const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
+
+    const getEventKindIcon = (kind: string) => {
+        // Mirror live match page icons
+        switch (kind) {
+            case 'goal':
+            case 'own_goal':
+                return footballOutline;
+            case 'assist':
+                return swapHorizontalOutline;
+            case 'key_pass':
+                return navigateOutline;
+            case 'save':
+                return shieldCheckmarkOutline;
+            case 'interception':
+                return handLeftOutline;
+            case 'tackle':
+                return bodyOutline;
+            case 'foul':
+                return alertCircleOutline;
+            case 'penalty':
+                return flagOutline;
+            case 'free_kick':
+                return flashOutline;
+            case 'ball_out':
+                return exitOutline;
+            // Not defined on live icons yet; fallbacks
+            case 'shot_on':
+            case 'shot_off':
+                return navigateOutline;
+            case 'yellow_card':
+            case 'red_card':
+                return alertCircleOutline;
+            default:
+                return play;
+        }
+    };
 
     // Early return if no user
     if (!user) {
@@ -91,6 +143,7 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
 
     const handleActivityClick = (activity: ActivityItem) => {
         if (!onNavigate) return;
+        if (isGroup(activity)) { toggleExpand(activity.id); return; }
 
         switch (activity.type) {
             case 'team':
@@ -241,21 +294,21 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
 
                 <IonList className="activity-list">
                     {activities?.map((activity) => (
-                        <IonItem
-                            key={activity.id}
-                            button
-                            onClick={() => handleActivityClick(activity)}
-                            className="activity-item"
-                        >
-                            <IonIcon
-                                icon={getActivityIcon(activity.type)}
-                                slot="start"
-                                color={getActivityColor(activity.type)}
-                                className="activity-item-icon"
-                            />
+                        <React.Fragment key={activity.id}>
+                            <IonItem
+                                button
+                                onClick={() => handleActivityClick(activity)}
+                                className="activity-item"
+                            >
+                                <IonIcon
+                                    icon={getActivityIcon(activity.type)}
+                                    slot="start"
+                                    color={getActivityColor(activity.type)}
+                                    className="activity-item-icon"
+                                />
                             <IonLabel>
                                 <h3 className="activity-description">
-                                    {activity.description}
+                                    {activity.title || activity.description}
                                 </h3>
                                 <div className="activity-meta">
                                     <IonChip
@@ -270,7 +323,33 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
                                     </IonNote>
                                 </div>
                             </IonLabel>
+                            {isGroup(activity) && (
+                                <IonIcon slot="end" icon={expanded[activity.id] ? chevronUp : chevronDown} />
+                            )}
                         </IonItem>
+                            {isGroup(activity) && expanded[activity.id] && (
+                                <IonList className="activity-sublist">
+                                    {(activity as any).metadata?.children?.map((child: any) => (
+                                        <IonItem
+                                            key={child.id}
+                                            button
+                                            onClick={() => onNavigate && (activity as any).metadata?.matchId && onNavigate(`live/${(activity as any).metadata.matchId}`)}
+                                            className="activity-subitem"
+                                        >
+                                            <IonIcon slot="start" icon={getEventKindIcon(child.kind)} />
+                                            <IonLabel>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    {child.timeLabel && (
+                                                        <IonChip color="medium" className="activity-time-chip">{child.timeLabel}</IonChip>
+                                                    )}
+                                                    <h3 className="activity-description" style={{ margin: 0 }}>{child.title}</h3>
+                                                </div>
+                                            </IonLabel>
+                                        </IonItem>
+                                    ))}
+                                </IonList>
+                            )}
+                        </React.Fragment>
                     ))}
                 </IonList>
 
