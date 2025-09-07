@@ -183,6 +183,18 @@
   stroke-width: 0.2;
 }
 
+/* Player short name label under circle */
+.player-label {
+  fill: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 1.8px;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: rgba(0,0,0,0.35);
+  stroke-width: 0.2;
+  pointer-events: none;
+}
+
 /* Player Count Indicator */
 .player-count {
   position: absolute;

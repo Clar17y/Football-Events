@@ -1,5 +1,8 @@
 import React from 'react';
 import { IonButton, IonChip, IonIcon, IonLabel, IonText } from '@ionic/react';
+import VisualPitchInterface from '../lineup/VisualPitchInterface';
+import { buildFormationSummary } from '../../lib/formationCore';
+import './LiveTimeline.css';
 import { 
   footballOutline,
   swapHorizontalOutline,
@@ -17,7 +20,7 @@ import {
 
 export type FeedItem = {
   id: string;
-  kind: 'event' | 'system';
+  kind: 'event' | 'system' | 'formation';
   label: string;
   createdAt: Date;
   periodNumber?: number;
@@ -27,6 +30,12 @@ export type FeedItem = {
   playerId?: string | null;
   sentiment?: number;
   event?: any; // Keep generic for reuse
+  formationChange?: {
+    reason?: string | null;
+    formation?: { players: Array<{ id: string; name?: string; squadNumber?: number; preferredPosition?: string; position: { x: number; y: number } }> };
+    prevFormation?: { players: Array<{ id: string; name?: string; squadNumber?: number; preferredPosition?: string; position: { x: number; y: number } }> } | null;
+    substitutions?: Array<{ out?: { id: string; name?: string | null }, in?: { id: string; name?: string | null } }>;
+  }
 };
 
 export interface LiveTimelineProps {
@@ -89,8 +98,12 @@ const LiveTimeline: React.FC<LiveTimelineProps> = ({ feed, currentMatch, playerN
             <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 4 }}>{groupTitle(pn, periodFormat)}</div>
           {groups.get(pn)!.map((item) => (
             <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--ion-color-step-150, rgba(0,0,0,.06))' }}>
-              {item.kind === 'event' && item.event ? (
-                <IonChip style={{ height: 20 }} color={chipColor(item.event.kind)}><IonLabel style={{ fontSize: 12 }}>{minuteLabel(item.event, durationMinutes, periodFormat)}</IonLabel></IonChip>
+              {item.kind !== 'system' && (item.event || item.kind === 'formation') ? (
+                <IonChip style={{ height: 20 }} color={chipColor(item.event?.kind)}>
+                  <IonLabel style={{ fontSize: 12 }}>
+                    {minuteLabel(item.event || { clockMs: item.clockMs, periodNumber: item.periodNumber, periodType: item.periodType, createdAt: item.createdAt }, durationMinutes, periodFormat)}
+                  </IonLabel>
+                </IonChip>
               ) : (
                 <IonChip style={{ height: 20 }} color="tertiary"><IonLabel style={{ fontSize: 12 }}>—</IonLabel></IonChip>
               )}
@@ -111,15 +124,88 @@ const LiveTimeline: React.FC<LiveTimelineProps> = ({ feed, currentMatch, playerN
                 <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1 }}>
                   {item.label}
                 </div>
-                <div style={{ fontSize: 12, opacity: 0.8 }}>
-                  {(() => {
-                    if (item.kind === 'system') return 'Match Update';
-                    const ev = item.event!;
-                    const team = ev?.teamName || (ev.teamId === currentMatch?.homeTeamId ? currentMatch?.homeTeam?.name : ev.teamId === currentMatch?.awayTeamId ? currentMatch?.awayTeam?.name : 'Team');
-                    const name = ev?.playerName || (ev.playerId ? playerNameMap[ev.playerId] : undefined);
-                    return name ? `${team} — ${name}` : team || 'Team';
-                  })()}
-                </div>
+                {(item.kind === 'event' && item.event?.kind === 'formation_change') ? (
+                  <div style={{ marginTop: 6 }}>
+                    {(() => {
+                      let payload: any = null;
+                      try { if (item.event?.notes) payload = JSON.parse(item.event.notes); } catch {}
+                      const reason = payload?.reason || undefined;
+                      const subs: Array<any> = Array.isArray(payload?.substitutions) ? payload.substitutions : [];
+                      const formation = payload?.formation && Array.isArray(payload.formation.players) ? payload.formation : null;
+                      // Derive formation strings client-side for consistency with pitch logic
+                      const computeLabel = (fm: any | null | undefined): string | undefined => {
+                        try {
+                          if (!fm || !Array.isArray(fm.players)) return undefined;
+                          const players = fm.players.map((p: any) => ({ id: p.id, x: Number(p.position?.x || 0), y: Number(p.position?.y || 0), preferredPosition: p.preferredPosition }));
+                          const summary = buildFormationSummary(players);
+                          return summary.labelOutfield;
+                        } catch { return undefined; }
+                      };
+                      const formationFrom = computeLabel(payload?.prevFormation);
+                      const formationTo = computeLabel(formation);
+                      return (
+                        <>
+                          <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 6 }}>
+                            {reason ? `Reason: ${reason}` : 'Formation updated'}{(formationFrom || formationTo) ? ` — ${formationFrom || '?'} → ${formationTo || '?'}` : ''}
+                          </div>
+                          {subs.length > 0 && (
+                            <div style={{ border: '1px solid var(--ion-color-step-150, rgba(0,0,0,.08))', borderRadius: 8, padding: 8, background: 'var(--ion-color-step-50, rgba(255,255,255,.04))' }}>
+                              <div style={{ fontSize: 12, marginBottom: 2, fontWeight: 600 }}>Substitutions</div>
+                              {subs.map((s, idx) => (
+                                <div key={idx} style={{ fontSize: 12 }}>
+                                  {s?.out?.name ? `${s.out.name} OFF` : ''}{(s?.out?.name && s?.in?.name) ? ' → ' : ''}{s?.in?.name ? `${s.in.name} ON` : ''}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {formation && (
+                            <div className="pitch-compact" style={{ marginTop: 8, border: '1px solid var(--ion-color-step-150, rgba(0,0,0,.08))', borderRadius: 8, padding: 6 }}>
+                              <div style={{ width: '100%' }}>
+                                <VisualPitchInterface
+                                  players={formation.players}
+                                  formation={formation}
+                                  onPlayerMove={() => {}}
+                                  onPlayerRemove={() => {}}
+                                  readonly
+                                  maxPlayers={11}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                ) : item.kind === 'formation' && item.formationChange ? (
+                  <div style={{ marginTop: 6 }}>
+                    <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 6 }}>
+                      {item.formationChange.reason ? `Reason: ${item.formationChange.reason}` : 'Formation updated'}
+                    </div>
+                    <div style={{ border: '1px solid var(--ion-color-step-150, rgba(0,0,0,.08))', borderRadius: 8, padding: 8, background: 'var(--ion-color-step-50, rgba(255,255,255,.04))' }}>
+                      {/* Simple textual summary of substitutions */}
+                      {item.formationChange.substitutions && item.formationChange.substitutions.length > 0 && (
+                        <div style={{ fontSize: 12, marginBottom: 6 }}>
+                          {item.formationChange.substitutions.map((s, idx) => (
+                            <div key={idx}>
+                              {s.out?.name ? `${s.out.name} OFF` : ''}{(s.out?.name && s.in?.name) ? ' → ' : ''}{s.in?.name ? `${s.in.name} ON` : ''}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Compact formation pitch preview can be added later if desired */}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, opacity: 0.8 }}>
+                    {(() => {
+                      if (item.kind === 'system') return 'Match Update';
+                      const ev = item.event!;
+                      const team = ev?.teamName || (ev.teamId === currentMatch?.homeTeamId ? currentMatch?.homeTeam?.name : ev.teamId === currentMatch?.awayTeamId ? currentMatch?.awayTeam?.name : 'Team');
+                      const name = ev?.playerName || (ev.playerId ? playerNameMap[ev.playerId] : undefined);
+                      return name ? `${team} — ${name}` : team || 'Team';
+                    })()}
+                  </div>
+                )}
               </div>
               {item.kind === 'event' && item.event && typeof item.event.sentiment === 'number' && item.event.sentiment !== 0 && (
                 <IonChip style={{ height: 20 }} color={item.event.sentiment > 0 ? 'success' as any : 'warning' as any}>

@@ -1,0 +1,21 @@
+.pitch-compact .visual-pitch-interface {
+  box-shadow: none;
+  border-radius: 6px;
+}
+
+.pitch-compact .pitch-container {
+  padding: 0;
+  min-height: 0;
+}
+
+.pitch-compact .football-pitch {
+  max-width: 100% !important;
+}
+
+/* Hide non-essential overlays in compact view */
+.pitch-compact .player-count,
+.pitch-compact .formation-indicator,
+.pitch-compact .position-feedback {
+  display: none !important;
+}
+
