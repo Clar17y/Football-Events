@@ -66,31 +66,31 @@ export const ZONES: ZoneDef[] = [
   { code: 'RB',  area: { minX: 8,  maxX: 28, minY: 64, maxY: 100 }, priority: 2 },
   { code: 'LWB', area: { minX: 24, maxX: 42, minY: 0,  maxY: 32 }, priority: 2 },
   { code: 'RWB', area: { minX: 24, maxX: 42, minY: 68, maxY: 100 }, priority: 2 },
-  { code: 'WB',  area: { minX: 24, maxX: 42, minY: 20, maxY: 80 }, priority: 2 },
-  { code: 'FB',  area: { minX: 12, maxX: 32, minY: 20, maxY: 80 }, priority: 2 },
+  { code: 'WB',  area: { minX: 24, maxX: 42, minY: 20, maxY: 80 }, priority: 1 },
+  { code: 'FB',  area: { minX: 12, maxX: 32, minY: 20, maxY: 80 }, priority: 1 },
 
   // DM / CM / AM
   { code: 'CDM', area: { minX: 34, maxX: 52, minY: 30, maxY: 70 }, priority: 3 },
-  { code: 'DM',  area: { minX: 34, maxX: 52, minY: 30, maxY: 70 }, priority: 3 },
+  { code: 'DM',  area: { minX: 34, maxX: 52, minY: 30, maxY: 70 }, priority: 1 },
   { code: 'CM',  area: { minX: 54, maxX: 58, minY: 24, maxY: 76 }, priority: 3 },
-  { code: 'LCM', area: { minX: 50, maxX: 56, minY: 24, maxY: 50 }, priority: 3 },
-  { code: 'RCM', area: { minX: 50, maxX: 56, minY: 50, maxY: 76 }, priority: 3 },
+  { code: 'LCM', area: { minX: 50, maxX: 56, minY: 24, maxY: 50 }, priority: 1 },
+  { code: 'RCM', area: { minX: 50, maxX: 56, minY: 50, maxY: 76 }, priority: 1 },
   { code: 'CAM', area: { minX: 60, maxX: 66, minY: 30, maxY: 70 }, priority: 3 },
-  { code: 'LAM', area: { minX: 60, maxX: 68, minY:  8, maxY: 36 }, priority: 3 },
-  { code: 'RAM', area: { minX: 60, maxX: 68, minY: 64, maxY: 92 }, priority: 3 },
-  { code: 'AM',  area: { minX: 60, maxX: 68, minY: 24, maxY: 76 }, priority: 3 },
+  { code: 'LAM', area: { minX: 60, maxX: 68, minY:  8, maxY: 36 }, priority: 2 },
+  { code: 'RAM', area: { minX: 60, maxX: 68, minY: 64, maxY: 92 }, priority: 2 },
+  { code: 'AM',  area: { minX: 60, maxX: 68, minY: 24, maxY: 76 }, priority: 1 },
   { code: 'LM',  area: { minX: 40, maxX: 62, minY:  0, maxY: 30 }, priority: 3 },
   { code: 'RM',  area: { minX: 40, maxX: 62, minY: 70, maxY: 100 }, priority: 3 },
-  { code: 'WM',  area: { minX: 40, maxX: 62, minY: 20, maxY: 80 }, priority: 3 },
+  { code: 'WM',  area: { minX: 40, maxX: 62, minY: 20, maxY: 80 }, priority: 1 },
 
   // Forwards
   { code: 'LW',  area: { minX: 76, maxX: 98, minY:  0, maxY: 36 }, priority: 4 },
   { code: 'RW',  area: { minX: 76, maxX: 98, minY: 64, maxY: 100 }, priority: 4 },
   { code: 'CF',  area: { minX: 72, maxX: 96, minY: 30, maxY: 70 }, priority: 4 },
   { code: 'ST',  area: { minX: 82, maxX: 100,minY: 24, maxY: 76 }, priority: 4 },
-  { code: 'SS',  area: { minX: 70, maxX: 90, minY: 30, maxY: 70 }, priority: 4 },
-  { code: 'LF',  area: { minX: 80, maxX: 98, minY:  0, maxY: 40 }, priority: 4 },
-  { code: 'RF',  area: { minX: 80, maxX: 98, minY: 60, maxY: 100 }, priority: 4 },
+  { code: 'SS',  area: { minX: 70, maxX: 90, minY: 30, maxY: 70 }, priority: 2 },
+  { code: 'LF',  area: { minX: 80, maxX: 98, minY:  0, maxY: 40 }, priority: 2 },
+  { code: 'RF',  area: { minX: 80, maxX: 98, minY: 60, maxY: 100 }, priority: 2 },
 ];
 
 // ===== Utilities =====

@@ -274,6 +274,7 @@ export class EventService {
         periodNumber: transformed.periodNumber || null,
         clockMs: transformed.clockMs || 0,
         sentiment: transformed.sentiment || 0,
+        notes: transformed.notes || null,
         createdAt: transformed.createdAt,
       }});
     } catch {}

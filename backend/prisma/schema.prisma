@@ -49,6 +49,7 @@ model User {
   viewer_links_deleted viewer_links[] @relation("ViewerLinkDeletedBy")
   default_lineups_created default_lineups[] @relation("DefaultLineupCreatedBy")
   default_lineups_deleted default_lineups[] @relation("DefaultLineupDeletedBy")
+  live_formations_created live_formations[] @relation("LiveFormationCreatedBy")
 
   @@map("users")
   @@schema("grassroots")
@@ -130,6 +131,7 @@ model Match {
   match_state        match_state?
   match_periods      match_periods[]
   viewer_links       viewer_links[]
+  live_formations    live_formations[] @relation("LiveFormationMatch")
   awayTeam           Team           @relation("AwayTeam", fields: [away_team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   created_by         User           @relation("MatchCreatedBy", fields: [created_by_user_id], references: [id])
   deleted_by         User?          @relation("MatchDeletedBy", fields: [deleted_by_user_id], references: [id])
@@ -399,6 +401,25 @@ model position_zones {
   @@schema("grassroots")
 }
 
+/// Live formation snapshots per match with start/end minutes and formation JSON
+model live_formations {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  match_id             String   @db.Uuid
+  start_min            Decimal  @db.Decimal(5,2)
+  end_min              Decimal? @db.Decimal(5,2)
+  formation_data       Json
+  substitution_reason  String?  @db.VarChar(100)
+  created_at           DateTime @default(now()) @db.Timestamptz(6)
+  created_by_user_id   String   @db.Uuid
+
+  matches              Match    @relation("LiveFormationMatch", fields: [match_id], references: [match_id], onDelete: Cascade, onUpdate: NoAction)
+  created_by           User     @relation("LiveFormationCreatedBy", fields: [created_by_user_id], references: [id])
+
+  @@unique([match_id, start_min])
+  @@map("live_formations")
+  @@schema("grassroots")
+}
+
 enum UserRole {
   ADMIN
   USER
@@ -458,6 +479,7 @@ enum event_kind {
   free_kick
   ball_out
   own_goal
+  formation_change
 
   @@schema("grassroots")
 }

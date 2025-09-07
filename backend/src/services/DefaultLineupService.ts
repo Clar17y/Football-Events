@@ -350,24 +350,58 @@ export class DefaultLineupService {
         throw error;
       }
 
-      // Create lineup records for each player in the formation
-      const lineupRecords = [];
-      for (const formationPlayer of defaultLineup.formation) {
-        const lineupRecord = await this.prisma.lineup.create({
+      // Create initial lineups and live_formations snapshot atomically
+      const result = await this.prisma.$transaction(async (tx) => {
+        // Fetch player details for formation snapshot
+        const ids = defaultLineup.formation.map(p => p.playerId);
+        const players = await tx.player.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, name: true, squad_number: true, preferred_pos: true }
+        });
+
+        const lineupRecords: any[] = [];
+        for (const fp of defaultLineup.formation) {
+          const lineupRecord = await tx.lineup.create({
+            data: {
+              match_id: matchId,
+              player_id: fp.playerId,
+              position: fp.position as any,
+              start_min: 0,
+              pitch_x: fp.pitchX,
+              pitch_y: fp.pitchY,
+              created_by_user_id: userId
+            }
+          });
+          lineupRecords.push(lineupRecord);
+        }
+
+        // Create live_formations row at kickoff
+        const formation_data = {
+          players: defaultLineup.formation.map(fp => {
+            const p = players.find(pp => pp.id === fp.playerId);
+            return {
+              id: fp.playerId,
+              name: (p as any)?.name || '',
+              squadNumber: p?.squad_number || undefined,
+              preferredPosition: p?.preferred_pos || undefined,
+              position: { x: fp.pitchX, y: fp.pitchY }
+            };
+          })
+        } as any;
+
+        await tx.live_formations.create({
           data: {
             match_id: matchId,
-            player_id: formationPlayer.playerId,
-            position: formationPlayer.position as any, // Cast to position_code enum
-            start_min: 0,
-            pitch_x: formationPlayer.pitchX,
-            pitch_y: formationPlayer.pitchY,
+            start_min: 0 as any,
+            formation_data,
             created_by_user_id: userId
           }
         });
-        lineupRecords.push(lineupRecord);
-      }
 
-      return lineupRecords;
+        return lineupRecords;
+      });
+
+      return result;
     }, 'DefaultLineupApplication');
   }
 

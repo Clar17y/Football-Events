@@ -288,6 +288,28 @@ const VisualPitchInterface: React.FC<VisualPitchInterfaceProps> = ({
   // Get positioned players (those with coordinates)
   const positionedPlayers = formation.players.filter(player => player.position);
 
+  // Compute short labels: first name, disambiguate with last initial if duplicates on pitch
+  const nameLabelMap = React.useMemo(() => {
+    const map = new Map<string, string>();
+    const firstCounts = new Map<string, number>();
+    const tokens: Record<string, { first: string; last?: string }> = {};
+    positionedPlayers.forEach(p => {
+      const parts = (p.name || '').trim().split(/\s+/).filter(Boolean);
+      const first = parts[0] || '';
+      const last = parts.length > 1 ? parts[parts.length - 1] : undefined;
+      tokens[p.id] = { first, last };
+      const key = first.toLowerCase();
+      firstCounts.set(key, (firstCounts.get(key) || 0) + 1);
+    });
+    positionedPlayers.forEach(p => {
+      const t = tokens[p.id];
+      const needInitial = t.first && (firstCounts.get(t.first.toLowerCase()) || 0) > 1;
+      const label = needInitial && t.last ? `${t.first} ${t.last.charAt(0).toUpperCase()}` : (t.first || p.name || '');
+      map.set(p.id, label);
+    });
+    return map;
+  }, [positionedPlayers]);
+
   return (
     <div className="visual-pitch-interface">
       <div className="pitch-container">
@@ -490,8 +512,16 @@ const VisualPitchInterface: React.FC<VisualPitchInterfaceProps> = ({
                     {player.squadNumber}
                   </text>
                 )}
-
-
+                {/* Player short name label below circle */}
+                <text
+                  x="0"
+                  y="4.8"
+                  className="player-label"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                >
+                  {nameLabelMap.get(player.id) || ''}
+                </text>
 
                 {/* Player name tooltip */}
                 <title>{player.name}</title>

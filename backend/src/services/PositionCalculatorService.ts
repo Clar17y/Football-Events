@@ -105,11 +105,28 @@ export class PositionCalculatorService {
         };
       }
 
-      // Sort by priority (higher priority first) and select the best match
-      const bestZone = matchingZones.sort((a, b) => b.priority - a.priority)[0];
-      
-      // Calculate confidence based on how centered the position is within the zone
-      const confidence = this.calculatePositionConfidence(pitchX, pitchY, bestZone);
+      // Choose best match with smarter tie‑breakers:
+      // 1) Higher priority wins
+      // 2) For same priority, smaller area (more specific zone) wins
+      // 3) For same area, higher confidence (closer to zone center) wins
+      const withMetrics = matchingZones.map(z => {
+        const width = Math.max(0, z.max_x - z.min_x);
+        const height = Math.max(0, z.max_y - z.min_y);
+        const area = width * height;
+        const conf = this.calculatePositionConfidence(pitchX, pitchY, z);
+        return { z, area, conf };
+      });
+
+      withMetrics.sort((a, b) => {
+        if (b.z.priority !== a.z.priority) return b.z.priority - a.z.priority;
+        if (a.area !== b.area) return a.area - b.area; // smaller area first
+        if (b.conf !== a.conf) return b.conf - a.conf; // higher confidence first
+        // final tie-breaker: code asc
+        return a.z.position_code.localeCompare(b.z.position_code);
+      });
+
+      const bestZone = withMetrics[0].z;
+      const confidence = withMetrics[0].conf;
 
       return {
         position: bestZone.position_code,

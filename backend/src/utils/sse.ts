@@ -83,6 +83,7 @@ export async function buildSnapshot(matchId: string) {
       period_number: true,
       clock_ms: true,
       sentiment: true,
+      notes: true,
       created_at: true,
     }
   });
@@ -150,6 +151,7 @@ export async function buildSnapshot(matchId: string) {
         periodType,
         clockMs: e.clock_ms ?? 0,
         sentiment: e.sentiment ?? 0,
+        notes: e.notes || null,
         createdAt: e.created_at?.toISOString?.() || null,
       });
     })

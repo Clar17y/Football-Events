@@ -38,6 +38,9 @@ import PageHeader from '../components/PageHeader';
 import LiveHeader from '../components/live/LiveHeader';
 import PeriodClock from '../components/live/PeriodClock';
 import LiveTimeline from '../components/live/LiveTimeline';
+import { defaultLineupsApi } from '../services/api/defaultLineupsApi';
+import LineupManagementModal from '../components/lineup/LineupManagementModal';
+import formationsApi from '../services/api/formationsApi';
 import './LiveMatchPage.css';
 import matchesApi from '../services/api/matchesApi';
 import viewerApi from '../services/api/viewerApi';
@@ -261,6 +264,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             setEventFeed(prev => sortFeed([{ id: e.id, kind: 'event', label: labelForEvent(e.kind), createdAt: new Date(e.createdAt || Date.now()), periodNumber: e.periodNumber || undefined, periodType: e.periodType || inferPeriodType(new Date(e.createdAt || Date.now())), clockMs: e.clockMs || 0, teamId: e.teamId || undefined, playerId: e.playerId || undefined, sentiment: e.sentiment || 0, event: e }, ...prev]));
           } catch {}
         });
+        // formation_changed SSE is no longer used; we persist a formation_change event and handle via event_created
         es.addEventListener('event_deleted', (ev: MessageEvent) => {
           try { const d = JSON.parse(ev.data); setEventFeed(prev => prev.filter(i => i.id !== d.id)); } catch {}
         });
@@ -536,6 +540,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         startTicking();
         const pn = 1;
         pushSystem('Match Kick Off', pn);
+        // Initialize lineups from default lineups for both teams
+        try {
+          const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
+          if (hId) await defaultLineupsApi.applyDefaultToMatch(hId, selectedId);
+          if (aId) await defaultLineupsApi.applyDefaultToMatch(aId, selectedId);
+        } catch (e) {
+          console.warn('Failed to apply default lineups at kickoff', e);
+        }
       }
     } catch (e) {
       // noop toast placeholder
@@ -636,6 +648,8 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   // ========== Events Quick Add ==========
   type QuickEventKind = 'goal' | 'assist' | 'key_pass' | 'save' | 'interception' | 'tackle' | 'foul' | 'penalty' | 'free_kick' | 'ball_out' | 'own_goal';
   const [selectedTeam, setSelectedTeam] = useState<'home' | 'away'>('home');
+  const [showLineupModal, setShowLineupModal] = useState(false);
+  const [hasDefaultLineup, setHasDefaultLineup] = useState<Record<string, boolean>>({});
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [lastEventId, setLastEventId] = useState<string | null>(null);
   const [lastEventKind, setLastEventKind] = useState<QuickEventKind | null>(null);
@@ -913,13 +927,38 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         const results = await Promise.all(promises);
         const map: Record<string, string> = {};
         results.forEach(res => (res?.data || []).forEach((p: any) => { map[p.id] = p.name; }));
-        setPlayerNameMap(map);
-      } catch (e) {
-        console.warn('Failed to load events', e);
-      }
-    };
-    run();
+      setPlayerNameMap(map);
+    } catch (e) {
+      console.warn('Failed to load events', e);
+    }
+  };
+  run();
   }, [isAuthenticated, selectedId, periods]);
+
+  // Prefetch current formation for selected match to make Team Changes modal instant
+  useEffect(() => {
+    if (selectedId) {
+      formationsApi.prefetch(selectedId).catch(() => {});
+    }
+  }, [selectedId]);
+
+  // Check default lineups for both teams when match changes
+  useEffect(() => {
+    (async () => {
+      try {
+        const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
+        if (!hId && !aId) return;
+        const [homeDL, awayDL] = await Promise.all([
+          hId ? defaultLineupsApi.getDefaultLineup(hId).catch(() => null) : Promise.resolve(null),
+          aId ? defaultLineupsApi.getDefaultLineup(aId).catch(() => null) : Promise.resolve(null)
+        ]);
+        const map: Record<string, boolean> = {};
+        if (hId) map[hId] = !!homeDL;
+        if (aId) map[aId] = !!awayDL;
+        setHasDefaultLineup(map);
+      } catch {}
+    })();
+  }, [currentMatch?.homeTeamId, currentMatch?.awayTeamId]);
 
   const inferPeriodType = (dt: Date | null): 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT' | undefined => {
     if (!dt) return undefined;
@@ -1033,7 +1072,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                         }
                         // Default fallback hidden
                         return null;
-                      })()}
+                    })()}
 
                       {/* Toggle Pause/Resume (only show one) */}
                       {matchState?.status === 'LIVE' && (
@@ -1054,13 +1093,13 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                       <IonText color="medium" style={{ textAlign: 'center' }}>
                         Read-only viewer. Sign in to control the match.
                       </IonText>
-                    )}
-                  </div>
-                </IonCardContent>
-              </IonCard>
-            </IonCol>
-          </IonRow>
-          )}
+                  )}
+                </div>
+              </IonCardContent>
+            </IonCard>
+          </IonCol>
+        </IonRow>
+        )}
         </IonGrid>
         {/* Events Quick Add (hidden when completed) */}
         {currentMatch && !viewerToken && matchState?.status !== 'COMPLETED' && (
@@ -1176,7 +1215,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                       <IonButton fill={selectedPlayerId === p.id ? 'solid' : 'outline'} size="small" onClick={() => setSelectedPlayerId(selectedPlayerId === p.id ? null : p.id)}>
                         {p.squadNumber ? `${p.squadNumber} ` : ''}{p.name}
                       </IonButton>
-                      <IonButton fill={pinned.has(p.id) ? 'solid' : 'outline'} size="small" style={{ marginLeft: 'auto' }} onClick={() => {
+                      <IonButton color={pinned.has(p.id) ? 'success' : 'danger'} fill={pinned.has(p.id) ? 'solid' : 'outline'} size="small" style={{ marginLeft: 'auto' }} onClick={() => {
                         const teamId2 = selectedTeam === 'home' ? currentMatch?.homeTeamId : currentMatch?.awayTeamId;
                         if (!teamId2) return;
                         setOnPitchByTeam(prev => {
@@ -1187,7 +1226,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                           return copy;
                         });
                       }}>
-                        {pinned.has(p.id) ? 'On‑pitch' : 'Pin'}
+                        Substitute
                       </IonButton>
                     </div>
                   ));
@@ -1225,6 +1264,28 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           </div>
         </div>
 
+        {/* Warning: default lineup missing before kickoff */}
+        {matchState?.status === 'SCHEDULED' && (() => {
+          const teamId = selectedTeam === 'home' ? currentMatch?.homeTeamId : currentMatch?.awayTeamId;
+          const missing = teamId ? !hasDefaultLineup[teamId] : false;
+          return missing ? (
+            <div style={{ padding: '0 16px 12px' }}>
+              <IonCard color="warning">
+                <IonCardContent>
+                  <IonText>Default lineup not set for selected team. Set it before kickoff for smooth live management.</IonText>
+                </IonCardContent>
+              </IonCard>
+            </div>
+          ) : null;
+        })()}
+
+        {/* Team Changes button */}
+        {!viewerToken && (
+          <div style={{ padding: '0 16px 12px' }}>
+            <IonButton onClick={() => setShowLineupModal(true)}>Team Changes</IonButton>
+          </div>
+        )}
+
         {/* Timeline */}
         <div style={{ padding: '12px 16px' }}>
           <IonCard>
@@ -1258,6 +1319,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           </IonCard>
         </div>
       </IonContent>
+      {/* Lineup Management Modal */}
+      <LineupManagementModal 
+        isOpen={showLineupModal}
+        onClose={() => setShowLineupModal(false)}
+        matchId={selectedId || ''}
+        selectedTeamId={selectedTeam === 'home' ? currentMatch?.homeTeamId || '' : currentMatch?.awayTeamId || ''}
+        currentMinute={Number((((timerMs || 0) / 60000)).toFixed(2))}
+      />
     </IonPage>
   );
 };

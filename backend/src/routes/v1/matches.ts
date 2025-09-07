@@ -25,11 +25,13 @@ import {
 } from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { extractApiError } from '../../utils/prismaErrorHandler';
+import { LiveFormationService } from '../../services/LiveFormationService';
 
 const router = Router();
 const matchService = new MatchService();
 const matchStateService = new MatchStateService();
 const matchPeriodsService = new MatchPeriodsService();
+const liveFormationService = new LiveFormationService();
 
 // GET /api/v1/matches - List matches with pagination and filtering
 router.get('/', authenticateToken, asyncHandler(async (req, res) => {
@@ -214,6 +216,53 @@ router.get('/:id/status', authenticateToken, validateUUID(), asyncHandler(async 
     if (apiError) {
       return res.status(apiError.statusCode).json({
         success: false,
+        error: apiError.error,
+        message: apiError.message,
+        field: apiError.field,
+        constraint: apiError.constraint
+      });
+    }
+    throw error;
+  }
+}));
+
+// === FORMATION ENDPOINTS ===
+
+// GET /api/v1/matches/:id/current-formation - Get active formation snapshot (or derived)
+router.get('/:id/current-formation', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const data = await liveFormationService.getCurrentFormation(
+    req.params['id']!,
+    req.user!.id,
+    req.user!.role
+  );
+  if (!data) return res.status(404).json({ error: 'Not found', message: 'Match not found or no formation available' });
+  return res.json(data);
+}));
+
+// POST /api/v1/matches/:id/formation-changes - Apply formation change with dual-table transaction
+router.post('/:id/formation-changes', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+  const { startMin, formation, reason } = req.body || {};
+  if (typeof startMin !== 'number' || !formation || !Array.isArray(formation.players)) {
+    return res.status(400).json({
+      error: 'Validation Error',
+      message: 'startMin (number) and formation.players (array) are required'
+    });
+  }
+
+  try {
+    const result = await liveFormationService.applyFormationChange({
+      matchId: req.params['id']!,
+      startMin,
+      formation,
+      userId: req.user!.id,
+      userRole: req.user!.role,
+      reason
+    });
+    return res.status(201).json(result);
+  } catch (error: any) {
+    const apiError = extractApiError(error);
+    if (apiError) {
+      return res.status(apiError.statusCode).json({
         error: apiError.error,
         message: apiError.message,
         field: apiError.field,
