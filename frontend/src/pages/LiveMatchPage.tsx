@@ -1111,10 +1111,10 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
 
   // Prefetch current formation for selected match to make Team Changes modal instant
   useEffect(() => {
-    if (selectedId) {
+    if (selectedId && isAuthenticated) {
       formationsApi.prefetch(selectedId).catch(() => {});
     }
-  }, [selectedId]);
+  }, [selectedId, isAuthenticated]);
 
   // Check default lineups for both teams when match changes
   useEffect(() => {

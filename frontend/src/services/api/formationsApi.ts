@@ -20,6 +20,10 @@ const inflight = new Map<string, Promise<FormationDataDTO | null>>();
 export const formationsApi = {
   async getCurrent(matchId: string, opts: { useCache?: boolean } = { useCache: true }): Promise<FormationDataDTO | null> {
     const { useCache = true } = opts;
+    // Guests keep formation local; avoid hitting server
+    if (!authApi.isAuthenticated()) {
+      return useCache && formationCache.has(matchId) ? formationCache.get(matchId)! : null;
+    }
     if (useCache && formationCache.has(matchId)) return formationCache.get(matchId)!;
     if (inflight.has(matchId)) return inflight.get(matchId)!;
     const p = (async () => {
@@ -37,7 +41,10 @@ export const formationsApi = {
   },
 
   async prefetch(matchId: string): Promise<void> {
-    try { await this.getCurrent(matchId, { useCache: true }); } catch {}
+    try {
+      // Guests should not call server; getCurrent will short-circuit
+      await this.getCurrent(matchId, { useCache: true });
+    } catch {}
   },
 
   setCached(matchId: string, data: FormationDataDTO) {
