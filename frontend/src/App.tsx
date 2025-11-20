@@ -23,6 +23,9 @@ import LiveMatchPage from './pages/LiveMatchPage';
 import LineupDemoPage from './pages/LineupDemoPage';
 import LineupManagementPage from './pages/LineupManagementPage';
 // import MatchConsole from './pages/MatchConsole'; // Removed - will be redesigned
+import { syncService } from './services/syncService';
+import ImportPromptModal from './components/ImportPromptModal';
+import { hasGuestData } from './services/importService';
 
 setupIonicReact();
 
@@ -30,9 +33,19 @@ const AppRoutes: React.FC = () => {
   const { isAuthenticated, isLoading } = useAuth();
   const [currentPage, setCurrentPage] = useState('home');
   const [currentMatchId, setCurrentMatchId] = useState<string | null>(null);
+  const [showImportPrompt, setShowImportPrompt] = useState(false);
 
   // On initial load and back/forward, parse URL path to set page state
   useEffect(() => {
+    // Start background sync service
+    try { syncService.start(); } catch {}
+    // Show import prompt after login if guest data exists
+    const onLoggedIn = async () => {
+      try {
+        if (await hasGuestData()) setShowImportPrompt(true);
+      } catch {}
+    };
+    window.addEventListener('auth:loggedin', onLoggedIn as EventListener);
     const applyLocation = () => {
       const { pathname } = window.location;
       // Normalize pathname without trailing slash
@@ -56,7 +69,10 @@ const AppRoutes: React.FC = () => {
     applyLocation();
     const onPop = () => applyLocation();
     window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      window.removeEventListener('auth:loggedin', onLoggedIn as EventListener);
+    };
   }, []);
 
   // Parse URL parameters for team filtering
@@ -125,24 +141,13 @@ const AppRoutes: React.FC = () => {
       case 'register':
         return <RegisterPage onNavigate={handleNavigation} />;
       case 'seasons':
-        if (!isAuthenticated) {
-          return <LoginPage onNavigate={handleNavigation} />;
-        }
+        // Allow guests to view/use with local storage; advanced features require login elsewhere
         return <SeasonsPage onNavigate={handleNavigation} />;
       case 'teams':
-        if (!isAuthenticated) {
-          return <LoginPage onNavigate={handleNavigation} />;
-        }
         return <TeamsPage onNavigate={handleNavigation} />;
       case 'players':
-        if (!isAuthenticated) {
-          return <LoginPage onNavigate={handleNavigation} />;
-        }
         return <PlayersPage onNavigate={handleNavigation} initialTeamFilter={teamFilter} />;
       case 'matches':
-        if (!isAuthenticated) {
-          return <LoginPage onNavigate={handleNavigation} />;
-        }
         return <MatchesPage onNavigate={handleNavigation} />;
       case 'awards':
         if (!isAuthenticated) {
@@ -150,6 +155,9 @@ const AppRoutes: React.FC = () => {
         }
         return <AwardsPage onNavigate={handleNavigation} />;
       case 'statistics':
+        if (!isAuthenticated) {
+          return <LoginPage onNavigate={handleNavigation} />;
+        }
         return <StatisticsPage onNavigate={handleNavigation} />;
       case 'live':
         // Pass currentMatchId (may be null to select nearest upcoming)
@@ -157,9 +165,6 @@ const AppRoutes: React.FC = () => {
       case 'lineup-demo':
         return <LineupDemoPage />;
       case 'lineup-management':
-        if (!isAuthenticated) {
-          return <LoginPage onNavigate={handleNavigation} />;
-        }
         return <LineupManagementPage onNavigate={handleNavigation} />;
       case 'home':
       default:
@@ -167,7 +172,12 @@ const AppRoutes: React.FC = () => {
     }
   };
 
-  return renderCurrentPage();
+  return (
+    <>
+      {renderCurrentPage()}
+      <ImportPromptModal isOpen={showImportPrompt} onClose={() => setShowImportPrompt(false)} />
+    </>
+  );
 };
 
 const App: React.FC = () => (

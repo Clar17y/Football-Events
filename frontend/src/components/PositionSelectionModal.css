@@ -67,11 +67,11 @@
 /* Responsive Adjustments */
 @media (max-width: 768px) {
   .position-item {
-    --padding-start: 16px;
-    --padding-end: 16px;
-    --padding-top: 6px;
-    --padding-bottom: 6px;
-    --min-height: 36px;
+    --padding-start: 12px;
+    --padding-end: 12px;
+    --padding-top: 4px;
+    --padding-bottom: 4px;
+    --min-height: 32px;
   }
   
   .position-item.selected {
@@ -81,7 +81,10 @@
   /* Position emoji removed */
   
   .position-name {
-    font-size: 1.05rem;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   
   /* Position description removed */

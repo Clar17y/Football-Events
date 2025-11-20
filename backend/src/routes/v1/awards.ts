@@ -18,7 +18,7 @@ router.post('/match-awards',
   validateRequest(matchAwardCreateSchema),
   asyncHandler(async (req, res) => {
     try {
-      const matchAward = await awardsService.createMatchAward(req.body, req.user!.id);
+      const matchAward = await awardsService.createMatchAward(req.body, req.user!.id, req.user!.role);
       return res.status(201).json(matchAward);
     } catch (error: any) {
       const apiError = extractApiError(error);
@@ -178,7 +178,7 @@ router.post('/',
   validateRequest(awardCreateSchema),
   asyncHandler(async (req, res) => {
     try {
-      const award = await awardsService.createAward(req.body, req.user!.id);
+      const award = await awardsService.createAward(req.body, req.user!.id, req.user!.role);
       return res.status(201).json(award);
     } catch (error: any) {
       const apiError = extractApiError(error);

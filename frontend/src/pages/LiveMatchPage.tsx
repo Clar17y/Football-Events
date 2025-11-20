@@ -37,6 +37,7 @@ import {
 import PageHeader from '../components/PageHeader';
 import LiveHeader from '../components/live/LiveHeader';
 import PeriodClock from '../components/live/PeriodClock';
+import GuestBanner from '../components/GuestBanner';
 import LiveTimeline from '../components/live/LiveTimeline';
 import { defaultLineupsApi } from '../services/api/defaultLineupsApi';
 import LineupManagementModal from '../components/lineup/LineupManagementModal';
@@ -49,6 +50,8 @@ import teamsApi from '../services/api/teamsApi';
 import { useAuth } from '../contexts/AuthContext';
 import type { MatchState, MatchPeriod, Event as MatchEvent } from '@shared/types';
 import type { Match } from '@shared/types';
+import { getLocalMatch } from '../services/guestQuickMatch';
+import { authApi } from '../services/api/authApi';
 
 interface LiveMatchPageProps {
   onNavigate?: (pageOrUrl: string) => void;
@@ -78,6 +81,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const [viewerTeams, setViewerTeams] = useState<{ homeId?: string; awayId?: string; homeName?: string; awayName?: string } | null>(null);
   const [viewerSummary, setViewerSummary] = useState<{ competition?: string | null; venue?: string | null } | null>(null);
   const [activeShareCode, setActiveShareCode] = useState<string | null>(null);
+  const [localMatches, setLocalMatches] = useState<Match[]>([]);
 
   // Load upcoming matches for switcher (skip in viewer mode)
   useEffect(() => {
@@ -94,12 +98,32 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       setLoading(true);
       setError(null);
       try {
-        const list = await matchesApi.getUpcoming(20);
-        if (cancelled) return;
-        setUpcoming(list || []);
-        // If no explicit matchId, select nearest upcoming
-        if (!selectedId && list && list.length > 0) {
-          setSelectedId(list[0].id);
+        if (!isAuthenticated) {
+          // Guest: load local matches for selection and optionally selected match
+          try {
+            const [up, recent] = await Promise.all([
+              matchesApi.getUpcoming(20).catch(() => []),
+              matchesApi.getRecent(10).catch(() => [])
+            ]);
+            const combined: Record<string, Match> = {} as any;
+            [...up, ...recent].forEach((m: any) => { combined[m.id] = m; });
+            setLocalMatches(Object.values(combined));
+          } catch {}
+          if (selectedId) {
+            const m = await getLocalMatch(selectedId);
+            if (cancelled) return;
+            setUpcoming(m ? [m] : []);
+          } else {
+            setUpcoming([]);
+          }
+        } else {
+          const list = await matchesApi.getUpcoming(20);
+          if (cancelled) return;
+          setUpcoming(list || []);
+          // If no explicit matchId, select nearest upcoming
+          if (!selectedId && list && list.length > 0) {
+            setSelectedId(list[0].id);
+          }
         }
       } catch (e: any) {
         if (!cancelled) setError(e?.message || 'Failed to load upcoming matches');
@@ -374,6 +398,24 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     if (matchId) setSelectedId(matchId);
   }, [matchId]);
 
+  // For guests: when selectedId changes, load that local match into the upcoming list
+  useEffect(() => {
+    let cancelled = false;
+    const syncUpcomingForGuest = async () => {
+      if (isAuthenticated) return; // only for guests
+      if (!selectedId) { setUpcoming([]); return; }
+      try {
+        const m = await getLocalMatch(selectedId);
+        if (cancelled) return;
+        setUpcoming(m ? [m] : []);
+      } catch {
+        if (!cancelled) setUpcoming([]);
+      }
+    };
+    syncUpcomingForGuest();
+    return () => { cancelled = true; };
+  }, [isAuthenticated, selectedId]);
+
   const currentIndex = useMemo(() => {
     return upcoming.findIndex(m => m.id === selectedId);
   }, [upcoming, selectedId]);
@@ -516,8 +558,41 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handleKickOff = async () => {
     if (!selectedId) return;
     try {
+      if (!isAuthenticated) {
+        // Guest: local kickoff
+        const now = new Date();
+        if (matchState?.status === 'PAUSED') {
+          // Start next regular period and resume
+          const nextNum = (periods.filter(p => p.periodType === 'REGULAR').length) + 1;
+          const p = { id: `local-p-${Date.now()}`, periodNumber: nextNum, periodType: 'REGULAR' as any, startedAt: now } as any;
+          setPeriods(prev => [...prev, p]);
+          const st: any = { ...(matchState || {}), status: 'LIVE', currentPeriod: nextNum };
+          setMatchState(st);
+          setTimerMs(0);
+          startTicking();
+          pushSystem(`Kick Off — Period ${nextNum}`, nextNum);
+          try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: 'regular' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
+        } else {
+          // First kickoff
+          const p1 = { id: `local-p-${Date.now()}`, periodNumber: 1, periodType: 'REGULAR' as any, startedAt: now } as any;
+          setPeriods([p1]);
+          const st: any = { id: 'local-state', matchId: selectedId, status: 'LIVE', currentPeriod: 1, totalElapsedSeconds: 0, createdAt: new Date(), updatedAt: new Date() };
+          setMatchState(st);
+          setTimerMs(0);
+          startTicking();
+          pushSystem('Match Kick Off', 1);
+          // Apply default lineups locally
+          try {
+            const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
+            if (hId) await defaultLineupsApi.applyDefaultToMatch(hId, selectedId);
+            if (aId) await defaultLineupsApi.applyDefaultToMatch(aId, selectedId);
+          } catch {}
+          try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_match' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: 'regular' }); } catch {}
+        }
+        return;
+      }
+      // Authenticated path
       if (matchState?.status === 'PAUSED') {
-        // Start next regular period and resume
         await matchesApi.startPeriod(selectedId, 'regular' as any);
         const p = await matchesApi.getMatchPeriods(selectedId);
         setPeriods(p);
@@ -526,13 +601,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         const base = computeBaseMs(st, p);
         setTimerMs(base);
         startTicking();
-        // System feed: Kick Off period N
         const pn = st.currentPeriod || currentPeriodNumber();
         pushSystem(`Kick Off — Period ${pn}`, pn);
       } else {
         const state = await matchesApi.startMatch(selectedId);
         setMatchState(state);
-        // Refresh periods; first period should be created by backend
         const p = await matchesApi.getMatchPeriods(selectedId);
         setPeriods(p);
         const base = computeBaseMs(state, p);
@@ -540,13 +613,12 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         startTicking();
         const pn = 1;
         pushSystem('Match Kick Off', pn);
-        // Initialize lineups from default lineups for both teams
         try {
           const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
           if (hId) await defaultLineupsApi.applyDefaultToMatch(hId, selectedId);
           if (aId) await defaultLineupsApi.applyDefaultToMatch(aId, selectedId);
         } catch (e) {
-          console.warn('Failed to apply default lineups at kickoff', e);
+          console.warn('Apply default lineups failed', e);
         }
       }
     } catch (e) {
@@ -557,9 +629,15 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handlePause = async () => {
     if (!selectedId) return;
     try {
+      if (!isAuthenticated) {
+        setMatchState(prev => prev ? ({ ...prev, status: 'PAUSED' } as any) : prev);
+        stopTicking();
+        pushSystem('Paused', currentPeriodNumber());
+        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'pause' }); } catch {}
+        return;
+      }
       const state = await matchesApi.pauseMatch(selectedId);
       setMatchState(state);
-      // Compute final base from state
       const p = await matchesApi.getMatchPeriods(selectedId);
       setPeriods(p);
       const base = computeBaseMs(state, p);
@@ -573,6 +651,13 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handleResume = async () => {
     if (!selectedId) return;
     try {
+      if (!isAuthenticated) {
+        setMatchState(prev => prev ? ({ ...prev, status: 'LIVE' } as any) : prev);
+        startTicking();
+        pushSystem('Resumed', currentPeriodNumber());
+        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
+        return;
+      }
       const state = await matchesApi.resumeMatch(selectedId);
       setMatchState(state);
       const p = await matchesApi.getMatchPeriods(selectedId);
@@ -588,12 +673,26 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handleEndPeriod = async () => {
     if (!selectedId || !currentOpenPeriod) return;
     try {
+      if (!isAuthenticated) {
+        // Close local period
+        setPeriods(prev => prev.map(p => p === currentOpenPeriod ? ({ ...p, endedAt: new Date(), durationSeconds: Math.max(1, Math.round((timerMs) / 1000)) } as any) : p));
+        stopTicking();
+        setTimerMs(0);
+        const fmt = (currentMatch?.periodFormat || '').toLowerCase();
+        const n = currentOpenPeriod.periodNumber;
+        let txt = 'End of Period';
+        if (fmt.includes('half')) txt = n === 1 ? 'End of 1st Half' : 'End of 2nd Half';
+        else if (fmt.includes('quarter')) txt = `End of Q${n}`;
+        else if (currentOpenPeriod.periodType === 'EXTRA_TIME') txt = `End of ET${n}`;
+        pushSystem(txt, n);
+        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'end_period' }); } catch {}
+        return;
+      }
       await matchesApi.endPeriod(selectedId, currentOpenPeriod.id);
       const p = await matchesApi.getMatchPeriods(selectedId);
       setPeriods(p);
       stopTicking();
       setTimerMs(0);
-      // Determine label based on format
       const fmt = (currentMatch?.periodFormat || '').toLowerCase();
       const n = currentOpenPeriod.periodNumber;
       let txt = 'End of Period';
@@ -608,12 +707,24 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handleStartNextPeriod = async (extraTime = false) => {
     if (!selectedId) return;
     try {
+      if (!isAuthenticated) {
+        const now = new Date();
+        const type = extraTime ? 'EXTRA_TIME' : 'REGULAR';
+        const nextNum = (periods.filter(p => p.periodType === (extraTime ? 'EXTRA_TIME' : 'REGULAR')).length) + 1;
+        const p = { id: `local-p-${Date.now()}`, periodNumber: nextNum, periodType: type as any, startedAt: now } as any;
+        setPeriods(prev => [...prev, p]);
+        setMatchState(prev => prev ? ({ ...prev, status: 'LIVE', currentPeriod: nextNum } as any) : prev);
+        setTimerMs(0);
+        startTicking();
+        pushSystem(extraTime ? `Extra Time Kick Off — ET${nextNum}` : `Kick Off — Period ${nextNum}`, nextNum);
+        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: extraTime ? 'extra_time' : 'regular' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
+        return;
+      }
       const periodType = extraTime ? 'extra_time' : 'regular';
       await matchesApi.startPeriod(selectedId, periodType as any);
       const p = await matchesApi.getMatchPeriods(selectedId);
       setPeriods(p);
       setTimerMs(0);
-      // Resume match if needed
       const st = await matchesApi.resumeMatch(selectedId);
       setMatchState(st);
       startTicking();
@@ -625,10 +736,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handleStartPenaltyShootout = async () => {
     if (!selectedId) return;
     try {
+      if (!isAuthenticated) {
+        pushSystem('Penalty Shootout', undefined);
+        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: 'penalty_shootout' }); } catch {}
+        return;
+      }
       await matchesApi.startPeriod(selectedId, 'penalty_shootout' as any);
       const p = await matchesApi.getMatchPeriods(selectedId);
       setPeriods(p);
-      // No timer for shootout; keep paused state
       pushSystem('Penalty Shootout', undefined);
     } catch (e) {
       console.error('Start penalty shootout failed', e);
@@ -637,6 +752,12 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handleComplete = async () => {
     if (!selectedId) return;
     try {
+      if (!isAuthenticated) {
+        setMatchState(prev => prev ? ({ ...prev, status: 'COMPLETED' } as any) : prev);
+        stopTicking();
+        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'complete' }); } catch {}
+        return;
+      }
       const state = await matchesApi.completeMatch(selectedId);
       setMatchState(state);
       stopTicking();
@@ -679,7 +800,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const [playerNameMap, setPlayerNameMap] = useState<Record<string, string>>({});
 
   const currentPeriodNumber = () => currentOpenPeriod?.periodNumber || matchState?.currentPeriod || 1;
-  const canAddEvents = !!(isAuthenticated && matchState?.status === 'LIVE' && currentOpenPeriod && selectedId);
+  const canAddEvents = !!(matchState?.status === 'LIVE' && currentOpenPeriod && selectedId);
 
   const openPlayerPicker = async (kind: QuickEventKind) => {
     if (!selectedId || !canAddEvents) return;
@@ -723,7 +844,27 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         playerId: selectedPlayerId || null,
         sentiment,
       } as any;
-      const created = await eventsApi.create(payload);
+      let created: any;
+      if (!isAuthenticated) {
+        // Guest: write to local outbox
+        const { db } = await import('../db/indexedDB');
+        const result = await db.addEvent({
+          kind: payload.kind,
+          match_id: payload.matchId,
+          team_id: payload.teamId,
+          player_id: payload.playerId,
+          minute: Math.floor((payload.clockMs || 0) / 60000),
+          second: Math.floor(((payload.clockMs || 0) % 60000) / 1000),
+          period: payload.periodNumber,
+          data: payload.notes ? { notes: payload.notes } : {},
+          created: Date.now()
+        });
+        if (!result.success) throw new Error(result.error || 'Failed to add event');
+        try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
+        created = { id: `local-${Date.now()}`, ...payload, createdAt: new Date() };
+      } else {
+        created = await eventsApi.create(payload);
+      }
       setLastEventId(created.id);
       setLastEventKind(pendingKind);
       setLastEventSentiment(sentiment);
@@ -740,7 +881,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
 
   const handleUndoLast = async () => {
     try {
-      if (lastEventId) await eventsApi.delete(lastEventId);
+      if (isAuthenticated && lastEventId) {
+        await eventsApi.delete(lastEventId);
+      }
     } catch (e) {
       console.error('Undo failed', e);
     } finally {
@@ -755,11 +898,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     try {
       if (!lastEventId) return;
       // Compute next value (clamped) and short-circuit if unchanged
-      const next = delta === 0
-        ? 0
-        : Math.max(-3, Math.min(3, lastEventSentiment + delta));
-      if (next === lastEventSentiment) return; // avoid redundant PUTs
-      await eventsApi.update(lastEventId, { sentiment: next });
+      const next = delta === 0 ? 0 : Math.max(-3, Math.min(3, lastEventSentiment + delta));
+      if (next === lastEventSentiment) return;
+      if (isAuthenticated) {
+        await eventsApi.update(lastEventId, { sentiment: next });
+      }
       setLastEventSentiment(next);
     } catch (e) {
       console.warn('Failed to update sentiment', e);
@@ -892,34 +1035,65 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     );
   };
 
-  // Load/refresh timeline for coach (auth only). Rebuild when periods change to keep system rows in sync.
+  // Load/refresh timeline
   useEffect(() => {
     const run = async () => {
-      if (!isAuthenticated || !selectedId) { return; }
+      if (!selectedId) return;
       try {
-        const list = await eventsApi.getByMatch(selectedId);
-        const feed: FeedItem[] = (list as any as MatchEvent[]).map(ev => ({ 
-          id: ev.id,
-          kind: 'event',
-          label: labelForEvent(ev.kind),
-          createdAt: new Date(ev.createdAt),
-          periodNumber: ev.periodNumber ?? undefined,
-          periodType: inferPeriodType(new Date(ev.createdAt)),
-          clockMs: ev.clockMs ?? undefined,
-          teamId: ev.teamId ?? undefined,
-          playerId: ev.playerId ?? undefined,
-          sentiment: ev.sentiment,
-          event: ev 
-        }));
-        // Derive system rows from known periods for coach view
-        const systemFromPeriods: FeedItem[] = periods.flatMap((p: any) => {
-          const out: FeedItem[] = [];
-          if (p.startedAt) out.push({ id: `ps-${p.id}`, kind: 'system', label: periodStartLabel(p), createdAt: new Date(p.startedAt), periodNumber: p.periodNumber, periodType: p.periodType });
-          if (p.endedAt) out.push({ id: `pe-${p.id}`, kind: 'system', label: periodEndLabel(p), createdAt: new Date(p.endedAt), periodNumber: p.periodNumber, periodType: p.periodType });
-          return out;
-        });
-        setEventFeed(sortFeed([...feed, ...systemFromPeriods]));
-        // Preload rosters for both teams to resolve player names
+      if (!isAuthenticated) {
+          const { db } = await import('../db/indexedDB');
+          const res = await db.getMatchEvents(selectedId);
+          const arr = (res.success && res.data) ? res.data : [];
+          const feed: FeedItem[] = arr.map((e: any) => {
+            const payload = e.data || e;
+            return {
+              id: String(e.id || `local-${payload.created || Date.now()}`),
+              kind: 'event',
+              label: labelForEvent(payload.kind),
+              createdAt: new Date(payload.created || Date.now()),
+              periodNumber: payload.period || undefined,
+              clockMs: ((payload.minute || 0) * 60000) + ((payload.second || 0) * 1000),
+              teamId: payload.team_id,
+              playerId: payload.player_id,
+              sentiment: payload.sentiment || 0,
+              event: {
+                id: String(e.id || crypto.randomUUID()),
+                kind: payload.kind,
+                createdAt: new Date(payload.created || Date.now()),
+                clockMs: ((payload.minute || 0) * 60000) + ((payload.second || 0) * 1000),
+                periodNumber: payload.period || undefined,
+                teamId: payload.team_id,
+                playerId: payload.player_id,
+                notes: payload.notes || (payload.data ? payload.data.notes : undefined),
+                sentiment: payload.sentiment || 0,
+              } as any
+            };
+          });
+          setEventFeed(sortFeed(feed));
+        } else {
+          const list = await eventsApi.getByMatch(selectedId);
+          const feed: FeedItem[] = (list as any as MatchEvent[]).map(ev => ({ 
+            id: ev.id,
+            kind: 'event',
+            label: labelForEvent(ev.kind),
+            createdAt: new Date(ev.createdAt),
+            periodNumber: ev.periodNumber ?? undefined,
+            periodType: inferPeriodType(new Date(ev.createdAt)),
+            clockMs: ev.clockMs ?? undefined,
+            teamId: ev.teamId ?? undefined,
+            playerId: ev.playerId ?? undefined,
+            sentiment: ev.sentiment,
+            event: ev 
+          }));
+          const systemFromPeriods: FeedItem[] = periods.flatMap((p: any) => {
+            const out: FeedItem[] = [];
+            if (p.startedAt) out.push({ id: `ps-${p.id}`, kind: 'system', label: periodStartLabel(p), createdAt: new Date(p.startedAt), periodNumber: p.periodNumber, periodType: p.periodType });
+            if (p.endedAt) out.push({ id: `pe-${p.id}`, kind: 'system', label: periodEndLabel(p), createdAt: new Date(p.endedAt), periodNumber: p.periodNumber, periodType: p.periodType });
+            return out;
+          });
+          setEventFeed(sortFeed([...feed, ...systemFromPeriods]));
+        }
+        // Preload roster names (works in guest via teamsApi fallback)
         const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
         const promises: Promise<any>[] = [];
         if (hId) promises.push(teamsApi.getTeamPlayers(hId));
@@ -927,12 +1101,12 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         const results = await Promise.all(promises);
         const map: Record<string, string> = {};
         results.forEach(res => (res?.data || []).forEach((p: any) => { map[p.id] = p.name; }));
-      setPlayerNameMap(map);
-    } catch (e) {
-      console.warn('Failed to load events', e);
-    }
-  };
-  run();
+        setPlayerNameMap(map);
+      } catch (e) {
+        console.warn('Failed to load events', e);
+      }
+    };
+    run();
   }, [isAuthenticated, selectedId, periods]);
 
   // Prefetch current formation for selected match to make Team Changes modal instant
@@ -977,6 +1151,25 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     <IonPage>
       <PageHeader onNavigate={onNavigate} />
       <IonContent fullscreen>
+        {!isAuthenticated && !viewerToken && !selectedId && localMatches.length > 0 && (
+          <div style={{ padding: '12px 16px' }}>
+            <IonCard>
+              <IonCardContent>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>Your Local Matches</div>
+                {localMatches.map((m) => (
+                  <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--grassroots-surface-variant)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ fontWeight: 600 }}>{m.homeTeam?.name || 'Home'} vs {m.awayTeam?.name || 'Away'}</div>
+                      <div style={{ fontSize: 12, color: 'var(--grassroots-text-tertiary)' }}>{new Date(m.kickoffTime).toLocaleString()}</div>
+                    </div>
+                    <IonButton size="small" onClick={() => { setSelectedId(m.id); onNavigate?.(`/live/${m.id}`); }}>Open</IonButton>
+                  </div>
+                ))}
+              </IonCardContent>
+            </IonCard>
+          </div>
+        )}
+        <GuestBanner matchId={selectedId} />
         <IonGrid fixed>
           <IonRow>
             <IonCol size="12">
@@ -1051,49 +1244,46 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                       {/* Primary context-aware action */}
                       {(() => {
-                        // Determine label/handler based on state and periods
                         const regCount = regPeriodsCount(currentMatch);
                         const extraEnded = periods.filter(p => p.periodType === 'EXTRA_TIME' && !!p.endedAt).length;
                         const inPaused = matchState?.status === 'PAUSED';
-                        const inScheduled = matchState?.status === 'SCHEDULED';
+                        const inScheduled = matchState?.status === 'SCHEDULED' || !matchState;
                         if (inScheduled) {
-                          return <IonButton disabled={!isAuthenticated || !selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
+                          return <IonButton disabled={!selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
                         }
                         if (inPaused) {
                           if (!currentOpenPeriod) {
                             if (endedRegularCount < regCount) {
-                              return <IonButton disabled={!isAuthenticated || !selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
+                              return <IonButton disabled={!selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
                             }
                             if (extraEnded < 2) {
-                              return <IonButton disabled={!isAuthenticated || !selectedId} onClick={() => handleStartNextPeriod(true)}>Extra Time</IonButton>;
+                              return <IonButton disabled={!selectedId} onClick={() => handleStartNextPeriod(true)}>Extra Time</IonButton>;
                             }
-                            return <IonButton disabled={!isAuthenticated || !selectedId} onClick={handleStartPenaltyShootout}>Penalty Shootout</IonButton>;
+                            return <IonButton disabled={!selectedId} onClick={handleStartPenaltyShootout}>Penalty Shootout</IonButton>;
                           }
                         }
-                        // Default fallback hidden
+                        if (matchState?.status === 'LIVE') {
+                          return <IonButton disabled={!selectedId || !currentOpenPeriod} onClick={handleEndPeriod}>End Period</IonButton>;
+                        }
                         return null;
-                    })()}
+                      })()}
 
                       {/* Toggle Pause/Resume (only show one) */}
                       {matchState?.status === 'LIVE' && (
-                        <IonButton onClick={handlePause} disabled={!isAuthenticated}>Pause</IonButton>
+                        <IonButton onClick={handlePause} disabled={!selectedId}>Pause</IonButton>
                       )}
                       {matchState?.status === 'PAUSED' && currentOpenPeriod && (
-                        <IonButton onClick={handleResume} disabled={!isAuthenticated}>Resume</IonButton>
+                        <IonButton onClick={handleResume} disabled={!selectedId}>Resume</IonButton>
                       )}
 
                       {/* End Period only visible when paused and a period is open */}
                       {matchState?.status === 'PAUSED' && currentOpenPeriod && (
-                        <IonButton onClick={handleEndPeriod} disabled={!isAuthenticated}>End Period</IonButton>
+                        <IonButton onClick={handleEndPeriod} disabled={!selectedId}>End Period</IonButton>
                       )}
 
-                      <IonButton disabled={!isAuthenticated || matchState?.status === 'SCHEDULED'} color="success" onClick={handleComplete}>Complete</IonButton>
+                      <IonButton disabled={matchState?.status === 'SCHEDULED'} color="success" onClick={handleComplete}>Complete</IonButton>
                     </div>
-                    {!isAuthenticated && (
-                      <IonText color="medium" style={{ textAlign: 'center' }}>
-                        Read-only viewer. Sign in to control the match.
-                      </IonText>
-                  )}
+                    {/* Guest mode can control offline match; viewer mode handled via viewerToken guard */}
                 </div>
               </IonCardContent>
             </IonCard>
@@ -1291,7 +1481,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           <IonCard>
             <IonCardContent>
               <div style={{ fontWeight: 700, marginBottom: 8 }}>Live Timeline</div>
-              {(isAuthenticated || viewerToken) && selectedId ? (
+              {selectedId ? (
                 <LiveTimeline 
                   feed={eventFeed as any} 
                   currentMatch={currentMatch as any} 
@@ -1301,7 +1491,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                     if (item.kind !== 'event') return;
                     (async () => {
                       try {
-                        await eventsApi.delete(item.id);
+                        if (isAuthenticated) {
+                          await eventsApi.delete(item.id);
+                        }
                         setEventFeed(prev => prev.filter(i => i.id !== item.id));
                         try { (window as any).__toastApi?.current?.showSuccess?.('Event deleted'); } catch {}
                       } catch (e: any) {

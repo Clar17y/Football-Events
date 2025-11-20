@@ -54,6 +54,8 @@ import { autoLinkEvents } from './eventLinking';
 import { runMigrations } from './migrations';
 import { addToOutbox } from './utils';
 import { performanceMonitor } from './performance';
+import { getGuestId, isGuest } from '../utils/guest';
+import { canAddEvent } from '../utils/guestQuota';
 
 /**
  * Enhanced IndexedDB database with proper typing and validation
@@ -95,8 +97,64 @@ export class GrassrootsDB extends Dexie {
     });
 
     // Version 4: Enhanced schema with event linking and PostgreSQL alignment
-    // Note: Incremented version to avoid primary key change conflicts
     this.version(4).stores({
+      events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
+      matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
+      teams: `id, ${SCHEMA_INDEXES.teams.join(', ')}`,
+      players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
+      seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
+      lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
+      player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
+      outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
+      sync_metadata: `++id, ${SCHEMA_INDEXES.sync_metadata.join(', ')}`,
+      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
+    });
+
+    // Version 5: Add indexes for created_by_user_id and is_deleted on teams/matches
+    // This enables guest-mode counts and filtering by creator without full scans
+    this.version(5).stores({
+      events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
+      matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
+      teams: `id, ${SCHEMA_INDEXES.teams.join(', ')}`,
+      players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
+      seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
+      lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
+      player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
+      outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
+      sync_metadata: `++id, ${SCHEMA_INDEXES.sync_metadata.join(', ')}`,
+      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
+    });
+
+    // Version 6: Add created_by_user_id / is_deleted indexes for seasons (missed previously)
+    this.version(6).stores({
+      events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
+      matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
+      teams: `id, ${SCHEMA_INDEXES.teams.join(', ')}`,
+      players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
+      seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
+      lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
+      player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
+      outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
+      sync_metadata: `++id, ${SCHEMA_INDEXES.sync_metadata.join(', ')}`,
+      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
+    });
+
+    // Version 7: Add composite event indexes used in utils ([match_id+player_id], [match_id+team_id])
+    this.version(7).stores({
+      events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
+      matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
+      teams: `id, ${SCHEMA_INDEXES.teams.join(', ')}`,
+      players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
+      seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
+      lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
+      player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
+      outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
+      sync_metadata: `++id, ${SCHEMA_INDEXES.sync_metadata.join(', ')}`,
+      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
+    });
+
+    // Version 8: Add created_by_user_id index on outbox for import detection
+    this.version(8).stores({
       events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
       matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
       teams: `id, ${SCHEMA_INDEXES.teams.join(', ')}`,
@@ -164,6 +222,21 @@ export class GrassrootsDB extends Dexie {
       // Handle constraint errors by resetting the database
       if (error instanceof Error && error.name === 'ConstraintError' && error.message.includes('already exists')) {
         console.log('Constraint error detected - resetting database...');
+        await this.resetDatabase();
+        return;
+      }
+
+      // Gracefully handle Dexie upgrade errors regarding primary key changes
+      // Seen as DatabaseClosedError with inner UpgradeError: "Not yet support for changing primary key"
+      const err: any = error;
+      const innerName = err?.inner?.name || err?.cause?.name;
+      const innerMsg = err?.inner?.message || err?.cause?.message || '';
+      if (
+        (error instanceof Error && (error.name === 'UpgradeError' || error.name === 'DatabaseClosedError')) ||
+        innerName === 'UpgradeError' ||
+        (typeof innerMsg === 'string' && innerMsg.includes('changing primary key'))
+      ) {
+        console.warn('Upgrade error detected (likely primary key change). Resetting IndexedDB...');
         await this.resetDatabase();
         return;
       }
@@ -251,7 +324,7 @@ export class GrassrootsDB extends Dexie {
         notes: eventData.notes,
         created_at: now,
         updated_at: now,
-        created_by_user_id: eventData.created_by_user_id || 'temp-user-id',
+        created_by_user_id: eventData.created_by_user_id || (isGuest() ? getGuestId() : 'authenticated-user'),
         is_deleted: false,
         // Note: EnhancedEvent uses snake_case properties only
       };
@@ -342,6 +415,20 @@ export class GrassrootsDB extends Dexie {
         };
       }
 
+      // Enforce guest quota for non-scoring events
+      try {
+        const kind = payload.kind;
+        const matchId = payload.match_id;
+        const quota = await canAddEvent(String(matchId || ''), String(kind || ''));
+        if (!quota.ok) {
+          return {
+            success: false,
+            error: quota.reason,
+            affected_count: 0
+          };
+        }
+      } catch {}
+
       const outboxEvent: Omit<OutboxEvent, 'id'> = {
         table_name: 'events',
         record_id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -350,7 +437,7 @@ export class GrassrootsDB extends Dexie {
         synced: 0, // Use 0 instead of false for IndexedDB compatibility
         created_at: Date.now(),
         retry_count: 0,
-        created_by_user_id: payload.created_by_user_id || 'temp-user-id'
+        created_by_user_id: payload.created_by_user_id || (isGuest() ? getGuestId() : 'authenticated-user')
       };
 
       const id = await this.outbox.add(outboxEvent);

@@ -123,9 +123,18 @@ router.get('/global', asyncHandler(async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching global stats:', error);
-    res.status(500).json({
-      error: 'Failed to fetch global statistics',
-      message: 'Unable to retrieve platform statistics at this time'
+    // Graceful degraded response so frontend can render using zeros/cached data
+    res.setHeader('x-degraded', '1');
+    res.json({
+      total_teams: 0,
+      active_teams: 0,
+      total_players: 0,
+      total_matches: 0,
+      matches_played: 0,
+      active_matches: 0,
+      matches_today: 0,
+      last_updated: new Date().toISOString(),
+      degraded: true
     });
   }
 }));

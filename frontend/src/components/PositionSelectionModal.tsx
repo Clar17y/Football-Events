@@ -208,7 +208,7 @@ const PositionSelectionModal: React.FC<PositionSelectionModalProps> = ({
                       {selectedPosition === position.code && (
                         <IonIcon icon={checkmark} slot="end" className="selected-icon" />
                       )}
-                      <IonRippleEffect />
+                      <IonRippleEffect slot="fixed" />
                     </IonItem>
                   ))}
                 </IonList>

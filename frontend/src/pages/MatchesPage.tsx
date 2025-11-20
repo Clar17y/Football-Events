@@ -16,6 +16,7 @@ import {
   refreshOutline
 } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader';
+import GuestBanner from '../components/GuestBanner';
 import MatchesCalendar from '../components/MatchesCalendar';
 import CreateMatchModal from '../components/CreateMatchModal';
 import UpcomingMatchesList from '../components/UpcomingMatchesList';
@@ -491,6 +492,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
       />
 
       <IonContent ref={contentRef}>
+        <GuestBanner />
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
           <IonRefresherContent
             pullingIcon={refresh}
@@ -644,9 +646,9 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
           isOpen={showErrorToast}
           onDidDismiss={() => setShowErrorToast(false)}
           message={error || 'An error occurred while loading matches'}
-          duration={4000}
+          duration={5000}
           color="danger"
-          position="top"
+          position="bottom"
           buttons={[
             {
               text: 'Retry',

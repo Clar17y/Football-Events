@@ -90,7 +90,6 @@
   - _Requirements: 1.1, 1.2, 5.1, 5.2_
 
 - [x] 5.1.1 Fix issues with LineupManagementPage
-
   - The page should have the MatchMaster header like every other page, containing the back arrow and the dark mode theme toggle
   - The "Lineup Management" header background should then be inside the page, with the same format as every other (Like Matches)
   - The "Lineup Management" page header should match the color of the Ion Card on the home page. We have a lot of repeated colors on the homepage, suggest another color that could be used and works well in light or dark mode
@@ -103,47 +102,41 @@
   - The "Save Layout" button should be under the pitch interface
   - The "status-section" saying the number of players on the pitch isn't necessary... it's on the pitch interface
 
-
-- [ ] 5.2 Implement formation state management with React Context
-  - Create React Context for managing current formation data (players, positions, team selection)
-  - Implement dirty state tracking to detect when formation has been modified from saved state
-  - Add unsaved changes warning prompt when user tries to navigate away or change teams
-  - Create context methods for: loading default lineup, updating player positions, adding/removing players
-  - Implement manual save-only workflow (no auto-save) - changes only persist when user clicks Save
-  - Add loading states for team data fetching and default lineup loading (page-level loading until ready)
-  - Create error states for failed API calls (team loading, player loading, lineup saving)
-  - _Requirements: 1.4, 5.2, 5.3_
-
-- [ ] 5.3 Add formation validation and error handling
-  - Implement minimum 1 player validation (grey out save button if no players on pitch)
-  - Implement maximum 11 player validation (prevent adding more than 11 players)
-  - Keep save button always enabled (except during loading states)
-  - Add network error handling for team API calls, player API calls, and default lineup save operations
-  - Create user feedback using toast messages for validation errors and save status
-  - Add save status feedback using toast messages (success/error messages after save attempts)
-  - Implement simple overwrite strategy for concurrent saves (latest save wins)
-  - Add graceful handling of missing default lineup data (empty pitch state)
-  - Create error recovery options (retry failed saves, reload team data)
-  - _Requirements: 1.4, 5.4_
-
 - [ ] 6. Live Match Integration
-- [ ] 6.1 Enhance live match player list with substitution functionality
-  - Update existing live match player components to show on-pitch status
-  - Replace "Pin" button with "Substitute" functionality
-  - Integrate position selector modal into substitution workflow
-  - _Requirements: 3.1, 3.2, 3.3_
+- [ ] 6.1 Create live_formations table and enhance match initialization
+  - Create live_formations database table with match_id, start_min, end_min, formation_data JSONB, substitution_reason
+  - Update LiveMatchPage to load default_lineup on match start and show lineup warning if none exists
+  - Initialize first live_formations row and corresponding lineup table rows when "Kickoff" is clicked
+  - Replace "Pin/On-pitch" toggle with "Substitute" button (green filled = on pitch, red outline = off pitch)
+  - Add pre-match warning message if no default lineup is set (with link to lineup management page)
+  - _Requirements: 3.1, 3.2, 5.1_
 
-- [ ] 6.2 Implement substitution workflow and timeline integration
-  - Create substitution logic that updates lineup table with precise timing
-  - Add timeline event creation for "Player X off" and "Player Y on" events
-  - Implement match state synchronization for accurate on-pitch tracking
+- [ ] 6.2 Create LineupManagementModal for live match formation changes
+  - Create modal overlay version of LineupManagementPage that opens over LiveMatchPage
+  - Load current formation from live_formations table (most recent row for match)
+  - Integrate substitution reason dropdown with presets: "Playtime rotation", "Injury", "Power play", "Power play x2"
+  - Reuse existing VisualPitchInterface and PlayerSelectionPanel components in modal context
+  - Add "Apply Changes" button that triggers dual-table update transaction
+  - Handle modal close/cancel with unsaved changes warning
+  - _Requirements: 3.3, 3.4, 5.2_
+
+- [ ] 6.3 Implement dual-table formation change transaction
+  - Create backend service method for atomic formation changes (live_formations + lineup tables)
+  - End current live_formations row (set end_min) and create new row with formation_data
+  - End current lineup table rows (set end_min) and create new rows for each player with positions/coordinates
+  - Generate substitution analysis from formation changes (Player X OFF → Player Y ON)
+  - Create timeline event with formation change data, substitutions list, and formation string change
+  - Add API endpoints: GET /matches/:id/current-formation, POST /matches/:id/formation-changes
   - _Requirements: 3.4, 3.5, 3.6_
 
-- [ ] 6.3 Add match preparation lineup loading
-  - Implement default lineup loading when preparing for matches
-  - Add match-specific lineup modification capabilities
-  - Create clear indication of changes from default formation
-  - _Requirements: 5.1, 5.3, 5.4_
+- [ ] 6.4 Create timeline visualization for formation changes
+  - Create timeline event component that displays read-only VisualPitchInterface for formation changes
+  - Show formation change summary: substitutions, formation string change (3-3 → 2-3-1), reason
+  - Display substitution details with player names and numbers (11 Player1 OFF → 31 Player2 ON)
+  - Integrate formation timeline events into existing timeline display for viewers/parents
+  - Add formation change event type to timeline event system
+  - Create responsive design for formation timeline events on mobile and desktop
+  - _Requirements: 3.6, 6.2_
 
 - [ ] 7. Data Integration and API Services
 - [ ] 7.1 Create frontend API services for lineup management

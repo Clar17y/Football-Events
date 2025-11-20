@@ -64,7 +64,7 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
     <IonToast
       isOpen={true}
       message={toast.message}
-      duration={toast.duration || 0}
+      duration={toast.duration ?? 5000}
       color={getToastColor(toast.severity)}
       icon={getToastIcon(toast.severity)}
       onDidDismiss={handleDismiss}
@@ -82,7 +82,7 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
           handler: handleDismiss
         }] : [])
       ]}
-      position="top"
+      position="bottom"
       translucent={true}
     />
   );
@@ -117,6 +117,7 @@ interface CustomToastProps {
   message: string;
   severity: ToastSeverity;
   onDismiss: () => void;
+  duration?: number;
   action?: {
     label: string;
     handler: () => void;
@@ -129,6 +130,7 @@ export const CustomToast: React.FC<CustomToastProps> = ({
   message,
   severity,
   onDismiss,
+  duration,
   action,
   children
 }) => {
@@ -149,11 +151,12 @@ export const CustomToast: React.FC<CustomToastProps> = ({
     <IonToast
       isOpen={isOpen}
       message={message}
+      duration={duration ?? 5000}
       color={getToastColor(severity)}
       icon={getToastIcon(severity)}
       onDidDismiss={onDismiss}
       buttons={buttons}
-      position="top"
+      position="bottom"
       translucent={true}
     >
       {children}

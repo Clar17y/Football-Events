@@ -4,6 +4,8 @@
  */
 
 import apiClient from './baseApi';
+import { createLocalQuickMatch } from '../guestQuickMatch';
+import { addToOutbox } from '../../db/utils';
 import type { Match, MatchUpdateRequest } from '@shared/types';
 import type { MatchState, MatchPeriod } from '@shared/types';
 
@@ -45,8 +47,15 @@ export const matchesApi = {
    * Quick-start a match
    */
   async quickStart(payload: QuickStartPayload): Promise<Match> {
-    const response = await apiClient.post<Match>('/matches/quick-start', payload);
-    return response.data as unknown as Match;
+    try {
+      const response = await apiClient.post<Match>('/matches/quick-start', payload);
+      return response.data as unknown as Match;
+    } catch (e) {
+      // Authenticated but offline: create locally and enqueue quick-start outbox
+      const local = await createLocalQuickMatch(payload as any);
+      await addToOutbox('matches', local.id, 'INSERT', { ...payload, quickStart: true } as any, 'offline');
+      return (await import('../../services/guestQuickMatch')).getLocalMatch(local.id) as unknown as Match;
+    }
   },
   /**
    * Get matches by season ID
@@ -79,25 +88,75 @@ export const matchesApi = {
     };
   }> {
     const { page = 1, limit = 25, search, seasonId, teamId, competition } = params;
-    
-    const queryParams = new URLSearchParams({
-      page: page.toString(),
-      limit: limit.toString(),
-    });
-    
-    if (search && search.trim()) {
-      queryParams.append('search', search.trim());
+    const { authApi } = await import('./authApi');
+    if (!authApi.isAuthenticated()) {
+      const { db } = await import('../../db/indexedDB');
+      const teams = await db.teams.toArray();
+      const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
+      let rows = await db.matches.toArray();
+      rows = rows.filter((m: any) => m && !m.is_deleted);
+      if (seasonId) rows = rows.filter((m: any) => m.season_id === seasonId);
+      if (teamId) rows = rows.filter((m: any) => m.home_team_id === teamId || m.away_team_id === teamId);
+      if (competition) rows = rows.filter((m: any) => (m.competition || '').toLowerCase().includes(competition.toLowerCase()));
+      if (search && search.trim()) {
+        const term = search.trim().toLowerCase();
+        rows = rows.filter((m: any) => {
+          const home = teamMap.get(m.home_team_id);
+          const away = teamMap.get(m.away_team_id);
+          return (
+            (m.competition || '').toLowerCase().includes(term) ||
+            (home?.name || '').toLowerCase().includes(term) ||
+            (away?.name || '').toLowerCase().includes(term)
+          );
+        });
+      }
+      rows.sort((a: any, b: any) => new Date(a.kickoff_ts).getTime() - new Date(b.kickoff_ts).getTime());
+      const total = rows.length;
+      const start = (page - 1) * limit;
+      const paged = rows.slice(start, start + limit);
+      const data: Match[] = paged.map((m: any) => {
+        const home = teamMap.get(m.home_team_id);
+        const away = teamMap.get(m.away_team_id);
+        return {
+          id: m.id,
+          seasonId: m.season_id,
+          kickoffTime: new Date(m.kickoff_ts),
+          competition: m.competition,
+          homeTeamId: m.home_team_id,
+          awayTeamId: m.away_team_id,
+          homeTeam: home ? { id: home.id, name: home.name, is_opponent: !!home.is_opponent, createdAt: new Date(home.created_at), created_by_user_id: home.created_by_user_id, is_deleted: !!home.is_deleted } as any : undefined,
+          awayTeam: away ? { id: away.id, name: away.name, is_opponent: !!away.is_opponent, createdAt: new Date(away.created_at), created_by_user_id: away.created_by_user_id, is_deleted: !!away.is_deleted } as any : undefined,
+          venue: m.venue,
+          durationMinutes: m.duration_mins,
+          periodFormat: m.period_format,
+          homeScore: m.home_score || 0,
+          awayScore: m.away_score || 0,
+          notes: m.notes,
+          createdAt: new Date(m.created_at),
+          updatedAt: m.updated_at ? new Date(m.updated_at) : undefined,
+          created_by_user_id: m.created_by_user_id,
+          deleted_at: m.deleted_at ? new Date(m.deleted_at) : undefined,
+          deleted_by_user_id: m.deleted_by_user_id,
+          is_deleted: !!m.is_deleted,
+        } as Match;
+      });
+      return {
+        data,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit) || 1,
+          hasNext: start + limit < total,
+          hasPrev: start > 0
+        }
+      };
     }
-    if (seasonId) {
-      queryParams.append('seasonId', seasonId);
-    }
-    if (teamId) {
-      queryParams.append('teamId', teamId);
-    }
-    if (competition) {
-      queryParams.append('competition', competition);
-    }
-    
+    const queryParams = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (search && search.trim()) queryParams.append('search', search.trim());
+    if (seasonId) queryParams.append('seasonId', seasonId);
+    if (teamId) queryParams.append('teamId', teamId);
+    if (competition) queryParams.append('competition', competition);
     const response = await apiClient.get(`/matches?${queryParams.toString()}`);
     return response.data;
   },
@@ -106,6 +165,35 @@ export const matchesApi = {
    * Upcoming matches
    */
   async getUpcoming(limit: number = 10, teamId?: string): Promise<Match[]> {
+    const { authApi } = await import('./authApi');
+    if (!authApi.isAuthenticated()) {
+      const { db } = await import('../../db/indexedDB');
+      const teams = await db.teams.toArray();
+      const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
+      let rows = await db.matches.toArray();
+      const now = Date.now();
+      rows = rows.filter((m: any) => !m.is_deleted && new Date(m.kickoff_ts).getTime() >= now);
+      if (teamId) rows = rows.filter((m: any) => m.home_team_id === teamId || m.away_team_id === teamId);
+      rows.sort((a: any, b: any) => new Date(a.kickoff_ts).getTime() - new Date(b.kickoff_ts).getTime());
+      return rows.slice(0, limit).map((m: any) => ({
+        id: m.id,
+        seasonId: m.season_id,
+        kickoffTime: new Date(m.kickoff_ts),
+        competition: m.competition,
+        homeTeamId: m.home_team_id,
+        awayTeamId: m.away_team_id,
+        homeTeam: teamMap.get(m.home_team_id) ? { id: m.home_team_id, name: teamMap.get(m.home_team_id).name, is_opponent: !!teamMap.get(m.home_team_id).is_opponent } as any : undefined,
+        awayTeam: teamMap.get(m.away_team_id) ? { id: m.away_team_id, name: teamMap.get(m.away_team_id).name, is_opponent: !!teamMap.get(m.away_team_id).is_opponent } as any : undefined,
+        venue: m.venue,
+        durationMinutes: m.duration_mins,
+        periodFormat: m.period_format,
+        homeScore: m.home_score || 0,
+        awayScore: m.away_score || 0,
+        createdAt: new Date(m.created_at),
+        is_deleted: !!m.is_deleted,
+        created_by_user_id: m.created_by_user_id,
+      } as Match));
+    }
     const params = new URLSearchParams();
     params.append('limit', String(limit));
     if (teamId) params.append('teamId', teamId);
@@ -117,6 +205,35 @@ export const matchesApi = {
    * Recent matches
    */
   async getRecent(limit: number = 10, teamId?: string): Promise<Match[]> {
+    const { authApi } = await import('./authApi');
+    if (!authApi.isAuthenticated()) {
+      const { db } = await import('../../db/indexedDB');
+      const teams = await db.teams.toArray();
+      const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
+      let rows = await db.matches.toArray();
+      const now = Date.now();
+      rows = rows.filter((m: any) => !m.is_deleted && new Date(m.kickoff_ts).getTime() < now);
+      if (teamId) rows = rows.filter((m: any) => m.home_team_id === teamId || m.away_team_id === teamId);
+      rows.sort((a: any, b: any) => new Date(b.kickoff_ts).getTime() - new Date(a.kickoff_ts).getTime());
+      return rows.slice(0, limit).map((m: any) => ({
+        id: m.id,
+        seasonId: m.season_id,
+        kickoffTime: new Date(m.kickoff_ts),
+        competition: m.competition,
+        homeTeamId: m.home_team_id,
+        awayTeamId: m.away_team_id,
+        homeTeam: teamMap.get(m.home_team_id) ? { id: m.home_team_id, name: teamMap.get(m.home_team_id).name, is_opponent: !!teamMap.get(m.home_team_id).is_opponent } as any : undefined,
+        awayTeam: teamMap.get(m.away_team_id) ? { id: m.away_team_id, name: teamMap.get(m.away_team_id).name, is_opponent: !!teamMap.get(m.away_team_id).is_opponent } as any : undefined,
+        venue: m.venue,
+        durationMinutes: m.duration_mins,
+        periodFormat: m.period_format,
+        homeScore: m.home_score || 0,
+        awayScore: m.away_score || 0,
+        createdAt: new Date(m.created_at),
+        is_deleted: !!m.is_deleted,
+        created_by_user_id: m.created_by_user_id,
+      } as Match));
+    }
     const params = new URLSearchParams();
     params.append('limit', String(limit));
     if (teamId) params.append('teamId', teamId);
@@ -133,8 +250,29 @@ export const matchesApi = {
       Object.entries(matchData).filter(([_, value]) => value !== undefined)
     );
 
-    const response = await apiClient.put<Match>(`/matches/${id}`, cleanData);
-    return response.data as unknown as Match;
+    try {
+      const response = await apiClient.put<Match>(`/matches/${id}`, cleanData);
+      return response.data as unknown as Match;
+    } catch (e) {
+      // Offline fallback: update locally and enqueue outbox
+      try {
+        const { db } = await import('../../db/indexedDB');
+        await db.matches.update(id, {
+          season_id: cleanData.seasonId,
+          kickoff_ts: cleanData.kickoffTime ? (cleanData.kickoffTime as Date).toISOString() : undefined,
+          competition: cleanData.competition,
+          home_team_id: cleanData.homeTeamId,
+          away_team_id: cleanData.awayTeamId,
+          venue: cleanData.venue,
+          duration_mins: cleanData.durationMinutes,
+          period_format: cleanData.periodFormat,
+          notes: cleanData.notes,
+          updated_at: Date.now()
+        } as any);
+      } catch {}
+      await addToOutbox('matches', id, 'UPDATE', cleanData as any, 'offline');
+      return (await import('../../services/guestQuickMatch')).getLocalMatch(id) as unknown as Match;
+    }
   },
 
   // === Live Match – State & Periods ===
@@ -179,6 +317,10 @@ export const matchesApi = {
    * Match states with pagination
    */
   async getMatchStates(page = 1, limit = 500, matchIds?: string[]): Promise<{ data: Array<MatchState & { matchId: string }>; pagination?: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean } }> {
+    const { authApi } = await import('./authApi');
+    if (!authApi.isAuthenticated()) {
+      return { data: [], pagination: { page, limit, total: 0, totalPages: 1, hasNext: false, hasPrev: false } } as any;
+    }
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (matchIds && matchIds.length) params.append('matchIds', matchIds.join(','));
     const response = await apiClient.get(`/matches/states?${params.toString()}`);
@@ -199,7 +341,15 @@ export const matchesApi = {
    * Delete a match (soft delete)
    */
   async deleteMatch(id: string): Promise<void> {
-    await apiClient.delete(`/matches/${id}`);
+    try {
+      await apiClient.delete(`/matches/${id}`);
+    } catch (e) {
+      try {
+        const { db } = await import('../../db/indexedDB');
+        await db.matches.update(id, { is_deleted: true, deleted_at: Date.now() } as any);
+      } catch {}
+      await addToOutbox('matches', id, 'DELETE', undefined, 'offline');
+    }
   },
   // === Viewer Sharing ===
   async shareViewerToken(id: string, expiresInMinutes: number = 480): Promise<{ viewer_token: string; expiresAt: string; code?: string; shareUrl?: string }> {

@@ -36,6 +36,7 @@ import {
   refreshOutline
 } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader';
+import GuestBanner from '../components/GuestBanner';
 import CreateTeamModal from '../components/CreateTeamModal';
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu';
 import { useTeams } from '../hooks/useTeams';
@@ -365,6 +366,7 @@ const TeamsPage: React.FC<TeamsPageProps> = ({ onNavigate }) => {
       />
       
       <IonContent ref={contentRef}>
+        <GuestBanner />
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
           <IonRefresherContent
             pullingIcon={refresh}

@@ -293,6 +293,8 @@ export const SCHEMA_INDEXES = {
     'team_id',                            // Team analysis
     'kind',                               // Event type filtering
     'sentiment',                          // Performance analysis
+    '[match_id+player_id]',              // Player events within a match
+    '[match_id+team_id]',                // Team events within a match
     '[match_id+clock_ms]',               // Timeline queries (most common)
     '[match_id+kind]',                   // Event type filtering per match
     '[match_id+period_number]',          // Period-specific analysis
@@ -310,6 +312,8 @@ export const SCHEMA_INDEXES = {
     'home_team_id',                      // Team match history
     'away_team_id',                      // Team match history
     'kickoff_ts',                        // Date-based queries
+    'created_by_user_id',                // Guest/user scoping
+    'is_deleted',                        // Soft delete filtering
     '[season_id+kickoff_ts]',           // Season timeline
     '[home_team_id+kickoff_ts]',        // Team schedule
     '[away_team_id+kickoff_ts]',        // Team schedule
@@ -321,6 +325,8 @@ export const SCHEMA_INDEXES = {
     'current_team',                      // Team roster queries
     'full_name',                         // Name-based search
     'squad_number',                      // Number-based lookup
+    'created_by_user_id',                // Guest/user scoping
+    'is_deleted',                        // Soft delete filtering
     '[current_team+squad_number]',      // Unique team numbers
     '[current_team+full_name]',         // Team roster with names
     'updated_at'                         // Change tracking
@@ -329,12 +335,16 @@ export const SCHEMA_INDEXES = {
   // Teams table
   teams: [
     'name',                              // Name-based search
+    'created_by_user_id',                // Guest/user scoping
+    'is_deleted',                        // Soft delete filtering
     'updated_at'                         // Change tracking
   ],
   
   // Seasons table
   seasons: [
     'label',                             // Label-based search
+    'created_by_user_id',                // Guest/user scoping
+    'is_deleted',                        // Soft delete filtering
     'updated_at'                         // Change tracking
   ],
   
@@ -360,6 +370,7 @@ export const SCHEMA_INDEXES = {
     'synced',                            // Unsynced items
     'table_name',                        // Table-specific sync
     'operation',                         // Operation-specific sync
+    'created_by_user_id',                // Source attribution (guest/import detection)
     '[synced+created_at]',              // Sync queue ordering
     '[table_name+synced]',              // Table-specific sync status
     'retry_count',                       // Failed sync tracking
