@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   IonPage,
   IonContent,
@@ -84,6 +84,43 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const [localMatches, setLocalMatches] = useState<Match[]>([]);
 
   // Load upcoming matches for switcher (skip in viewer mode)
+  // Helper to hydrate guest live state snapshot
+  const hydrateGuestState = useCallback(async (matchId: string) => {
+    try {
+      const { db } = await import('../db/indexedDB');
+      const rec = await db.settings.get(`local_live_state:${matchId}`);
+      if (!rec?.value) return;
+      const parsed = JSON.parse(rec.value);
+      const ps: MatchPeriod[] = (parsed.periods || []).map((p: any) => ({
+        id: p.id,
+        matchId,
+        periodNumber: p.periodNumber,
+        periodType: (p.periodType || 'REGULAR') as any,
+        startedAt: p.startedAt ? new Date(p.startedAt) : undefined,
+        endedAt: p.endedAt ? new Date(p.endedAt) : undefined,
+        durationSeconds: p.durationSeconds
+      }));
+      setPeriods(ps);
+      const running = parsed.status === 'LIVE';
+      const lastPeriod = ps.find(p => !p.endedAt) || ps[ps.length - 1];
+      let base = parsed.timerMs || 0;
+      if (running && lastPeriod?.startedAt) {
+        base += Math.max(0, Date.now() - new Date(lastPeriod.startedAt).getTime());
+      }
+      setTimerMs(base);
+      setMatchState({
+        id: 'local-state',
+        matchId,
+        status: parsed.status || 'NOT_STARTED',
+        currentPeriod: lastPeriod?.periodNumber || 1,
+        totalElapsedSeconds: Math.floor(base / 1000),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as any);
+      if (running) startTicking();
+    } catch {}
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -113,6 +150,8 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             const m = await getLocalMatch(selectedId);
             if (cancelled) return;
             setUpcoming(m ? [m] : []);
+            // Try to hydrate local live state snapshot
+            await hydrateGuestState(selectedId);
           } else {
             setUpcoming([]);
           }
@@ -133,7 +172,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     };
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [hydrateGuestState]);
+
+  // Re-hydrate guest state when selecting a local match from the list
+  useEffect(() => {
+    if (!isAuthenticated && selectedId) {
+      hydrateGuestState(selectedId);
+    }
+  }, [isAuthenticated, selectedId, hydrateGuestState]);
 
   // Query active viewer link on load (for creator UI state)
   useEffect(() => {
@@ -587,6 +633,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             if (hId) await defaultLineupsApi.applyDefaultToMatch(hId, selectedId);
             if (aId) await defaultLineupsApi.applyDefaultToMatch(aId, selectedId);
           } catch {}
+          try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'LIVE', periods: [{ id: p1.id, periodType: 'REGULAR', periodNumber: 1, startedAt: now.toISOString() }], timerMs: 0, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
           try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_match' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: 'regular' }); } catch {}
         }
         return;
@@ -633,6 +680,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         setMatchState(prev => prev ? ({ ...prev, status: 'PAUSED' } as any) : prev);
         stopTicking();
         pushSystem('Paused', currentPeriodNumber());
+        try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'PAUSED', periods, timerMs, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
         try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'pause' }); } catch {}
         return;
       }
@@ -655,6 +703,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         setMatchState(prev => prev ? ({ ...prev, status: 'LIVE' } as any) : prev);
         startTicking();
         pushSystem('Resumed', currentPeriodNumber());
+        try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'LIVE', periods, timerMs, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
         try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
         return;
       }
@@ -671,13 +720,16 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     }
   };
   const handleEndPeriod = async () => {
-    if (!selectedId || !currentOpenPeriod) return;
-    try {
-      if (!isAuthenticated) {
-        // Close local period
-        setPeriods(prev => prev.map(p => p === currentOpenPeriod ? ({ ...p, endedAt: new Date(), durationSeconds: Math.max(1, Math.round((timerMs) / 1000)) } as any) : p));
-        stopTicking();
-        setTimerMs(0);
+      if (!selectedId || !currentOpenPeriod) return;
+      try {
+        if (!isAuthenticated) {
+          // Close local period
+          const endedAt = new Date();
+          const updatedPeriods = periods.map(p => p.id === currentOpenPeriod.id ? ({ ...p, endedAt, durationSeconds: Math.max(1, Math.round((timerMs) / 1000)) } as any) : p);
+          setPeriods(updatedPeriods);
+          setMatchState(prev => prev ? ({ ...prev, status: 'PAUSED', currentPeriod: currentOpenPeriod.periodNumber } as any) : { id: 'local-state', matchId: selectedId, status: 'PAUSED', currentPeriod: currentOpenPeriod.periodNumber, createdAt: new Date(), updatedAt: new Date() } as any);
+          stopTicking();
+          setTimerMs(0);
         const fmt = (currentMatch?.periodFormat || '').toLowerCase();
         const n = currentOpenPeriod.periodNumber;
         let txt = 'End of Period';
@@ -686,6 +738,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         else if (currentOpenPeriod.periodType === 'EXTRA_TIME') txt = `End of ET${n}`;
         pushSystem(txt, n);
         try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'end_period' }); } catch {}
+        try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'PAUSED', periods: updatedPeriods, timerMs: 0, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
         return;
       }
       await matchesApi.endPeriod(selectedId, currentOpenPeriod.id);
@@ -705,21 +758,22 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     }
   };
   const handleStartNextPeriod = async (extraTime = false) => {
-    if (!selectedId) return;
-    try {
-      if (!isAuthenticated) {
-        const now = new Date();
-        const type = extraTime ? 'EXTRA_TIME' : 'REGULAR';
-        const nextNum = (periods.filter(p => p.periodType === (extraTime ? 'EXTRA_TIME' : 'REGULAR')).length) + 1;
-        const p = { id: `local-p-${Date.now()}`, periodNumber: nextNum, periodType: type as any, startedAt: now } as any;
-        setPeriods(prev => [...prev, p]);
-        setMatchState(prev => prev ? ({ ...prev, status: 'LIVE', currentPeriod: nextNum } as any) : prev);
-        setTimerMs(0);
-        startTicking();
-        pushSystem(extraTime ? `Extra Time Kick Off — ET${nextNum}` : `Kick Off — Period ${nextNum}`, nextNum);
-        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: extraTime ? 'extra_time' : 'regular' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
-        return;
-      }
+      if (!selectedId) return;
+      try {
+        if (!isAuthenticated) {
+          const now = new Date();
+          const type = extraTime ? 'EXTRA_TIME' : 'REGULAR';
+          const nextNum = (periods.filter(p => p.periodType === (extraTime ? 'EXTRA_TIME' : 'REGULAR')).length) + 1;
+          const p = { id: `local-p-${Date.now()}`, periodNumber: nextNum, periodType: type as any, startedAt: now } as any;
+          setPeriods(prev => [...prev, p]);
+          setMatchState(prev => prev ? ({ ...prev, status: 'LIVE', currentPeriod: nextNum } as any) : prev);
+          setTimerMs(0);
+          startTicking();
+          pushSystem(extraTime ? `Extra Time Kick Off — ET${nextNum}` : `Kick Off — Period ${nextNum}`, nextNum);
+          try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'LIVE', periods: [...periods, p], timerMs: 0, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
+          try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: extraTime ? 'extra_time' : 'regular' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
+          return;
+        }
       const periodType = extraTime ? 'extra_time' : 'regular';
       await matchesApi.startPeriod(selectedId, periodType as any);
       const p = await matchesApi.getMatchPeriods(selectedId);
@@ -753,9 +807,21 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     if (!selectedId) return;
     try {
       if (!isAuthenticated) {
-        setMatchState(prev => prev ? ({ ...prev, status: 'COMPLETED' } as any) : prev);
+        const endedAt = new Date();
+        const updatedPeriods = periods.map(p => p.endedAt ? p : ({ ...p, endedAt }));
+        setPeriods(updatedPeriods);
+        setMatchState(prev => prev ? ({ ...prev, status: 'COMPLETED' } as any) : { id: 'local-state', matchId: selectedId, status: 'COMPLETED', currentPeriod: currentPeriodNumber(), createdAt: new Date(), updatedAt: new Date() } as any);
         stopTicking();
         try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'complete' }); } catch {}
+        try {
+          const { db } = await import('../db/indexedDB');
+          await db.settings.put({
+            key: `local_live_state:${selectedId}`,
+            value: JSON.stringify({ status: 'COMPLETED', periods: updatedPeriods, timerMs, lastUpdatedAt: Date.now() }),
+            created_at: Date.now(),
+            updated_at: Date.now()
+          });
+        } catch {}
         return;
       }
       const state = await matchesApi.completeMatch(selectedId);
