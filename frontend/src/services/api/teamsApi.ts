@@ -184,6 +184,17 @@ export const teamsApi = {
    * Update an existing team
    */
   async updateTeam(id: string, teamData: TeamUpdateRequest): Promise<TeamResponse> {
+    if (!authApi.isAuthenticated()) {
+      const { db } = await import('../../db/indexedDB');
+      await db.teams.update(id, { ...teamData, updated_at: Date.now() } as any);
+      const updated = await db.teams.get(id);
+      try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
+      return {
+        data: { id, name: (updated as any)?.name || teamData.name } as any,
+        success: true,
+        message: 'Team updated locally'
+      };
+    }
     // Remove undefined values while preserving shared type keys
     const cleanData = Object.fromEntries(
       Object.entries(teamData).filter(([_, value]) => value !== undefined)
@@ -201,6 +212,12 @@ export const teamsApi = {
    * Delete a team (soft delete)
    */
   async deleteTeam(id: string): Promise<{ success: boolean; message: string }> {
+    if (!authApi.isAuthenticated()) {
+      const { db } = await import('../../db/indexedDB');
+      await db.teams.update(id, { is_deleted: true, deleted_at: Date.now() } as any);
+      try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
+      return { success: true, message: 'Team deleted locally' };
+    }
     await apiClient.delete(`/teams/${id}`);
     return {
       success: true,

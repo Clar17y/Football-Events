@@ -55,6 +55,8 @@ import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import CreateTeamModal from './CreateTeamModal';
 import type { Match, Team, Season } from '@shared/types';
 import styles from './FormSection.module.css';
+import { canCreateMatch } from '../utils/guestQuota';
+import { authApi } from '../services/api/authApi';
 
 interface CreateMatchModalProps {
   isOpen: boolean;
@@ -213,6 +215,11 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
     };
 
     const loadSeasons = async () => {
+      // Guests skip server seasons; creation handled locally in guest quick match flow
+      if (!authApi.isAuthenticated()) {
+        setSeasonsState([]);
+        return;
+      }
       try {
         setSeasonsLoading(true);
         const res = await seasonsApi.getSeasons({ page: 1, limit: 100 });
@@ -304,7 +311,7 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
     }
 
     // Season validation
-    if (!formData.seasonId) {
+    if (authApi.isAuthenticated() && !formData.seasonId) {
       newErrors.seasonId = 'Please select a season';
     }
 
@@ -340,6 +347,17 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
       return;
     }
 
+    // Guest quota guard for matches
+    if (!authApi.isAuthenticated() && !editingMatch) {
+      try {
+        const allowed = await canCreateMatch();
+        if (!allowed.ok) {
+          showToast({ message: allowed.reason || 'Guest limit reached: 1 match', severity: 'error' });
+          return;
+        }
+      } catch {}
+    }
+
     setLoading(true);
 
     try {
@@ -365,8 +383,25 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
           notes: formData.notes || undefined
         };
 
-        result = await matchesApi.updateMatch(editingMatch.id, updatePayload);
-        showToast({ message: 'Match updated successfully', severity: 'success' });
+        if (!authApi.isAuthenticated()) {
+          const { db } = await import('../db/indexedDB');
+          await db.matches.update(editingMatch.id, {
+            season_id: updatePayload.seasonId,
+            kickoff_ts: (updatePayload.kickoffTime as Date).toISOString(),
+            competition: updatePayload.competition,
+            venue: updatePayload.venue,
+            duration_mins: updatePayload.durationMinutes,
+            period_format: updatePayload.periodFormat,
+            notes: updatePayload.notes,
+            updated_at: Date.now()
+          } as any);
+          const updated = await db.matches.get(editingMatch.id);
+          result = updated ? await (await import('../services/guestQuickMatch')).getLocalMatch(editingMatch.id) as any : editingMatch;
+          showToast({ message: 'Match updated locally', severity: 'success' });
+        } else {
+          result = await matchesApi.updateMatch(editingMatch.id, updatePayload);
+          showToast({ message: 'Match updated successfully', severity: 'success' });
+        }
       } else {
         // Create new match
         const payload: QuickStartPayload = {
@@ -382,8 +417,15 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
           notes: formData.notes || undefined
         };
 
-        result = await matchesApi.quickStart(payload);
-        showToast({ message: 'Match created successfully', severity: 'success' });
+        if (!authApi.isAuthenticated()) {
+          const { createLocalQuickMatch, getLocalMatch } = await import('../services/guestQuickMatch');
+          const local = await createLocalQuickMatch(payload as any);
+          result = local?.id ? await getLocalMatch(local.id) as any : undefined;
+          showToast({ message: 'Match created locally', severity: 'success' });
+        } else {
+          result = await matchesApi.quickStart(payload);
+          showToast({ message: 'Match created successfully', severity: 'success' });
+        }
       }
 
       if (result) {

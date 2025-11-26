@@ -214,6 +214,17 @@ export const playersApi = {
    * Update an existing player
    */
   async updatePlayer(id: string, playerData: PlayerUpdateRequest): Promise<PlayerResponse> {
+    if (!authApi.isAuthenticated()) {
+      const { db } = await import('../../db/indexedDB');
+      await db.players.update(id, { ...playerData, updated_at: Date.now() } as any);
+      const updated = await db.players.get(id);
+      try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
+      return {
+        data: { id, name: (updated as any)?.full_name || playerData.name } as any,
+        success: true,
+        message: 'Player updated locally'
+      };
+    }
     // Remove undefined values
     const cleanData = Object.fromEntries(
       Object.entries(playerData).filter(([_, value]) => value !== undefined)
@@ -231,6 +242,17 @@ export const playersApi = {
    * Update an existing player with team changes
    */
   async updatePlayerWithTeams(id: string, playerData: PlayerUpdateRequest & { teamIds: string[] }): Promise<PlayerResponse> {
+    if (!authApi.isAuthenticated()) {
+      const { db } = await import('../../db/indexedDB');
+      await db.players.update(id, { ...playerData, current_team: playerData.teamIds?.[0], updated_at: Date.now() } as any);
+      const updated = await db.players.get(id);
+      try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
+      return {
+        data: { id, name: (updated as any)?.full_name || playerData.name } as any,
+        success: true,
+        message: 'Player updated locally'
+      };
+    }
     const { teamIds, ...playerFields } = playerData;
     
     // Remove undefined values from player fields
@@ -255,6 +277,12 @@ export const playersApi = {
    * Delete a player (soft delete)
    */
   async deletePlayer(id: string): Promise<{ success: boolean; message: string }> {
+    if (!authApi.isAuthenticated()) {
+      const { db } = await import('../../db/indexedDB');
+      await db.players.update(id, { is_deleted: true, deleted_at: Date.now() } as any);
+      try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
+      return { success: true, message: 'Player deleted locally' };
+    }
     await apiClient.delete(`/players/${id}`);
     return {
       success: true,

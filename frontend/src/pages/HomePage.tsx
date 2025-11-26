@@ -119,7 +119,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         setTeamsLoading(false);
       }
     };
-    if (user) load();
+    load();
   }, [user]);
 
   const navigate = (page: string) => {
