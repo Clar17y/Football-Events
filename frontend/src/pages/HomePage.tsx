@@ -72,7 +72,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
     delay: 250,
     minLength: 2,
     onSearch: async (term: string) => {
-      if (!user || !term) { setOpponentOptions([]); return; }
+      if (!term) { setOpponentOptions([]); return; }
       try {
         const list = await teamsApi.getOpponentTeams(term.trim());
         setOpponentOptions(list.map(t => t.name));

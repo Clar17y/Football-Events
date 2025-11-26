@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { IonModal, IonCard, IonCardContent, IonButton, IonText, IonProgressBar } from '@ionic/react';
-import { hasGuestData, getGuestDataSummary, runImport } from '../services/importService';
+import { IonModal, IonContent, IonHeader, IonToolbar, IonTitle, IonButton, IonText, IonProgressBar, IonButtons } from '@ionic/react';
+import { getGuestDataSummary, runImport } from '../services/importService';
 
 interface ImportPromptModalProps {
   isOpen: boolean;
@@ -37,32 +37,37 @@ const ImportPromptModal: React.FC<ImportPromptModalProps> = ({ isOpen, onClose }
   };
 
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={onClose}>
-      <IonCard style={{ margin: 16 }}>
-        <IonCardContent>
-          <h2 style={{ marginTop: 0 }}>Import your guest data</h2>
-          {summary && (
-            <IonText color="medium" style={{ display: 'block', marginBottom: 8 }}>
-              Found: {summary.seasons} seasons, {summary.teams} teams, {summary.players} players, {summary.matches} matches, {summary.events} events
-            </IonText>
-          )}
-          {running && (
-            <div style={{ marginBottom: 8 }}>
-              <IonText>{progress?.step || 'Importing…'}</IonText>
-              <IonProgressBar type="indeterminate" style={{ marginTop: 8 }} />
-            </div>
-          )}
-          {done && (
-            <IonText color="success" style={{ display: 'block', marginBottom: 8 }}>
-              Import complete. Your data is now linked to your account.
-            </IonText>
-          )}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <IonButton fill="outline" onClick={onClose}>Close</IonButton>
-            <IonButton onClick={start} disabled={running || done || !summary || (summary.seasons+summary.teams+summary.players+summary.matches+summary.events)===0}>Import now</IonButton>
+    <IonModal isOpen={isOpen} onDidDismiss={onClose} initialBreakpoint={0.5} breakpoints={[0, 0.5, 0.75]}>
+      <IonHeader>
+        <IonToolbar>
+          <IonTitle>Import your guest data</IonTitle>
+          <IonButtons slot="end">
+            <IonButton onClick={onClose}>Close</IonButton>
+          </IonButtons>
+        </IonToolbar>
+      </IonHeader>
+      <IonContent className="ion-padding">
+        {summary && (
+          <IonText color="medium" style={{ display: 'block', marginBottom: 16 }}>
+            <p>Found: {summary.seasons} seasons, {summary.teams} teams, {summary.players} players, {summary.matches} matches, {summary.events} events</p>
+          </IonText>
+        )}
+        {running && (
+          <div style={{ marginBottom: 16 }}>
+            <IonText>{progress?.step || 'Importing…'}</IonText>
+            <IonProgressBar type="indeterminate" style={{ marginTop: 8 }} />
           </div>
-        </IonCardContent>
-      </IonCard>
+        )}
+        {done && (
+          <IonText color="success" style={{ display: 'block', marginBottom: 16 }}>
+            <p>Import complete. Your data is now linked to your account.</p>
+          </IonText>
+        )}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <IonButton fill="outline" onClick={onClose}>Close</IonButton>
+          <IonButton onClick={start} disabled={running || done || !summary || (summary.seasons+summary.teams+summary.players+summary.matches+summary.events)===0}>Import now</IonButton>
+        </div>
+      </IonContent>
     </IonModal>
   );
 };

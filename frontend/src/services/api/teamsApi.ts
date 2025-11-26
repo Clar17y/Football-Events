@@ -81,8 +81,21 @@ export const teamsApi = {
       const total = teams.length;
       const start = (page - 1) * limit;
       const paged = teams.slice(start, start + limit);
-      // Map to shared Team shape minimally
-      const data = paged.map(t => ({ id: t.id, name: t.name })) as any;
+      // Map to shared Team shape including colors
+      const data = paged.map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        homeKitPrimary: t.color_primary || t.homeKitPrimary,
+        homeKitSecondary: t.color_secondary || t.homeKitSecondary,
+        awayKitPrimary: t.away_color_primary || t.awayKitPrimary,
+        awayKitSecondary: t.away_color_secondary || t.awayKitSecondary,
+        logoUrl: t.logo_url || t.logoUrl,
+        is_opponent: !!t.is_opponent,
+        createdAt: t.created_at ? new Date(t.created_at) : undefined,
+        updatedAt: t.updated_at ? new Date(t.updated_at) : undefined,
+        created_by_user_id: t.created_by_user_id,
+        is_deleted: !!t.is_deleted
+      })) as any;
       return {
         data,
         pagination: {
@@ -110,6 +123,32 @@ export const teamsApi = {
    * Get a specific team by ID
    */
   async getTeamById(id: string): Promise<TeamResponse> {
+    if (!authApi.isAuthenticated()) {
+      // Guest fallback: query local team by ID
+      const { db } = await import('../../db/indexedDB');
+      const team = await db.teams.get(id);
+      if (!team || (team as any).is_deleted) {
+        throw new Error('Team not found');
+      }
+      const t = team as any;
+      return {
+        data: {
+          id: t.id,
+          name: t.name,
+          homeKitPrimary: t.color_primary || t.homeKitPrimary,
+          homeKitSecondary: t.color_secondary || t.homeKitSecondary,
+          awayKitPrimary: t.away_color_primary || t.awayKitPrimary,
+          awayKitSecondary: t.away_color_secondary || t.awayKitSecondary,
+          logoUrl: t.logo_url || t.logoUrl,
+          is_opponent: !!t.is_opponent,
+          createdAt: t.created_at ? new Date(t.created_at) : undefined,
+          updatedAt: t.updated_at ? new Date(t.updated_at) : undefined,
+          created_by_user_id: t.created_by_user_id,
+          is_deleted: !!t.is_deleted
+        } as Team,
+        success: true
+      };
+    }
     const response = await apiClient.get(`/teams/${id}`);
     return {
       data: response.data as Team,
@@ -128,12 +167,16 @@ export const teamsApi = {
       const { db } = await import('../../db/indexedDB');
       const now = Date.now();
       const id = crypto?.randomUUID ? crypto.randomUUID() : `team-${now}-${Math.random().toString(36).slice(2)}`;
+      const data = teamData as any;
       await db.teams.add({
         id,
         team_id: id,
         name: teamData.name,
-        color_primary: (teamData as any).homeKitPrimary,
-        color_secondary: (teamData as any).homeKitSecondary,
+        color_primary: data.homeKitPrimary,
+        color_secondary: data.homeKitSecondary,
+        away_color_primary: data.awayKitPrimary,
+        away_color_secondary: data.awayKitSecondary,
+        logo_url: data.logoUrl,
         created_at: now,
         updated_at: now,
         created_by_user_id: getGuestId(),
@@ -141,7 +184,15 @@ export const teamsApi = {
       } as any);
       try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
       return {
-        data: { id, name: teamData.name } as any,
+        data: {
+          id,
+          name: teamData.name,
+          homeKitPrimary: data.homeKitPrimary,
+          homeKitSecondary: data.homeKitSecondary,
+          awayKitPrimary: data.awayKitPrimary,
+          awayKitSecondary: data.awayKitSecondary,
+          logoUrl: data.logoUrl
+        } as any,
         success: true,
         message: 'Team created locally'
       };
@@ -159,12 +210,16 @@ export const teamsApi = {
       const { addToOutbox } = await import('../../db/utils');
       const now = Date.now();
       const id = crypto?.randomUUID ? crypto.randomUUID() : `team-${now}-${Math.random().toString(36).slice(2)}`;
+      const data = teamData as any;
       await db.teams.add({
         id,
         team_id: id,
         name: teamData.name,
-        color_primary: (teamData as any).homeKitPrimary,
-        color_secondary: (teamData as any).homeKitSecondary,
+        color_primary: data.homeKitPrimary,
+        color_secondary: data.homeKitSecondary,
+        away_color_primary: data.awayKitPrimary,
+        away_color_secondary: data.awayKitSecondary,
+        logo_url: data.logoUrl,
         created_at: now,
         updated_at: now,
         created_by_user_id: 'offline',
@@ -173,7 +228,15 @@ export const teamsApi = {
       await addToOutbox('teams', id, 'INSERT', teamData as any, 'offline');
       try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
       return {
-        data: { id, name: teamData.name } as any,
+        data: {
+          id,
+          name: teamData.name,
+          homeKitPrimary: data.homeKitPrimary,
+          homeKitSecondary: data.homeKitSecondary,
+          awayKitPrimary: data.awayKitPrimary,
+          awayKitSecondary: data.awayKitSecondary,
+          logoUrl: data.logoUrl
+        } as any,
         success: true,
         message: 'Team created (offline, pending sync)'
       };
@@ -186,11 +249,27 @@ export const teamsApi = {
   async updateTeam(id: string, teamData: TeamUpdateRequest): Promise<TeamResponse> {
     if (!authApi.isAuthenticated()) {
       const { db } = await import('../../db/indexedDB');
-      await db.teams.update(id, { ...teamData, updated_at: Date.now() } as any);
+      // Map frontend field names to DB schema field names
+      const dbUpdate: any = { updated_at: Date.now() };
+      if (teamData.name !== undefined) dbUpdate.name = teamData.name;
+      if ((teamData as any).homeKitPrimary !== undefined) dbUpdate.color_primary = (teamData as any).homeKitPrimary;
+      if ((teamData as any).homeKitSecondary !== undefined) dbUpdate.color_secondary = (teamData as any).homeKitSecondary;
+      if ((teamData as any).awayKitPrimary !== undefined) dbUpdate.away_color_primary = (teamData as any).awayKitPrimary;
+      if ((teamData as any).awayKitSecondary !== undefined) dbUpdate.away_color_secondary = (teamData as any).awayKitSecondary;
+      if ((teamData as any).logoUrl !== undefined) dbUpdate.logo_url = (teamData as any).logoUrl;
+      await db.teams.update(id, dbUpdate);
       const updated = await db.teams.get(id);
       try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
       return {
-        data: { id, name: (updated as any)?.name || teamData.name } as any,
+        data: {
+          id,
+          name: (updated as any)?.name || teamData.name,
+          homeKitPrimary: (updated as any)?.color_primary,
+          homeKitSecondary: (updated as any)?.color_secondary,
+          awayKitPrimary: (updated as any)?.away_color_primary,
+          awayKitSecondary: (updated as any)?.away_color_secondary,
+          logoUrl: (updated as any)?.logo_url
+        } as any,
         success: true,
         message: 'Team updated locally'
       };
@@ -255,6 +334,25 @@ export const teamsApi = {
    * Get active players for a team
    */
   async getActiveTeamPlayers(id: string): Promise<TeamPlayersResponse> {
+    if (!authApi.isAuthenticated()) {
+      // Guest fallback: query local players by team
+      const { db } = await import('../../db/indexedDB');
+      const players = await db.players
+        .where('current_team')
+        .equals(id)
+        .and((p: any) => !p.is_deleted)
+        .toArray();
+      return {
+        data: players.map((p: any) => ({
+          id: p.id,
+          name: p.full_name || p.name || '',
+          squadNumber: p.squad_number,
+          preferredPosition: p.preferred_pos,
+          isActive: true
+        })),
+        success: true
+      };
+    }
     const response = await apiClient.get(`/teams/${id}/active-players`);
     return {
       data: response.data as Array<{

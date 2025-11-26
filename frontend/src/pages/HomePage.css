@@ -159,6 +159,7 @@
 .nav-card-amber::before { background: linear-gradient(90deg, var(--ion-color-amber), var(--ion-color-amber-tint)); }
 .nav-card-purple::before { background: linear-gradient(90deg, var(--ion-color-purple), var(--ion-color-purple-tint)); }
 .nav-card-emerald::before { background: linear-gradient(90deg, var(--ion-color-emerald), var(--ion-color-emerald-tint)); }
+.nav-card-sky::before { background: linear-gradient(90deg, var(--ion-color-sky), var(--ion-color-sky-tint)); }
 
 /* Make border/outline match card color on hover/focus */
 .nav-card-primary:hover, .nav-card-primary:focus-visible { border-color: var(--ion-color-primary); outline-color: var(--ion-color-primary); }
@@ -169,6 +170,7 @@
 .nav-card-amber:hover, .nav-card-amber:focus-visible { border-color: var(--ion-color-amber); outline-color: var(--ion-color-amber); }
 .nav-card-purple:hover, .nav-card-purple:focus-visible { border-color: var(--ion-color-purple); outline-color: var(--ion-color-purple); }
 .nav-card-emerald:hover, .nav-card-emerald:focus-visible { border-color: var(--ion-color-emerald); outline-color: var(--ion-color-emerald); }
+.nav-card-sky:hover, .nav-card-sky:focus-visible { border-color: var(--ion-color-sky); outline-color: var(--ion-color-sky); }
 
 .nav-card-content {
   padding: var(--grassroots-space-lg);

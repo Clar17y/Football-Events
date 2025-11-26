@@ -36,6 +36,7 @@ import {
   time
 } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader';
+import GuestBanner from '../components/GuestBanner';
 import CreateSeasonModal from '../components/CreateSeasonModal';
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu';
 import { useSeasons } from '../hooks/useSeasons';
@@ -284,11 +285,11 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
 
   return (
     <IonPage>
-      <PageHeader 
+      <PageHeader
         onNavigate={navigate}
         additionalButtons={
-          <IonButton 
-            fill="clear" 
+          <IonButton
+            fill="clear"
             onClick={() => loadSeasons()}
             style={{ color: 'white' }}
             disabled={loading}
@@ -297,7 +298,8 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
           </IonButton>
         }
       />
-      
+      <GuestBanner />
+
       <IonContent ref={contentRef}>
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
           <IonRefresherContent

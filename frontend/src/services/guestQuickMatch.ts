@@ -22,11 +22,12 @@ export async function createLocalQuickMatch(payload: GuestQuickMatchPayload): Pr
   const { db } = await import('../db/indexedDB');
   const guestId = getGuestId();
 
-  // 1) Ensure Demo Season exists
-  const seasonLabel = 'Demo Season';
+  // 1) Ensure season exists (year-based naming)
+  const year = new Date().getFullYear();
+  const seasonLabel = `${year}-${year + 1} Season`;
   const now = Date.now();
-  // try to find existing
-  let season = await db.seasons.where('created_by_user_id').equals(guestId).and(s => s.label === seasonLabel).first();
+  // try to find existing (check both new and legacy names)
+  let season = await db.seasons.where('created_by_user_id').equals(guestId).and(s => s.label === seasonLabel || s.label === 'Demo Season').first();
   if (!season) {
     const start = new Date(now - 30 * 24 * 3600_000).toISOString();
     const end = new Date(now + 365 * 24 * 3600_000).toISOString();
@@ -38,7 +39,7 @@ export async function createLocalQuickMatch(payload: GuestQuickMatchPayload): Pr
       start_date: start,
       end_date: end,
       is_current: true,
-      description: 'Auto-created for Guest Quick Match',
+      description: 'Auto-created season',
       created_at: now,
       updated_at: now,
       created_by_user_id: guestId,

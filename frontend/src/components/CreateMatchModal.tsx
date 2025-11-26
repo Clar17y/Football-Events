@@ -703,31 +703,33 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
                     </div>
                   </IonCol>
                 </IonRow>
-                <IonRow>
-                  <IonCol size="12">
-                    <div className="form-row">
-                      <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>Season *</label>
-                      <IonSelect
-                        value={formData.seasonId}
-                        onIonChange={(e) => setFormData(prev => ({ ...prev, seasonId: e.detail.value }))}
-                        placeholder="Select season"
-                        disabled={loading || seasonsLoading}
-                        className={styles.formInput}
-                      >
-                        {seasons.map(season => (
-                          <IonSelectOption key={season.id} value={season.id}>
-                            {season.label} {season.isCurrent ? '(Current)' : ''}
-                          </IonSelectOption>
-                        ))}
-                      </IonSelect>
-                      {errors.seasonId && touched.seasonId && (
-                        <IonText color="danger" className={styles.errorText}>
-                          {errors.seasonId}
-                        </IonText>
-                      )}
-                    </div>
-                  </IonCol>
-                </IonRow>
+                {authApi.isAuthenticated() && (
+                  <IonRow>
+                    <IonCol size="12">
+                      <div className="form-row">
+                        <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>Season *</label>
+                        <IonSelect
+                          value={formData.seasonId}
+                          onIonChange={(e) => setFormData(prev => ({ ...prev, seasonId: e.detail.value }))}
+                          placeholder="Select season"
+                          disabled={loading || seasonsLoading}
+                          className={styles.formInput}
+                        >
+                          {seasons.map(season => (
+                            <IonSelectOption key={season.id} value={season.id}>
+                              {season.label} {season.isCurrent ? '(Current)' : ''}
+                            </IonSelectOption>
+                          ))}
+                        </IonSelect>
+                        {errors.seasonId && touched.seasonId && (
+                          <IonText color="danger" className={styles.errorText}>
+                            {errors.seasonId}
+                          </IonText>
+                        )}
+                      </div>
+                    </IonCol>
+                  </IonRow>
+                )}
 
                 <IonRow>
                   <IonCol size="12">
@@ -906,7 +908,7 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
               expand="block"
               color="emerald"
               onClick={handleSubmit}
-              disabled={loading || !formData.myTeamId || !opponentText.trim() || !formData.seasonId}
+              disabled={loading || !formData.myTeamId || !opponentText.trim() || (authApi.isAuthenticated() && !formData.seasonId)}
               className={styles.submitButton}
             >
               {loading ? (

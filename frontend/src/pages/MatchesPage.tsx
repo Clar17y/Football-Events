@@ -24,6 +24,7 @@ import CompletedMatchesList from '../components/CompletedMatchesList';
 import LiveMatchesList from '../components/LiveMatchesList';
 import { matchesApi } from '../services/api/matchesApi';
 import { teamsApi } from '../services/api/teamsApi';
+import { authApi } from '../services/api/authApi';
 import type { Match, Team, MatchState } from '@shared/types';
 import './PageStyles.css';
 import './MatchesPage.css';
@@ -130,15 +131,41 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
       setMatches(response.data);
       setError(null);
       // Fetch match states for status-driven sections
-      try {
-        const ids = (response.data || []).map(m => m.id);
-        const states = await matchesApi.getMatchStates(1, 500, ids);
-        const allStates = (states.data || []) as any[];
-        console.log('🧭 Match states loaded:', allStates.length, allStates.slice(0, 3));
-        setMatchStates(allStates as any);
-      } catch (e) {
-        console.warn('Failed to load match states', e);
-        setMatchStates([]);
+      if (authApi.isAuthenticated()) {
+        try {
+          const ids = (response.data || []).map(m => m.id);
+          const states = await matchesApi.getMatchStates(1, 500, ids);
+          const allStates = (states.data || []) as any[];
+          console.log('🧭 Match states loaded:', allStates.length, allStates.slice(0, 3));
+          setMatchStates(allStates as any);
+        } catch (e) {
+          console.warn('Failed to load match states', e);
+          setMatchStates([]);
+        }
+      } else {
+        // Guest mode: check local_live_state for each match
+        try {
+          const { db } = await import('../db/indexedDB');
+          const localStates: MatchState[] = [];
+          for (const match of response.data) {
+            const stateRec = await db.settings.get(`local_live_state:${match.id}`);
+            if (stateRec?.value) {
+              try {
+                const parsed = JSON.parse(stateRec.value);
+                localStates.push({
+                  matchId: match.id,
+                  status: parsed.status || 'SCHEDULED',
+                  currentPeriod: parsed.currentPeriod || null,
+                  totalElapsedSeconds: parsed.timerMs ? Math.floor(parsed.timerMs / 1000) : 0,
+                } as any);
+              } catch {}
+            }
+          }
+          console.log('🧭 Guest local states loaded:', localStates.length);
+          setMatchStates(localStates as any);
+        } catch {
+          setMatchStates([]);
+        }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load matches';

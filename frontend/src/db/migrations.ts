@@ -38,7 +38,7 @@ export const MIGRATIONS: Migration[] = [
       console.log('Migration 1: Initial schema created');
     }
   },
-  
+
   {
     version: 2,
     description: 'Add performance indexes',
@@ -47,42 +47,43 @@ export const MIGRATIONS: Migration[] = [
       console.log('Migration 2: Performance indexes added');
     }
   },
-  
+
   {
     version: 3,
     description: 'Enhanced schema with event linking and PostgreSQL alignment',
     up: async (db: GrassrootsDB) => {
       console.log('Migration 3: Starting enhanced schema migration...');
-      
+
       try {
         // Migrate existing events to enhanced format
         await migrateEventsToEnhanced(db);
-        
+
         // Migrate existing matches to enhanced format
         await migrateMatchesToEnhanced(db);
-        
+
         // Migrate existing teams to enhanced format
         await migrateTeamsToEnhanced(db);
-        
+
         // Migrate existing players to enhanced format
         await migratePlayersToEnhanced(db);
-        
-        // Create seasons if they don't exist
-        await createDefaultSeason(db);
-        
+
+        // NOTE: createDefaultSeason() removed - no longer needed
+        // Guest users get a "Demo Season" when they create their first match via quick-match
+        // Authenticated users sync seasons from the server
+
         // Retroactively link existing events
         await retroactivelyLinkExistingEvents(db);
-        
+
         console.log('Migration 3: Enhanced schema migration completed successfully');
       } catch (error) {
         console.error('Migration 3: Error during migration:', error);
         throw error;
       }
     },
-    
+
     down: async (db: GrassrootsDB) => {
       console.log('Migration 3: Rolling back enhanced schema...');
-      
+
       // Remove linking fields from events
       const events = await db.events.toArray();
       for (const event of events) {
@@ -91,7 +92,7 @@ export const MIGRATIONS: Migration[] = [
           auto_linked_at: undefined
         });
       }
-      
+
       console.log('Migration 3: Rollback completed');
     }
   }

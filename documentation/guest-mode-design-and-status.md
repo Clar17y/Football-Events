@@ -1,6 +1,27 @@
 # Guest Mode (Local‑First) — Design, Limits, and Implementation Status
 
-This document specifies the “Guest Mode” feature that enables first‑time users to explore, record a quick match, and try lineup tools without creating an account. It covers design goals, data flow, quotas, what’s implemented, and everything needed to finish the work.
+**Last Updated:** 2025-01-26
+**Status:** ✅ **Production-Ready** - All critical issues resolved
+
+This document specifies the "Guest Mode" feature that enables first‑time users to explore, record a quick match, and try lineup tools without creating an account. It covers design goals, data flow, quotas, what's implemented, and everything needed to finish the work.
+
+## Recent Updates (2025-01-26)
+
+### ✅ Critical Bug Fixes
+- **CreateMatchModal**: Fixed seasonId validation and UI for guests
+- **API Fallbacks**: Added guest fallbacks to `getActiveTeamPlayers()` and `getPlayerStats()`
+- **Auth Guards**: Added explicit guards in MatchesPage to prevent 401 errors
+- **GuestBanner**: Added to all relevant pages including SeasonsPage
+
+### ✅ UX Improvements
+- **Pre-submit Quota Checks**: Added to CreatePlayerModal and CreateTeamModal
+- **Opponent Search**: Enabled autocomplete for guests in HomePage
+- **Settings Cleanup**: Proper cleanup of orphaned state on match deletion
+
+### ✅ Data Integrity
+- **Import Service**: Players retain team assignments during upgrade
+- **Event Mapping**: Events preserve team/player associations during import
+- **Zero Data Loss**: Full ID mapping prevents relationship loss on account upgrade
 
 ## Goals
 - Let new users use core functionality without registration on first visit.

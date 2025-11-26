@@ -38,6 +38,8 @@ import {
 } from 'ionicons/icons';
 import { usePlayers } from '../hooks/usePlayers';
 import { useTeams } from '../hooks/useTeams';
+import { authApi } from '../services/api/authApi';
+import { canAddPlayer } from '../utils/guestQuota';
 import TeamSelectionModal from './TeamSelectionModal';
 import PositionSelectionModal from './PositionSelectionModal';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -214,7 +216,16 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
 
     // Find team IDs from team names
     const selectedTeams = teams.filter(team => formData.currentTeams.includes(team.name));
-    
+
+    // Guest quota check for new players with team assignment
+    if (mode === 'create' && !authApi.isAuthenticated() && selectedTeams.length > 0) {
+      const quota = await canAddPlayer(selectedTeams[0].id);
+      if (!quota.ok) {
+        setErrors(prev => ({ ...prev, currentTeams: quota.reason }));
+        return;
+      }
+    }
+
     const playerData: PlayerCreateRequest & { teamIds?: string[] } = {
       name: formData.name.trim(),
       squadNumber: formData.squadNumber ? parseInt(formData.squadNumber, 10) : undefined,

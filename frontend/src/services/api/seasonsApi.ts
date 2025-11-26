@@ -81,6 +81,33 @@ export const seasonsApi = {
    * Get a specific season by ID
    */
   async getSeasonById(id: string): Promise<SeasonResponse> {
+    const { authApi } = await import('./authApi');
+    if (!authApi.isAuthenticated()) {
+      // Guest fallback: query local season by ID
+      const { db } = await import('../../db/indexedDB');
+      const season = await db.seasons.get(id);
+      if (!season || season.is_deleted) {
+        throw new Error('Season not found');
+      }
+      return {
+        data: {
+          id: season.season_id || season.id,
+          seasonId: season.season_id || season.id,
+          label: season.label,
+          startDate: season.start_date,
+          endDate: season.end_date,
+          isCurrent: !!season.is_current,
+          description: season.description,
+          createdAt: new Date(season.created_at),
+          updatedAt: season.updated_at ? new Date(season.updated_at) : undefined,
+          created_by_user_id: season.created_by_user_id,
+          deleted_at: season.deleted_at ? new Date(season.deleted_at) : undefined,
+          deleted_by_user_id: season.deleted_by_user_id,
+          is_deleted: !!season.is_deleted
+        } as Season,
+        success: true
+      };
+    }
     const response = await apiClient.get(`/seasons/${id}`);
     return {
       data: response.data as Season,

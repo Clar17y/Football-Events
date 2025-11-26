@@ -302,11 +302,23 @@ export const playersApi = {
    * Get player statistics
    */
   async getPlayerStats(playerId: string, seasonId?: string): Promise<any> {
+    if (!authApi.isAuthenticated()) {
+      // Guest fallback: return empty stats
+      return {
+        matches: 0,
+        goals: 0,
+        assists: 0,
+        yellowCards: 0,
+        redCards: 0,
+        minutesPlayed: 0,
+        appearances: 0
+      };
+    }
     const queryParams = new URLSearchParams();
     if (seasonId) {
       queryParams.append('seasonId', seasonId);
     }
-    
+
     const url = `/players/${playerId}/stats${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
     const response = await apiClient.get(url);
     return response.data;

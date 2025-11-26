@@ -61,6 +61,27 @@ export const matchesApi = {
    * Get matches by season ID
    */
   async getMatchesBySeason(seasonId: string): Promise<Match[]> {
+    const { authApi } = await import('./authApi');
+    if (!authApi.isAuthenticated()) {
+      // Guest fallback: query local matches by season
+      const { db } = await import('../../db/indexedDB');
+      const matches = await db.matches
+        .where('season_id')
+        .equals(seasonId)
+        .and((m: any) => !m.is_deleted)
+        .toArray();
+      return matches.map((m: any) => ({
+        id: m.id,
+        matchId: m.match_id || m.id,
+        homeTeamId: m.home_team_id,
+        awayTeamId: m.away_team_id,
+        kickoffTime: m.kickoff_ts,
+        seasonId: m.season_id,
+        competition: m.competition,
+        venue: m.venue,
+        notes: m.notes
+      })) as Match[];
+    }
     const response = await apiClient.get(`/matches/season/${seasonId}`);
     return response.data as Match[];
   },
@@ -69,6 +90,29 @@ export const matchesApi = {
    * Get matches by team ID
    */
   async getMatchesByTeam(teamId: string): Promise<Match[]> {
+    const { authApi } = await import('./authApi');
+    if (!authApi.isAuthenticated()) {
+      // Guest fallback: query local matches where team is home or away
+      const { db } = await import('../../db/indexedDB');
+      const matches = await db.matches
+        .filter((m: any) => !m.is_deleted && (m.home_team_id === teamId || m.away_team_id === teamId))
+        .toArray();
+      return matches.map((m: any) => ({
+        id: m.id,
+        matchId: m.match_id || m.id,
+        homeTeamId: m.home_team_id,
+        awayTeamId: m.away_team_id,
+        kickoffTime: m.kickoff_ts,
+        seasonId: m.season_id,
+        competition: m.competition,
+        venue: m.venue,
+        durationMinutes: m.duration_mins,
+        periodFormat: m.period_format,
+        homeScore: m.home_score || 0,
+        awayScore: m.away_score || 0,
+        notes: m.notes
+      })) as Match[];
+    }
     const response = await apiClient.get(`/matches/team/${teamId}`);
     return response.data as Match[];
   },
@@ -347,6 +391,8 @@ export const matchesApi = {
       try {
         const { db } = await import('../../db/indexedDB');
         await db.matches.update(id, { is_deleted: true, deleted_at: Date.now() } as any);
+        // Clean up orphaned live state for guests
+        await db.settings.delete(`local_live_state:${id}`);
       } catch {}
       await addToOutbox('matches', id, 'DELETE', undefined, 'offline');
     }
