@@ -3,11 +3,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { randomUUID } from 'crypto';
+import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Log levels with numeric values for filtering
 const LOG_LEVELS = {
   TRACE: 0,
   DEBUG: 1,
@@ -27,7 +27,6 @@ class EnhancedLogger {
     this.errorLogFile = path.join(this.logDir, `${project}-${this.timestamp}-errors.log`);
     this.debugLogFile = path.join(this.logDir, `${project}-${this.timestamp}-debug.log`);
     
-    // Configuration
     this.config = {
       level: options.level || 'INFO',
       maxRecentLines: options.maxRecentLines || 200,
@@ -55,14 +54,9 @@ class EnhancedLogger {
 
   createLogFiles() {
     const header = this.createLogHeader();
-    
-    // Main log file
     fs.writeFileSync(this.logFile, header);
-    
-    // Error-only log file
     fs.writeFileSync(this.errorLogFile, header);
     
-    // Debug log file (if enabled)
     if (this.config.enableDebugFile) {
       fs.writeFileSync(this.debugLogFile, header);
     }
@@ -71,7 +65,7 @@ class EnhancedLogger {
   createLogHeader() {
     const systemInfo = this.getSystemInfo();
     return `${'='.repeat(80)}
-MCP SERVER ENHANCED LOG
+MCP SERVER LOG
 ${'='.repeat(80)}
 Project: ${this.project.toUpperCase()}
 Session ID: ${this.sessionId}
@@ -81,7 +75,6 @@ Node Version: ${process.version}
 Platform: ${process.platform}
 Architecture: ${process.arch}
 Working Directory: ${process.cwd()}
-Memory Usage: ${JSON.stringify(process.memoryUsage(), null, 2)}
 Environment: ${process.env.NODE_ENV || 'development'}
 Docker: ${process.env.DOCKER_CONTAINER === 'true' ? 'Yes' : 'No'}
 System Info: ${JSON.stringify(systemInfo, null, 2)}
@@ -93,12 +86,11 @@ ${'='.repeat(80)}
   getSystemInfo() {
     try {
       return {
-        hostname: require('os').hostname(),
-        cpus: require('os').cpus().length,
-        totalMemory: require('os').totalmem(),
-        freeMemory: require('os').freemem(),
-        uptime: require('os').uptime(),
-        loadAverage: require('os').loadavg()
+        hostname: os.hostname(),
+        cpus: os.cpus().length,
+        totalMemory: os.totalmem(),
+        freeMemory: os.freemem(),
+        uptime: os.uptime()
       };
     } catch (error) {
       return { error: 'Failed to get system info' };
@@ -108,41 +100,33 @@ ${'='.repeat(80)}
   startPerformanceMonitoring() {
     if (!this.config.enablePerformance) return;
     
-    // Monitor memory usage every 30 seconds
     this.performanceInterval = setInterval(() => {
       const memUsage = process.memoryUsage();
       this.debug('PERFORMANCE', 'Memory usage', {
         rss: `${Math.round(memUsage.rss / 1024 / 1024)}MB`,
-        heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
-        heapTotal: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
-        external: `${Math.round(memUsage.external / 1024 / 1024)}MB`
+        heapUsed: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`
       });
     }, 30000);
   }
 
-  // Enhanced pipe method with better process monitoring
   pipe(serverProcess) {
     const processId = randomUUID();
     this.info('PROCESS', 'Process spawned', {
       processId,
       pid: serverProcess.pid,
-      command: serverProcess.spawnargs?.join(' ') || 'unknown',
-      cwd: serverProcess.spawnfile || 'unknown'
+      command: serverProcess.spawnargs?.join(' ') || 'unknown'
     });
 
-    // Enhanced stdout monitoring
     serverProcess.stdout.on('data', (data) => {
       const output = data.toString();
       this.parseAndLogProcessOutput('STDOUT', output, { processId, pid: serverProcess.pid });
     });
 
-    // Enhanced stderr monitoring
     serverProcess.stderr.on('data', (data) => {
       const output = data.toString();
       this.parseAndLogProcessOutput('STDERR', output, { processId, pid: serverProcess.pid });
     });
 
-    // Process lifecycle events
     serverProcess.on('spawn', () => {
       this.info('PROCESS', 'Process spawn event', { processId, pid: serverProcess.pid });
     });
@@ -152,11 +136,7 @@ ${'='.repeat(80)}
         processId,
         pid: serverProcess.pid,
         error: error.message,
-        stack: error.stack,
-        code: error.code,
-        errno: error.errno,
-        syscall: error.syscall,
-        path: error.path
+        code: error.code
       });
     });
 
@@ -165,8 +145,7 @@ ${'='.repeat(80)}
         processId,
         pid: serverProcess.pid,
         exitCode: code,
-        signal: signal,
-        expected: code === 0 || signal === 'SIGTERM'
+        signal: signal
       });
     });
 
@@ -179,14 +158,9 @@ ${'='.repeat(80)}
       });
     });
 
-    serverProcess.on('disconnect', () => {
-      this.warn('PROCESS', 'Process disconnected', { processId, pid: serverProcess.pid });
-    });
-
     return processId;
   }
 
-  // Parse process output and extract meaningful information
   parseAndLogProcessOutput(source, output, context) {
     const lines = output.split('\n').filter(line => line.trim());
     
@@ -194,148 +168,40 @@ ${'='.repeat(80)}
       const trimmedLine = line.trim();
       if (!trimmedLine) continue;
 
-      // Detect different types of output and log appropriately
       if (this.isErrorLine(trimmedLine)) {
-        this.error(source, 'Process error output', {
-          ...context,
-          message: trimmedLine,
-          parsed: this.parseErrorLine(trimmedLine)
-        });
+        this.error(source, 'Process error output', { ...context, message: trimmedLine });
       } else if (this.isWarningLine(trimmedLine)) {
-        this.warn(source, 'Process warning output', {
-          ...context,
-          message: trimmedLine,
-          parsed: this.parseWarningLine(trimmedLine)
-        });
+        this.warn(source, 'Process warning output', { ...context, message: trimmedLine });
       } else if (this.isInfoLine(trimmedLine)) {
-        this.info(source, 'Process info output', {
-          ...context,
-          message: trimmedLine,
-          parsed: this.parseInfoLine(trimmedLine)
-        });
+        this.info(source, 'Process info output', { ...context, message: trimmedLine });
       } else {
-        this.debug(source, 'Process output', {
-          ...context,
-          message: trimmedLine
-        });
+        this.debug(source, 'Process output', { ...context, message: trimmedLine });
       }
     }
   }
 
   isErrorLine(line) {
-    const errorPatterns = [
-      /error/i,
-      /exception/i,
-      /failed/i,
-      /cannot/i,
-      /unable to/i,
-      /\[ERROR\]/i,
-      /ERR!/i,
-      /✗/,
-      /❌/,
-      /ENOENT/,
-      /EADDRINUSE/,
-      /ECONNREFUSED/
-    ];
+    const errorPatterns = [/error/i, /exception/i, /failed/i, /cannot/i, /ENOENT/, /EADDRINUSE/, /ECONNREFUSED/];
     return errorPatterns.some(pattern => pattern.test(line));
   }
 
   isWarningLine(line) {
-    const warningPatterns = [
-      /warn/i,
-      /warning/i,
-      /deprecated/i,
-      /\[WARN\]/i,
-      /⚠/,
-      /!!/
-    ];
+    const warningPatterns = [/warn/i, /warning/i, /deprecated/i];
     return warningPatterns.some(pattern => pattern.test(line));
   }
 
   isInfoLine(line) {
-    const infoPatterns = [
-      /server.*running/i,
-      /listening.*port/i,
-      /ready/i,
-      /started/i,
-      /local:/i,
-      /network:/i,
-      /✓/,
-      /✅/,
-      /➜/
-    ];
+    const infoPatterns = [/server.*running/i, /listening.*port/i, /ready/i, /started/i, /local:/i, /network:/i];
     return infoPatterns.some(pattern => pattern.test(line));
   }
 
-  parseErrorLine(line) {
-    // Extract useful information from error lines
-    const parsed = {};
-    
-    // Extract port numbers
-    const portMatch = line.match(/port\s+(\d+)/i);
-    if (portMatch) parsed.port = parseInt(portMatch[1]);
-    
-    // Extract file paths
-    const pathMatch = line.match(/([\/\\][\w\/\\.-]+\.\w+)/);
-    if (pathMatch) parsed.file = pathMatch[1];
-    
-    // Extract error codes
-    const codeMatch = line.match(/(E[A-Z]+)/);
-    if (codeMatch) parsed.errorCode = codeMatch[1];
-    
-    return parsed;
-  }
+  trace(category, message, context = {}) { this.log('TRACE', category, message, context); }
+  debug(category, message, context = {}) { this.log('DEBUG', category, message, context); }
+  info(category, message, context = {}) { this.log('INFO', category, message, context); }
+  warn(category, message, context = {}) { this.log('WARN', category, message, context); }
+  error(category, message, context = {}) { this.log('ERROR', category, message, context); }
+  fatal(category, message, context = {}) { this.log('FATAL', category, message, context); }
 
-  parseWarningLine(line) {
-    const parsed = {};
-    
-    // Extract deprecated features
-    const deprecatedMatch = line.match(/deprecated[:\s]+(.+)/i);
-    if (deprecatedMatch) parsed.deprecated = deprecatedMatch[1];
-    
-    return parsed;
-  }
-
-  parseInfoLine(line) {
-    const parsed = {};
-    
-    // Extract server URLs
-    const urlMatch = line.match(/(https?:\/\/[^\s]+)/);
-    if (urlMatch) parsed.url = urlMatch[1];
-    
-    // Extract port numbers
-    const portMatch = line.match(/port\s+(\d+)/i);
-    if (portMatch) parsed.port = parseInt(portMatch[1]);
-    
-    return parsed;
-  }
-
-  // Core logging methods
-  trace(category, message, context = {}) {
-    this.log('TRACE', category, message, context);
-  }
-
-  debug(category, message, context = {}) {
-    this.log('DEBUG', category, message, context);
-  }
-
-  info(category, message, context = {}) {
-    this.log('INFO', category, message, context);
-  }
-
-  warn(category, message, context = {}) {
-    this.log('WARN', category, message, context);
-  }
-
-  error(category, message, context = {}) {
-    this.log('ERROR', category, message, context);
-  }
-
-  fatal(category, message, context = {}) {
-    this.log('FATAL', category, message, context);
-  }
-
-  // Operation tracking
   startOperation(operationName, context = {}) {
     const operationId = randomUUID();
     const operation = {
@@ -346,10 +212,7 @@ ${'='.repeat(80)}
     };
     
     this.operationStack.push(operation);
-    this.info('OPERATION', `Started: ${operationName}`, {
-      operationId,
-      ...context
-    });
+    this.info('OPERATION', `Started: ${operationName}`, { operationId, ...context });
     
     return operationId;
   }
@@ -375,35 +238,28 @@ ${'='.repeat(80)}
     return { duration, operation };
   }
 
-  // Main logging method
   log(level, category, message, context = {}) {
     const levelNum = LOG_LEVELS[level];
     const configLevelNum = LOG_LEVELS[this.config.level];
     
-    // Skip if below configured level
     if (levelNum < configLevelNum) return;
     
     const logEntry = this.createLogEntry(level, category, message, context);
     
-    // Write to appropriate files
     this.writeToFile(this.logFile, logEntry);
     
-    // Write errors to error file
     if (levelNum >= LOG_LEVELS.ERROR) {
       this.writeToFile(this.errorLogFile, logEntry);
     }
     
-    // Write debug info to debug file
     if (this.config.enableDebugFile && levelNum <= LOG_LEVELS.DEBUG) {
       this.writeToFile(this.debugLogFile, logEntry);
     }
     
-    // Console output
     if (this.config.enableConsole) {
       this.writeToConsole(level, logEntry);
     }
     
-    // Keep in memory for recent logs
     this.addToRecentLogs(logEntry);
   }
 
@@ -436,24 +292,16 @@ ${'='.repeat(80)}
     try {
       fs.appendFileSync(filePath, logEntry);
     } catch (error) {
-      console.error(`Failed to write to log file ${filePath}:`, error.message);
+      // Silently fail in MCP mode
     }
   }
 
   writeToConsole(level, logEntry) {
-    const colorMap = {
-      TRACE: '\x1b[90m', // Gray
-      DEBUG: '\x1b[36m', // Cyan
-      INFO: '\x1b[32m',  // Green
-      WARN: '\x1b[33m',  // Yellow
-      ERROR: '\x1b[31m', // Red
-      FATAL: '\x1b[35m'  // Magenta
-    };
-    
-    const color = colorMap[level] || '';
-    const reset = '\x1b[0m';
-    
-    console.log(`${color}${logEntry.trim()}${reset}`);
+    // In MCP mode with stdio, we shouldn't write to console
+    // as it interferes with the protocol
+    if (this.config.enableConsole) {
+      console.error(logEntry.trim()); // Use stderr to avoid interfering with stdout
+    }
   }
 
   addToRecentLogs(logEntry) {
@@ -463,18 +311,9 @@ ${'='.repeat(80)}
     }
   }
 
-  // Enhanced retrieval methods
-  getLogFile() {
-    return this.logFile;
-  }
-
-  getErrorLogFile() {
-    return this.errorLogFile;
-  }
-
-  getDebugLogFile() {
-    return this.debugLogFile;
-  }
+  getLogFile() { return this.logFile; }
+  getErrorLogFile() { return this.errorLogFile; }
+  getDebugLogFile() { return this.debugLogFile; }
 
   getRecentLogs(lines = 50, level = null) {
     let logs = this.recentLogs.slice(-lines);
@@ -528,7 +367,6 @@ ${'='.repeat(80)}
     }
   }
 
-  // Performance and metrics
   getPerformanceMetrics() {
     return {
       operationsInProgress: this.operationStack.length,
@@ -542,7 +380,6 @@ ${'='.repeat(80)}
     };
   }
 
-  // Search and filter logs
   searchLogs(query, options = {}) {
     try {
       const content = fs.readFileSync(this.logFile, 'utf8');
@@ -567,7 +404,6 @@ ${'='.repeat(80)}
     }
   }
 
-  // Cleanup
   cleanup() {
     if (this.performanceInterval) {
       clearInterval(this.performanceInterval);
@@ -579,7 +415,6 @@ ${'='.repeat(80)}
     });
   }
 
-  // Static methods for log file management
   static listLogFiles(project = null) {
     const logDir = path.join(__dirname, '../logs');
     
@@ -590,12 +425,10 @@ ${'='.repeat(80)}
 
       let files = fs.readdirSync(logDir);
       
-      // Filter by project if specified
       if (project) {
         files = files.filter(file => file.startsWith(`${project}-`));
       }
       
-      // Get file stats and categorize
       const fileDetails = files.map(file => {
         const filePath = path.join(logDir, file);
         const stats = fs.statSync(filePath);
@@ -615,7 +448,6 @@ ${'='.repeat(80)}
         };
       });
 
-      // Sort by creation time (newest first)
       fileDetails.sort((a, b) => b.created - a.created);
 
       return {
@@ -649,7 +481,6 @@ ${'='.repeat(80)}
       const stats = fs.statSync(filePath);
       let content = this.safeReadFileContent(filePath);
       
-      // Apply filters if specified
       if (options.level) {
         const lines = content.split('\n');
         const filteredLines = lines.filter(line => line.includes(`[${options.level}]`));
@@ -682,29 +513,19 @@ ${'='.repeat(80)}
     }
   }
 
-  // Safe file reading method that handles both UTF-8 and binary content
   static safeReadFileContent(filePath) {
     try {
-      // First, read as buffer
       const buffer = fs.readFileSync(filePath);
-      
-      // Try to decode as UTF-8
       const content = buffer.toString('utf8');
       
-      // Check if the content contains replacement characters (indicates invalid UTF-8)
       if (content.includes('\uFFFD')) {
-        // Fallback to latin1 for binary data, which preserves all bytes
-        console.log(`Warning: File ${filePath} contains binary data, using latin1 encoding`);
         return buffer.toString('latin1');
       }
       
-      // Clean up problematic characters that cause JSON serialization issues
-      // Replace non-printable characters except common whitespace and ANSI escape sequences
-      // Also handle problematic high-bit characters that cause UTF-8 issues
       return content
-        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control characters
-        .replace(/[\x80-\x9F]/g, '') // Remove problematic high-bit characters
-        .replace(/\uFFFD/g, ''); // Remove replacement characters
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+        .replace(/[\x80-\x9F]/g, '')
+        .replace(/\uFFFD/g, '');
     } catch (error) {
       throw new Error(`Failed to read file: ${error.message}`);
     }
