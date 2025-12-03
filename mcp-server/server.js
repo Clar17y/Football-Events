@@ -1,305 +1,433 @@
-// server.js  — MCP v2 Enhanced
-import express from 'express';
-import cors from 'cors';
-import fs from 'fs';
-import path from 'path';
-import { exec } from 'child_process';
+#!/usr/bin/env node
 
-// Import our enhanced functionality
-import mcpFunctions from './lib/index.js';
+/**
+ * Grassroots PWA MCP Server v3.0
+ * 
+ * A proper MCP server for Claude Code that manages development servers,
+ * handles logging, and provides utilities that Claude Code can't do natively.
+ * 
+ * Uses stdio transport for direct integration with Claude Code.
+ */
 
-const PORT = 9123;
-const EXEC_TIMEOUT = 60_000;
-const OUTPUT_DIR = '/workspace/.ai-outputs';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { z } from 'zod';
 
-fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-const cdPrefix = String.raw`(?:cd\s+(?:\.?[\w\/\-]+(?:\/[\w\-]+)*)\s+&&\s+)?`;
-const nodeScript = String.raw`${cdPrefix}node\s+\.?\/?(backend|scripts)\/[\w\-]+\.js$`;
-const tsxScript  = String.raw`${cdPrefix}npx\s+tsx\s+\.?\/?(backend|scripts)\/[\w\-]+\.js$`;
+// Import our existing functionality
+import ProcessManager from './lib/processManager.js';
+import EnhancedLogger from './lib/enhancedLogger.js';
 
-/* ---------- allow-list ---------------------------------------------------- */
-const allowList = [
-  new RegExp(`^${cdPrefix}npx\\s+vitest\\b`, 'i'),
-  new RegExp(`^${cdPrefix}npx\\s+tsc\\b.*--noEmit\\b`, 'i'),
-  new RegExp(`^${cdPrefix}npm\\s+install\\b`, 'i'),
-  new RegExp(`^${cdPrefix}npm\\s+run\\b`, 'i'),
-  new RegExp(`^${cdPrefix}npm\\s+list\\b`, 'i'),
-  new RegExp(`^${cdPrefix}node\\s+-v(?:ersion)?$`, 'i'),
-  new RegExp(`^${cdPrefix}ls\\b`, 'i'),
-  new RegExp(`^${cdPrefix}npx\\s+prisma\\s+(generate|format|validate|migrate\\s+(dev|status)|db\\s+pull)\\b`, 'i'),
-  new RegExp(`^${cdPrefix}date\\b`, 'i'),
-  new RegExp(`^${cdPrefix}grep\\b.*`, 'i'),
-  new RegExp(`^${cdPrefix}cat\\b.*`, 'i'),
-  new RegExp(`^${cdPrefix}pwd\\b`, 'i'),
-  new RegExp(`^${cdPrefix}echo\\b.*`, 'i'),
-  new RegExp(`^${cdPrefix}head\\b.*`, 'i'),
-  new RegExp(`^${cdPrefix}tail\\b.*`, 'i'),
-  new RegExp(`^${cdPrefix}which\\b.*`, 'i'),
-  new RegExp(`^${cdPrefix}whoami\\b`, 'i'),
-  new RegExp(nodeScript, 'i'),
-  new RegExp(tsxScript, 'i')
-];
-const isAllowed = cmd => allowList.some(re => re.test(cmd.trim()));
+// Create singleton instance
+const processManager = new ProcessManager();
 
-/* ---------- express app --------------------------------------------------- */
-const app = express();
-app.use(express.json());
-app.use(cors());
-
-/* ---------- GET /logs/:file  ----------------------------------------------
- *  • Raw binary by default
- *  • Add ?b64=1  →  JSON  { base64: "<data>" }
- * ------------------------------------------------------------------------- */
-app.get('/logs/:file', (req, res) => {
-  const filePath = path.join(OUTPUT_DIR, req.params.file);
-  if (!fs.existsSync(filePath)) return res.sendStatus(404);
-
-  if (req.query.b64) {
-    const data = fs.readFileSync(filePath);
-    return res.json({ base64: data.toString('base64') });
-  }
-  res.sendFile(filePath);
+// Create the MCP server
+const server = new McpServer({
+  name: 'grassroots-dev-server',
+  version: '3.0.0',
 });
 
-/* ---------- POST /exec ---------------------------------------------------- */
-app.post('/exec', (req, res) => {
-  const { command = '' } = req.body || {};
-  if (!command)             return res.status(400).json({ error: 'missing command' });
-  if (!isAllowed(command))  return res.status(403).json({ error: 'command not permitted' });
+// ============================================================================
+// SERVER MANAGEMENT TOOLS
+// ============================================================================
 
-  exec(
-    command,
-    { shell: true, cwd: '/workspace', timeout: EXEC_TIMEOUT, windowsHide: true, encoding: 'buffer' },
-    (err, stdoutBuf, stderrBuf) => {
-      const id   = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-      const out  = `${id}.out`;
-      const errF = `${id}.err`;
-      fs.writeFileSync(path.join(OUTPUT_DIR, out),  stdoutBuf);
-      fs.writeFileSync(path.join(OUTPUT_DIR, errF), stderrBuf);
-
-      const preview = buf =>
-        buf.toString('utf8').replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '').slice(0, 1000);
-
-      res.json({
-        success: !err,
-        exitCode: err?.code ?? 0,
-        stdoutPreview: preview(stdoutBuf),
-        stderrPreview: preview(stderrBuf),
-        stdoutFile: `/logs/${out}`,
-        stderrFile: `/logs/${errF}`
-      });
+server.tool(
+  'start_dev_server',
+  {
+    project: z.enum(['backend', 'frontend']).describe('Which project to start'),
+    timeout: z.number().optional().describe('Startup timeout in milliseconds (default: 30000)'),
+  },
+  async ({ project, timeout }) => {
+    try {
+      const result = await processManager.startServer(project, { timeout });
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: false, error: error.message }, null, 2),
+        }],
+        isError: true,
+      };
     }
-  );
-});
-
-/* ---------- Enhanced MCP Functions ------------------------------------ */
-
-// Server Management
-app.post('/startDevServer', async (req, res) => {
-  try {
-    const result = await mcpFunctions.startDevServer(req.body);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
   }
-});
+);
 
-app.post('/stopDevServer', async (req, res) => {
-  try {
-    const result = await mcpFunctions.stopDevServer(req.body);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-app.post('/getServerStatus', async (req, res) => {
-  try {
-    const result = await mcpFunctions.getServerStatus(req.body);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-app.post('/stopAllServers', async (req, res) => {
-  try {
-    const result = await mcpFunctions.stopAllServers();
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-app.post('/forceKillPort', async (req, res) => {
-  try {
-    const { port } = req.body;
-    if (!port) {
-      return res.status(400).json({ error: 'PORT_REQUIRED', message: 'Port number is required' });
+server.tool(
+  'stop_dev_server',
+  {
+    project: z.enum(['backend', 'frontend']).describe('Which project to stop'),
+  },
+  async ({ project }) => {
+    try {
+      const result = await processManager.stopServer(project);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: false, error: error.message }, null, 2),
+        }],
+        isError: true,
+      };
     }
-    const result = await mcpFunctions.forceKillPort(port);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
   }
-});
+);
 
-app.post('/listManagedServers', async (req, res) => {
-  try {
-    const result = await mcpFunctions.listManagedServers();
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-// API Testing
-app.post('/testApiEndpoint', async (req, res) => {
-  try {
-    const result = await mcpFunctions.testApiEndpoint(req.body);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-app.post('/checkPortStatus', async (req, res) => {
-  try {
-    const result = await mcpFunctions.checkPortStatus(req.body);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-app.post('/testApiWorkflow', async (req, res) => {
-  try {
-    const result = await mcpFunctions.testApiWorkflow(req.body);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-app.post('/testCrudEndpoints', async (req, res) => {
-  try {
-    const result = await mcpFunctions.testCrudEndpoints(req.body);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-// Logging
-app.post('/getServerLogs', async (req, res) => {
-  try {
-    const result = await mcpFunctions.getServerLogs(req.body);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-app.post('/listLogFiles', async (req, res) => {
-  try {
-    const result = await mcpFunctions.listLogFiles(req.body);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-app.post('/getLogFile', async (req, res) => {
-  try {
-    const result = await mcpFunctions.getLogFile(req.body);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-
-// Enhanced logging endpoints
-app.post('/searchLogs', async (req, res) => {
-  try {
-    const result = await mcpFunctions.searchLogs(req.body);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-app.post('/getPerformanceMetrics', async (req, res) => {
-  try {
-    const result = await mcpFunctions.getPerformanceMetrics(req.body);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-app.post('/getRecentLogs', async (req, res) => {
-  try {
-    const result = await mcpFunctions.getRecentLogs(req.body);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'INTERNAL_ERROR', message: error.message });
-  }
-});
-
-// Enhanced status endpoint
-app.get('/status', (req, res) => {
-  res.json({
-    status: 'running',
-    version: '2.1.0',
-    features: {
-      originalExec: true,
-      serverManagement: true,
-      apiTesting: true,
-      enhancedLogging: true,
-      operationTracking: true,
-      performanceMonitoring: true,
-      structuredLogs: true
-    },
-    endpoints: {
-      exec: '/exec',
-      logs: '/logs/*',
-      serverManagement: ['/startDevServer', '/stopDevServer', '/getServerStatus', '/stopAllServers', '/listManagedServers'],
-      apiTesting: ['/testApiEndpoint', '/checkPortStatus', '/testApiWorkflow', '/testCrudEndpoints'],
-      enhancedLogging: ['/getServerLogs', '/listLogFiles', '/getLogFile', '/searchLogs', '/getPerformanceMetrics', '/getRecentLogs']
-    },
-    loggingFeatures: {
-      levels: ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'],
-      structured: true,
-      operationTracking: true,
-      performanceMetrics: true,
-      processMonitoring: true,
-      searchAndFilter: true,
-      multipleLogFiles: ['main', 'error', 'debug']
+server.tool(
+  'get_server_status',
+  {
+    project: z.enum(['backend', 'frontend']).describe('Which project to check'),
+  },
+  async ({ project }) => {
+    try {
+      const result = await processManager.getServerStatus(project);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: false, error: error.message }, null, 2),
+        }],
+        isError: true,
+      };
     }
-  });
-});
+  }
+);
 
-// Cleanup on shutdown
+server.tool(
+  'list_managed_servers',
+  {},
+  async () => {
+    try {
+      const result = processManager.listManagedServers();
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: false, error: error.message }, null, 2),
+        }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  'stop_all_servers',
+  {},
+  async () => {
+    try {
+      const result = await processManager.stopAllServers();
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: false, error: error.message }, null, 2),
+        }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// ============================================================================
+// PORT MANAGEMENT TOOLS
+// ============================================================================
+
+server.tool(
+  'check_port_status',
+  {
+    port: z.number().describe('Port number to check'),
+  },
+  async ({ port }) => {
+    try {
+      const available = await processManager.checkPortAvailable(port);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            port,
+            available,
+            inUse: !available,
+            message: available ? `Port ${port} is available` : `Port ${port} is in use`,
+          }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: false, error: error.message }, null, 2),
+        }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  'force_kill_port',
+  {
+    port: z.number().describe('Port number to force kill'),
+  },
+  async ({ port }) => {
+    try {
+      const result = await processManager.forceKillPort(port);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: false, error: error.message }, null, 2),
+        }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// ============================================================================
+// LOGGING TOOLS
+// ============================================================================
+
+server.tool(
+  'get_recent_logs',
+  {
+    project: z.enum(['backend', 'frontend']).describe('Which project to get logs for'),
+    lines: z.number().optional().describe('Number of recent lines (default: 50)'),
+    level: z.enum(['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']).optional().describe('Filter by log level'),
+  },
+  async ({ project, lines = 50, level }) => {
+    try {
+      const serverInfo = processManager.servers.get(project);
+      
+      if (!serverInfo || !serverInfo.logger) {
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: 'SERVER_NOT_FOUND',
+              message: `No managed ${project} server found. Start the server first with start_dev_server.`,
+            }, null, 2),
+          }],
+        };
+      }
+
+      const logs = serverInfo.logger.getRecentLogs(lines, level);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            project,
+            sessionId: serverInfo.logger.sessionId,
+            logs,
+          }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: false, error: error.message }, null, 2),
+        }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  'search_logs',
+  {
+    project: z.enum(['backend', 'frontend']).describe('Which project to search logs for'),
+    query: z.string().describe('Regex pattern to search for'),
+    limit: z.number().optional().describe('Maximum matches to return (default: 100)'),
+    caseSensitive: z.boolean().optional().describe('Case sensitive search (default: false)'),
+  },
+  async ({ project, query, limit = 100, caseSensitive = false }) => {
+    try {
+      const serverInfo = processManager.servers.get(project);
+      
+      if (!serverInfo || !serverInfo.logger) {
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: 'SERVER_NOT_FOUND',
+              message: `No managed ${project} server found. Start the server first with start_dev_server.`,
+            }, null, 2),
+          }],
+        };
+      }
+
+      const result = serverInfo.logger.searchLogs(query, { limit, caseSensitive });
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: true, ...result }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: false, error: error.message }, null, 2),
+        }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  'list_log_files',
+  {
+    project: z.enum(['backend', 'frontend']).optional().describe('Filter by project (optional)'),
+  },
+  async ({ project }) => {
+    try {
+      const result = EnhancedLogger.listLogFiles(project);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: false, error: error.message }, null, 2),
+        }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  'get_log_file',
+  {
+    filename: z.string().describe('Log file name to retrieve'),
+    level: z.enum(['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']).optional().describe('Filter by log level'),
+    search: z.string().optional().describe('Search term to filter entries'),
+  },
+  async ({ filename, level, search }) => {
+    try {
+      const result = EnhancedLogger.getLogFileContent(filename, { level, search });
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: false, error: error.message }, null, 2),
+        }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  'get_server_logs',
+  {
+    project: z.enum(['backend', 'frontend']).describe('Which project to get logs for'),
+    lines: z.number().optional().describe('Number of lines to retrieve (default: 50)'),
+    level: z.enum(['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']).optional().describe('Filter by log level'),
+  },
+  async ({ project, lines = 50, level }) => {
+    try {
+      const serverInfo = processManager.servers.get(project);
+      
+      if (!serverInfo || !serverInfo.logger) {
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: 'SERVER_NOT_FOUND',
+              message: `No managed ${project} server found`,
+            }, null, 2),
+          }],
+        };
+      }
+
+      const result = serverInfo.logger.tail(lines, level);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: true, ...result }, null, 2),
+        }],
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ success: false, error: error.message }, null, 2),
+        }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// ============================================================================
+// CLEANUP HANDLERS
+// ============================================================================
+
 process.on('SIGINT', async () => {
-  console.log('\nShutting down MCP server...');
-  await mcpFunctions.cleanup();
+  await processManager.cleanup();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\nShutting down MCP server...');
-  await mcpFunctions.cleanup();
+  await processManager.cleanup();
   process.exit(0);
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Enhanced MCP Server v2.1 listening on http://localhost:${PORT}`);
-  console.log(`📋 Original exec endpoint: /exec`);
-  console.log(`🔧 Server management: /startDevServer, /stopDevServer, /getServerStatus`);
-  console.log(`🧪 API testing: /testApiEndpoint, /testApiWorkflow`);
-  console.log(`📝 Enhanced logging: /getServerLogs, /searchLogs, /getPerformanceMetrics`);
-  console.log(`📊 Status: /status`);
-  console.log(`📁 Logs: /logs/*`);
-  console.log(`✨ New features: Operation tracking, structured logs, performance monitoring`);
-});
+// ============================================================================
+// START THE SERVER
+// ============================================================================
+
+const transport = new StdioServerTransport();
+await server.connect(transport);

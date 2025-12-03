@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   IonPage,
   IonContent,
@@ -37,6 +37,7 @@ import {
 import PageHeader from '../components/PageHeader';
 import LiveHeader from '../components/live/LiveHeader';
 import PeriodClock from '../components/live/PeriodClock';
+import GuestBanner from '../components/GuestBanner';
 import LiveTimeline from '../components/live/LiveTimeline';
 import { defaultLineupsApi } from '../services/api/defaultLineupsApi';
 import LineupManagementModal from '../components/lineup/LineupManagementModal';
@@ -49,6 +50,8 @@ import teamsApi from '../services/api/teamsApi';
 import { useAuth } from '../contexts/AuthContext';
 import type { MatchState, MatchPeriod, Event as MatchEvent } from '@shared/types';
 import type { Match } from '@shared/types';
+import { getLocalMatch } from '../services/guestQuickMatch';
+import { authApi } from '../services/api/authApi';
 
 interface LiveMatchPageProps {
   onNavigate?: (pageOrUrl: string) => void;
@@ -76,10 +79,48 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const timerRef = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
   const [viewerTeams, setViewerTeams] = useState<{ homeId?: string; awayId?: string; homeName?: string; awayName?: string } | null>(null);
-  const [viewerSummary, setViewerSummary] = useState<{ competition?: string | null; venue?: string | null } | null>(null);
+  const [viewerSummary, setViewerSummary] = useState<{ competition?: string | null; venue?: string | null; periodFormat?: string | null; durationMinutes?: number | null } | null>(null);
   const [activeShareCode, setActiveShareCode] = useState<string | null>(null);
+  const [localMatches, setLocalMatches] = useState<Match[]>([]);
 
   // Load upcoming matches for switcher (skip in viewer mode)
+  // Helper to hydrate guest live state snapshot
+  const hydrateGuestState = useCallback(async (matchId: string) => {
+    try {
+      const { db } = await import('../db/indexedDB');
+      const rec = await db.settings.get(`local_live_state:${matchId}`);
+      if (!rec?.value) return;
+      const parsed = JSON.parse(rec.value);
+      const ps: MatchPeriod[] = (parsed.periods || []).map((p: any) => ({
+        id: p.id,
+        matchId,
+        periodNumber: p.periodNumber,
+        periodType: (p.periodType || 'REGULAR') as any,
+        startedAt: p.startedAt ? new Date(p.startedAt) : undefined,
+        endedAt: p.endedAt ? new Date(p.endedAt) : undefined,
+        durationSeconds: p.durationSeconds
+      }));
+      setPeriods(ps);
+      const running = parsed.status === 'LIVE';
+      const lastPeriod = ps.find(p => !p.endedAt) || ps[ps.length - 1];
+      let base = parsed.timerMs || 0;
+      if (running && lastPeriod?.startedAt) {
+        base += Math.max(0, Date.now() - new Date(lastPeriod.startedAt).getTime());
+      }
+      setTimerMs(base);
+      setMatchState({
+        id: 'local-state',
+        matchId,
+        status: parsed.status || 'NOT_STARTED',
+        currentPeriod: lastPeriod?.periodNumber || 1,
+        totalElapsedSeconds: Math.floor(base / 1000),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      } as any);
+      if (running) startTicking();
+    } catch {}
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -94,12 +135,65 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       setLoading(true);
       setError(null);
       try {
-        const list = await matchesApi.getUpcoming(20);
-        if (cancelled) return;
-        setUpcoming(list || []);
-        // If no explicit matchId, select nearest upcoming
-        if (!selectedId && list && list.length > 0) {
-          setSelectedId(list[0].id);
+        if (!isAuthenticated) {
+          // Guest: load local matches for selection and optionally selected match
+          try {
+            const [up, recent] = await Promise.all([
+              matchesApi.getUpcoming(20).catch(() => []),
+              matchesApi.getRecent(10).catch(() => [])
+            ]);
+            const combined: Record<string, Match> = {} as any;
+            [...up, ...recent].forEach((m: any) => { combined[m.id] = m; });
+            setLocalMatches(Object.values(combined));
+          } catch {}
+          if (selectedId) {
+            const m = await getLocalMatch(selectedId);
+            if (cancelled) return;
+            setUpcoming(m ? [m] : []);
+            // Try to hydrate local live state snapshot
+            await hydrateGuestState(selectedId);
+          } else {
+            setUpcoming([]);
+          }
+        } else {
+          // Load both upcoming AND recent matches (for today's matches)
+          const [upcomingList, recentList] = await Promise.all([
+            matchesApi.getUpcoming(20),
+            matchesApi.getRecent(10)
+          ]);
+          if (cancelled) return;
+
+          // Combine and deduplicate by ID
+          const combined: Record<string, Match> = {};
+          [...(upcomingList || []), ...(recentList || [])].forEach(m => {
+            combined[m.id] = m;
+          });
+          const list = Object.values(combined).sort((a, b) =>
+            new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime()
+          );
+
+          setUpcoming(list);
+          // If no explicit matchId, prioritize non-COMPLETED matches
+          if (!selectedId && list.length > 0) {
+            try {
+              // Fetch match states to determine completion status
+              const matchIds = list.map(m => m.id);
+              const states = await matchesApi.getMatchStates(1, 100, matchIds);
+              const statesMap = new Map((states.data || []).map((s: any) => [s.matchId, s]));
+
+              // Find first match that isn't COMPLETED
+              const nonCompleted = list.find(m => {
+                const state = statesMap.get(m.id);
+                return state?.status !== 'COMPLETED';
+              });
+
+              // Use non-completed match if found, otherwise fall back to first match
+              setSelectedId(nonCompleted ? nonCompleted.id : list[0].id);
+            } catch {
+              // If fetching states fails, fall back to first match
+              setSelectedId(list[0].id);
+            }
+          }
         }
       } catch (e: any) {
         if (!cancelled) setError(e?.message || 'Failed to load upcoming matches');
@@ -109,7 +203,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     };
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [isAuthenticated, selectedId, hydrateGuestState]);
+
+  // Re-hydrate guest state when selecting a local match from the list
+  useEffect(() => {
+    if (!isAuthenticated && selectedId) {
+      hydrateGuestState(selectedId);
+    }
+  }, [isAuthenticated, selectedId, hydrateGuestState]);
 
   // Query active viewer link on load (for creator UI state)
   useEffect(() => {
@@ -209,7 +310,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               const s = data.summary as any;
               setPeriods(data.periods || []);
               setViewerTeams({ homeId: s.homeTeam?.id, awayId: s.awayTeam?.id, homeName: s.homeTeam?.name, awayName: s.awayTeam?.name });
-              setViewerSummary({ competition: s.competition, venue: s.venue, periodFormat: s.periodFormat });
+              setViewerSummary({ competition: s.competition, venue: s.venue, periodFormat: s.periodFormat, durationMinutes: s.durationMinutes });
               setMatchState({
                 id: 'viewer',
                 matchId: s.matchId,
@@ -269,20 +370,50 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           try { const d = JSON.parse(ev.data); setEventFeed(prev => prev.filter(i => i.id !== d.id)); } catch {}
         });
         es.addEventListener('period_started', (ev: MessageEvent) => {
-          try { 
-            const d = JSON.parse(ev.data); 
-            setPeriods(prev => [...prev, d.period]); 
-            setTimerMs(0);
+          try {
+            const d = JSON.parse(ev.data);
+            const newPeriodNum = d.period.periodNumber || 1;
+            setPeriods(prev => [...prev, d.period]);
+            // Start timer from expected period start time (not cumulative actual)
+            // Calculate expected start based on match duration and period format
+            const perMs = (() => {
+              const fmt = (currentMatch?.periodFormat || viewerSummary?.periodFormat || '').toLowerCase();
+              const total = (currentMatch?.durationMinutes || viewerSummary?.durationMinutes || 0) * 60_000;
+              if (d.period.periodType === 'EXTRA_TIME') return 15 * 60_000;
+              if (fmt.includes('half')) return total ? Math.round(total / 2) : 45 * 60_000;
+              if (fmt.includes('quarter')) return total ? Math.round(total / 4) : 12 * 60_000;
+              if (fmt.includes('whole')) return total || 90 * 60_000;
+              return total || 45 * 60_000;
+            })();
+            const expectedStartMs = perMs * (newPeriodNum - 1);
+            setTimerMs(expectedStartMs);
             startTicking();
             setEventFeed(prev => sortFeed([{ id: `ps-${d.period.id}`, kind: 'system', label: periodStartLabel(d.period), createdAt: new Date(), periodNumber: d.period.periodNumber }, ...prev]));
           } catch {}
         });
         es.addEventListener('period_ended', (ev: MessageEvent) => {
-          try { 
-            const d = JSON.parse(ev.data); 
-            setPeriods(prev => prev.map(p => p.id === d.period.id ? d.period : p)); 
+          try {
+            const d = JSON.parse(ev.data);
+            const endedPeriodNum = d.period.periodNumber || 1;
+            // Update periods with the ended period
+            setPeriods(prev => prev.map(p => p.id === d.period.id ? { ...p, ...d.period } : p));
+            // Show expected end time for this period (not cumulative actual)
+            const perMs = (() => {
+              const fmt = (currentMatch?.periodFormat || viewerSummary?.periodFormat || '').toLowerCase();
+              const total = (currentMatch?.durationMinutes || viewerSummary?.durationMinutes || 0) * 60_000;
+              if (d.period.periodType === 'EXTRA_TIME') return 15 * 60_000;
+              if (fmt.includes('half')) return total ? Math.round(total / 2) : 45 * 60_000;
+              if (fmt.includes('quarter')) return total ? Math.round(total / 4) : 12 * 60_000;
+              if (fmt.includes('whole')) return total || 90 * 60_000;
+              return total || 45 * 60_000;
+            })();
+            const expectedEndMs = perMs * endedPeriodNum;
+            setTimerMs(expectedEndMs);
+            // Update match state if provided (status changed to PAUSED)
+            if (d.matchState) {
+              setMatchState(prev => prev ? { ...prev, status: d.matchState.status, totalElapsedSeconds: d.matchState.totalElapsedSeconds } as any : prev);
+            }
             stopTicking();
-            setTimerMs(0);
             setEventFeed(prev => sortFeed([{ id: `pe-${d.period.id}`, kind: 'system', label: periodEndLabel(d.period), createdAt: new Date(), periodNumber: d.period.periodNumber }, ...prev]));
           } catch {}
         });
@@ -322,7 +453,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           createdAt: new Date(), is_deleted: false,
         } as any);
         setViewerTeams({ homeId: summary.homeTeam?.id, awayId: summary.awayTeam?.id, homeName: summary.homeTeam?.name, awayName: summary.awayTeam?.name });
-        setViewerSummary({ competition: summary.competition, venue: summary.venue, periodFormat: (summary as any).periodFormat });
+        setViewerSummary({ competition: summary.competition, venue: summary.venue, periodFormat: (summary as any).periodFormat, durationMinutes: (summary as any).durationMinutes });
       } catch {}
       openSSE();
     };
@@ -330,19 +461,28 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     return () => { cancelled = true; esRef.current?.close(); };
   }, [selectedId, viewerToken, viewerParam, viewerExpired]);
 
+  // Compute display time: expected period start + current period elapsed
+  // E.g., in Q3 of 50-min game: starts at 25:00 + time elapsed in Q3
+  // This ensures timer shows "match time" (like 45' in football) not actual elapsed
   const computeBaseMs = (state: MatchState | null, list: MatchPeriod[]): number => {
     if (!state) return 0;
-    const endedMs = list.reduce((acc, p) => acc + (p.endedAt && p.durationSeconds ? p.durationSeconds * 1000 : 0), 0);
-    let base = (state.totalElapsedSeconds || 0) * 1000 - endedMs;
-    if (base <= 0) {
-      const open = list.find(p => !p.endedAt && p.startedAt);
-      if (open && state.status === 'LIVE') {
-        base = Math.max(0, Date.now() - new Date(open.startedAt as any).getTime());
-      } else {
-        base = 0;
-      }
+    // Find open period (started but not ended)
+    const open = list.find(p => !p.endedAt && p.startedAt);
+    if (open && state.status === 'LIVE') {
+      // Expected start for this period (e.g., Q3 = 25:00)
+      const expectedStartMs = getExpectedPeriodStartMs(open.periodNumber);
+      // Time elapsed in current period
+      const openElapsedMs = Math.max(0, Date.now() - new Date(open.startedAt as any).getTime());
+      return expectedStartMs + openElapsedMs;
     }
-    return Math.max(0, base);
+    // No open period - show expected end of last completed period
+    const lastEnded = [...list].filter(p => p.endedAt).sort((a, b) => (b.periodNumber || 0) - (a.periodNumber || 0))[0];
+    if (lastEnded) {
+      // Show expected end time for that period (not actual)
+      const perMs = getPerPeriodMs();
+      return perMs * lastEnded.periodNumber;
+    }
+    return 0;
   };
 
   // Timer controls
@@ -373,6 +513,24 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   useEffect(() => {
     if (matchId) setSelectedId(matchId);
   }, [matchId]);
+
+  // For guests: when selectedId changes, load that local match into the upcoming list
+  useEffect(() => {
+    let cancelled = false;
+    const syncUpcomingForGuest = async () => {
+      if (isAuthenticated) return; // only for guests
+      if (!selectedId) { setUpcoming([]); return; }
+      try {
+        const m = await getLocalMatch(selectedId);
+        if (cancelled) return;
+        setUpcoming(m ? [m] : []);
+      } catch {
+        if (!cancelled) setUpcoming([]);
+      }
+    };
+    syncUpcomingForGuest();
+    return () => { cancelled = true; };
+  }, [isAuthenticated, selectedId]);
 
   const currentIndex = useMemo(() => {
     return upcoming.findIndex(m => m.id === selectedId);
@@ -488,9 +646,10 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     return 'Live';
   };
 
-  const getPerPeriodMs = (): number => {
-    const fmt = (currentMatch?.periodFormat || '').toLowerCase();
-    const total = (currentMatch?.durationMinutes || 0) * 60_000;
+  const getPerPeriodMs = (match?: typeof currentMatch): number => {
+    const m = match || currentMatch;
+    const fmt = (m?.periodFormat || '').toLowerCase();
+    const total = (m?.durationMinutes || 0) * 60_000;
     const open = currentOpenPeriod;
     const type = open?.periodType;
     // Heuristics: halves/quarters split evenly; whole = full; ET default 15m
@@ -501,10 +660,20 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     return total || 45 * 60_000;
   };
 
+  // Calculate expected start time for a period (e.g., Q3 starts at 25:00 in 50-min game)
+  const getExpectedPeriodStartMs = (periodNumber: number, match?: typeof currentMatch): number => {
+    const perMs = getPerPeriodMs(match);
+    return perMs * (periodNumber - 1);
+  };
+
   const getStoppageMmSs = (): string | null => {
     const perMs = getPerPeriodMs();
-    if (timerMs > perMs) {
-      const over = Math.max(0, timerMs - perMs);
+    const periodNum = currentOpenPeriod?.periodNumber || matchState?.currentPeriod || 1;
+    // Expected end time for current period = perMs * periodNumber
+    // e.g., Q3 of 50-min game: 12.5 * 3 = 37.5 minutes
+    const expectedEndMs = perMs * periodNum;
+    if (timerMs > expectedEndMs) {
+      const over = Math.max(0, timerMs - expectedEndMs);
       const mm = Math.floor(over / 60_000);
       const ss = Math.floor((over % 60_000) / 1000).toString().padStart(2, '0');
       return `+${mm}:${ss}`;
@@ -516,8 +685,45 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handleKickOff = async () => {
     if (!selectedId) return;
     try {
+      if (!isAuthenticated) {
+        // Guest: local kickoff
+        const now = new Date();
+        if (matchState?.status === 'PAUSED') {
+          // Start next regular period - timer starts at expected time (e.g., Q2 = 12:30)
+          const nextNum = (periods.filter(p => p.periodType === 'REGULAR').length) + 1;
+          const p = { id: `local-p-${Date.now()}`, periodNumber: nextNum, periodType: 'REGULAR' as any, startedAt: now } as any;
+          const updatedPeriods = [...periods, p];
+          setPeriods(updatedPeriods);
+          const st: any = { ...(matchState || {}), status: 'LIVE', currentPeriod: nextNum };
+          setMatchState(st);
+          // Start from expected period start time (not cumulative actual)
+          const expectedStartMs = getExpectedPeriodStartMs(nextNum);
+          setTimerMs(expectedStartMs);
+          startTicking();
+          pushSystem(`Kick Off — Period ${nextNum}`, nextNum);
+          try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: 'regular' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
+        } else {
+          // First kickoff
+          const p1 = { id: `local-p-${Date.now()}`, periodNumber: 1, periodType: 'REGULAR' as any, startedAt: now } as any;
+          setPeriods([p1]);
+          const st: any = { id: 'local-state', matchId: selectedId, status: 'LIVE', currentPeriod: 1, totalElapsedSeconds: 0, createdAt: new Date(), updatedAt: new Date() };
+          setMatchState(st);
+          setTimerMs(0);
+          startTicking();
+          pushSystem('Match Kick Off', 1);
+          // Apply default lineups locally
+          try {
+            const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
+            if (hId) await defaultLineupsApi.applyDefaultToMatch(hId, selectedId);
+            if (aId) await defaultLineupsApi.applyDefaultToMatch(aId, selectedId);
+          } catch {}
+          try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'LIVE', periods: [{ id: p1.id, periodType: 'REGULAR', periodNumber: 1, startedAt: now.toISOString() }], timerMs: 0, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
+          try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_match' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: 'regular' }); } catch {}
+        }
+        return;
+      }
+      // Authenticated path
       if (matchState?.status === 'PAUSED') {
-        // Start next regular period and resume
         await matchesApi.startPeriod(selectedId, 'regular' as any);
         const p = await matchesApi.getMatchPeriods(selectedId);
         setPeriods(p);
@@ -526,13 +732,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         const base = computeBaseMs(st, p);
         setTimerMs(base);
         startTicking();
-        // System feed: Kick Off period N
         const pn = st.currentPeriod || currentPeriodNumber();
         pushSystem(`Kick Off — Period ${pn}`, pn);
       } else {
         const state = await matchesApi.startMatch(selectedId);
         setMatchState(state);
-        // Refresh periods; first period should be created by backend
         const p = await matchesApi.getMatchPeriods(selectedId);
         setPeriods(p);
         const base = computeBaseMs(state, p);
@@ -540,13 +744,12 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         startTicking();
         const pn = 1;
         pushSystem('Match Kick Off', pn);
-        // Initialize lineups from default lineups for both teams
         try {
           const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
           if (hId) await defaultLineupsApi.applyDefaultToMatch(hId, selectedId);
           if (aId) await defaultLineupsApi.applyDefaultToMatch(aId, selectedId);
         } catch (e) {
-          console.warn('Failed to apply default lineups at kickoff', e);
+          console.warn('Apply default lineups failed', e);
         }
       }
     } catch (e) {
@@ -557,9 +760,16 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handlePause = async () => {
     if (!selectedId) return;
     try {
+      if (!isAuthenticated) {
+        setMatchState(prev => prev ? ({ ...prev, status: 'PAUSED' } as any) : prev);
+        stopTicking();
+        pushSystem('Paused', currentPeriodNumber());
+        try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'PAUSED', periods, timerMs, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
+        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'pause' }); } catch {}
+        return;
+      }
       const state = await matchesApi.pauseMatch(selectedId);
       setMatchState(state);
-      // Compute final base from state
       const p = await matchesApi.getMatchPeriods(selectedId);
       setPeriods(p);
       const base = computeBaseMs(state, p);
@@ -573,6 +783,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handleResume = async () => {
     if (!selectedId) return;
     try {
+      if (!isAuthenticated) {
+        setMatchState(prev => prev ? ({ ...prev, status: 'LIVE' } as any) : prev);
+        startTicking();
+        pushSystem('Resumed', currentPeriodNumber());
+        try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'LIVE', periods, timerMs, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
+        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
+        return;
+      }
       const state = await matchesApi.resumeMatch(selectedId);
       setMatchState(state);
       const p = await matchesApi.getMatchPeriods(selectedId);
@@ -586,14 +804,47 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     }
   };
   const handleEndPeriod = async () => {
-    if (!selectedId || !currentOpenPeriod) return;
-    try {
+      if (!selectedId || !currentOpenPeriod) return;
+      try {
+        if (!isAuthenticated) {
+          // Close local period
+          const endedAt = new Date();
+          const periodNum = currentOpenPeriod.periodNumber;
+          // Calculate this period's duration (timerMs = expectedStart + periodElapsed)
+          const expectedStartMs = getExpectedPeriodStartMs(periodNum);
+          const thisPeriodDurationMs = Math.max(1000, timerMs - expectedStartMs);
+          const updatedPeriods = periods.map(p => p.id === currentOpenPeriod.id ? ({ ...p, endedAt, durationSeconds: Math.round(thisPeriodDurationMs / 1000) } as any) : p);
+          setPeriods(updatedPeriods);
+          // Compute total actual elapsed (for backend sync)
+          const totalActualMs = updatedPeriods.reduce((acc, p) => acc + (p.endedAt && p.durationSeconds ? p.durationSeconds * 1000 : 0), 0);
+          setMatchState(prev => prev ? ({ ...prev, status: 'PAUSED', currentPeriod: periodNum, totalElapsedSeconds: Math.round(totalActualMs / 1000) } as any) : { id: 'local-state', matchId: selectedId, status: 'PAUSED', currentPeriod: periodNum, totalElapsedSeconds: Math.round(totalActualMs / 1000), createdAt: new Date(), updatedAt: new Date() } as any);
+          stopTicking();
+          // Show expected end time for this period (not cumulative actual)
+          const expectedEndMs = getPerPeriodMs() * periodNum;
+          setTimerMs(expectedEndMs);
+        const fmt = (currentMatch?.periodFormat || '').toLowerCase();
+        const n = currentOpenPeriod.periodNumber;
+        let txt = 'End of Period';
+        if (fmt.includes('half')) txt = n === 1 ? 'End of 1st Half' : 'End of 2nd Half';
+        else if (fmt.includes('quarter')) txt = `End of Q${n}`;
+        else if (currentOpenPeriod.periodType === 'EXTRA_TIME') txt = `End of ET${n}`;
+        pushSystem(txt, n);
+        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'end_period' }); } catch {}
+        try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'PAUSED', periods: updatedPeriods, timerMs: expectedEndMs, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
+        return;
+      }
       await matchesApi.endPeriod(selectedId, currentOpenPeriod.id);
-      const p = await matchesApi.getMatchPeriods(selectedId);
+      // Fetch both updated periods AND match state
+      const [p, state] = await Promise.all([
+        matchesApi.getMatchPeriods(selectedId),
+        matchesApi.getMatchState(selectedId)
+      ]);
       setPeriods(p);
+      setMatchState(state);
       stopTicking();
-      setTimerMs(0);
-      // Determine label based on format
+      // Don't reset to 0 - show cumulative time (frozen)
+      const cumulativeMs = computeBaseMs(state, p);
+      setTimerMs(cumulativeMs);
       const fmt = (currentMatch?.periodFormat || '').toLowerCase();
       const n = currentOpenPeriod.periodNumber;
       let txt = 'End of Period';
@@ -606,16 +857,34 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     }
   };
   const handleStartNextPeriod = async (extraTime = false) => {
-    if (!selectedId) return;
-    try {
+      if (!selectedId) return;
+      try {
+        if (!isAuthenticated) {
+          const now = new Date();
+          const type = extraTime ? 'EXTRA_TIME' : 'REGULAR';
+          const nextNum = (periods.filter(p => p.periodType === (extraTime ? 'EXTRA_TIME' : 'REGULAR')).length) + 1;
+          const p = { id: `local-p-${Date.now()}`, periodNumber: nextNum, periodType: type as any, startedAt: now } as any;
+          const updatedPeriods = [...periods, p];
+          setPeriods(updatedPeriods);
+          setMatchState(prev => prev ? ({ ...prev, status: 'LIVE', currentPeriod: nextNum } as any) : prev);
+          // Start from expected period start time (not cumulative actual)
+          const expectedStartMs = getExpectedPeriodStartMs(nextNum);
+          setTimerMs(expectedStartMs);
+          startTicking();
+          pushSystem(extraTime ? `Extra Time Kick Off — ET${nextNum}` : `Kick Off — Period ${nextNum}`, nextNum);
+          try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'LIVE', periods: updatedPeriods, timerMs: expectedStartMs, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
+          try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: extraTime ? 'extra_time' : 'regular' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
+          return;
+        }
       const periodType = extraTime ? 'extra_time' : 'regular';
       await matchesApi.startPeriod(selectedId, periodType as any);
       const p = await matchesApi.getMatchPeriods(selectedId);
       setPeriods(p);
-      setTimerMs(0);
-      // Resume match if needed
       const st = await matchesApi.resumeMatch(selectedId);
       setMatchState(st);
+      // Continue from cumulative time
+      const base = computeBaseMs(st, p);
+      setTimerMs(base);
       startTicking();
       pushSystem(extraTime ? `Extra Time Kick Off — ET${(p.filter(pp=>pp.periodType==='EXTRA_TIME').length)}` : `Kick Off — Period ${(p.filter(pp=>pp.periodType==='REGULAR').length)}`, st.currentPeriod || undefined);
     } catch (e) {
@@ -625,10 +894,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handleStartPenaltyShootout = async () => {
     if (!selectedId) return;
     try {
+      if (!isAuthenticated) {
+        pushSystem('Penalty Shootout', undefined);
+        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: 'penalty_shootout' }); } catch {}
+        return;
+      }
       await matchesApi.startPeriod(selectedId, 'penalty_shootout' as any);
       const p = await matchesApi.getMatchPeriods(selectedId);
       setPeriods(p);
-      // No timer for shootout; keep paused state
       pushSystem('Penalty Shootout', undefined);
     } catch (e) {
       console.error('Start penalty shootout failed', e);
@@ -637,6 +910,24 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handleComplete = async () => {
     if (!selectedId) return;
     try {
+      if (!isAuthenticated) {
+        const endedAt = new Date();
+        const updatedPeriods = periods.map(p => p.endedAt ? p : ({ ...p, endedAt }));
+        setPeriods(updatedPeriods);
+        setMatchState(prev => prev ? ({ ...prev, status: 'COMPLETED' } as any) : { id: 'local-state', matchId: selectedId, status: 'COMPLETED', currentPeriod: currentPeriodNumber(), createdAt: new Date(), updatedAt: new Date() } as any);
+        stopTicking();
+        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'complete' }); } catch {}
+        try {
+          const { db } = await import('../db/indexedDB');
+          await db.settings.put({
+            key: `local_live_state:${selectedId}`,
+            value: JSON.stringify({ status: 'COMPLETED', periods: updatedPeriods, timerMs, lastUpdatedAt: Date.now() }),
+            created_at: Date.now(),
+            updated_at: Date.now()
+          });
+        } catch {}
+        return;
+      }
       const state = await matchesApi.completeMatch(selectedId);
       setMatchState(state);
       stopTicking();
@@ -679,7 +970,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const [playerNameMap, setPlayerNameMap] = useState<Record<string, string>>({});
 
   const currentPeriodNumber = () => currentOpenPeriod?.periodNumber || matchState?.currentPeriod || 1;
-  const canAddEvents = !!(isAuthenticated && matchState?.status === 'LIVE' && currentOpenPeriod && selectedId);
+  const canAddEvents = !!(matchState?.status === 'LIVE' && currentOpenPeriod && selectedId);
 
   const openPlayerPicker = async (kind: QuickEventKind) => {
     if (!selectedId || !canAddEvents) return;
@@ -723,7 +1014,27 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         playerId: selectedPlayerId || null,
         sentiment,
       } as any;
-      const created = await eventsApi.create(payload);
+      let created: any;
+      if (!isAuthenticated) {
+        // Guest: write to local outbox
+        const { db } = await import('../db/indexedDB');
+        const result = await db.addEvent({
+          kind: payload.kind,
+          match_id: payload.matchId,
+          team_id: payload.teamId,
+          player_id: payload.playerId,
+          minute: Math.floor((payload.clockMs || 0) / 60000),
+          second: Math.floor(((payload.clockMs || 0) % 60000) / 1000),
+          period: payload.periodNumber,
+          data: payload.notes ? { notes: payload.notes } : {},
+          created: Date.now()
+        });
+        if (!result.success) throw new Error(result.error || 'Failed to add event');
+        try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
+        created = { id: `local-${Date.now()}`, ...payload, createdAt: new Date() };
+      } else {
+        created = await eventsApi.create(payload);
+      }
       setLastEventId(created.id);
       setLastEventKind(pendingKind);
       setLastEventSentiment(sentiment);
@@ -740,7 +1051,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
 
   const handleUndoLast = async () => {
     try {
-      if (lastEventId) await eventsApi.delete(lastEventId);
+      if (isAuthenticated && lastEventId) {
+        await eventsApi.delete(lastEventId);
+      }
     } catch (e) {
       console.error('Undo failed', e);
     } finally {
@@ -755,11 +1068,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     try {
       if (!lastEventId) return;
       // Compute next value (clamped) and short-circuit if unchanged
-      const next = delta === 0
-        ? 0
-        : Math.max(-3, Math.min(3, lastEventSentiment + delta));
-      if (next === lastEventSentiment) return; // avoid redundant PUTs
-      await eventsApi.update(lastEventId, { sentiment: next });
+      const next = delta === 0 ? 0 : Math.max(-3, Math.min(3, lastEventSentiment + delta));
+      if (next === lastEventSentiment) return;
+      if (isAuthenticated) {
+        await eventsApi.update(lastEventId, { sentiment: next });
+      }
       setLastEventSentiment(next);
     } catch (e) {
       console.warn('Failed to update sentiment', e);
@@ -892,34 +1205,66 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     );
   };
 
-  // Load/refresh timeline for coach (auth only). Rebuild when periods change to keep system rows in sync.
-  useEffect(() => {
-    const run = async () => {
-      if (!isAuthenticated || !selectedId) { return; }
-      try {
-        const list = await eventsApi.getByMatch(selectedId);
-        const feed: FeedItem[] = (list as any as MatchEvent[]).map(ev => ({ 
-          id: ev.id,
-          kind: 'event',
-          label: labelForEvent(ev.kind),
-          createdAt: new Date(ev.createdAt),
-          periodNumber: ev.periodNumber ?? undefined,
-          periodType: inferPeriodType(new Date(ev.createdAt)),
-          clockMs: ev.clockMs ?? undefined,
-          teamId: ev.teamId ?? undefined,
-          playerId: ev.playerId ?? undefined,
-          sentiment: ev.sentiment,
-          event: ev 
-        }));
-        // Derive system rows from known periods for coach view
-        const systemFromPeriods: FeedItem[] = periods.flatMap((p: any) => {
-          const out: FeedItem[] = [];
-          if (p.startedAt) out.push({ id: `ps-${p.id}`, kind: 'system', label: periodStartLabel(p), createdAt: new Date(p.startedAt), periodNumber: p.periodNumber, periodType: p.periodType });
-          if (p.endedAt) out.push({ id: `pe-${p.id}`, kind: 'system', label: periodEndLabel(p), createdAt: new Date(p.endedAt), periodNumber: p.periodNumber, periodType: p.periodType });
-          return out;
-        });
-        setEventFeed(sortFeed([...feed, ...systemFromPeriods]));
-        // Preload rosters for both teams to resolve player names
+  // Load/refresh timeline (skip for viewers - they get events via SSE)
+  const loadEvents = useCallback(async () => {
+    if (!selectedId) return;
+    // Viewers get events from SSE snapshot - don't overwrite with empty data
+    if (viewerToken) return;
+    try {
+      if (!isAuthenticated) {
+          const { db } = await import('../db/indexedDB');
+          const res = await db.getMatchEvents(selectedId);
+          const arr = (res.success && res.data) ? res.data : [];
+          const feed: FeedItem[] = arr.map((e: any) => {
+            const payload = e.data || e;
+            return {
+              id: String(e.id || `local-${payload.created || Date.now()}`),
+              kind: 'event',
+              label: labelForEvent(payload.kind),
+              createdAt: new Date(payload.created || Date.now()),
+              periodNumber: payload.period || undefined,
+              clockMs: ((payload.minute || 0) * 60000) + ((payload.second || 0) * 1000),
+              teamId: payload.team_id,
+              playerId: payload.player_id,
+              sentiment: payload.sentiment || 0,
+              event: {
+                id: String(e.id || crypto.randomUUID()),
+                kind: payload.kind,
+                createdAt: new Date(payload.created || Date.now()),
+                clockMs: ((payload.minute || 0) * 60000) + ((payload.second || 0) * 1000),
+                periodNumber: payload.period || undefined,
+                teamId: payload.team_id,
+                playerId: payload.player_id,
+                notes: payload.notes || (payload.data ? payload.data.notes : undefined),
+                sentiment: payload.sentiment || 0,
+              } as any
+            };
+          });
+          setEventFeed(sortFeed(feed));
+        } else {
+          const list = await eventsApi.getByMatch(selectedId);
+          const feed: FeedItem[] = (list as any as MatchEvent[]).map(ev => ({ 
+            id: ev.id,
+            kind: 'event',
+            label: labelForEvent(ev.kind),
+            createdAt: new Date(ev.createdAt),
+            periodNumber: ev.periodNumber ?? undefined,
+            periodType: inferPeriodType(new Date(ev.createdAt)),
+            clockMs: ev.clockMs ?? undefined,
+            teamId: ev.teamId ?? undefined,
+            playerId: ev.playerId ?? undefined,
+            sentiment: ev.sentiment,
+            event: ev 
+          }));
+          const systemFromPeriods: FeedItem[] = periods.flatMap((p: any) => {
+            const out: FeedItem[] = [];
+            if (p.startedAt) out.push({ id: `ps-${p.id}`, kind: 'system', label: periodStartLabel(p), createdAt: new Date(p.startedAt), periodNumber: p.periodNumber, periodType: p.periodType });
+            if (p.endedAt) out.push({ id: `pe-${p.id}`, kind: 'system', label: periodEndLabel(p), createdAt: new Date(p.endedAt), periodNumber: p.periodNumber, periodType: p.periodType });
+            return out;
+          });
+          setEventFeed(sortFeed([...feed, ...systemFromPeriods]));
+        }
+        // Preload roster names (works in guest via teamsApi fallback)
         const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
         const promises: Promise<any>[] = [];
         if (hId) promises.push(teamsApi.getTeamPlayers(hId));
@@ -927,20 +1272,23 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         const results = await Promise.all(promises);
         const map: Record<string, string> = {};
         results.forEach(res => (res?.data || []).forEach((p: any) => { map[p.id] = p.name; }));
-      setPlayerNameMap(map);
-    } catch (e) {
-      console.warn('Failed to load events', e);
-    }
-  };
-  run();
-  }, [isAuthenticated, selectedId, periods]);
+        setPlayerNameMap(map);
+      } catch (e) {
+        console.warn('Failed to load events', e);
+      }
+  }, [isAuthenticated, selectedId, viewerToken, currentMatch, periods]);
+
+  // UseEffect to load events when dependencies change
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents, periods]);
 
   // Prefetch current formation for selected match to make Team Changes modal instant
   useEffect(() => {
-    if (selectedId) {
+    if (selectedId && isAuthenticated) {
       formationsApi.prefetch(selectedId).catch(() => {});
     }
-  }, [selectedId]);
+  }, [selectedId, isAuthenticated]);
 
   // Check default lineups for both teams when match changes
   useEffect(() => {
@@ -977,6 +1325,25 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     <IonPage>
       <PageHeader onNavigate={onNavigate} />
       <IonContent fullscreen>
+        {!isAuthenticated && !viewerToken && !selectedId && localMatches.length > 0 && (
+          <div style={{ padding: '12px 16px' }}>
+            <IonCard>
+              <IonCardContent>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>Your Local Matches</div>
+                {localMatches.map((m) => (
+                  <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--grassroots-surface-variant)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ fontWeight: 600 }}>{m.homeTeam?.name || 'Home'} vs {m.awayTeam?.name || 'Away'}</div>
+                      <div style={{ fontSize: 12, color: 'var(--grassroots-text-tertiary)' }}>{new Date(m.kickoffTime).toLocaleString()}</div>
+                    </div>
+                    <IonButton size="small" onClick={() => { setSelectedId(m.id); onNavigate?.(`/live/${m.id}`); }}>Open</IonButton>
+                  </div>
+                ))}
+              </IonCardContent>
+            </IonCard>
+          </div>
+        )}
+        {!viewerToken && <GuestBanner matchId={selectedId} />}
         <IonGrid fixed>
           <IonRow>
             <IonCol size="12">
@@ -1051,49 +1418,46 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                       {/* Primary context-aware action */}
                       {(() => {
-                        // Determine label/handler based on state and periods
                         const regCount = regPeriodsCount(currentMatch);
                         const extraEnded = periods.filter(p => p.periodType === 'EXTRA_TIME' && !!p.endedAt).length;
                         const inPaused = matchState?.status === 'PAUSED';
-                        const inScheduled = matchState?.status === 'SCHEDULED';
+                        const inScheduled = matchState?.status === 'SCHEDULED' || !matchState;
                         if (inScheduled) {
-                          return <IonButton disabled={!isAuthenticated || !selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
+                          return <IonButton disabled={!selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
                         }
                         if (inPaused) {
                           if (!currentOpenPeriod) {
                             if (endedRegularCount < regCount) {
-                              return <IonButton disabled={!isAuthenticated || !selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
+                              return <IonButton disabled={!selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
                             }
                             if (extraEnded < 2) {
-                              return <IonButton disabled={!isAuthenticated || !selectedId} onClick={() => handleStartNextPeriod(true)}>Extra Time</IonButton>;
+                              return <IonButton disabled={!selectedId} onClick={() => handleStartNextPeriod(true)}>Extra Time</IonButton>;
                             }
-                            return <IonButton disabled={!isAuthenticated || !selectedId} onClick={handleStartPenaltyShootout}>Penalty Shootout</IonButton>;
+                            return <IonButton disabled={!selectedId} onClick={handleStartPenaltyShootout}>Penalty Shootout</IonButton>;
                           }
                         }
-                        // Default fallback hidden
+                        if (matchState?.status === 'LIVE') {
+                          return <IonButton disabled={!selectedId || !currentOpenPeriod} onClick={handleEndPeriod}>End Period</IonButton>;
+                        }
                         return null;
-                    })()}
+                      })()}
 
                       {/* Toggle Pause/Resume (only show one) */}
                       {matchState?.status === 'LIVE' && (
-                        <IonButton onClick={handlePause} disabled={!isAuthenticated}>Pause</IonButton>
+                        <IonButton onClick={handlePause} disabled={!selectedId}>Pause</IonButton>
                       )}
                       {matchState?.status === 'PAUSED' && currentOpenPeriod && (
-                        <IonButton onClick={handleResume} disabled={!isAuthenticated}>Resume</IonButton>
+                        <IonButton onClick={handleResume} disabled={!selectedId}>Resume</IonButton>
                       )}
 
                       {/* End Period only visible when paused and a period is open */}
                       {matchState?.status === 'PAUSED' && currentOpenPeriod && (
-                        <IonButton onClick={handleEndPeriod} disabled={!isAuthenticated}>End Period</IonButton>
+                        <IonButton onClick={handleEndPeriod} disabled={!selectedId}>End Period</IonButton>
                       )}
 
-                      <IonButton disabled={!isAuthenticated || matchState?.status === 'SCHEDULED'} color="success" onClick={handleComplete}>Complete</IonButton>
+                      <IonButton disabled={matchState?.status === 'SCHEDULED'} color="success" onClick={handleComplete}>Complete</IonButton>
                     </div>
-                    {!isAuthenticated && (
-                      <IonText color="medium" style={{ textAlign: 'center' }}>
-                        Read-only viewer. Sign in to control the match.
-                      </IonText>
-                  )}
+                    {/* Guest mode can control offline match; viewer mode handled via viewerToken guard */}
                 </div>
               </IonCardContent>
             </IonCard>
@@ -1291,7 +1655,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           <IonCard>
             <IonCardContent>
               <div style={{ fontWeight: 700, marginBottom: 8 }}>Live Timeline</div>
-              {(isAuthenticated || viewerToken) && selectedId ? (
+              {selectedId ? (
                 <LiveTimeline 
                   feed={eventFeed as any} 
                   currentMatch={currentMatch as any} 
@@ -1301,7 +1665,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                     if (item.kind !== 'event') return;
                     (async () => {
                       try {
-                        await eventsApi.delete(item.id);
+                        if (isAuthenticated) {
+                          await eventsApi.delete(item.id);
+                        }
                         setEventFeed(prev => prev.filter(i => i.id !== item.id));
                         try { (window as any).__toastApi?.current?.showSuccess?.('Event deleted'); } catch {}
                       } catch (e: any) {
@@ -1320,12 +1686,13 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         </div>
       </IonContent>
       {/* Lineup Management Modal */}
-      <LineupManagementModal 
+      <LineupManagementModal
         isOpen={showLineupModal}
         onClose={() => setShowLineupModal(false)}
         matchId={selectedId || ''}
         selectedTeamId={selectedTeam === 'home' ? currentMatch?.homeTeamId || '' : currentMatch?.awayTeamId || ''}
         currentMinute={Number((((timerMs || 0) / 60000)).toFixed(2))}
+        onFormationChanged={loadEvents}
       />
     </IonPage>
   );

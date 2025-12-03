@@ -155,7 +155,8 @@ export class RealTimeService {
         second: Math.floor(((event.clockMs || 0) % 60000) / 1000), // Convert remainder to seconds
         period: event.periodNumber,
         data: event.notes ? { notes: event.notes } : {},
-        created: event.createdAt.getTime()
+        created: event.createdAt.getTime(),
+        created_by_user_id: (await import('../utils/guest')).isGuest() ? (await import('../utils/guest')).getGuestId() : 'authenticated-user'
       });
 
       if (!result.success) {

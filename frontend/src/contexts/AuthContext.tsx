@@ -71,18 +71,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             console.log('AuthContext: Profile loaded successfully');
             setUser(response.data);
             setTokenExpiryMs(getAccessTokenExpiryMs());
+            try { window.dispatchEvent(new CustomEvent('auth:loggedin')); } catch {}
           } else {
             console.log('AuthContext: Profile failed, trying refresh...');
             // Token might be expired, try to refresh
             const refreshSuccess = await authApi.attemptTokenRefresh();
-            if (refreshSuccess) {
-              console.log('AuthContext: Refresh successful, retrying profile...');
-              const retryResponse = await authApi.getProfile();
-              if (retryResponse.success && retryResponse.data) {
-                console.log('AuthContext: Profile loaded after refresh');
-                setUser(retryResponse.data);
-                setTokenExpiryMs(getAccessTokenExpiryMs());
-              }
+              if (refreshSuccess) {
+                console.log('AuthContext: Refresh successful, retrying profile...');
+                const retryResponse = await authApi.getProfile();
+                if (retryResponse.success && retryResponse.data) {
+                  console.log('AuthContext: Profile loaded after refresh');
+                  setUser(retryResponse.data);
+                  setTokenExpiryMs(getAccessTokenExpiryMs());
+                  try { window.dispatchEvent(new CustomEvent('auth:loggedin')); } catch {}
+                }
             } else {
               console.log('AuthContext: Refresh failed, clearing tokens...');
               // Clear invalid tokens

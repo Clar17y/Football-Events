@@ -14,6 +14,8 @@ import {
 } from '@ionic/react';
 import { arrowBackOutline, football } from 'ionicons/icons';
 import ThemeToggle from './ThemeToggle';
+import OfflineSyncIndicator from './OfflineSyncIndicator';
+import ImportGuestDataButton from './ImportGuestDataButton';
 
 interface PageHeaderProps {
   onNavigate?: (page: string) => void;
@@ -54,7 +56,9 @@ const PageHeader: React.FC<PageHeaderProps> = ({
           </div>
         </IonTitle>
         
-        <IonButtons slot="end">
+        <IonButtons slot="end" style={{ gap: 8 }}>
+          <OfflineSyncIndicator />
+          <ImportGuestDataButton />
           {additionalButtons}
           {showThemeToggle && <ThemeToggle />}
         </IonButtons>

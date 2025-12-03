@@ -119,9 +119,28 @@ class StatsService {
       const response = await apiClient.get<GlobalStats>('/stats/global');
       
       if (response.success && response.data) {
-        const freshStats = response.data;
-        
-        // Cache the fresh data
+        const freshStats = response.data as GlobalStats & { degraded?: boolean };
+
+        // If server indicates degraded mode, prefer cached data if available
+        if ((freshStats as any)?.degraded === true) {
+          const cached = this.getCachedStats();
+          if (cached) {
+            return {
+              success: true,
+              data: cached,
+              fromCache: true,
+              error: 'Server degraded; showing cached data'
+            };
+          }
+          // No cache; return degraded response without caching
+          return {
+            success: true,
+            data: freshStats,
+            fromCache: false
+          };
+        }
+
+        // Cache the fresh data when not degraded
         this.setCachedStats(freshStats);
         
         // Emit update event

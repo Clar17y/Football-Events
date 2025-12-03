@@ -115,7 +115,8 @@ const LineupManagementPage: React.FC<LineupManagementPageProps> = ({ onNavigate 
       setState(prev => ({ 
         ...prev, 
         teams: sortedTeams,
-        isTeamsLoading: false 
+        isTeamsLoading: false,
+        isLoading: false
       }));
 
       // Prefer selection from URL (?teamId=...), then localStorage, then oldest team
@@ -562,25 +563,46 @@ const LineupManagementPage: React.FC<LineupManagementPageProps> = ({ onNavigate 
       <PageHeader onNavigate={navigate} />
 
       <IonContent className="lineup-management-content">
-        {!isPageReady ? (
+        {/* Lineup header (mirrors Matches header, themed Sky) */}
+        <div className="lineup-header">
+          <div className="lineup-title-section">
+            <div className="page-header-with-color" style={{ backgroundColor: 'var(--theme-primary, var(--ion-color-secondary))' }}>
+              <h1 className="lineup-main-title">Lineup Management</h1>
+            </div>
+            <p className="lineup-subtitle">Create and manage default team lineups with visual pitch interface</p>
+          </div>
+        </div>
+        {(!isPageReady) ? (
           <div className="loading-container">
             <IonSpinner name="crescent" />
             <IonText>
               <p>Loading lineup data...</p>
             </IonText>
           </div>
-        ) : (
-          <>
-            {/* Lineup header (mirrors Matches header, themed Sky) */}
-            <div className="lineup-header">
-              <div className="lineup-title-section">
-                <div className="page-header-with-color" style={{ backgroundColor: 'var(--theme-primary, var(--ion-color-secondary))' }}>
-                  <h1 className="lineup-main-title">Lineup Management</h1>
-                </div>
-                <p className="lineup-subtitle">Create and manage default team lineups with visual pitch interface</p>
+        ) : state.teams.length === 0 ? (
+          <div style={{ padding: '16px' }}>
+            <div style={{
+              border: '1px dashed var(--ion-color-medium)',
+              borderRadius: 12,
+              padding: '16px',
+              background: 'var(--ion-color-step-50, rgba(0,0,0,0.02))'
+            }}>
+              <h2 style={{ margin: '0 0 8px' }}>Add a team to start</h2>
+              <IonText color="medium">
+                You’ll need at least one team before you can manage default lineups.
+              </IonText>
+              <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <IonButton color="primary" onClick={() => onNavigate ? onNavigate('teams') : window.history.pushState({}, '', '/teams')}>
+                  Go to Teams
+                </IonButton>
+                <IonButton fill="outline" onClick={() => onNavigate ? onNavigate('home') : window.history.back()}>
+                  Back to Home
+                </IonButton>
               </div>
             </div>
-
+          </div>
+        ) : (
+          <div className="lineup-content-wrapper">
             <div className="lineup-content">
               {/* Team Selection Section */}
               <div className="team-selection-section">
@@ -660,21 +682,21 @@ const LineupManagementPage: React.FC<LineupManagementPageProps> = ({ onNavigate 
 
                 {/* Player Selection Panel */}
                 <div className="player-panel-section">
-                <div className="player-panel-content">
-                  <PlayerSelectionPanel
-                    players={state.players}
-                    onPlayerSelect={handlePlayerSelect}
-                    onPlayerRemove={handlePlayerRemoveFromPanel}
-                    selectedPlayers={selectedPlayers}
-                    maxPlayers={11}
-                    readonly={false}
-                    searchable={true}
-                  />
-                </div>
+                  <div className="player-panel-content">
+                    <PlayerSelectionPanel
+                      players={state.players}
+                      onPlayerSelect={handlePlayerSelect}
+                      onPlayerRemove={handlePlayerRemoveFromPanel}
+                      selectedPlayers={selectedPlayers}
+                      maxPlayers={11}
+                      readonly={false}
+                      searchable={true}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </>
+          </div>
         )}
 
         {/* Error Display */}
@@ -702,7 +724,8 @@ const LineupManagementPage: React.FC<LineupManagementPageProps> = ({ onNavigate 
           isOpen={showToast}
           onDidDismiss={() => setShowToast(false)}
           message={toastMessage}
-          duration={3000}
+          duration={5000}
+          position="bottom"
           color={toastColor}
         />
       </IonContent>

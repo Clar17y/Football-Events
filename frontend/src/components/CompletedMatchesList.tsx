@@ -222,7 +222,7 @@ const CompletedMatchesList: React.FC<CompletedMatchesListProps> = ({
                     <IonButton
                       fill="outline"
                       size="small"
-                      color="medium"
+                      color="primary"
                       className="show-events-button"
                       onClick={(e) => {
                         e.stopPropagation();

@@ -1,4 +1,7 @@
 import apiClient from './baseApi';
+import { authApi } from './authApi';
+import { canChangeFormation } from '../../utils/guestQuota';
+import { getGuestId, isGuest } from '../../utils/guest';
 
 export interface FormationPlayerDTO {
   id: string;
@@ -17,6 +20,10 @@ const inflight = new Map<string, Promise<FormationDataDTO | null>>();
 export const formationsApi = {
   async getCurrent(matchId: string, opts: { useCache?: boolean } = { useCache: true }): Promise<FormationDataDTO | null> {
     const { useCache = true } = opts;
+    // Guests keep formation local; avoid hitting server
+    if (!authApi.isAuthenticated()) {
+      return useCache && formationCache.has(matchId) ? formationCache.get(matchId)! : null;
+    }
     if (useCache && formationCache.has(matchId)) return formationCache.get(matchId)!;
     if (inflight.has(matchId)) return inflight.get(matchId)!;
     const p = (async () => {
@@ -34,7 +41,10 @@ export const formationsApi = {
   },
 
   async prefetch(matchId: string): Promise<void> {
-    try { await this.getCurrent(matchId, { useCache: true }); } catch {}
+    try {
+      // Guests should not call server; getCurrent will short-circuit
+      await this.getCurrent(matchId, { useCache: true });
+    } catch {}
   },
 
   setCached(matchId: string, data: FormationDataDTO) {
@@ -46,10 +56,52 @@ export const formationsApi = {
   },
 
   async applyChange(matchId: string, startMin: number, formation: FormationDataDTO, reason?: string) {
-    const resp = await apiClient.post(`/matches/${matchId}/formation-changes`, { startMin, formation, reason });
-    // Optimistically update cache with the new formation
-    formationCache.set(matchId, formation);
-    return resp.data as any;
+    const prev = formationCache.get(matchId);
+    const notes = JSON.stringify({ reason: reason || null, formation, prevFormation: prev || null });
+
+    // Guest mode: enforce quota and record local event
+    if (!authApi.isAuthenticated()) {
+      const q = await canChangeFormation(matchId);
+      if (!q.ok) throw new Error(q.reason);
+      try {
+        const { db } = await import('../../db/indexedDB');
+        await db.addEvent({
+          kind: 'formation_change',
+          match_id: matchId,
+          minute: Math.max(0, Math.floor(startMin || 0)),
+          second: 0,
+          data: { notes },
+          created: Date.now(),
+          created_by_user_id: getGuestId(),
+        });
+      } catch (e) { /* ignore db errors */ }
+      formationCache.set(matchId, formation);
+      try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
+      return { success: true, data: { local: true } } as any;
+    }
+
+    // Authenticated path, with offline fallback
+    try {
+      const resp = await apiClient.post(`/matches/${matchId}/formation-changes`, { startMin, formation, reason });
+      formationCache.set(matchId, formation);
+      return resp.data as any;
+    } catch (e) {
+      // Offline fallback: record formation_change in outbox
+      try {
+        const { db } = await import('../../db/indexedDB');
+        await db.addEvent({
+          kind: 'formation_change',
+          match_id: matchId,
+          minute: Math.max(0, Math.floor(startMin || 0)),
+          second: 0,
+          data: { notes },
+          created: Date.now(),
+          created_by_user_id: 'offline',
+        });
+      } catch {}
+      formationCache.set(matchId, formation);
+      return { success: true, data: { local: true } } as any;
+    }
   }
 };
 

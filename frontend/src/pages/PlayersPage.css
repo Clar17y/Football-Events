@@ -541,3 +541,55 @@
 .search-container ion-searchbar {
   --padding-end: 48px;
 }
+/* Empty State Styles (match Seasons/Teams pages) */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--grassroots-space-2xl);
+  min-height: 400px;
+}
+
+.empty-icon {
+  font-size: 4rem;
+  color: var(--grassroots-text-tertiary);
+  margin-bottom: var(--grassroots-space-lg);
+  opacity: 0.6;
+}
+
+.empty-title {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--grassroots-text-primary);
+  margin: 0 0 var(--grassroots-space-sm) 0;
+}
+
+.empty-subtitle {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1rem;
+  color: var(--grassroots-text-secondary);
+  margin: 0 0 var(--grassroots-space-lg) 0;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.empty-action {
+  --border-radius: var(--grassroots-radius-md);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  max-width: 280px;
+}
+
+@media (max-width: 768px) {
+  .empty-state {
+    padding: var(--grassroots-space-xl) var(--grassroots-space-md);
+    min-height: 300px;
+  }
+  .empty-icon { font-size: 3rem; }
+  .empty-title { font-size: 1.25rem; }
+}

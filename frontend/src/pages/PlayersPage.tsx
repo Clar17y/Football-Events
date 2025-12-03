@@ -41,6 +41,7 @@ import {
   flash
 } from 'ionicons/icons';
 import PageHeader from '../components/PageHeader';
+import GuestBanner from '../components/GuestBanner';
 import CreatePlayerModal from '../components/CreatePlayerModal';
 import TeamSelectionModal from '../components/TeamSelectionModal';
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu';
@@ -574,6 +575,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
       <PageHeader onNavigate={navigate} />
       
       <IonContent ref={contentRef}>
+        <GuestBanner teamId={selectedTeamFilter || undefined} />
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
           <IonRefresherContent
             pullingIcon={refresh}
@@ -670,11 +672,13 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
               </p>
               {!searchText && !selectedTeamFilter && (
                 <IonButton 
-                  color="indigo" 
+                  expand="block"
+                  color="indigo"
+                  className="empty-action"
                   onClick={handleCreatePlayer}
                 >
                   <IonIcon icon={add} slot="start" />
-                  Add First Player
+                  Create Your First Player
                 </IonButton>
               )}
             </div>

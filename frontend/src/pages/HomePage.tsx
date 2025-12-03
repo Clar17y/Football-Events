@@ -32,6 +32,9 @@ import ThemeToggle from '../components/ThemeToggle';
 import { useGlobalStats } from '../hooks/useGlobalStats';
 import { useAuth } from '../contexts/AuthContext';
 import UserProfile from '../components/UserProfile';
+import ImportGuestDataButton from '../components/ImportGuestDataButton';
+import GuestBanner from '../components/GuestBanner';
+import { useToast } from '../contexts/ToastContext';
 import './HomePage.css';
 import { teamsApi } from '../services/api/teamsApi';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -44,6 +47,8 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import dayjs, { Dayjs } from 'dayjs';
 import { matchesApi, type QuickStartPayload } from '../services/api/matchesApi';
+import { createLocalQuickMatch } from '../services/guestQuickMatch';
+import { canCreateMatch } from '../utils/guestQuota';
 import CreateTeamModal from '../components/CreateTeamModal';
 import RecentActivity from '../components/RecentActivity';
 import type { Team } from '@shared/types';
@@ -54,6 +59,7 @@ interface HomePageProps {
 
 const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const { user } = useAuth();
+  const { showInfo } = useToast();
   const { stats, loading, error, fromCache } = useGlobalStats();
 
   // Quick Start state
@@ -66,7 +72,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
     delay: 250,
     minLength: 2,
     onSearch: async (term: string) => {
-      if (!user || !term) { setOpponentOptions([]); return; }
+      if (!term) { setOpponentOptions([]); return; }
       try {
         const list = await teamsApi.getOpponentTeams(term.trim());
         setOpponentOptions(list.map(t => t.name));
@@ -113,7 +119,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         setTeamsLoading(false);
       }
     };
-    if (user) load();
+    load();
   }, [user]);
 
   const navigate = (page: string) => {
@@ -223,7 +229,8 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               <span>MatchMaster</span>
             </div>
           </IonTitle>
-          <IonButtons slot="end">
+          <IonButtons slot="end" style={{ gap: 8 }}>
+            <ImportGuestDataButton />
             <ThemeToggle />
             <UserProfile />
           </IonButtons>
@@ -231,6 +238,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       </IonHeader>
       
       <IonContent className="home-content">
+        <GuestBanner />
         {/* Hero Section */}
         <div className="hero-section">
           <div className="hero-content">
@@ -294,7 +302,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         {/* Navigation Grid */}
         <div className="navigation-section">
           <IonGrid className="navigation-grid">
-            {user && (
+            {(
               <IonRow style={{ justifyContent: 'center', marginBottom: '0.5rem' }}>
                 <IonCol size="12" sizeMd="6" sizeLg="4">
                   <div className="nav-card-wrapper">
@@ -440,18 +448,37 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                               onClick={async () => {
                                 try {
                                   setSubmitting(true);
-                                  const payload: QuickStartPayload = {
-                                    myTeamId,
-                                    opponentName: opponentText.trim(),
-                                    isHome,
-                                    kickoffTime: (() => { const d = kickoffDate || dayjs(); const t = kickoffTime || dayjs(); const merged = d.hour(t.hour()).minute(t.minute()).second(0).millisecond(0); return merged.toDate().toISOString(); })(),
-                                    durationMinutes,
-                                    periodFormat
-                                  };
-                                  const match = await matchesApi.quickStart(payload);
-                                  const id = (match as any).id || (match as any).match_id;
-                                  if (id) {
-                                    onNavigate?.(`/live/${id}`);
+                                  if (!user) {
+                                    // Guest: create local quick match
+                                    const allowed = await canCreateMatch();
+                                    if (!allowed.ok) {
+                                      showInfo?.(allowed.reason || 'Guest limit reached: 1 match');
+                                      return;
+                                    }
+                                    const payload: QuickStartPayload = {
+                                      myTeamId,
+                                      opponentName: opponentText.trim(),
+                                      isHome,
+                                      kickoffTime: (() => { const d = kickoffDate || dayjs(); const t = kickoffTime || dayjs(); const merged = d.hour(t.hour()).minute(t.minute()).second(0).millisecond(0); return merged.toDate().toISOString(); })(),
+                                      durationMinutes,
+                                      periodFormat
+                                    };
+                                    const local = await createLocalQuickMatch(payload as any);
+                                    if (local?.id) onNavigate?.(`/live/${local.id}`);
+                                  } else {
+                                    const payload: QuickStartPayload = {
+                                      myTeamId,
+                                      opponentName: opponentText.trim(),
+                                      isHome,
+                                      kickoffTime: (() => { const d = kickoffDate || dayjs(); const t = kickoffTime || dayjs(); const merged = d.hour(t.hour()).minute(t.minute()).second(0).millisecond(0); return merged.toDate().toISOString(); })(),
+                                      durationMinutes,
+                                      periodFormat
+                                    };
+                                    const match = await matchesApi.quickStart(payload);
+                                    const id = (match as any).id || (match as any).match_id;
+                                    if (id) {
+                                      onNavigate?.(`/live/${id}`);
+                                    }
                                   }
                                 } catch (err) {
                                   console.error('Quick start failed', err);
@@ -498,8 +525,9 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                         // Convert route to page name
                         const pageName = card.route.replace('/', '');
                         
-                        // Check if route requires authentication
-                        const protectedRoutes = ['seasons', 'teams', 'players', 'matches', 'awards', 'lineup-management'];
+                        // Check if route requires authentication (align with AppRoutes)
+                        // Only 'awards' and 'statistics' require auth; others are guest-accessible
+                        const protectedRoutes = ['awards', 'statistics'];
                         if (protectedRoutes.includes(pageName) && !user) {
                           // Redirect to login for protected routes
                           navigate('login');
@@ -526,7 +554,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                             <IonLabel>Coming Soon</IonLabel>
                           </IonChip>
                         )}
-                        {!user && ['Seasons', 'Teams', 'Players', 'Matches', 'Awards', 'Lineup Management'].includes(card.title) && (
+                        {!user && ['Awards', 'Statistics'].includes(card.title) && (
                           <IonChip color="primary" className="login-required-chip">
                             <IonLabel>Sign In Required</IonLabel>
                           </IonChip>

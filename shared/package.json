@@ -6,11 +6,16 @@
   "main": "index.ts",
   "scripts": {
     "build": "tsc",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "typescript": "^5.3.3",
-    "rimraf": "^5.0.5"
+    "rimraf": "^5.0.5",
+    "vitest": "^1.2.0",
+    "@vitest/coverage-v8": "^1.2.0"
   },
   "dependencies": {
     "zod": "^3.22.4"

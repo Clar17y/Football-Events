@@ -246,6 +246,7 @@ export class MatchPeriodsService {
       });
 
       // Persist the cumulative total on match_state for fast reads
+      // Also set status to PAUSED since no period is now active
       const completed = await this.prisma.match_periods.findMany({
         where: { match_id: matchId, ended_at: { not: null }, is_deleted: false },
         select: { duration_seconds: true }
@@ -253,20 +254,30 @@ export class MatchPeriodsService {
       const sum = completed.reduce((acc, p) => acc + (p.duration_seconds || 0), 0);
       await this.prisma.match_state.updateMany({
         where: { match_id: matchId, is_deleted: false },
-        data: { total_elapsed_seconds: sum, updated_at: new Date() }
+        data: {
+          total_elapsed_seconds: sum,
+          status: 'PAUSED',  // No active period, so pause the match
+          updated_at: new Date()
+        }
       });
 
       const transformed = transformMatchPeriod(updatedPeriod);
-      // Broadcast SSE
+      // Broadcast SSE with updated status and total elapsed time
       try {
         const { sseHub } = await import('../utils/sse');
-        sseHub.broadcast(matchId, 'period_ended', { period: {
-          id: transformed.id,
-          periodNumber: transformed.periodNumber,
-          periodType: transformed.periodType,
-          endedAt: transformed.endedAt,
-          durationSeconds: transformed.durationSeconds,
-        }});
+        sseHub.broadcast(matchId, 'period_ended', {
+          period: {
+            id: transformed.id,
+            periodNumber: transformed.periodNumber,
+            periodType: transformed.periodType,
+            endedAt: transformed.endedAt,
+            durationSeconds: transformed.durationSeconds,
+          },
+          matchState: {
+            status: 'PAUSED',
+            totalElapsedSeconds: sum,
+          }
+        });
       } catch {}
       return transformed;
     }, 'MatchPeriod');

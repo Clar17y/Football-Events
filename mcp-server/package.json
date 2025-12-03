@@ -1,10 +1,28 @@
 {
-  "name": "mcp-server",
-  "version": "1.0.0",
+  "name": "grassroots-dev-server",
+  "version": "3.0.0",
+  "description": "MCP server for managing development servers in the Grassroots PWA project",
   "type": "module",
   "main": "server.js",
+  "bin": {
+    "grassroots-dev-server": "./server.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "inspect": "npx @modelcontextprotocol/inspector node server.js"
+  },
   "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.19.2"
-  }
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.25.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "dev-server",
+    "process-management"
+  ]
 }

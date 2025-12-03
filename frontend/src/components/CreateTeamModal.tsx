@@ -33,6 +33,8 @@ import {
   shirt
 } from 'ionicons/icons';
 import { useTeams } from '../hooks/useTeams';
+import { authApi } from '../services/api/authApi';
+import { canCreateTeam } from '../utils/guestQuota';
 import ColorPickerModal from './ColorPickerModal';
 import type { Team, TeamCreateRequest } from '@shared/types';
 import styles from './FormSection.module.css';
@@ -175,6 +177,15 @@ const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
 
     if (!validateForm()) {
       return;
+    }
+
+    // Guest quota check for new teams
+    if (mode === 'create' && !authApi.isAuthenticated()) {
+      const quota = await canCreateTeam();
+      if (!quota.ok) {
+        setErrors(prev => ({ ...prev, name: quota.reason }));
+        return;
+      }
     }
 
     const teamData = {

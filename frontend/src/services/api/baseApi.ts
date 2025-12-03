@@ -135,10 +135,14 @@ export class ApiClient {
         // Token expired or invalid - clear it
         this.setToken(null);
         apiError.message = 'Authentication required. Please log in again.';
+        // Only show session-expired toast if user has a refresh token (i.e., was actually logged in)
         try {
+          const hasRefresh = (() => { try { return !!localStorage.getItem('refresh_token'); } catch { return false; } })();
           window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-          const toast = (window as any).__toastApi?.current;
-          toast?.showError?.('Your session expired. Please sign in again.');
+          if (hasRefresh) {
+            const toast = (window as any).__toastApi?.current;
+            toast?.showError?.('Your session expired. Please sign in again.');
+          }
         } catch {}
       }
 
@@ -231,13 +235,9 @@ export class ApiClient {
         })();
 
         if (!hasRefresh) {
-          // No refresh token available, clear and notify
+          // No refresh token available, clear and return original error silently for guests
           this.setToken(null);
-          try {
-            window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-            const toast = (window as any).__toastApi?.current;
-            toast?.showError?.('Your session expired. Please sign in again.');
-          } catch {}
+          try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
           return await this.handleResponse<T>(originalResponse);
         }
 
@@ -253,11 +253,7 @@ export class ApiClient {
           // Refresh failed
           this.setToken(null);
           try { localStorage.removeItem('refresh_token'); } catch {}
-          try {
-            window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-            const toast = (window as any).__toastApi?.current;
-            toast?.showError?.('Your session expired. Please sign in again.');
-          } catch {}
+          try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
           // Return original error
           return await this.handleResponse<T>(originalResponse);
         }
@@ -286,11 +282,7 @@ export class ApiClient {
         // Any error during refresh -> clear and propagate
         this.setToken(null);
         try { localStorage.removeItem('refresh_token'); } catch {}
-        try {
-          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-          const toast = (window as any).__toastApi?.current;
-          toast?.showError?.('Your session expired. Please sign in again.');
-        } catch {}
+        try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
         // Fallback to original error handling
         return await this.handleResponse<T>(originalResponse);
       }
