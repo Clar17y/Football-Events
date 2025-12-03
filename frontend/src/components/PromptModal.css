@@ -1,0 +1,118 @@
+/* PromptModal.css - Shared styles for centered prompt modals */
+
+/* Make the modal appear as a centered card */
+.prompt-modal {
+  --width: 90%;
+  --max-width: 500px;
+  --height: auto;
+  --max-height: 90%;
+  --border-radius: 16px;
+  --box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.prompt-modal::part(content) {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.prompt-container {
+  background: var(--ion-background-color, #fff);
+}
+
+.prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 8px 16px 20px;
+  background: var(--ion-color-primary, #3880ff);
+  color: white;
+}
+
+.prompt-title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.prompt-close {
+  --color: white;
+  margin: 0;
+}
+
+.prompt-content {
+  padding: 20px;
+}
+
+.prompt-message {
+  margin: 0 0 24px 0;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.prompt-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Progress indicator */
+.prompt-progress {
+  margin-bottom: 16px;
+}
+
+.prompt-progress-text {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  color: var(--grassroots-text-secondary);
+}
+
+/* Success/Info messages */
+.prompt-info {
+  display: block;
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--grassroots-surface-variant);
+}
+
+.prompt-success {
+  display: block;
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--ion-color-success);
+}
+
+/* Dark Theme Support */
+.dark-theme .prompt-modal {
+  --box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.dark-theme .prompt-container {
+  background: var(--grassroots-surface);
+}
+
+.dark-theme .prompt-header {
+  background: var(--ion-color-primary);
+}
+
+.dark-theme .prompt-title {
+  color: white;
+}
+
+.dark-theme .prompt-message,
+.dark-theme .prompt-progress-text {
+  color: var(--grassroots-text-secondary);
+}
+
+.dark-theme .prompt-info {
+  background: var(--grassroots-surface-variant);
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .prompt-success {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--ion-color-success-tint);
+}

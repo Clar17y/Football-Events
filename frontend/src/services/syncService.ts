@@ -33,18 +33,39 @@ class SyncService {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     // Only attempt sync when authenticated; guests keep data local
     if (!apiClient.isAuthenticated()) return;
+
     // If guest data exists locally, pause automatic sync to avoid 400/403s until import completes
     try {
       const { hasGuestData } = await import('../services/importService');
       const needsImport = await hasGuestData();
       if (needsImport) {
+        console.warn('[SyncService] Guest data detected - pausing sync until import completes');
         try {
           (window as any).__toastApi?.current?.showInfo?.('Local guest data detected — import it to sync.');
           window.dispatchEvent(new CustomEvent('import:needed'));
         } catch {}
         return;
       }
-    } catch {}
+    } catch (err) {
+      console.error('[SyncService] Error checking for guest data:', err);
+    }
+
+    // Additional check: if outbox has items from guest user, pause sync
+    try {
+      const { getGuestId } = await import('../utils/guest');
+      const guestId = getGuestId();
+      const batch = await getUnsyncedItems(1);
+      if (batch.length > 0 && batch[0].created_by_user_id === guestId) {
+        console.warn('[SyncService] Outbox contains guest items - pausing sync');
+        try {
+          (window as any).__toastApi?.current?.showInfo?.('Please import your guest data before syncing.');
+          window.dispatchEvent(new CustomEvent('import:needed'));
+        } catch {}
+        return;
+      }
+    } catch (err) {
+      console.error('[SyncService] Error checking outbox for guest items:', err);
+    }
     this.running = true;
     try {
       const batch = await getUnsyncedItems(50);

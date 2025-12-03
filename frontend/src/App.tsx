@@ -39,13 +39,48 @@ const AppRoutes: React.FC = () => {
   useEffect(() => {
     // Start background sync service
     try { syncService.start(); } catch {}
+
     // Show import prompt after login if guest data exists
     const onLoggedIn = async () => {
       try {
-        if (await hasGuestData()) setShowImportPrompt(true);
-      } catch {}
+        console.log('[App] auth:loggedin event received, checking for guest data');
+        if (await hasGuestData()) {
+          console.log('[App] Guest data found, showing import prompt');
+          setShowImportPrompt(true);
+        } else {
+          console.log('[App] No guest data found');
+        }
+      } catch (err) {
+        console.error('[App] Error checking guest data:', err);
+      }
     };
+
+    // Also show import prompt when sync service detects import is needed
+    const onImportNeeded = () => {
+      console.log('[App] import:needed event received, showing import prompt');
+      setShowImportPrompt(true);
+    };
+
+    // Clear outbox and resume sync after import completes
+    const onImportCompleted = async () => {
+      console.log('[App] import:completed event received');
+      try {
+        const { db } = await import('./db/indexedDB');
+        const { getGuestId } = await import('./utils/guest');
+        const guestId = getGuestId();
+        // Ensure outbox is cleared of guest items
+        await db.outbox.where('created_by_user_id').equals(guestId).delete();
+        console.log('[App] Guest outbox items cleared');
+        // Trigger a sync attempt
+        syncService.flushOnce().catch(() => {});
+      } catch (err) {
+        console.error('[App] Error clearing outbox after import:', err);
+      }
+    };
+
     window.addEventListener('auth:loggedin', onLoggedIn as EventListener);
+    window.addEventListener('import:needed', onImportNeeded as EventListener);
+    window.addEventListener('import:completed', onImportCompleted as EventListener);
     const applyLocation = () => {
       const { pathname } = window.location;
       // Normalize pathname without trailing slash
@@ -72,6 +107,8 @@ const AppRoutes: React.FC = () => {
     return () => {
       window.removeEventListener('popstate', onPop);
       window.removeEventListener('auth:loggedin', onLoggedIn as EventListener);
+      window.removeEventListener('import:needed', onImportNeeded as EventListener);
+      window.removeEventListener('import:completed', onImportCompleted as EventListener);
     };
   }, []);
 

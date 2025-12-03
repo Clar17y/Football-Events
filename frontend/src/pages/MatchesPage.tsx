@@ -460,6 +460,10 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
 
     // Clear any existing errors since we successfully created a match
     setError(null);
+
+    // Refresh match states to update upcoming/completed/live sections
+    // Use loadMatches(false) to avoid showing loading spinner during refresh
+    loadMatches(false);
   };
 
   const handleMatchUpdated = (updatedMatch: Match) => {

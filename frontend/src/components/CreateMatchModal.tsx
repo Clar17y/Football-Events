@@ -130,8 +130,10 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
     }
   });
 
-  const defaultKickoffIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString();
-  const defaultMiddayTime = dayjs().hour(12).minute(0).second(0).millisecond(0);
+  // Default to 1 hour from now to ensure match appears in "upcoming"
+  const defaultKickoffDateTime = dayjs().add(1, 'hour').minute(0).second(0).millisecond(0);
+  const defaultKickoffIso = defaultKickoffDateTime.toDate().toISOString();
+  const defaultMiddayTime = defaultKickoffDateTime;
   const [formData, setFormData] = useState<FormData>({
     myTeamId: '',
     opponentName: '',

@@ -60,16 +60,34 @@ const minuteLabel = (ev: any, durationMinutes?: number, periodFormat?: string): 
   const regCount = fmt.includes('half') ? 2 : fmt.includes('quarter') ? 4 : 1;
   const regPerMs = Math.round((dur * 60000) / regCount);
   let base = 0;
+  let periodDurationMs = regPerMs; // Duration of current period for stoppage calc
+
   if (ev?.periodType === 'REGULAR') {
     base = (Math.max(1, Number(ev.periodNumber || 1)) - 1) * regPerMs;
+    periodDurationMs = regPerMs;
   } else if (ev?.periodType === 'EXTRA_TIME') {
     const etPerMs = 15 * 60000; // default per ET period
     base = (dur * 60000) + (Math.max(1, Number(ev.periodNumber || 1)) - 1) * etPerMs;
+    periodDurationMs = etPerMs;
   } else if (ev?.periodType === 'PENALTY_SHOOTOUT') {
     base = (dur * 60000) + 2 * 15 * 60000; // regulation + ET1+ET2 (approx)
+    periodDurationMs = 0; // No stoppage time in penalty shootout
   }
+
   const totalMs = base + (ev.clockMs || 0);
   const mm = Math.floor(totalMs / 60000);
+
+  // Calculate expected end of current period for stoppage time
+  const expectedEndMs = base + periodDurationMs;
+
+  // If event occurred in stoppage/injury time, show as "45'+2'" format
+  if (totalMs > expectedEndMs && periodDurationMs > 0) {
+    const regularMinutes = Math.floor(expectedEndMs / 60000);
+    const stoppageMs = totalMs - expectedEndMs;
+    const stoppageMinutes = Math.floor(stoppageMs / 60000);
+    return `${regularMinutes}'+${stoppageMinutes}'`;
+  }
+
   return `${mm}'`;
 };
 

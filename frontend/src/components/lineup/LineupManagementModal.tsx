@@ -11,11 +11,12 @@ type Props = {
   matchId: string;
   selectedTeamId: string;
   currentMinute?: number;
+  onFormationChanged?: () => void;
 };
 
 const REASONS = ['Starting Lineup Adjustment', 'Playtime rotation', 'Injury', 'Formation Change', 'Power play', 'Power play x2'];
 
-const LineupManagementModal: React.FC<Props> = ({ isOpen, onClose, matchId, selectedTeamId, currentMinute = 0 }) => {
+const LineupManagementModal: React.FC<Props> = ({ isOpen, onClose, matchId, selectedTeamId, currentMinute = 0, onFormationChanged }) => {
   const [loading, setLoading] = useState(false);
   const [roster, setRoster] = useState<PlayerWithPosition[]>([]);
   const [formation, setFormation] = useState<FormationData>({ players: [] });
@@ -110,6 +111,12 @@ const LineupManagementModal: React.FC<Props> = ({ isOpen, onClose, matchId, sele
       await formationsApi.applyChange(matchId, currentMinute || 0, dto, reason);
       formationsApi.setCached(matchId, dto);
       try { (window as any).__toastApi?.current?.showSuccess?.('Formation updated'); } catch {}
+
+      // Notify parent to reload events/timeline
+      if (onFormationChanged) {
+        onFormationChanged();
+      }
+
       onClose();
     } catch (e: any) {
       console.error('Apply formation failed', e);

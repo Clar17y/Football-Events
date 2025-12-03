@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { IonModal, IonContent, IonHeader, IonToolbar, IonTitle, IonButton, IonText, IonProgressBar, IonButtons } from '@ionic/react';
+import {
+  IonModal,
+  IonButton,
+  IonIcon,
+  IonText,
+  IonProgressBar
+} from '@ionic/react';
+import { close, cloudUpload, checkmarkCircle } from 'ionicons/icons';
 import { getGuestDataSummary, runImport } from '../services/importService';
+import './PromptModal.css';
 
 interface ImportPromptModalProps {
   isOpen: boolean;
@@ -36,38 +44,70 @@ const ImportPromptModal: React.FC<ImportPromptModalProps> = ({ isOpen, onClose }
     }
   };
 
+  const hasData = summary && (summary.seasons + summary.teams + summary.players + summary.matches + summary.events) > 0;
+
   return (
-    <IonModal isOpen={isOpen} onDidDismiss={onClose} initialBreakpoint={0.5} breakpoints={[0, 0.5, 0.75]}>
-      <IonHeader>
-        <IonToolbar>
-          <IonTitle>Import your guest data</IonTitle>
-          <IonButtons slot="end">
-            <IonButton onClick={onClose}>Close</IonButton>
-          </IonButtons>
-        </IonToolbar>
-      </IonHeader>
-      <IonContent className="ion-padding">
-        {summary && (
-          <IonText color="medium" style={{ display: 'block', marginBottom: 16 }}>
-            <p>Found: {summary.seasons} seasons, {summary.teams} teams, {summary.players} players, {summary.matches} matches, {summary.events} events</p>
-          </IonText>
-        )}
-        {running && (
-          <div style={{ marginBottom: 16 }}>
-            <IonText>{progress?.step || 'Importing…'}</IonText>
-            <IonProgressBar type="indeterminate" style={{ marginTop: 8 }} />
-          </div>
-        )}
-        {done && (
-          <IonText color="success" style={{ display: 'block', marginBottom: 16 }}>
-            <p>Import complete. Your data is now linked to your account.</p>
-          </IonText>
-        )}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <IonButton fill="outline" onClick={onClose}>Close</IonButton>
-          <IonButton onClick={start} disabled={running || done || !summary || (summary.seasons+summary.teams+summary.players+summary.matches+summary.events)===0}>Import now</IonButton>
+    <IonModal
+      isOpen={isOpen}
+      onDidDismiss={onClose}
+      className="prompt-modal"
+    >
+      <div className="prompt-container">
+        <div className="prompt-header">
+          <h2 className="prompt-title">Import Your Guest Data</h2>
+          <IonButton
+            fill="clear"
+            onClick={onClose}
+            className="prompt-close"
+          >
+            <IonIcon icon={close} />
+          </IonButton>
         </div>
-      </IonContent>
+
+        <div className="prompt-content">
+          {summary && hasData && (
+            <IonText color="medium">
+              <p className="prompt-message">
+                Found: {summary.seasons} seasons, {summary.teams} teams, {summary.players} players, {summary.matches} matches, {summary.events} events
+              </p>
+            </IonText>
+          )}
+
+          {running && (
+            <div className="prompt-progress">
+              <IonText className="prompt-progress-text">
+                {progress?.step || 'Importing…'}
+              </IonText>
+              <IonProgressBar type="indeterminate" />
+            </div>
+          )}
+
+          {done && (
+            <IonText className="prompt-success">
+              <IonIcon icon={checkmarkCircle} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+              Import complete! Reloading page to refresh data...
+            </IonText>
+          )}
+
+          <div className="prompt-buttons">
+            <IonButton
+              expand="block"
+              onClick={start}
+              disabled={running || done || !hasData}
+            >
+              <IonIcon icon={cloudUpload} slot="start" />
+              Import Now
+            </IonButton>
+            <IonButton
+              expand="block"
+              fill="outline"
+              onClick={onClose}
+            >
+              {done ? 'Close' : 'Cancel'}
+            </IonButton>
+          </div>
+        </div>
+      </div>
     </IonModal>
   );
 };

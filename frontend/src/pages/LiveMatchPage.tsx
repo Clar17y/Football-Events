@@ -79,7 +79,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const timerRef = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
   const [viewerTeams, setViewerTeams] = useState<{ homeId?: string; awayId?: string; homeName?: string; awayName?: string } | null>(null);
-  const [viewerSummary, setViewerSummary] = useState<{ competition?: string | null; venue?: string | null } | null>(null);
+  const [viewerSummary, setViewerSummary] = useState<{ competition?: string | null; venue?: string | null; periodFormat?: string | null; durationMinutes?: number | null } | null>(null);
   const [activeShareCode, setActiveShareCode] = useState<string | null>(null);
   const [localMatches, setLocalMatches] = useState<Match[]>([]);
 
@@ -156,12 +156,43 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             setUpcoming([]);
           }
         } else {
-          const list = await matchesApi.getUpcoming(20);
+          // Load both upcoming AND recent matches (for today's matches)
+          const [upcomingList, recentList] = await Promise.all([
+            matchesApi.getUpcoming(20),
+            matchesApi.getRecent(10)
+          ]);
           if (cancelled) return;
-          setUpcoming(list || []);
-          // If no explicit matchId, select nearest upcoming
-          if (!selectedId && list && list.length > 0) {
-            setSelectedId(list[0].id);
+
+          // Combine and deduplicate by ID
+          const combined: Record<string, Match> = {};
+          [...(upcomingList || []), ...(recentList || [])].forEach(m => {
+            combined[m.id] = m;
+          });
+          const list = Object.values(combined).sort((a, b) =>
+            new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime()
+          );
+
+          setUpcoming(list);
+          // If no explicit matchId, prioritize non-COMPLETED matches
+          if (!selectedId && list.length > 0) {
+            try {
+              // Fetch match states to determine completion status
+              const matchIds = list.map(m => m.id);
+              const states = await matchesApi.getMatchStates(1, 100, matchIds);
+              const statesMap = new Map((states.data || []).map((s: any) => [s.matchId, s]));
+
+              // Find first match that isn't COMPLETED
+              const nonCompleted = list.find(m => {
+                const state = statesMap.get(m.id);
+                return state?.status !== 'COMPLETED';
+              });
+
+              // Use non-completed match if found, otherwise fall back to first match
+              setSelectedId(nonCompleted ? nonCompleted.id : list[0].id);
+            } catch {
+              // If fetching states fails, fall back to first match
+              setSelectedId(list[0].id);
+            }
           }
         }
       } catch (e: any) {
@@ -172,7 +203,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     };
     load();
     return () => { cancelled = true; };
-  }, [hydrateGuestState]);
+  }, [isAuthenticated, selectedId, hydrateGuestState]);
 
   // Re-hydrate guest state when selecting a local match from the list
   useEffect(() => {
@@ -279,7 +310,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               const s = data.summary as any;
               setPeriods(data.periods || []);
               setViewerTeams({ homeId: s.homeTeam?.id, awayId: s.awayTeam?.id, homeName: s.homeTeam?.name, awayName: s.awayTeam?.name });
-              setViewerSummary({ competition: s.competition, venue: s.venue, periodFormat: s.periodFormat });
+              setViewerSummary({ competition: s.competition, venue: s.venue, periodFormat: s.periodFormat, durationMinutes: s.durationMinutes });
               setMatchState({
                 id: 'viewer',
                 matchId: s.matchId,
@@ -339,20 +370,50 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           try { const d = JSON.parse(ev.data); setEventFeed(prev => prev.filter(i => i.id !== d.id)); } catch {}
         });
         es.addEventListener('period_started', (ev: MessageEvent) => {
-          try { 
-            const d = JSON.parse(ev.data); 
-            setPeriods(prev => [...prev, d.period]); 
-            setTimerMs(0);
+          try {
+            const d = JSON.parse(ev.data);
+            const newPeriodNum = d.period.periodNumber || 1;
+            setPeriods(prev => [...prev, d.period]);
+            // Start timer from expected period start time (not cumulative actual)
+            // Calculate expected start based on match duration and period format
+            const perMs = (() => {
+              const fmt = (currentMatch?.periodFormat || viewerSummary?.periodFormat || '').toLowerCase();
+              const total = (currentMatch?.durationMinutes || viewerSummary?.durationMinutes || 0) * 60_000;
+              if (d.period.periodType === 'EXTRA_TIME') return 15 * 60_000;
+              if (fmt.includes('half')) return total ? Math.round(total / 2) : 45 * 60_000;
+              if (fmt.includes('quarter')) return total ? Math.round(total / 4) : 12 * 60_000;
+              if (fmt.includes('whole')) return total || 90 * 60_000;
+              return total || 45 * 60_000;
+            })();
+            const expectedStartMs = perMs * (newPeriodNum - 1);
+            setTimerMs(expectedStartMs);
             startTicking();
             setEventFeed(prev => sortFeed([{ id: `ps-${d.period.id}`, kind: 'system', label: periodStartLabel(d.period), createdAt: new Date(), periodNumber: d.period.periodNumber }, ...prev]));
           } catch {}
         });
         es.addEventListener('period_ended', (ev: MessageEvent) => {
-          try { 
-            const d = JSON.parse(ev.data); 
-            setPeriods(prev => prev.map(p => p.id === d.period.id ? d.period : p)); 
+          try {
+            const d = JSON.parse(ev.data);
+            const endedPeriodNum = d.period.periodNumber || 1;
+            // Update periods with the ended period
+            setPeriods(prev => prev.map(p => p.id === d.period.id ? { ...p, ...d.period } : p));
+            // Show expected end time for this period (not cumulative actual)
+            const perMs = (() => {
+              const fmt = (currentMatch?.periodFormat || viewerSummary?.periodFormat || '').toLowerCase();
+              const total = (currentMatch?.durationMinutes || viewerSummary?.durationMinutes || 0) * 60_000;
+              if (d.period.periodType === 'EXTRA_TIME') return 15 * 60_000;
+              if (fmt.includes('half')) return total ? Math.round(total / 2) : 45 * 60_000;
+              if (fmt.includes('quarter')) return total ? Math.round(total / 4) : 12 * 60_000;
+              if (fmt.includes('whole')) return total || 90 * 60_000;
+              return total || 45 * 60_000;
+            })();
+            const expectedEndMs = perMs * endedPeriodNum;
+            setTimerMs(expectedEndMs);
+            // Update match state if provided (status changed to PAUSED)
+            if (d.matchState) {
+              setMatchState(prev => prev ? { ...prev, status: d.matchState.status, totalElapsedSeconds: d.matchState.totalElapsedSeconds } as any : prev);
+            }
             stopTicking();
-            setTimerMs(0);
             setEventFeed(prev => sortFeed([{ id: `pe-${d.period.id}`, kind: 'system', label: periodEndLabel(d.period), createdAt: new Date(), periodNumber: d.period.periodNumber }, ...prev]));
           } catch {}
         });
@@ -392,7 +453,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           createdAt: new Date(), is_deleted: false,
         } as any);
         setViewerTeams({ homeId: summary.homeTeam?.id, awayId: summary.awayTeam?.id, homeName: summary.homeTeam?.name, awayName: summary.awayTeam?.name });
-        setViewerSummary({ competition: summary.competition, venue: summary.venue, periodFormat: (summary as any).periodFormat });
+        setViewerSummary({ competition: summary.competition, venue: summary.venue, periodFormat: (summary as any).periodFormat, durationMinutes: (summary as any).durationMinutes });
       } catch {}
       openSSE();
     };
@@ -400,19 +461,28 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     return () => { cancelled = true; esRef.current?.close(); };
   }, [selectedId, viewerToken, viewerParam, viewerExpired]);
 
+  // Compute display time: expected period start + current period elapsed
+  // E.g., in Q3 of 50-min game: starts at 25:00 + time elapsed in Q3
+  // This ensures timer shows "match time" (like 45' in football) not actual elapsed
   const computeBaseMs = (state: MatchState | null, list: MatchPeriod[]): number => {
     if (!state) return 0;
-    const endedMs = list.reduce((acc, p) => acc + (p.endedAt && p.durationSeconds ? p.durationSeconds * 1000 : 0), 0);
-    let base = (state.totalElapsedSeconds || 0) * 1000 - endedMs;
-    if (base <= 0) {
-      const open = list.find(p => !p.endedAt && p.startedAt);
-      if (open && state.status === 'LIVE') {
-        base = Math.max(0, Date.now() - new Date(open.startedAt as any).getTime());
-      } else {
-        base = 0;
-      }
+    // Find open period (started but not ended)
+    const open = list.find(p => !p.endedAt && p.startedAt);
+    if (open && state.status === 'LIVE') {
+      // Expected start for this period (e.g., Q3 = 25:00)
+      const expectedStartMs = getExpectedPeriodStartMs(open.periodNumber);
+      // Time elapsed in current period
+      const openElapsedMs = Math.max(0, Date.now() - new Date(open.startedAt as any).getTime());
+      return expectedStartMs + openElapsedMs;
     }
-    return Math.max(0, base);
+    // No open period - show expected end of last completed period
+    const lastEnded = [...list].filter(p => p.endedAt).sort((a, b) => (b.periodNumber || 0) - (a.periodNumber || 0))[0];
+    if (lastEnded) {
+      // Show expected end time for that period (not actual)
+      const perMs = getPerPeriodMs();
+      return perMs * lastEnded.periodNumber;
+    }
+    return 0;
   };
 
   // Timer controls
@@ -576,9 +646,10 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     return 'Live';
   };
 
-  const getPerPeriodMs = (): number => {
-    const fmt = (currentMatch?.periodFormat || '').toLowerCase();
-    const total = (currentMatch?.durationMinutes || 0) * 60_000;
+  const getPerPeriodMs = (match?: typeof currentMatch): number => {
+    const m = match || currentMatch;
+    const fmt = (m?.periodFormat || '').toLowerCase();
+    const total = (m?.durationMinutes || 0) * 60_000;
     const open = currentOpenPeriod;
     const type = open?.periodType;
     // Heuristics: halves/quarters split evenly; whole = full; ET default 15m
@@ -589,10 +660,20 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     return total || 45 * 60_000;
   };
 
+  // Calculate expected start time for a period (e.g., Q3 starts at 25:00 in 50-min game)
+  const getExpectedPeriodStartMs = (periodNumber: number, match?: typeof currentMatch): number => {
+    const perMs = getPerPeriodMs(match);
+    return perMs * (periodNumber - 1);
+  };
+
   const getStoppageMmSs = (): string | null => {
     const perMs = getPerPeriodMs();
-    if (timerMs > perMs) {
-      const over = Math.max(0, timerMs - perMs);
+    const periodNum = currentOpenPeriod?.periodNumber || matchState?.currentPeriod || 1;
+    // Expected end time for current period = perMs * periodNumber
+    // e.g., Q3 of 50-min game: 12.5 * 3 = 37.5 minutes
+    const expectedEndMs = perMs * periodNum;
+    if (timerMs > expectedEndMs) {
+      const over = Math.max(0, timerMs - expectedEndMs);
       const mm = Math.floor(over / 60_000);
       const ss = Math.floor((over % 60_000) / 1000).toString().padStart(2, '0');
       return `+${mm}:${ss}`;
@@ -608,13 +689,16 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         // Guest: local kickoff
         const now = new Date();
         if (matchState?.status === 'PAUSED') {
-          // Start next regular period and resume
+          // Start next regular period - timer starts at expected time (e.g., Q2 = 12:30)
           const nextNum = (periods.filter(p => p.periodType === 'REGULAR').length) + 1;
           const p = { id: `local-p-${Date.now()}`, periodNumber: nextNum, periodType: 'REGULAR' as any, startedAt: now } as any;
-          setPeriods(prev => [...prev, p]);
+          const updatedPeriods = [...periods, p];
+          setPeriods(updatedPeriods);
           const st: any = { ...(matchState || {}), status: 'LIVE', currentPeriod: nextNum };
           setMatchState(st);
-          setTimerMs(0);
+          // Start from expected period start time (not cumulative actual)
+          const expectedStartMs = getExpectedPeriodStartMs(nextNum);
+          setTimerMs(expectedStartMs);
           startTicking();
           pushSystem(`Kick Off — Period ${nextNum}`, nextNum);
           try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: 'regular' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
@@ -725,11 +809,19 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         if (!isAuthenticated) {
           // Close local period
           const endedAt = new Date();
-          const updatedPeriods = periods.map(p => p.id === currentOpenPeriod.id ? ({ ...p, endedAt, durationSeconds: Math.max(1, Math.round((timerMs) / 1000)) } as any) : p);
+          const periodNum = currentOpenPeriod.periodNumber;
+          // Calculate this period's duration (timerMs = expectedStart + periodElapsed)
+          const expectedStartMs = getExpectedPeriodStartMs(periodNum);
+          const thisPeriodDurationMs = Math.max(1000, timerMs - expectedStartMs);
+          const updatedPeriods = periods.map(p => p.id === currentOpenPeriod.id ? ({ ...p, endedAt, durationSeconds: Math.round(thisPeriodDurationMs / 1000) } as any) : p);
           setPeriods(updatedPeriods);
-          setMatchState(prev => prev ? ({ ...prev, status: 'PAUSED', currentPeriod: currentOpenPeriod.periodNumber } as any) : { id: 'local-state', matchId: selectedId, status: 'PAUSED', currentPeriod: currentOpenPeriod.periodNumber, createdAt: new Date(), updatedAt: new Date() } as any);
+          // Compute total actual elapsed (for backend sync)
+          const totalActualMs = updatedPeriods.reduce((acc, p) => acc + (p.endedAt && p.durationSeconds ? p.durationSeconds * 1000 : 0), 0);
+          setMatchState(prev => prev ? ({ ...prev, status: 'PAUSED', currentPeriod: periodNum, totalElapsedSeconds: Math.round(totalActualMs / 1000) } as any) : { id: 'local-state', matchId: selectedId, status: 'PAUSED', currentPeriod: periodNum, totalElapsedSeconds: Math.round(totalActualMs / 1000), createdAt: new Date(), updatedAt: new Date() } as any);
           stopTicking();
-          setTimerMs(0);
+          // Show expected end time for this period (not cumulative actual)
+          const expectedEndMs = getPerPeriodMs() * periodNum;
+          setTimerMs(expectedEndMs);
         const fmt = (currentMatch?.periodFormat || '').toLowerCase();
         const n = currentOpenPeriod.periodNumber;
         let txt = 'End of Period';
@@ -738,14 +830,21 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         else if (currentOpenPeriod.periodType === 'EXTRA_TIME') txt = `End of ET${n}`;
         pushSystem(txt, n);
         try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'end_period' }); } catch {}
-        try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'PAUSED', periods: updatedPeriods, timerMs: 0, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
+        try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'PAUSED', periods: updatedPeriods, timerMs: expectedEndMs, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
         return;
       }
       await matchesApi.endPeriod(selectedId, currentOpenPeriod.id);
-      const p = await matchesApi.getMatchPeriods(selectedId);
+      // Fetch both updated periods AND match state
+      const [p, state] = await Promise.all([
+        matchesApi.getMatchPeriods(selectedId),
+        matchesApi.getMatchState(selectedId)
+      ]);
       setPeriods(p);
+      setMatchState(state);
       stopTicking();
-      setTimerMs(0);
+      // Don't reset to 0 - show cumulative time (frozen)
+      const cumulativeMs = computeBaseMs(state, p);
+      setTimerMs(cumulativeMs);
       const fmt = (currentMatch?.periodFormat || '').toLowerCase();
       const n = currentOpenPeriod.periodNumber;
       let txt = 'End of Period';
@@ -765,12 +864,15 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           const type = extraTime ? 'EXTRA_TIME' : 'REGULAR';
           const nextNum = (periods.filter(p => p.periodType === (extraTime ? 'EXTRA_TIME' : 'REGULAR')).length) + 1;
           const p = { id: `local-p-${Date.now()}`, periodNumber: nextNum, periodType: type as any, startedAt: now } as any;
-          setPeriods(prev => [...prev, p]);
+          const updatedPeriods = [...periods, p];
+          setPeriods(updatedPeriods);
           setMatchState(prev => prev ? ({ ...prev, status: 'LIVE', currentPeriod: nextNum } as any) : prev);
-          setTimerMs(0);
+          // Start from expected period start time (not cumulative actual)
+          const expectedStartMs = getExpectedPeriodStartMs(nextNum);
+          setTimerMs(expectedStartMs);
           startTicking();
           pushSystem(extraTime ? `Extra Time Kick Off — ET${nextNum}` : `Kick Off — Period ${nextNum}`, nextNum);
-          try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'LIVE', periods: [...periods, p], timerMs: 0, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
+          try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'LIVE', periods: updatedPeriods, timerMs: expectedStartMs, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
           try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: extraTime ? 'extra_time' : 'regular' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
           return;
         }
@@ -778,9 +880,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       await matchesApi.startPeriod(selectedId, periodType as any);
       const p = await matchesApi.getMatchPeriods(selectedId);
       setPeriods(p);
-      setTimerMs(0);
       const st = await matchesApi.resumeMatch(selectedId);
       setMatchState(st);
+      // Continue from cumulative time
+      const base = computeBaseMs(st, p);
+      setTimerMs(base);
       startTicking();
       pushSystem(extraTime ? `Extra Time Kick Off — ET${(p.filter(pp=>pp.periodType==='EXTRA_TIME').length)}` : `Kick Off — Period ${(p.filter(pp=>pp.periodType==='REGULAR').length)}`, st.currentPeriod || undefined);
     } catch (e) {
@@ -1101,11 +1205,12 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     );
   };
 
-  // Load/refresh timeline
-  useEffect(() => {
-    const run = async () => {
-      if (!selectedId) return;
-      try {
+  // Load/refresh timeline (skip for viewers - they get events via SSE)
+  const loadEvents = useCallback(async () => {
+    if (!selectedId) return;
+    // Viewers get events from SSE snapshot - don't overwrite with empty data
+    if (viewerToken) return;
+    try {
       if (!isAuthenticated) {
           const { db } = await import('../db/indexedDB');
           const res = await db.getMatchEvents(selectedId);
@@ -1171,9 +1276,12 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       } catch (e) {
         console.warn('Failed to load events', e);
       }
-    };
-    run();
-  }, [isAuthenticated, selectedId, periods]);
+  }, [isAuthenticated, selectedId, viewerToken, currentMatch, periods]);
+
+  // UseEffect to load events when dependencies change
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents, periods]);
 
   // Prefetch current formation for selected match to make Team Changes modal instant
   useEffect(() => {
@@ -1235,7 +1343,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             </IonCard>
           </div>
         )}
-        <GuestBanner matchId={selectedId} />
+        {!viewerToken && <GuestBanner matchId={selectedId} />}
         <IonGrid fixed>
           <IonRow>
             <IonCol size="12">
@@ -1578,12 +1686,13 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         </div>
       </IonContent>
       {/* Lineup Management Modal */}
-      <LineupManagementModal 
+      <LineupManagementModal
         isOpen={showLineupModal}
         onClose={() => setShowLineupModal(false)}
         matchId={selectedId || ''}
         selectedTeamId={selectedTeam === 'home' ? currentMatch?.homeTeamId || '' : currentMatch?.awayTeamId || ''}
         currentMinute={Number((((timerMs || 0) / 60000)).toFixed(2))}
+        onFormationChanged={loadEvents}
       />
     </IonPage>
   );
