@@ -75,52 +75,51 @@
     - **Property 6: Guest Data Sync Exclusion**
     - **Validates: Requirements 2.6**
   - [x] 4.7 Remove outbox-based sync code
-
     - Remove outbox processing from flushOnce()
     - Keep outbox table for migration period
     - _Requirements: 5.2_
 
-- [ ] 5. Checkpoint - Verify Sync Flow
+- [x] 5. Checkpoint - Verify Sync Flow
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Cache Service Implementation (Milestone 6)
-  - [ ] 6.1 Create cacheService.ts with core functions
+- [x] 6. Cache Service Implementation (Milestone 6)
+  - [x] 6.1 Create cacheService.ts with core functions
     - Create `frontend/src/services/cacheService.ts`
     - Implement `refreshCache()` main entry point
     - Define THIRTY_DAYS_MS constant
     - _Requirements: 3.4, 3.5_
-  - [ ] 6.2 Implement reference data refresh
+  - [x] 6.2 Implement reference data refresh
     - Implement `refreshReferenceData()` function
     - Fetch teams, players, seasons from server
     - Replace synced records, preserve unsynced records
     - _Requirements: 3.3, 6.3, 6.4_
-  - [ ]* 6.3 Write property test for reference data retention
+  - [x] 6.3 Write property test for reference data retention
     - **Property 9: Reference Data Retention**
     - **Validates: Requirements 3.3**
-  - [ ]* 6.4 Write property test for refresh preserves unsynced
+  - [x] 6.4 Write property test for refresh preserves unsynced
     - **Property 14: Refresh Preserves Unsynced Records**
     - **Validates: Requirements 6.3, 6.4**
-  - [ ] 6.5 Implement temporal data cleanup
+  - [x] 6.5 Implement temporal data cleanup
     - Implement `cleanupOldTemporalData()` function
     - Delete synced temporal data older than 30 days
     - Preserve all unsynced records regardless of age
     - _Requirements: 3.1, 3.2_
-  - [ ]* 6.6 Write property test for temporal data cleanup
+  - [x] 6.6 Write property test for temporal data cleanup
     - **Property 7: Temporal Data Cleanup Age Threshold**
     - **Validates: Requirements 3.1**
-  - [ ]* 6.7 Write property test for unsynced data preservation
+  - [x] 6.7 Write property test for unsynced data preservation
     - **Property 8: Unsynced Data Preservation**
     - **Validates: Requirements 3.2**
-  - [ ] 6.8 Implement recent matches caching
+  - [x] 6.8 Implement recent matches caching
     - Implement `cacheRecentMatches()` function
     - Fetch matches from last 30 days
     - Add to local cache with synced: true
     - _Requirements: 3.4_
-  - [ ] 6.9 Integrate cache service into app lifecycle
+  - [x] 6.9 Integrate cache service into app lifecycle
     - Call `refreshCache()` on app load when online and authenticated
     - Trigger cache refresh when coming back online
     - _Requirements: 3.4, 3.5_
-  - [ ]* 6.10 Write property test for offline reference data access
+  - [x] 6.10 Write property test for offline reference data access
     - **Property 13: Offline Reference Data Access**
     - **Validates: Requirements 6.1, 6.2**
 
