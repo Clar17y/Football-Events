@@ -1,12 +1,285 @@
-import { getUnsyncedItems, markAsSynced, markSyncFailed } from '../db/utils';
 import { apiClient } from './api/baseApi';
-import teamsApi from './api/teamsApi';
-import playersApi from './api/playersApi';
 import eventsApi from './api/eventsApi';
 import { matchesApi } from './api/matchesApi';
-import { seasonsApi } from './api/seasonsApi';
-import { defaultLineupsApi } from './api/defaultLineupsApi';
+import { isGuestId } from './importService';
+import { db } from '../db/indexedDB';
 
+/**
+ * Sync result interface for tracking sync progress and errors
+ */
+export interface SyncResult {
+  synced: number;
+  failed: number;
+  errors: SyncError[];
+}
+
+export interface SyncError {
+  table: string;
+  recordId: string;
+  error: string;
+}
+
+/**
+ * Batch size for sync operations
+ * Requirements: 2.6 - Batch operations (50 records per batch)
+ */
+const BATCH_SIZE = 50;
+
+/**
+ * Sync events from the events table to the server.
+ * 
+ * Requirements: 2.1 - Process unsynced events from the events table where synced equals false
+ * Requirements: 2.4 - Update synced to true and set synced_at on success
+ * Requirements: 2.6 - Exclude records where created_by_user_id starts with 'guest-'
+ */
+async function syncEvents(): Promise<SyncResult> {
+  const result: SyncResult = { synced: 0, failed: 0, errors: [] };
+
+  try {
+    // Check if table exists and is accessible
+    if (!db.events) {
+      return result;
+    }
+
+    // Query all events and filter in JavaScript to avoid IndexedDB boolean indexing issues
+    // IndexedDB indexes don't work well with boolean values
+    let allEvents;
+    try {
+      allEvents = await db.events.toArray();
+    } catch (dbErr) {
+      // Table might not be ready yet, skip this sync cycle
+      console.debug('[SyncService] Events table not ready:', dbErr);
+      return result;
+    }
+    
+    // Filter for unsynced, non-guest records (Requirements: 2.6)
+    const eventsToSync = allEvents
+      .filter(e => e.synced === false && !isGuestId(e.created_by_user_id))
+      .slice(0, BATCH_SIZE);
+
+    for (const event of eventsToSync) {
+      try {
+        // POST to events API endpoint
+        await eventsApi.create({
+          matchId: event.match_id,
+          kind: event.kind,
+          periodNumber: event.period_number,
+          clockMs: event.clock_ms,
+          teamId: event.team_id,
+          playerId: event.player_id,
+          notes: event.notes,
+          sentiment: event.sentiment,
+        } as any);
+
+        // Update synced to true and set synced_at on success (Requirements: 2.4)
+        await db.events.update(event.id, {
+          synced: true,
+          synced_at: Date.now(),
+        });
+
+        result.synced++;
+      } catch (err) {
+        result.failed++;
+        result.errors.push({
+          table: 'events',
+          recordId: event.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[SyncService] Error syncing events:', err);
+  }
+
+  return result;
+}
+
+
+/**
+ * Sync match periods from the match_periods table to the server.
+ * 
+ * Requirements: 2.2 - Process unsynced periods from the match_periods table
+ * Requirements: 2.4 - Update synced to true and set synced_at on success
+ * Requirements: 2.6 - Exclude guest records
+ */
+async function syncMatchPeriods(): Promise<SyncResult> {
+  const result: SyncResult = { synced: 0, failed: 0, errors: [] };
+
+  try {
+    // Check if table exists and is accessible
+    if (!db.match_periods) {
+      return result;
+    }
+
+    // Query all periods and filter in JavaScript to avoid IndexedDB boolean indexing issues
+    // IndexedDB indexes don't work well with boolean values
+    let allPeriods;
+    try {
+      allPeriods = await db.match_periods.toArray();
+    } catch (dbErr) {
+      // Table might not be ready yet, skip this sync cycle
+      console.debug('[SyncService] Match periods table not ready:', dbErr);
+      return result;
+    }
+    
+    // Filter for unsynced, non-guest records (Requirements: 2.6)
+    const periodsToSync = allPeriods
+      .filter(p => p.synced === false && !isGuestId(p.created_by_user_id))
+      .slice(0, BATCH_SIZE);
+
+    for (const period of periodsToSync) {
+      try {
+        // Use appropriate API based on period completion status
+        if (period.ended_at) {
+          // Period is complete - use the import endpoint to preserve timestamps
+          await apiClient.post(`/matches/${period.match_id}/periods/import`, {
+            periodNumber: period.period_number,
+            periodType: period.period_type || 'REGULAR',
+            startedAt: new Date(period.started_at).toISOString(),
+            endedAt: new Date(period.ended_at).toISOString(),
+            durationSeconds: period.duration_seconds,
+          });
+        } else {
+          // Period is still in progress - start it on the server
+          // First check if the match has been started
+          try {
+            const state = await matchesApi.getMatchState(period.match_id);
+            // Server uses 'SCHEDULED' for not-started matches
+            if (state.status === 'SCHEDULED') {
+              await matchesApi.startMatch(period.match_id);
+            }
+          } catch {
+            // Match state might not exist, try to start it
+            try {
+              await matchesApi.startMatch(period.match_id);
+            } catch {
+              // Match might already be started, continue
+            }
+          }
+
+          // Start the period
+          const periodType = (period.period_type || 'REGULAR').toLowerCase() as 'regular' | 'extra_time' | 'penalty_shootout';
+          await matchesApi.startPeriod(period.match_id, periodType);
+        }
+
+        // Update synced to true and set synced_at on success (Requirements: 2.4)
+        await db.match_periods.update(period.id, {
+          synced: true,
+          synced_at: Date.now(),
+        });
+
+        result.synced++;
+      } catch (err) {
+        result.failed++;
+        result.errors.push({
+          table: 'match_periods',
+          recordId: period.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[SyncService] Error syncing match periods:', err);
+  }
+
+  return result;
+}
+
+/**
+ * Sync match state from the match_state table to the server.
+ * 
+ * Requirements: 2.3 - Process unsynced state from the match_state table
+ * Requirements: 2.4 - Update synced to true and set synced_at on success
+ * Requirements: 2.6 - Exclude guest records
+ */
+async function syncMatchState(): Promise<SyncResult> {
+  const result: SyncResult = { synced: 0, failed: 0, errors: [] };
+
+  try {
+    // Check if table exists and is accessible
+    if (!db.match_state) {
+      return result;
+    }
+
+    // Query all states and filter in JavaScript to avoid IndexedDB boolean indexing issues
+    // IndexedDB indexes don't work well with boolean values
+    let allStates;
+    try {
+      allStates = await db.match_state.toArray();
+    } catch (dbErr) {
+      // Table might not be ready yet, skip this sync cycle
+      console.debug('[SyncService] Match state table not ready:', dbErr);
+      return result;
+    }
+    
+    // Filter for unsynced, non-guest records (Requirements: 2.6)
+    const statesToSync = allStates
+      .filter(s => s.synced === false && !isGuestId(s.created_by_user_id))
+      .slice(0, BATCH_SIZE);
+
+    for (const state of statesToSync) {
+      try {
+        // Sync state changes to server based on status
+        // Note: Local schema uses 'NOT_STARTED', server uses 'SCHEDULED'
+        const status = state.status;
+        
+        if (status === 'LIVE') {
+          // Ensure match is started
+          try {
+            await matchesApi.startMatch(state.match_id);
+          } catch {
+            // Match might already be started
+          }
+        } else if (status === 'PAUSED') {
+          await matchesApi.pauseMatch(state.match_id);
+        } else if (status === 'COMPLETED') {
+          // Get match to retrieve final score
+          try {
+            const match = await db.matches.get(state.match_id);
+            if (match) {
+              await matchesApi.completeMatch(state.match_id, {
+                home: match.home_score || 0,
+                away: match.away_score || 0,
+              });
+            } else {
+              await matchesApi.completeMatch(state.match_id);
+            }
+          } catch {
+            // Try without score
+            await matchesApi.completeMatch(state.match_id);
+          }
+        }
+        // For 'NOT_STARTED' status, nothing to sync
+
+        // Update synced to true and set synced_at on success (Requirements: 2.4)
+        await db.match_state.update(state.match_id, {
+          synced: true,
+          synced_at: Date.now(),
+        });
+
+        result.synced++;
+      } catch (err) {
+        result.failed++;
+        result.errors.push({
+          table: 'match_state',
+          recordId: state.match_id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[SyncService] Error syncing match state:', err);
+  }
+
+  return result;
+}
+
+
+/**
+ * SyncService class for managing background synchronization.
+ * 
+ * Requirements: 5.2 - Use table-based sync exclusively without reading from the outbox
+ */
 class SyncService {
   private timer: number | null = null;
   private running = false;
@@ -27,12 +300,19 @@ class SyncService {
     this.timer = null;
   }
 
-  async flushOnce(): Promise<void> {
-    if (this.running) return;
+  /**
+   * Flush all unsynced data to the server.
+   * 
+   * Requirements: 5.2 - Use table-based sync exclusively without reading from the outbox
+   */
+  async flushOnce(): Promise<SyncResult> {
+    const combinedResult: SyncResult = { synced: 0, failed: 0, errors: [] };
+
+    if (this.running) return combinedResult;
     // If no network, skip
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return combinedResult;
     // Only attempt sync when authenticated; guests keep data local
-    if (!apiClient.isAuthenticated()) return;
+    if (!apiClient.isAuthenticated()) return combinedResult;
 
     // If guest data exists locally, pause automatic sync to avoid 400/403s until import completes
     try {
@@ -44,120 +324,40 @@ class SyncService {
           (window as any).__toastApi?.current?.showInfo?.('Local guest data detected — import it to sync.');
           window.dispatchEvent(new CustomEvent('import:needed'));
         } catch {}
-        return;
+        return combinedResult;
       }
     } catch (err) {
       console.error('[SyncService] Error checking for guest data:', err);
     }
 
-    // Additional check: if outbox has items from guest user, pause sync
-    try {
-      const { getGuestId } = await import('../utils/guest');
-      const guestId = getGuestId();
-      const batch = await getUnsyncedItems(1);
-      if (batch.length > 0 && batch[0].created_by_user_id === guestId) {
-        console.warn('[SyncService] Outbox contains guest items - pausing sync');
-        try {
-          (window as any).__toastApi?.current?.showInfo?.('Please import your guest data before syncing.');
-          window.dispatchEvent(new CustomEvent('import:needed'));
-        } catch {}
-        return;
-      }
-    } catch (err) {
-      console.error('[SyncService] Error checking outbox for guest items:', err);
-    }
     this.running = true;
     try {
-      const batch = await getUnsyncedItems(50);
-      for (const item of batch) {
-        try {
-          if (item.table_name === 'events') {
-            const p = (item as any).data || (item as any).payload || item;
-            await eventsApi.create({
-              matchId: p.match_id,
-              kind: p.kind,
-              periodNumber: p.period || p.period_number,
-              clockMs: (p.minute != null || p.second != null) ? ((p.minute || 0) * 60000 + (p.second || 0) * 1000) : p.clock_ms,
-              teamId: p.team_id,
-              playerId: p.player_id,
-              notes: p.notes || p.data?.notes,
-              sentiment: p.sentiment,
-            } as any);
-          } else if (item.table_name === 'teams') {
-            const data: any = item.data || {};
-            const name: string = (data.name || '').toString();
-            const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
-            let exists = false;
-            try {
-              // Search both own teams and opponents for a name match
-              const resp = await teamsApi.getTeams({ limit: 25, search: name, includeOpponents: true });
-              const opp = await teamsApi.getOpponentTeams(name);
-              const all = [...(resp.data || []), ...(opp || [])] as any[];
-              exists = all.some(t => norm(t.name || '') === norm(name));
-            } catch {}
-            if (!exists) {
-              await teamsApi.createTeam((item.data || {}) as any);
-            }
-          } else if (item.table_name === 'players') {
-            await playersApi.createPlayer((item.data || {}) as any);
-          } else if (item.table_name === 'seasons') {
-            if (item.operation === 'INSERT') {
-              await seasonsApi.createSeason((item.data || {}) as any);
-            } else if (item.operation === 'UPDATE') {
-              await seasonsApi.updateSeason(item.record_id as any, (item.data || {}) as any);
-            } else if (item.operation === 'DELETE') {
-              await seasonsApi.deleteSeason(item.record_id as any);
-            }
-          } else if (item.table_name === 'matches') {
-            const data: any = item.data || {};
-            if (item.operation === 'INSERT' && data.quickStart) {
-              await matchesApi.quickStart(data);
-            } else if (item.operation === 'UPDATE') {
-              await matchesApi.updateMatch(item.record_id as any, data);
-            } else if (item.operation === 'DELETE') {
-              await matchesApi.deleteMatch(item.record_id as any);
-            }
-          } else if (item.table_name === 'default_lineups') {
-            const data: any = item.data || {};
-            const teamId = (data.teamId || item.record_id) as string;
-            if (item.operation === 'DELETE') {
-              await defaultLineupsApi.deleteDefaultLineup(teamId);
-            } else {
-              // INSERT/UPDATE -> save (idempotent)
-              await defaultLineupsApi.saveDefaultLineup({ teamId, formation: data.formation || [] });
-            }
-          } else if (item.table_name === 'match_commands') {
-            const cmd: any = item.data || {};
-            const matchId = cmd.matchId;
-            if (!matchId) { await markAsSynced(item.id!); continue; }
-            if (cmd.cmd === 'start_match') {
-              await matchesApi.startMatch(matchId);
-            } else if (cmd.cmd === 'pause') {
-              await matchesApi.pauseMatch(matchId);
-            } else if (cmd.cmd === 'resume') {
-              await matchesApi.resumeMatch(matchId);
-            } else if (cmd.cmd === 'start_period') {
-              const type = (cmd.periodType || 'regular') as any;
-              await matchesApi.startPeriod(matchId, type);
-            } else if (cmd.cmd === 'end_period') {
-              // Find current open period
-              const periods = await matchesApi.getMatchPeriods(matchId);
-              const open = periods.find((p: any) => !p.endedAt);
-              if (open) await matchesApi.endPeriod(matchId, open.id, {});
-            } else if (cmd.cmd === 'complete') {
-              await matchesApi.completeMatch(matchId);
-            }
-          } else {
-            // Unknown table: skip for now
-          }
-          await markAsSynced(item.id!);
-        } catch (e: any) {
-          await markSyncFailed(item.id!, e?.message || 'Sync failed');
-        }
+      // Sync events from events table (Requirements: 2.1)
+      const eventsResult = await syncEvents();
+      combinedResult.synced += eventsResult.synced;
+      combinedResult.failed += eventsResult.failed;
+      combinedResult.errors.push(...eventsResult.errors);
+
+      // Sync match periods from match_periods table (Requirements: 2.2)
+      const periodsResult = await syncMatchPeriods();
+      combinedResult.synced += periodsResult.synced;
+      combinedResult.failed += periodsResult.failed;
+      combinedResult.errors.push(...periodsResult.errors);
+
+      // Sync match state from match_state table (Requirements: 2.3)
+      const stateResult = await syncMatchState();
+      combinedResult.synced += stateResult.synced;
+      combinedResult.failed += stateResult.failed;
+      combinedResult.errors.push(...stateResult.errors);
+
+      if (combinedResult.synced > 0 || combinedResult.failed > 0) {
+        console.log(`[SyncService] Sync complete - synced: ${combinedResult.synced}, failed: ${combinedResult.failed}`);
       }
     } finally {
       this.running = false;
     }
+
+    return combinedResult;
   }
 }
 
