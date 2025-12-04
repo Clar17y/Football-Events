@@ -100,3 +100,6 @@ shared/types/*.js
 # Text files in base directory likely to be temporary
 *.txt
 *.tsbuildinfo
+
+# Codex CLI tool
+codex-*
