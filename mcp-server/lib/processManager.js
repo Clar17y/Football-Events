@@ -1,6 +1,7 @@
-import { spawn } from 'child_process';
+import spawn from 'cross-spawn';
 import path from 'path';
 import { promises as fs } from 'fs';
+import { spawnSync } from 'child_process';
 import net from 'net';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -15,8 +16,10 @@ class ProcessManager {
     this.workspaceRoot = path.resolve(__dirname, '../../');
     this.pidFile = path.join(__dirname, '../pids.json');
     this.isRunningInDocker = this.detectDockerEnvironment();
+    this.isWindows = process.platform === 'win32';
     this.setupCleanup();
     this.loadPersistedPids();
+    this.detectOrphanedServers();
   }
 
   detectDockerEnvironment() {
@@ -80,6 +83,41 @@ class ProcessManager {
     }
   }
 
+  async detectOrphanedServers() {
+    const projects = ['backend', 'frontend'];
+    
+    for (const project of projects) {
+      // Skip if we already know about this server
+      if (this.servers.has(project)) continue;
+      
+      const config = this.getProjectConfig(project);
+      if (!config) continue;
+      
+      // Check if port is in use
+      const portInUse = !(await this.checkPortAvailable(config.port));
+      if (!portInUse) continue;
+      
+      // Check if it responds to health check
+      const health = await this.checkHealth(project, config.port);
+      if (!health.healthy) continue;
+      
+      // Found an orphaned server! Register it (without process handle)
+      console.error(`[ProcessManager] Detected orphaned ${project} server on port ${config.port}`);
+      
+      this.servers.set(project, {
+        pid: null, // Unknown - it's orphaned
+        port: config.port,
+        startTime: null, // Unknown
+        status: 'running (orphaned)',
+        command: ['npm', 'run', 'dev'],
+        cwd: path.join(this.workspaceRoot, project),
+        process: null,
+        logger: null,
+        orphaned: true
+      });
+    }
+  }
+
   async startServer(project, options = {}) {
     const logger = new EnhancedLogger(project, {
       level: 'DEBUG',
@@ -131,20 +169,40 @@ class ProcessManager {
         };
       }
 
-      const portAvailable = await this.checkPortAvailable(config.port);
+      // Check port availability and handle orphaned processes
+      let portAvailable = await this.checkPortAvailable(config.port);
       if (!portAvailable) {
-        logger.error('SERVER_MGMT', 'Port conflict detected', { 
-          project, 
+        logger.info('SERVER_MGMT', 'Port in use, attempting to kill orphaned process', {
+          project,
           port: config.port
         });
-        logger.endOperation(operationId, { success: false, reason: 'port_conflict' });
-        return {
-          success: false,
-          error: 'PORT_CONFLICT',
-          message: `Port ${config.port} is already in use`,
-          port: config.port,
-          suggestion: `Use force_kill_port to free the port`
-        };
+        
+        // Try to kill whatever is using the port (likely an orphan from previous session)
+        const killResult = await this.forceKillPort(config.port);
+        if (killResult.success) {
+          logger.info('SERVER_MGMT', 'Killed orphaned process', {
+            port: config.port,
+            pid: killResult.pid
+          });
+          // Wait for port to be released
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          portAvailable = await this.checkPortAvailable(config.port);
+        }
+        
+        if (!portAvailable) {
+          logger.error('SERVER_MGMT', 'Port conflict detected', { 
+            project, 
+            port: config.port
+          });
+          logger.endOperation(operationId, { success: false, reason: 'port_conflict' });
+          return {
+            success: false,
+            error: 'PORT_CONFLICT',
+            message: `Port ${config.port} is already in use and could not be freed`,
+            port: config.port,
+            suggestion: `Manually kill the process using port ${config.port}`
+          };
+        }
       }
 
       const serverProcess = await this.spawnServerProcess(project, config, logger);
@@ -247,6 +305,19 @@ class ProcessManager {
 
   async stopServer(project) {
     const serverInfo = this.servers.get(project);
+    if (serverInfo?.orphaned) {
+      // Kill by port since we don't have the PID
+      const killResult = await this.forceKillPort(serverInfo.port);
+      this.servers.delete(project);
+      await this.persistPids();
+      return {
+        success: killResult.success,
+        message: killResult.success 
+          ? `Stopped orphaned ${project} server on port ${serverInfo.port}`
+          : `Failed to stop orphaned server: ${killResult.message}`,
+        orphaned: true
+      };
+    }
     const logger = serverInfo?.logger;
     
     const tempLogger = logger || new EnhancedLogger(project, { level: 'INFO', enableConsole: false });
@@ -274,31 +345,46 @@ class ProcessManager {
         };
       }
 
-      // Send SIGTERM to process group
-      let sigtermSuccess = false;
+      // Kill process tree (handles child processes properly)
+      let killSuccess = false;
+      
       try {
-        process.kill(-pid, 'SIGTERM');
-        sigtermSuccess = true;
-      } catch (error) {
-        try {
-          serverProcess?.kill('SIGTERM');
-          sigtermSuccess = true;
-        } catch (fallbackError) {
-          // Continue
+        if (this.isWindows) {
+          // Windows: use taskkill to kill process tree
+          const result = spawnSync('taskkill', ['/T', '/F', '/PID', pid.toString()], {
+            stdio: 'ignore'
+          });
+          killSuccess = result.status === 0;
+        } else {
+          // Unix: kill process group
+          try {
+            process.kill(-pid, 'SIGTERM');
+            killSuccess = true;
+          } catch (error) {
+            // Try killing just the process if group kill fails
+            serverProcess?.kill('SIGTERM');
+            killSuccess = true;
+          }
         }
+      } catch (error) {
+        tempLogger.warn('STOP_SERVER', 'Initial kill attempt failed', { error: error.message });
       }
 
+      // Wait for graceful exit
       const gracefulExit = await this.waitForProcessExit(pid, 3000);
 
+      // Force kill if still running
       if (!gracefulExit && this.isProcessRunning(pid)) {
         try {
-          process.kill(-pid, 'SIGKILL');
-        } catch (error) {
-          try {
-            serverProcess?.kill('SIGKILL');
-          } catch (fallbackError) {
-            // Continue
+          if (this.isWindows) {
+            spawnSync('taskkill', ['/T', '/F', '/PID', pid.toString()], {
+              stdio: 'ignore'
+            });
+          } else {
+            process.kill(-pid, 'SIGKILL');
           }
+        } catch (error) {
+          // Ignore errors on force kill
         }
         await this.waitForProcessExit(pid, 1000);
       }
@@ -396,50 +482,11 @@ class ProcessManager {
 
   async forceKillPort(port) {
     try {
-      const { spawn } = await import('child_process');
-      return new Promise((resolve) => {
-        const netstat = spawn('netstat', ['-tlnp']);
-        let output = '';
-        
-        netstat.stdout.on('data', (data) => {
-          output += data.toString();
-        });
-        
-        netstat.on('close', (code) => {
-          if (code !== 0) {
-            resolve({ success: false, message: `netstat failed with code ${code}` });
-            return;
-          }
-          
-          const lines = output.split('\n');
-          const portLine = lines.find(line => line.includes(`:${port} `));
-          
-          if (portLine) {
-            const match = portLine.match(/(\d+)\/\w+\s*$/);
-            
-            if (match && match[1]) {
-              const pid = match[1];
-              
-              const kill = spawn('kill', ['-9', pid]);
-              kill.on('close', (killCode) => {
-                resolve({
-                  success: killCode === 0,
-                  pid: pid,
-                  message: killCode === 0 ? `Killed process ${pid} using port ${port}` : `Failed to kill process ${pid}`
-                });
-              });
-            } else {
-              resolve({ success: false, message: `Could not extract PID from netstat output for port ${port}` });
-            }
-          } else {
-            resolve({ success: false, message: `No process found using port ${port}` });
-          }
-        });
-        
-        netstat.on('error', (error) => {
-          resolve({ success: false, error: error.message, message: `Failed to run netstat` });
-        });
-      });
+      if (this.isWindows) {
+        return this.forceKillPortWindows(port);
+      } else {
+        return this.forceKillPortUnix(port);
+      }
     } catch (error) {
       return {
         success: false,
@@ -447,6 +494,126 @@ class ProcessManager {
         message: `Failed to kill process on port ${port}`
       };
     }
+  }
+
+  async forceKillPortWindows(port) {
+    try {
+      // Use netstat to find PID on Windows
+      const netstat = spawnSync('netstat', ['-ano'], { encoding: 'utf8' });
+      
+      if (netstat.status !== 0) {
+        return { success: false, message: 'netstat command failed' };
+      }
+
+      const lines = netstat.stdout.split('\n');
+      const portPattern = new RegExp(`:${port}\\s+.*LISTENING\\s+(\\d+)`);
+      
+      let pid = null;
+      for (const line of lines) {
+        const match = line.match(portPattern);
+        if (match) {
+          pid = match[1];
+          break;
+        }
+      }
+
+      if (!pid) {
+        // Also check for ESTABLISHED connections
+        const establishedPattern = new RegExp(`:${port}\\s+.*:(\\d+)\\s+ESTABLISHED\\s+(\\d+)`);
+        for (const line of lines) {
+          const match = line.match(establishedPattern);
+          if (match) {
+            pid = match[2];
+            break;
+          }
+        }
+      }
+
+      if (!pid) {
+        return { success: false, message: `No process found using port ${port}` };
+      }
+
+      // Kill the process tree
+      const kill = spawnSync('taskkill', ['/T', '/F', '/PID', pid], { encoding: 'utf8' });
+      
+      return {
+        success: kill.status === 0,
+        pid: pid,
+        message: kill.status === 0 
+          ? `Killed process ${pid} (and children) using port ${port}` 
+          : `Failed to kill process ${pid}: ${kill.stderr || 'Unknown error'}`
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        message: `Failed to kill process on port ${port}`
+      };
+    }
+  }
+
+  async forceKillPortUnix(port) {
+    return new Promise((resolve) => {
+      const netstat = spawn('netstat', ['-tlnp']);
+      let output = '';
+      
+      netstat.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+      
+      netstat.on('close', (code) => {
+        if (code !== 0) {
+          // Try lsof as fallback
+          const lsof = spawn('lsof', ['-ti', `:${port}`]);
+          let lsofOutput = '';
+          
+          lsof.stdout.on('data', (data) => {
+            lsofOutput += data.toString();
+          });
+          
+          lsof.on('close', (lsofCode) => {
+            if (lsofCode !== 0 || !lsofOutput.trim()) {
+              resolve({ success: false, message: `No process found using port ${port}` });
+              return;
+            }
+            
+            const pid = lsofOutput.trim().split('\n')[0];
+            const kill = spawnSync('kill', ['-9', pid]);
+            resolve({
+              success: kill.status === 0,
+              pid: pid,
+              message: kill.status === 0 ? `Killed process ${pid} using port ${port}` : `Failed to kill process ${pid}`
+            });
+          });
+          return;
+        }
+        
+        const lines = output.split('\n');
+        const portLine = lines.find(line => line.includes(`:${port} `));
+        
+        if (portLine) {
+          const match = portLine.match(/(\d+)\/\w+\s*$/);
+          
+          if (match && match[1]) {
+            const pid = match[1];
+            const kill = spawnSync('kill', ['-9', pid]);
+            resolve({
+              success: kill.status === 0,
+              pid: pid,
+              message: kill.status === 0 ? `Killed process ${pid} using port ${port}` : `Failed to kill process ${pid}`
+            });
+          } else {
+            resolve({ success: false, message: `Could not extract PID from netstat output for port ${port}` });
+          }
+        } else {
+          resolve({ success: false, message: `No process found using port ${port}` });
+        }
+      });
+      
+      netstat.on('error', (error) => {
+        resolve({ success: false, error: error.message, message: `Failed to run netstat` });
+      });
+    });
   }
 
   listManagedServers() {
@@ -479,7 +646,7 @@ class ProcessManager {
       frontend: {
         port: 5173,
         timeout: 30000,
-        readyPattern: /Local:\s+http:\/\/localhost:(\d+)\//,
+        readyPattern: /VITE.*ready|localhost:5173/i,
         healthPath: '/',
         env: {}
       }
@@ -511,7 +678,10 @@ class ProcessManager {
         }
 
         const recentLogs = serverInfo.logger?.getRecentLogs() || '';
-        if (config.readyPattern.test(recentLogs)) {
+        // Strip ANSI escape codes before pattern matching
+        const cleanLogs = recentLogs.replace(/\x1b\[[0-9;]*m/g, '');
+        
+        if (config.readyPattern.test(cleanLogs)) {
           this.checkHealth(project, config.port)
             .then(healthResult => {
               if (healthResult.healthy) {
@@ -618,38 +788,41 @@ class ProcessManager {
     const spawnOperation = logger.startOperation('SPAWN_PROCESS', { project });
     
     try {
-      if (this.isRunningInDocker) {
-        const cwd = `/workspace/${project}`;
-        const env = { 
-          ...process.env, 
-          ...config.env,
+      const cwd = this.isRunningInDocker 
+        ? `/workspace/${project}`
+        : path.join(this.workspaceRoot, project);
+        
+      const env = { 
+        ...process.env, 
+        ...config.env,
+        ...(this.isRunningInDocker && {
           PATH: `/workspace/${project}/node_modules/.bin:${process.env.PATH}`
-        };
-        
-        const childProcess = spawn('npm', ['run', 'dev'], {
-          cwd,
-          stdio: 'pipe',
-          detached: true,
-          env
-        });
-        
-        logger.endOperation(spawnOperation, { success: true, pid: childProcess.pid, environment: 'docker' });
-        return childProcess;
-        
-      } else {
-        const cwd = path.join(this.workspaceRoot, project);
-        const env = { ...process.env, ...config.env };
-        
-        const childProcess = spawn('npm', ['run', 'dev'], {
-          cwd,
-          stdio: 'pipe',
-          detached: true,
-          env
-        });
-        
-        logger.endOperation(spawnOperation, { success: true, pid: childProcess.pid, environment: 'host' });
-        return childProcess;
+        })
+      };
+      
+      const spawnOptions = {
+        cwd,
+        stdio: 'pipe',
+        env,
+      };
+      
+      // On Windows, don't detach - it breaks stdio piping
+      // On Unix, detach so the process survives MCP server restarts
+      if (!this.isWindows) {
+        spawnOptions.detached = true;
       }
+      
+      const childProcess = spawn('npm', ['run', 'dev'], spawnOptions);
+      
+      logger.endOperation(spawnOperation, { 
+        success: true, 
+        pid: childProcess.pid, 
+        environment: this.isRunningInDocker ? 'docker' : 'host',
+        platform: process.platform
+      });
+      
+      return childProcess;
+      
     } catch (error) {
       logger.error('SPAWN', 'Failed to spawn process', {
         project,
