@@ -44,6 +44,7 @@ export async function createLocalQuickMatch(payload: GuestQuickMatchPayload): Pr
       updated_at: now,
       created_by_user_id: guestId,
       is_deleted: false,
+      synced: false,
     } as any);
     season = await db.seasons.get(seasonId);
   }
@@ -69,6 +70,7 @@ export async function createLocalQuickMatch(payload: GuestQuickMatchPayload): Pr
         created_by_user_id: guestId,
         is_deleted: false,
         is_opponent: false,
+        synced: false,
       } as any);
       ourTeamId = id;
     }
@@ -85,6 +87,7 @@ export async function createLocalQuickMatch(payload: GuestQuickMatchPayload): Pr
       created_by_user_id: guestId,
       is_deleted: false,
       is_opponent: false,
+      synced: false,
     } as any);
     ourTeamId = id;
   }
@@ -103,6 +106,7 @@ export async function createLocalQuickMatch(payload: GuestQuickMatchPayload): Pr
       created_by_user_id: guestId,
       is_deleted: false,
       is_opponent: true,
+      synced: false,
     } as any);
     oppTeam = await db.teams.get(id);
   }
@@ -133,6 +137,7 @@ export async function createLocalQuickMatch(payload: GuestQuickMatchPayload): Pr
     updated_at: now,
     created_by_user_id: guestId,
     is_deleted: false,
+    synced: false,
   } as any);
 
   return { id: matchId };

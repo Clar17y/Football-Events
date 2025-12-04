@@ -59,22 +59,25 @@ export const formationsApi = {
     const prev = formationCache.get(matchId);
     const notes = JSON.stringify({ reason: reason || null, formation, prevFormation: prev || null });
 
-    // Guest mode: enforce quota and record local event
+    // Guest mode: enforce quota and record local event in events table
     if (!authApi.isAuthenticated()) {
       const q = await canChangeFormation(matchId);
       if (!q.ok) throw new Error(q.reason);
       try {
         const { db } = await import('../../db/indexedDB');
-        await db.addEvent({
+        // Use addEventToTable to store in events table (not outbox)
+        await db.addEventToTable({
           kind: 'formation_change',
           match_id: matchId,
+          team_id: '', // Formation changes are match-level, not team-specific
           minute: Math.max(0, Math.floor(startMin || 0)),
           second: 0,
-          data: { notes },
-          created: Date.now(),
+          notes: notes,
           created_by_user_id: getGuestId(),
         });
-      } catch (e) { /* ignore db errors */ }
+      } catch (e) { 
+        console.warn('Failed to save formation change:', e);
+      }
       formationCache.set(matchId, formation);
       try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
       return { success: true, data: { local: true } } as any;
@@ -86,16 +89,16 @@ export const formationsApi = {
       formationCache.set(matchId, formation);
       return resp.data as any;
     } catch (e) {
-      // Offline fallback: record formation_change in outbox
+      // Offline fallback: record formation_change in events table
       try {
         const { db } = await import('../../db/indexedDB');
-        await db.addEvent({
+        await db.addEventToTable({
           kind: 'formation_change',
           match_id: matchId,
+          team_id: '', // Formation changes are match-level, not team-specific
           minute: Math.max(0, Math.floor(startMin || 0)),
           second: 0,
-          data: { notes },
-          created: Date.now(),
+          notes: notes,
           created_by_user_id: 'offline',
         });
       } catch {}

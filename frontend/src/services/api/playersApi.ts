@@ -175,6 +175,7 @@ export const playersApi = {
         updated_at: now,
         created_by_user_id: getGuestId(),
         is_deleted: false,
+        synced: false,
       } as any);
       try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
       return { data: { id, name: playerData.name } as any, success: true, message: 'Player created locally' };
@@ -203,6 +204,7 @@ export const playersApi = {
         updated_at: now,
         created_by_user_id: 'offline',
         is_deleted: false,
+        synced: false,
       } as any);
       await addToOutbox('players', id, 'INSERT', playerData as any, 'offline');
       try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
@@ -347,6 +349,7 @@ export const playersApi = {
         updated_at: now,
         created_by_user_id: getGuestId(),
         is_deleted: false,
+        synced: false,
       } as any);
       try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
       return { data: { id, name: playerData.name } as any, success: true, message: 'Player created locally' };

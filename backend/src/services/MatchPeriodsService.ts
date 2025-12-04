@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, period_type } from '@prisma/client';
 import { transformMatchPeriod, safeTransformMatchPeriod, transformMatchPeriods } from '@shared/types';
 import type { MatchPeriod } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
@@ -452,6 +452,105 @@ export class MatchPeriodsService {
           updated_at: new Date()
         }
       });
+    }, 'MatchPeriod');
+  }
+
+  /**
+   * Import a period with preserved timestamps (for guest data import)
+   * This endpoint accepts periods with original timestamps instead of generating them server-side
+   */
+  async importPeriod(
+    matchId: string,
+    data: {
+      periodNumber: number;
+      periodType: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT';
+      startedAt: string;
+      endedAt?: string;
+      durationSeconds?: number;
+    },
+    userId: string,
+    userRole: string
+  ): Promise<MatchPeriod> {
+    return withPrismaErrorHandling(async () => {
+      // Validate user permission
+      const hasPermission = await this.validateUserPermission(matchId, userId, userRole);
+      if (!hasPermission) {
+        const error = new Error('Access denied: You do not have permission to import periods for this match') as any;
+        error.statusCode = 403;
+        throw error;
+      }
+
+      // Parse and validate timestamps
+      const startedAt = new Date(data.startedAt);
+      if (isNaN(startedAt.getTime())) {
+        const error = new Error('Invalid startedAt timestamp') as any;
+        error.statusCode = 400;
+        throw error;
+      }
+
+      let endedAt: Date | null = null;
+      if (data.endedAt) {
+        endedAt = new Date(data.endedAt);
+        if (isNaN(endedAt.getTime())) {
+          const error = new Error('Invalid endedAt timestamp') as any;
+          error.statusCode = 400;
+          throw error;
+        }
+        // Validate that endedAt is after startedAt
+        if (endedAt <= startedAt) {
+          const error = new Error('endedAt must be after startedAt') as any;
+          error.statusCode = 400;
+          throw error;
+        }
+      }
+
+      // Calculate duration if not provided but endedAt is
+      let durationSeconds = data.durationSeconds;
+      if (endedAt && durationSeconds === undefined) {
+        durationSeconds = Math.ceil((endedAt.getTime() - startedAt.getTime()) / 1000);
+      }
+
+      // Cast periodType to the Prisma enum type
+      const dbPeriodType = data.periodType as period_type;
+
+      // Check for existing period with same match_id, period_number, period_type
+      const existingPeriod = await this.prisma.match_periods.findFirst({
+        where: {
+          match_id: matchId,
+          period_number: data.periodNumber,
+          period_type: dbPeriodType,
+          is_deleted: false
+        }
+      });
+
+      if (existingPeriod) {
+        // Update existing period with imported data
+        const updatedPeriod = await this.prisma.match_periods.update({
+          where: { id: existingPeriod.id },
+          data: {
+            started_at: startedAt,
+            ended_at: endedAt,
+            duration_seconds: durationSeconds ?? null,
+            updated_at: new Date()
+          }
+        });
+        return transformMatchPeriod(updatedPeriod);
+      }
+
+      // Create new period with preserved timestamps
+      const newPeriod = await this.prisma.match_periods.create({
+        data: {
+          match_id: matchId,
+          period_number: data.periodNumber,
+          period_type: dbPeriodType,
+          started_at: startedAt,
+          ended_at: endedAt,
+          duration_seconds: durationSeconds ?? null,
+          created_by_user_id: userId
+        }
+      });
+
+      return transformMatchPeriod(newPeriod);
     }, 'MatchPeriod');
   }
 }

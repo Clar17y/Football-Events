@@ -88,37 +88,53 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const hydrateGuestState = useCallback(async (matchId: string) => {
     try {
       const { db } = await import('../db/indexedDB');
-      const rec = await db.settings.get(`local_live_state:${matchId}`);
-      if (!rec?.value) return;
-      const parsed = JSON.parse(rec.value);
-      const ps: MatchPeriod[] = (parsed.periods || []).map((p: any) => ({
+
+      // Load match state from match_state table
+      const stateResult = await db.getMatchState(matchId);
+      if (!stateResult.success || !stateResult.data) return;
+      const matchStateData = stateResult.data;
+
+      // Load periods from match_periods table
+      const periodsResult = await db.getMatchPeriods(matchId);
+      if (!periodsResult.success) return;
+      const localPeriods = periodsResult.data || [];
+
+      // Convert to MatchPeriod format for UI
+      const ps: MatchPeriod[] = localPeriods.map(p => ({
         id: p.id,
         matchId,
-        periodNumber: p.periodNumber,
-        periodType: (p.periodType || 'REGULAR') as any,
-        startedAt: p.startedAt ? new Date(p.startedAt) : undefined,
-        endedAt: p.endedAt ? new Date(p.endedAt) : undefined,
-        durationSeconds: p.durationSeconds
+        periodNumber: p.period_number,
+        periodType: p.period_type as any,
+        startedAt: new Date(p.started_at),
+        endedAt: p.ended_at ? new Date(p.ended_at) : undefined,
+        durationSeconds: p.duration_seconds
       }));
       setPeriods(ps);
-      const running = parsed.status === 'LIVE';
+
+      const running = matchStateData.status === 'LIVE';
       const lastPeriod = ps.find(p => !p.endedAt) || ps[ps.length - 1];
-      let base = parsed.timerMs || 0;
+
+      // Recalculate timer based on periods
+      let base = matchStateData.timer_ms || 0;
       if (running && lastPeriod?.startedAt) {
         base += Math.max(0, Date.now() - new Date(lastPeriod.startedAt).getTime());
       }
       setTimerMs(base);
+
       setMatchState({
         id: 'local-state',
         matchId,
-        status: parsed.status || 'NOT_STARTED',
+        status: matchStateData.status || 'NOT_STARTED',
         currentPeriod: lastPeriod?.periodNumber || 1,
         totalElapsedSeconds: Math.floor(base / 1000),
         createdAt: new Date(),
         updatedAt: new Date()
       } as any);
+
       if (running) startTicking();
-    } catch {}
+    } catch (e) {
+      console.error('Failed to hydrate guest state:', e);
+    }
   }, []);
 
   useEffect(() => {
@@ -686,12 +702,28 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     if (!selectedId) return;
     try {
       if (!isAuthenticated) {
-        // Guest: local kickoff
+        // Guest: local kickoff - write directly to match_periods and match_state tables
         const now = new Date();
+        const { db } = await import('../db/indexedDB');
         if (matchState?.status === 'PAUSED') {
           // Start next regular period - timer starts at expected time (e.g., Q2 = 12:30)
           const nextNum = (periods.filter(p => p.periodType === 'REGULAR').length) + 1;
-          const p = { id: `local-p-${Date.now()}`, periodNumber: nextNum, periodType: 'REGULAR' as any, startedAt: now } as any;
+          const periodResult = await db.createMatchPeriod({
+            match_id: selectedId,
+            period_number: nextNum,
+            period_type: 'REGULAR',
+            started_at: now.getTime(),
+          });
+          if (!periodResult.success) throw new Error(periodResult.error);
+          const periodId = periodResult.data!;
+
+          await db.updateMatchState(selectedId, {
+            status: 'LIVE',
+            current_period_id: periodId,
+            timer_ms: getExpectedPeriodStartMs(nextNum),
+          });
+
+          const p = { id: periodId, periodNumber: nextNum, periodType: 'REGULAR' as any, startedAt: now } as any;
           const updatedPeriods = [...periods, p];
           setPeriods(updatedPeriods);
           const st: any = { ...(matchState || {}), status: 'LIVE', currentPeriod: nextNum };
@@ -701,10 +733,24 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           setTimerMs(expectedStartMs);
           startTicking();
           pushSystem(`Kick Off — Period ${nextNum}`, nextNum);
-          try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: 'regular' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
         } else {
-          // First kickoff
-          const p1 = { id: `local-p-${Date.now()}`, periodNumber: 1, periodType: 'REGULAR' as any, startedAt: now } as any;
+          // First kickoff - write directly to match_periods and match_state tables
+          const periodResult = await db.createMatchPeriod({
+            match_id: selectedId,
+            period_number: 1,
+            period_type: 'REGULAR',
+            started_at: now.getTime(),
+          });
+          if (!periodResult.success) throw new Error(periodResult.error);
+          const periodId = periodResult.data!;
+
+          await db.updateMatchState(selectedId, {
+            status: 'LIVE',
+            current_period_id: periodId,
+            timer_ms: 0,
+          });
+
+          const p1 = { id: periodId, periodNumber: 1, periodType: 'REGULAR' as any, startedAt: now } as any;
           setPeriods([p1]);
           const st: any = { id: 'local-state', matchId: selectedId, status: 'LIVE', currentPeriod: 1, totalElapsedSeconds: 0, createdAt: new Date(), updatedAt: new Date() };
           setMatchState(st);
@@ -717,8 +763,6 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             if (hId) await defaultLineupsApi.applyDefaultToMatch(hId, selectedId);
             if (aId) await defaultLineupsApi.applyDefaultToMatch(aId, selectedId);
           } catch {}
-          try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'LIVE', periods: [{ id: p1.id, periodType: 'REGULAR', periodNumber: 1, startedAt: now.toISOString() }], timerMs: 0, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
-          try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_match' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: 'regular' }); } catch {}
         }
         return;
       }
@@ -761,11 +805,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     if (!selectedId) return;
     try {
       if (!isAuthenticated) {
+        const { db } = await import('../db/indexedDB');
+        await db.updateMatchState(selectedId, {
+          status: 'PAUSED',
+          timer_ms: timerMs,
+        });
         setMatchState(prev => prev ? ({ ...prev, status: 'PAUSED' } as any) : prev);
         stopTicking();
         pushSystem('Paused', currentPeriodNumber());
-        try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'PAUSED', periods, timerMs, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
-        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'pause' }); } catch {}
         return;
       }
       const state = await matchesApi.pauseMatch(selectedId);
@@ -784,11 +831,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     if (!selectedId) return;
     try {
       if (!isAuthenticated) {
+        const { db } = await import('../db/indexedDB');
+        await db.updateMatchState(selectedId, {
+          status: 'LIVE',
+          timer_ms: timerMs,
+        });
         setMatchState(prev => prev ? ({ ...prev, status: 'LIVE' } as any) : prev);
         startTicking();
         pushSystem('Resumed', currentPeriodNumber());
-        try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'LIVE', periods, timerMs, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
-        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
         return;
       }
       const state = await matchesApi.resumeMatch(selectedId);
@@ -807,32 +857,44 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       if (!selectedId || !currentOpenPeriod) return;
       try {
         if (!isAuthenticated) {
-          // Close local period
+          // Close local period - write directly to match_periods and match_state tables
+          const { db } = await import('../db/indexedDB');
           const endedAt = new Date();
           const periodNum = currentOpenPeriod.periodNumber;
           // Calculate this period's duration (timerMs = expectedStart + periodElapsed)
           const expectedStartMs = getExpectedPeriodStartMs(periodNum);
           const thisPeriodDurationMs = Math.max(1000, timerMs - expectedStartMs);
+
+          // End the period in the database
+          await db.endMatchPeriod(selectedId, currentOpenPeriod.id, endedAt.getTime());
+
           const updatedPeriods = periods.map(p => p.id === currentOpenPeriod.id ? ({ ...p, endedAt, durationSeconds: Math.round(thisPeriodDurationMs / 1000) } as any) : p);
           setPeriods(updatedPeriods);
+
           // Compute total actual elapsed (for backend sync)
           const totalActualMs = updatedPeriods.reduce((acc, p) => acc + (p.endedAt && p.durationSeconds ? p.durationSeconds * 1000 : 0), 0);
+          const expectedEndMs = getPerPeriodMs() * periodNum;
+
+          // Update match state
+          await db.updateMatchState(selectedId, {
+            status: 'PAUSED',
+            current_period_id: undefined,
+            timer_ms: expectedEndMs,
+          });
+
           setMatchState(prev => prev ? ({ ...prev, status: 'PAUSED', currentPeriod: periodNum, totalElapsedSeconds: Math.round(totalActualMs / 1000) } as any) : { id: 'local-state', matchId: selectedId, status: 'PAUSED', currentPeriod: periodNum, totalElapsedSeconds: Math.round(totalActualMs / 1000), createdAt: new Date(), updatedAt: new Date() } as any);
           stopTicking();
-          // Show expected end time for this period (not cumulative actual)
-          const expectedEndMs = getPerPeriodMs() * periodNum;
           setTimerMs(expectedEndMs);
-        const fmt = (currentMatch?.periodFormat || '').toLowerCase();
-        const n = currentOpenPeriod.periodNumber;
-        let txt = 'End of Period';
-        if (fmt.includes('half')) txt = n === 1 ? 'End of 1st Half' : 'End of 2nd Half';
-        else if (fmt.includes('quarter')) txt = `End of Q${n}`;
-        else if (currentOpenPeriod.periodType === 'EXTRA_TIME') txt = `End of ET${n}`;
-        pushSystem(txt, n);
-        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'end_period' }); } catch {}
-        try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'PAUSED', periods: updatedPeriods, timerMs: expectedEndMs, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
-        return;
-      }
+
+          const fmt = (currentMatch?.periodFormat || '').toLowerCase();
+          const n = currentOpenPeriod.periodNumber;
+          let txt = 'End of Period';
+          if (fmt.includes('half')) txt = n === 1 ? 'End of 1st Half' : 'End of 2nd Half';
+          else if (fmt.includes('quarter')) txt = `End of Q${n}`;
+          else if (currentOpenPeriod.periodType === 'EXTRA_TIME') txt = `End of ET${n}`;
+          pushSystem(txt, n);
+          return;
+        }
       await matchesApi.endPeriod(selectedId, currentOpenPeriod.id);
       // Fetch both updated periods AND match state
       const [p, state] = await Promise.all([
@@ -860,20 +922,49 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       if (!selectedId) return;
       try {
         if (!isAuthenticated) {
+          const { db } = await import('../db/indexedDB');
           const now = new Date();
           const type = extraTime ? 'EXTRA_TIME' : 'REGULAR';
           const nextNum = (periods.filter(p => p.periodType === (extraTime ? 'EXTRA_TIME' : 'REGULAR')).length) + 1;
-          const p = { id: `local-p-${Date.now()}`, periodNumber: nextNum, periodType: type as any, startedAt: now } as any;
+
+          // Create period in match_periods table
+          const periodResult = await db.createMatchPeriod({
+            match_id: selectedId,
+            period_number: nextNum,
+            period_type: type,
+            started_at: now.getTime(),
+          });
+
+          if (!periodResult.success) {
+            throw new Error(periodResult.error || 'Failed to create period');
+          }
+
+          const periodId = periodResult.data!;
+          const p: MatchPeriod = {
+            id: periodId,
+            matchId: selectedId,
+            periodNumber: nextNum,
+            periodType: type as any,
+            startedAt: now,
+          };
+
           const updatedPeriods = [...periods, p];
           setPeriods(updatedPeriods);
           setMatchState(prev => prev ? ({ ...prev, status: 'LIVE', currentPeriod: nextNum } as any) : prev);
+
           // Start from expected period start time (not cumulative actual)
           const expectedStartMs = getExpectedPeriodStartMs(nextNum);
           setTimerMs(expectedStartMs);
+
+          // Update match state in match_state table
+          await db.updateMatchState(selectedId, {
+            status: 'LIVE',
+            current_period_id: periodId,
+            timer_ms: expectedStartMs,
+          });
+
           startTicking();
           pushSystem(extraTime ? `Extra Time Kick Off — ET${nextNum}` : `Kick Off — Period ${nextNum}`, nextNum);
-          try { const { db } = await import('../db/indexedDB'); await db.settings.put({ key: `local_live_state:${selectedId}`, value: JSON.stringify({ status: 'LIVE', periods: updatedPeriods, timerMs: expectedStartMs, lastUpdatedAt: Date.now() }), created_at: Date.now(), updated_at: Date.now() }); } catch {}
-          try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: extraTime ? 'extra_time' : 'regular' }); await addToOutbox('match_commands', `cmd-${Date.now()+1}`, 'INSERT', { matchId: selectedId, cmd: 'resume' }); } catch {}
           return;
         }
       const periodType = extraTime ? 'extra_time' : 'regular';
@@ -911,21 +1002,28 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     if (!selectedId) return;
     try {
       if (!isAuthenticated) {
+        const { db } = await import('../db/indexedDB');
         const endedAt = new Date();
-        const updatedPeriods = periods.map(p => p.endedAt ? p : ({ ...p, endedAt }));
+
+        // End any open periods
+        const updatedPeriods = periods.map(p => {
+          if (!p.endedAt && p.id) {
+            db.endMatchPeriod(selectedId, p.id, endedAt.getTime()).catch(console.error);
+            return { ...p, endedAt };
+          }
+          return p;
+        });
         setPeriods(updatedPeriods);
+
+        // Update match state to COMPLETED
+        await db.updateMatchState(selectedId, {
+          status: 'COMPLETED',
+          current_period_id: undefined,
+          timer_ms: timerMs,
+        });
+
         setMatchState(prev => prev ? ({ ...prev, status: 'COMPLETED' } as any) : { id: 'local-state', matchId: selectedId, status: 'COMPLETED', currentPeriod: currentPeriodNumber(), createdAt: new Date(), updatedAt: new Date() } as any);
         stopTicking();
-        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'complete' }); } catch {}
-        try {
-          const { db } = await import('../db/indexedDB');
-          await db.settings.put({
-            key: `local_live_state:${selectedId}`,
-            value: JSON.stringify({ status: 'COMPLETED', periods: updatedPeriods, timerMs, lastUpdatedAt: Date.now() }),
-            created_at: Date.now(),
-            updated_at: Date.now()
-          });
-        } catch {}
         return;
       }
       const state = await matchesApi.completeMatch(selectedId);
@@ -1016,22 +1114,21 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       } as any;
       let created: any;
       if (!isAuthenticated) {
-        // Guest: write to local outbox
+        // Guest: write directly to events table
         const { db } = await import('../db/indexedDB');
-        const result = await db.addEvent({
+        const result = await db.addEventToTable({
           kind: payload.kind,
           match_id: payload.matchId,
           team_id: payload.teamId,
           player_id: payload.playerId,
-          minute: Math.floor((payload.clockMs || 0) / 60000),
-          second: Math.floor(((payload.clockMs || 0) % 60000) / 1000),
-          period: payload.periodNumber,
-          data: payload.notes ? { notes: payload.notes } : {},
-          created: Date.now()
+          clock_ms: payload.clockMs || 0,
+          period_number: payload.periodNumber,
+          sentiment: sentiment,
+          notes: payload.notes,
         });
         if (!result.success) throw new Error(result.error || 'Failed to add event');
         try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
-        created = { id: `local-${Date.now()}`, ...payload, createdAt: new Date() };
+        created = { id: result.data, ...payload, createdAt: new Date() };
       } else {
         created = await eventsApi.create(payload);
       }
@@ -1216,27 +1313,27 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           const res = await db.getMatchEvents(selectedId);
           const arr = (res.success && res.data) ? res.data : [];
           const feed: FeedItem[] = arr.map((e: any) => {
-            const payload = e.data || e;
+            // Events from events table use period_number and clock_ms directly
             return {
-              id: String(e.id || `local-${payload.created || Date.now()}`),
+              id: String(e.id || `local-${e.created_at || Date.now()}`),
               kind: 'event',
-              label: labelForEvent(payload.kind),
-              createdAt: new Date(payload.created || Date.now()),
-              periodNumber: payload.period || undefined,
-              clockMs: ((payload.minute || 0) * 60000) + ((payload.second || 0) * 1000),
-              teamId: payload.team_id,
-              playerId: payload.player_id,
-              sentiment: payload.sentiment || 0,
+              label: labelForEvent(e.kind),
+              createdAt: new Date(e.created_at || Date.now()),
+              periodNumber: e.period_number || undefined,
+              clockMs: e.clock_ms || 0,
+              teamId: e.team_id,
+              playerId: e.player_id,
+              sentiment: e.sentiment || 0,
               event: {
                 id: String(e.id || crypto.randomUUID()),
-                kind: payload.kind,
-                createdAt: new Date(payload.created || Date.now()),
-                clockMs: ((payload.minute || 0) * 60000) + ((payload.second || 0) * 1000),
-                periodNumber: payload.period || undefined,
-                teamId: payload.team_id,
-                playerId: payload.player_id,
-                notes: payload.notes || (payload.data ? payload.data.notes : undefined),
-                sentiment: payload.sentiment || 0,
+                kind: e.kind,
+                createdAt: new Date(e.created_at || Date.now()),
+                clockMs: e.clock_ms || 0,
+                periodNumber: e.period_number || undefined,
+                teamId: e.team_id,
+                playerId: e.player_id,
+                notes: e.notes,
+                sentiment: e.sentiment || 0,
               } as any
             };
           });

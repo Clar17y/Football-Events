@@ -78,20 +78,17 @@ const GoalModal: React.FC<Props> = ({
     try {
       const kind = ownGoalFlag ? 'own_goal' : 'goal';
       
-      const payload = {
+      // Use addEventToTable to store in events table (not outbox)
+      const result = await db.addEventToTable({
         kind: kind as 'goal' | 'own_goal',
         match_id: matchId,
-        season_id: seasonId,
-        created: Date.now(),
         period_number: period,
         clock_ms: elapsedMs,
         team_id: targetTeam.id,
-        player_id: scorerId || 'unknown',
+        player_id: scorerId || undefined,
         sentiment: ownGoalFlag ? -2 : 2, // Default sentiment
         notes: assistId ? `${notes} (Assist: ${assistId})` : notes,
-      };
-
-      const result = await db.addEvent(payload);
+      });
       if (!result.success) {
         throw new Error(result.error || 'Failed to save goal');
       }

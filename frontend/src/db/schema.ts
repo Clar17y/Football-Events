@@ -9,15 +9,23 @@ import type { ID, Timestamp } from '../types/index';
 import type { EventKind } from '../types/events';
 
 /**
+ * Base interface for records that can be synced to server
+ */
+export interface SyncableRecord {
+  /** Whether this record has been synced to server */
+  synced: boolean;
+  /** Timestamp of last successful sync */
+  synced_at?: Timestamp;
+}
+
+/**
  * Enhanced Event interface with auto-linking support
  */
-export interface EnhancedEvent {
+export interface EnhancedEvent extends SyncableRecord {
   /** UUID primary key */
   id: ID;
   /** Foreign key to matches table */
   match_id: ID;
-  /** Foreign key to seasons table */
-  season_id: ID;
   /** Server timestamp when event was created */
   ts_server: Timestamp;
   /** Match period number (1, 2, 3, 4 for quarters) */
@@ -52,7 +60,7 @@ export interface EnhancedEvent {
 /**
  * Enhanced Match interface aligned with PostgreSQL schema
  */
-export interface EnhancedMatch {
+export interface EnhancedMatch extends SyncableRecord {
   /** UUID primary key */
   match_id: ID;
   /** Legacy compatibility - alias for match_id */
@@ -92,7 +100,7 @@ export interface EnhancedMatch {
 /**
  * Enhanced Team interface
  */
-export interface EnhancedTeam {
+export interface EnhancedTeam extends SyncableRecord {
   /** UUID primary key */
   team_id: ID;
   /** Legacy compatibility - alias for team_id */
@@ -116,7 +124,7 @@ export interface EnhancedTeam {
 /**
  * Enhanced Player interface aligned with PostgreSQL schema
  */
-export interface EnhancedPlayer {
+export interface EnhancedPlayer extends SyncableRecord {
   /** UUID primary key */
   id: ID;
   /** Player's full name */
@@ -144,7 +152,7 @@ export interface EnhancedPlayer {
 /**
  * Season interface
  */
-export interface EnhancedSeason {
+export interface EnhancedSeason extends SyncableRecord {
   /** UUID primary key */
   season_id: ID;
   /** Season label (unique) */
@@ -162,7 +170,7 @@ export interface EnhancedSeason {
 /**
  * Lineup interface for tracking player positions and substitutions
  */
-export interface EnhancedLineup {
+export interface EnhancedLineup extends SyncableRecord {
   /** Composite key: match_id + player_id + start_min */
   id: string; // Generated: `${match_id}-${player_id}-${start_min}`
   /** Foreign key to matches */
@@ -197,6 +205,88 @@ export interface EnhancedMatchNote {
   notes: string;
   /** Period number (0 for general match notes) */
   period_number: number;
+  /** Client timestamps */
+  created_at: Timestamp;
+  updated_at: Timestamp;
+  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
+  created_by_user_id: ID;
+  deleted_at?: Timestamp;
+  deleted_by_user_id?: ID;
+  is_deleted: boolean;
+}
+
+/**
+ * Match period for tracking match time segments
+ */
+export interface LocalMatchPeriod extends SyncableRecord {
+  /** UUID primary key */
+  id: ID;
+  /** Foreign key to matches table */
+  match_id: ID;
+  /** Period number (1, 2, 3, 4 for quarters; 1, 2 for halves) */
+  period_number: number;
+  /** Period type */
+  period_type: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT';
+  /** When the period started (timestamp - preserves original) */
+  started_at: Timestamp;
+  /** When the period ended (timestamp - preserves original) */
+  ended_at?: Timestamp;
+  /** Duration in seconds */
+  duration_seconds?: number;
+  /** Client timestamps */
+  created_at: Timestamp;
+  updated_at: Timestamp;
+  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
+  created_by_user_id: ID;
+  deleted_at?: Timestamp;
+  deleted_by_user_id?: ID;
+  is_deleted: boolean;
+}
+
+/**
+ * Match state for tracking current match status
+ */
+export interface LocalMatchState extends SyncableRecord {
+  /** Match ID (primary key) */
+  match_id: ID;
+  /** Current match status */
+  status: 'NOT_STARTED' | 'LIVE' | 'PAUSED' | 'COMPLETED';
+  /** Current period ID (if match is live) */
+  current_period_id?: ID;
+  /** Elapsed timer in milliseconds */
+  timer_ms: number;
+  /** Last updated timestamp */
+  last_updated_at: Timestamp;
+  /** Client timestamps */
+  created_at: Timestamp;
+  updated_at: Timestamp;
+  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
+  created_by_user_id: ID;
+  deleted_at?: Timestamp;
+  deleted_by_user_id?: ID;
+  is_deleted: boolean;
+}
+
+/**
+ * Formation player position in a default lineup
+ */
+export interface FormationPlayerPosition {
+  playerId: string;
+  position: string;
+  pitchX: number;
+  pitchY: number;
+}
+
+/**
+ * Default lineup for a team (stored locally)
+ */
+export interface LocalDefaultLineup extends SyncableRecord {
+  /** Unique ID */
+  id: ID;
+  /** Team ID this lineup belongs to */
+  team_id: ID;
+  /** Formation data - array of player positions */
+  formation: FormationPlayerPosition[];
   /** Client timestamps */
   created_at: Timestamp;
   updated_at: Timestamp;
@@ -269,11 +359,13 @@ export interface EnhancedDatabaseSchema {
   seasons: EnhancedSeason;
   lineup: EnhancedLineup;
   match_notes: EnhancedMatchNote;
-  
+  match_periods: LocalMatchPeriod;
+  match_state: LocalMatchState;
+
   // Sync infrastructure
   outbox: EnhancedOutboxEvent;
   sync_metadata: EnhancedSyncMetadata;
-  
+
   // Settings (keeping existing)
   settings: {
     key: string;
@@ -303,7 +395,9 @@ export const SCHEMA_INDEXES = {
     '[team_id+period_number]',           // Team period analysis
     'linked_events',                     // Multi-entry index for linked events
     'ts_server',                         // Sync ordering
-    'updated_at'                         // Change tracking
+    'updated_at',                        // Change tracking
+    'synced',                            // Sync status
+    '[synced+created_by_user_id]'       // Unsynced guest data
   ],
   
   // Matches table
@@ -317,7 +411,9 @@ export const SCHEMA_INDEXES = {
     '[season_id+kickoff_ts]',           // Season timeline
     '[home_team_id+kickoff_ts]',        // Team schedule
     '[away_team_id+kickoff_ts]',        // Team schedule
-    'updated_at'                         // Change tracking
+    'updated_at',                        // Change tracking
+    'synced',                            // Sync status
+    '[synced+created_by_user_id]'       // Unsynced guest data
   ],
   
   // Players table
@@ -329,25 +425,31 @@ export const SCHEMA_INDEXES = {
     'is_deleted',                        // Soft delete filtering
     '[current_team+squad_number]',      // Unique team numbers
     '[current_team+full_name]',         // Team roster with names
-    'updated_at'                         // Change tracking
+    'updated_at',                        // Change tracking
+    'synced',                            // Sync status
+    '[synced+created_by_user_id]'       // Unsynced guest data
   ],
-  
+
   // Teams table
   teams: [
     'name',                              // Name-based search
     'created_by_user_id',                // Guest/user scoping
     'is_deleted',                        // Soft delete filtering
-    'updated_at'                         // Change tracking
+    'updated_at',                        // Change tracking
+    'synced',                            // Sync status
+    '[synced+created_by_user_id]'       // Unsynced guest data
   ],
-  
+
   // Seasons table
   seasons: [
     'label',                             // Label-based search
     'created_by_user_id',                // Guest/user scoping
     'is_deleted',                        // Soft delete filtering
-    'updated_at'                         // Change tracking
+    'updated_at',                        // Change tracking
+    'synced',                            // Sync status
+    '[synced+created_by_user_id]'       // Unsynced guest data
   ],
-  
+
   // Lineup table
   lineup: [
     'match_id',                          // Match lineup queries
@@ -355,7 +457,9 @@ export const SCHEMA_INDEXES = {
     '[match_id+start_min]',             // Timeline-based queries
     '[match_id+position]',              // Position-based analysis
     '[player_id+match_id]',             // Player match participation
-    'updated_at'                         // Change tracking
+    'updated_at',                        // Change tracking
+    'synced',                            // Sync status
+    '[synced+created_by_user_id]'       // Unsynced guest data
   ],
   
   // Match notes table
@@ -390,6 +494,37 @@ export const SCHEMA_INDEXES = {
   settings: [
     'key',                               // Key-based lookup
     'updated_at'                         // Change tracking
+  ],
+
+  // Match periods table
+  match_periods: [
+    'match_id',                          // Match-specific periods
+    'period_number',                     // Period ordering
+    '[match_id+period_number]',         // Unique period per match
+    'started_at',                        // Timeline ordering
+    'created_by_user_id',                // Guest/user scoping
+    'is_deleted',                        // Soft delete filtering
+    'synced',                            // Sync status
+    '[synced+created_by_user_id]',      // Unsynced guest data
+    '[match_id+synced]'                 // Match sync status
+  ],
+
+  // Match state table
+  match_state: [
+    'match_id',                          // Primary key
+    'status',                            // Status filtering
+    'created_by_user_id',                // Guest/user scoping
+    'synced',                            // Sync status
+    '[synced+created_by_user_id]'       // Unsynced guest data
+  ],
+
+  // Default lineups table
+  default_lineups: [
+    'team_id',                           // Primary lookup by team
+    'created_by_user_id',                // Guest/user scoping
+    'is_deleted',                        // Soft delete filtering
+    'synced',                            // Sync status
+    '[synced+created_by_user_id]'       // Unsynced guest data
   ]
 } as const;
 
@@ -419,8 +554,8 @@ export const EVENT_RELATIONSHIPS = {
  * Auto-linking configuration
  */
 export const LINKING_CONFIG = {
-  /** Time window for auto-linking events (15 seconds) */
-  TIME_WINDOW_MS: 15000,
+  /** Time window for auto-linking events (60 seconds) */
+  TIME_WINDOW_MS: 60000,
   
   /** Maximum number of events to link to a single event */
   MAX_LINKS_PER_EVENT: 5,

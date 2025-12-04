@@ -532,3 +532,22 @@ export const periodEndSchema = z.object({
     .max(7200, 'Duration cannot exceed 2 hours')
     .optional()
 });
+
+// Period import schema for importing periods with preserved timestamps (guest data import)
+export const periodImportSchema = z.object({
+  periodNumber: z.number()
+    .int('Period number must be an integer')
+    .min(1, 'Period number must be at least 1')
+    .max(10, 'Period number must be at most 10'),
+  periodType: z.enum(['REGULAR', 'EXTRA_TIME', 'PENALTY_SHOOTOUT']),
+  startedAt: z.string()
+    .datetime('startedAt must be a valid ISO date'),
+  endedAt: z.string()
+    .datetime('endedAt must be a valid ISO date')
+    .optional(),
+  durationSeconds: z.number()
+    .int('Duration must be an integer')
+    .min(0, 'Duration cannot be negative')
+    .max(7200, 'Duration cannot exceed 2 hours')
+    .optional()
+});

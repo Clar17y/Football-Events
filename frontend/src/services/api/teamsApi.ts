@@ -177,10 +177,12 @@ export const teamsApi = {
         away_color_primary: data.awayKitPrimary,
         away_color_secondary: data.awayKitSecondary,
         logo_url: data.logoUrl,
+        is_opponent: !!data.isOpponent,
         created_at: now,
         updated_at: now,
         created_by_user_id: getGuestId(),
         is_deleted: false,
+        synced: false,
       } as any);
       try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
       return {
@@ -191,7 +193,8 @@ export const teamsApi = {
           homeKitSecondary: data.homeKitSecondary,
           awayKitPrimary: data.awayKitPrimary,
           awayKitSecondary: data.awayKitSecondary,
-          logoUrl: data.logoUrl
+          logoUrl: data.logoUrl,
+          is_opponent: !!data.isOpponent
         } as any,
         success: true,
         message: 'Team created locally'
@@ -220,10 +223,12 @@ export const teamsApi = {
         away_color_primary: data.awayKitPrimary,
         away_color_secondary: data.awayKitSecondary,
         logo_url: data.logoUrl,
+        is_opponent: !!data.isOpponent,
         created_at: now,
         updated_at: now,
         created_by_user_id: 'offline',
         is_deleted: false,
+        synced: false,
       } as any);
       await addToOutbox('teams', id, 'INSERT', teamData as any, 'offline');
       try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
@@ -235,7 +240,8 @@ export const teamsApi = {
           homeKitSecondary: data.homeKitSecondary,
           awayKitPrimary: data.awayKitPrimary,
           awayKitSecondary: data.awayKitSecondary,
-          logoUrl: data.logoUrl
+          logoUrl: data.logoUrl,
+          is_opponent: !!data.isOpponent
         } as any,
         success: true,
         message: 'Team created (offline, pending sync)'

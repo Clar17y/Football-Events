@@ -54,26 +54,64 @@ export const defaultLineupsApi = {
    * Create or update default lineup for a team
    */
   async saveDefaultLineup(data: DefaultLineupCreateRequest): Promise<DefaultLineupResponse> {
-    // Guest fallback: store locally in settings
+    // Guest fallback: store locally in default_lineups table
     if (!authApi.isAuthenticated()) {
       const { db } = await import('../../db/indexedDB');
-      const key = `default_lineup:${data.teamId}`;
-      const value = JSON.stringify({ formation: data.formation, updatedAt: Date.now() });
-      await db.settings.put({ key, value, created_at: Date.now(), updated_at: Date.now() });
-      return { success: true, data: { id: key, teamId: data.teamId, formation: data.formation as any, createdAt: new Date(), is_deleted: false, created_by_user_id: 'guest' } as any };
+      const { getGuestId } = await import('../../utils/guest');
+      const now = Date.now();
+      const id = `default-lineup-${data.teamId}`;
+      
+      // Check if exists and update, otherwise create
+      const existing = await db.default_lineups.where('team_id').equals(data.teamId).first();
+      if (existing) {
+        await db.default_lineups.update(existing.id, {
+          formation: data.formation,
+          updated_at: now,
+        });
+      } else {
+        await db.default_lineups.add({
+          id,
+          team_id: data.teamId,
+          formation: data.formation,
+          created_at: now,
+          updated_at: now,
+          created_by_user_id: getGuestId(),
+          is_deleted: false,
+          synced: false,
+        } as any);
+      }
+      return { success: true, data: { id, teamId: data.teamId, formation: data.formation as any, createdAt: new Date(), is_deleted: false, created_by_user_id: 'guest' } as any };
     }
     try {
       const response = await apiClient.post('/default-lineups', data);
       return response.data as DefaultLineupResponse;
     } catch (e) {
-      // Offline fallback: store locally
+      // Offline fallback: store locally in default_lineups table
       const { db } = await import('../../db/indexedDB');
       const { addToOutbox } = await import('../../db/utils');
-      const key = `default_lineup:${data.teamId}`;
-      const value = JSON.stringify({ formation: data.formation, updatedAt: Date.now() });
-      await db.settings.put({ key, value, created_at: Date.now(), updated_at: Date.now() });
+      const now = Date.now();
+      const id = `default-lineup-${data.teamId}`;
+      
+      const existing = await db.default_lineups.where('team_id').equals(data.teamId).first();
+      if (existing) {
+        await db.default_lineups.update(existing.id, {
+          formation: data.formation,
+          updated_at: now,
+        });
+      } else {
+        await db.default_lineups.add({
+          id,
+          team_id: data.teamId,
+          formation: data.formation,
+          created_at: now,
+          updated_at: now,
+          created_by_user_id: 'offline',
+          is_deleted: false,
+          synced: false,
+        } as any);
+      }
       await addToOutbox('default_lineups', data.teamId, 'UPDATE', { teamId: data.teamId, formation: data.formation } as any, 'offline');
-      return { success: true, data: { id: key, teamId: data.teamId, formation: data.formation as any, createdAt: new Date(), is_deleted: false, created_by_user_id: 'offline' } as any };
+      return { success: true, data: { id, teamId: data.teamId, formation: data.formation as any, createdAt: new Date(), is_deleted: false, created_by_user_id: 'offline' } as any };
     }
   },
 
@@ -83,16 +121,17 @@ export const defaultLineupsApi = {
   async getDefaultLineup(teamId: string): Promise<DefaultLineupData | null> {
     if (!authApi.isAuthenticated()) {
       const { db } = await import('../../db/indexedDB');
-      const key = `default_lineup:${teamId}`;
-      const rec = await db.settings.get(key);
+      const rec = await db.default_lineups.where('team_id').equals(teamId).and(r => !r.is_deleted).first();
       if (!rec) return null;
-      try {
-        const parsed = JSON.parse(rec.value || '{}');
-        if (!parsed || !Array.isArray(parsed.formation)) return null;
-        return { id: key, teamId, formation: parsed.formation, createdAt: new Date(rec.created_at), updatedAt: new Date(rec.updated_at), created_by_user_id: 'guest', is_deleted: false } as any;
-      } catch {
-        return null;
-      }
+      return {
+        id: rec.id,
+        teamId: rec.team_id,
+        formation: rec.formation,
+        createdAt: new Date(rec.created_at),
+        updatedAt: rec.updated_at ? new Date(rec.updated_at) : undefined,
+        created_by_user_id: rec.created_by_user_id,
+        is_deleted: rec.is_deleted
+      } as any;
     }
     try {
       console.log('[defaultLineupsApi] GET default lineup request:', teamId);
@@ -112,24 +151,39 @@ export const defaultLineupsApi = {
    */
   async updateDefaultLineup(teamId: string, formation: FormationPlayer[]): Promise<DefaultLineupResponse> {
     if (!authApi.isAuthenticated()) {
-      const { db } = await import('../../db/indexedDB');
-      const key = `default_lineup:${teamId}`;
-      const value = JSON.stringify({ formation, updatedAt: Date.now() });
-      await db.settings.put({ key, value, created_at: Date.now(), updated_at: Date.now() });
-      return { success: true, data: { id: key, teamId, formation: formation as any, createdAt: new Date(), updatedAt: new Date(), created_by_user_id: 'guest', is_deleted: false } as any };
+      // Use saveDefaultLineup which handles create/update
+      return this.saveDefaultLineup({ teamId, formation });
     }
     try {
       const response = await apiClient.put(`/default-lineups/${teamId}`, { formation });
       return response.data as DefaultLineupResponse;
     } catch (e) {
-      // Offline fallback to settings
+      // Offline fallback to default_lineups table
       const { db } = await import('../../db/indexedDB');
       const { addToOutbox } = await import('../../db/utils');
-      const key = `default_lineup:${teamId}`;
-      const value = JSON.stringify({ formation, updatedAt: Date.now() });
-      await db.settings.put({ key, value, created_at: Date.now(), updated_at: Date.now() });
+      const now = Date.now();
+      
+      const existing = await db.default_lineups.where('team_id').equals(teamId).first();
+      if (existing) {
+        await db.default_lineups.update(existing.id, {
+          formation,
+          updated_at: now,
+        });
+      } else {
+        const id = `default-lineup-${teamId}`;
+        await db.default_lineups.add({
+          id,
+          team_id: teamId,
+          formation,
+          created_at: now,
+          updated_at: now,
+          created_by_user_id: 'offline',
+          is_deleted: false,
+          synced: false,
+        } as any);
+      }
       await addToOutbox('default_lineups', teamId, 'UPDATE', { teamId, formation } as any, 'offline');
-      return { success: true, data: { id: key, teamId, formation: formation as any, createdAt: new Date(), updatedAt: new Date(), created_by_user_id: 'offline', is_deleted: false } as any };
+      return { success: true, data: { id: `default-lineup-${teamId}`, teamId, formation: formation as any, createdAt: new Date(), updatedAt: new Date(), created_by_user_id: 'offline', is_deleted: false } as any };
     }
   },
 
@@ -139,18 +193,22 @@ export const defaultLineupsApi = {
   async deleteDefaultLineup(teamId: string): Promise<{ success: boolean; message: string }> {
     if (!authApi.isAuthenticated()) {
       const { db } = await import('../../db/indexedDB');
-      const key = `default_lineup:${teamId}`;
-      await db.settings.delete(key);
+      const existing = await db.default_lineups.where('team_id').equals(teamId).first();
+      if (existing) {
+        await db.default_lineups.update(existing.id, { is_deleted: true, deleted_at: Date.now() });
+      }
       return { success: true, message: 'Deleted local default lineup' };
     }
     try {
       const response = await apiClient.delete(`/default-lineups/${teamId}`);
-      return response.data;
+      return response.data as { success: boolean; message: string };
     } catch (e) {
       const { db } = await import('../../db/indexedDB');
       const { addToOutbox } = await import('../../db/utils');
-      const key = `default_lineup:${teamId}`;
-      await db.settings.delete(key);
+      const existing = await db.default_lineups.where('team_id').equals(teamId).first();
+      if (existing) {
+        await db.default_lineups.update(existing.id, { is_deleted: true, deleted_at: Date.now() });
+      }
       await addToOutbox('default_lineups', teamId, 'DELETE', undefined, 'offline');
       return { success: true, message: 'Deleted local default lineup' };
     }
@@ -163,11 +221,12 @@ export const defaultLineupsApi = {
     if (!authApi.isAuthenticated()) {
       const { db } = await import('../../db/indexedDB');
       const teams = await db.teams.toArray();
-      const settings = await db.settings.toArray();
+      const defaultLineups = await db.default_lineups.filter(dl => !dl.is_deleted).toArray();
+      const lineupTeamIds = new Set(defaultLineups.map(dl => dl.team_id));
       const results = teams.map(t => ({
         teamId: t.id,
         teamName: t.name,
-        hasDefaultLineup: settings.some(s => s.key === `default_lineup:${t.id}`)
+        hasDefaultLineup: lineupTeamIds.has(t.id)
       }));
       return { success: true, data: results } as any;
     }
@@ -192,7 +251,7 @@ export const defaultLineupsApi = {
    */
   async validateFormation(formation: FormationPlayer[]): Promise<{ isValid: boolean; errors: string[] }> {
     const response = await apiClient.post('/default-lineups/validate', { formation });
-    return response.data.data;
+    return (response.data as any).data;
   }
 };
 
