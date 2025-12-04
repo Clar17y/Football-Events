@@ -26,6 +26,7 @@ import LineupManagementPage from './pages/LineupManagementPage';
 import { syncService } from './services/syncService';
 import ImportPromptModal from './components/ImportPromptModal';
 import { hasGuestData } from './services/importService';
+import { refreshCache, setupCacheRefreshTriggers } from './services/cacheService';
 
 setupIonicReact();
 
@@ -39,6 +40,23 @@ const AppRoutes: React.FC = () => {
   useEffect(() => {
     // Start background sync service
     try { syncService.start(); } catch {}
+
+    // Set up cache refresh triggers for online/offline transitions
+    // Requirements: 3.4, 3.5 - Trigger cache refresh on app load and when coming back online
+    try { setupCacheRefreshTriggers(); } catch {}
+
+    // Initial cache refresh if online and authenticated
+    // Requirements: 3.4 - Call refreshCache() on app load when online and authenticated
+    const initialCacheRefresh = async () => {
+      try {
+        if (navigator.onLine) {
+          await refreshCache();
+        }
+      } catch (err) {
+        console.error('[App] Initial cache refresh failed:', err);
+      }
+    };
+    initialCacheRefresh();
 
     // Show import prompt after login if guest data exists
     const onLoggedIn = async () => {
