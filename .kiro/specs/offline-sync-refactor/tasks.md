@@ -1,0 +1,181 @@
+# Implementation Plan
+
+- [x] 1. Backend Period Import Endpoint (Milestone 4 - Backend)
+  - [x] 1.1 Create period import endpoint with timestamp preservation
+    - Add POST `/api/matches/:id/periods/import` route
+    - Accept `periodNumber`, `periodType`, `startedAt`, `endedAt`, `durationSeconds`
+    - Store periods with provided timestamps (not server-generated)
+    - Validate match ownership before allowing import
+    - _Requirements: 7.1, 7.2, 7.3, 7.5_
+  - [ ]* 1.2 Write property test for timestamp preservation round-trip
+    - **Property 2: Timestamp Preservation Round-Trip**
+    - **Validates: Requirements 1.3, 7.1, 7.2, 7.3**
+  - [ ]* 1.3 Write property test for authorization validation
+    - **Property 15: Import Authorization Validation**
+    - **Validates: Requirements 7.5**
+
+- [x] 2. Import Service Updates (Milestone 4 - Frontend)
+  - [x] 2.1 Update hasGuestData to check all local tables
+    - Check events, matches, teams, players, seasons, lineup, match_periods, match_state tables
+    - Return true if any record has `created_by_user_id` starting with 'guest-'
+    - _Requirements: 1.1_
+  - [ ]* 2.2 Write property test for guest data detection
+    - **Property 1: Guest Data Detection**
+    - **Validates: Requirements 1.1**
+  - [x] 2.3 Update runImport to read from local tables
+    - Read events from events table (not outbox)
+    - Read match periods from match_periods table with preserved timestamps
+    - Read match state from match_state table
+    - Use new period import endpoint for periods
+    - Handle match state to trigger completion on server if needed
+    - _Requirements: 1.2, 1.3, 1.4_
+  - [x] 2.4 Update import cleanup to include new tables
+    - Clear match_periods records where `created_by_user_id` starts with 'guest-'
+    - Clear match_state records where `created_by_user_id` starts with 'guest-'
+    - Remove old settings cleanup (no longer needed)
+    - _Requirements: 1.5_
+  - [ ]* 2.5 Write property test for import cleanup completeness
+    - **Property 3: Import Cleanup Completeness**
+    - **Validates: Requirements 1.5**
+  - [ ]* 2.6 Write unit tests for import error handling
+    - Test partial import failure preserves failed records
+    - Test network failure handling
+    - _Requirements: 1.6_
+
+- [ ] 3. Checkpoint - Verify Import Flow
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 4. Sync Service Updates (Milestone 5)
+  - [ ] 4.1 Implement table-based sync for events
+    - Query events table where `synced` equals false
+    - Exclude records where `created_by_user_id` starts with 'guest-'
+    - POST to events API endpoint
+    - Update `synced` to true and set `synced_at` on success
+    - Batch operations (50 records per batch)
+    - _Requirements: 2.1, 2.4, 2.6_
+  - [ ] 4.2 Implement table-based sync for match periods
+    - Query match_periods table where `synced` equals false
+    - Exclude guest records
+    - Use appropriate API based on period completion status
+    - Update sync flags on success
+    - _Requirements: 2.2, 2.4, 2.6_
+  - [ ] 4.3 Implement table-based sync for match state
+    - Query match_state table where `synced` equals false
+    - Exclude guest records
+    - Sync state changes to server
+    - Update sync flags on success
+    - _Requirements: 2.3, 2.4, 2.6_
+  - [ ]* 4.4 Write property test for sync processing coverage
+    - **Property 4: Sync Processing Coverage**
+    - **Validates: Requirements 2.1, 2.2, 2.3**
+  - [ ]* 4.5 Write property test for sync flag update correctness
+    - **Property 5: Sync Flag Update Correctness**
+    - **Validates: Requirements 2.4**
+  - [ ]* 4.6 Write property test for guest data sync exclusion
+    - **Property 6: Guest Data Sync Exclusion**
+    - **Validates: Requirements 2.6**
+  - [ ] 4.7 Remove outbox-based sync code
+    - Remove outbox processing from flushOnce()
+    - Keep outbox table for migration period
+    - _Requirements: 5.2_
+
+- [ ] 5. Checkpoint - Verify Sync Flow
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 6. Cache Service Implementation (Milestone 6)
+  - [ ] 6.1 Create cacheService.ts with core functions
+    - Create `frontend/src/services/cacheService.ts`
+    - Implement `refreshCache()` main entry point
+    - Define THIRTY_DAYS_MS constant
+    - _Requirements: 3.4, 3.5_
+  - [ ] 6.2 Implement reference data refresh
+    - Implement `refreshReferenceData()` function
+    - Fetch teams, players, seasons from server
+    - Replace synced records, preserve unsynced records
+    - _Requirements: 3.3, 6.3, 6.4_
+  - [ ]* 6.3 Write property test for reference data retention
+    - **Property 9: Reference Data Retention**
+    - **Validates: Requirements 3.3**
+  - [ ]* 6.4 Write property test for refresh preserves unsynced
+    - **Property 14: Refresh Preserves Unsynced Records**
+    - **Validates: Requirements 6.3, 6.4**
+  - [ ] 6.5 Implement temporal data cleanup
+    - Implement `cleanupOldTemporalData()` function
+    - Delete synced temporal data older than 30 days
+    - Preserve all unsynced records regardless of age
+    - _Requirements: 3.1, 3.2_
+  - [ ]* 6.6 Write property test for temporal data cleanup
+    - **Property 7: Temporal Data Cleanup Age Threshold**
+    - **Validates: Requirements 3.1**
+  - [ ]* 6.7 Write property test for unsynced data preservation
+    - **Property 8: Unsynced Data Preservation**
+    - **Validates: Requirements 3.2**
+  - [ ] 6.8 Implement recent matches caching
+    - Implement `cacheRecentMatches()` function
+    - Fetch matches from last 30 days
+    - Add to local cache with synced: true
+    - _Requirements: 3.4_
+  - [ ] 6.9 Integrate cache service into app lifecycle
+    - Call `refreshCache()` on app load when online and authenticated
+    - Trigger cache refresh when coming back online
+    - _Requirements: 3.4, 3.5_
+  - [ ]* 6.10 Write property test for offline reference data access
+    - **Property 13: Offline Reference Data Access**
+    - **Validates: Requirements 6.1, 6.2**
+
+- [ ] 7. Checkpoint - Verify Caching
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 8. Migration Script (Milestone 7)
+  - [ ] 8.1 Implement outbox events migration
+    - Add migration in IndexedDB version upgrade handler
+    - Move events from outbox to events table
+    - Preserve synced status from outbox records
+    - _Requirements: 4.1_
+  - [ ]* 8.2 Write property test for migration event preservation
+    - **Property 10: Migration Event Preservation**
+    - **Validates: Requirements 4.1**
+  - [ ] 8.3 Implement match commands migration
+    - Process match commands from outbox in chronological order
+    - Reconstruct match_periods with original timestamps
+    - Create match_state reflecting final state
+    - _Requirements: 4.2, 4.3_
+  - [ ]* 8.4 Write property test for migration timestamp reconstruction
+    - **Property 11: Migration Timestamp Reconstruction**
+    - **Validates: Requirements 4.2**
+  - [ ]* 8.5 Write property test for migration state reconstruction
+    - **Property 12: Migration State Reconstruction**
+    - **Validates: Requirements 4.3**
+  - [ ] 8.6 Implement live state settings migration
+    - Migrate local_live_state settings to match_state table
+    - Only migrate if not already migrated from commands
+    - _Requirements: 4.2, 4.3_
+  - [ ] 8.7 Add migration error handling and logging
+    - Log corrupted/incomplete records and continue
+    - Log summary of migrated records on completion
+    - _Requirements: 4.4, 4.5_
+
+- [ ] 9. Checkpoint - Verify Migration
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 10. Cleanup and Deprecation (Milestone 8)
+  - [ ] 10.1 Mark addToOutbox as deprecated
+    - Add @deprecated JSDoc annotation
+    - Add console.warn for deprecation notice
+    - Keep function working for backwards compatibility
+    - _Requirements: 5.1_
+  - [ ] 10.2 Remove outbox references from import service
+    - Remove outbox cleanup from import service
+    - Verify import only reads from local tables
+    - _Requirements: 5.3_
+  - [ ] 10.3 Add TODO comment for future outbox table removal
+    - Document that outbox table can be removed in future version
+    - _Requirements: 5.4_
+  - [ ]* 10.4 Write integration tests for full offline/online flow
+    - Test guest mode event creation and import
+    - Test authenticated sync flow
+    - Test offline/online transitions
+    - _Requirements: 1.1-1.6, 2.1-2.6_
+
+- [ ] 11. Final Checkpoint - Full Integration Verification
+  - Ensure all tests pass, ask the user if questions arise.

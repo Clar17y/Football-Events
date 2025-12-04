@@ -110,7 +110,6 @@ async function migrateEventsToEnhanced(db: GrassrootsDB): Promise<void> {
   for (const event of events) {
     const enhancedEvent: Partial<EnhancedEvent> = {
       // Ensure all required fields exist
-      season_id: event.season_id || 'default-season',
       ts_server: event.ts_server || event.created_at || now,
       period_number: event.period_number || 1,
       sentiment: event.sentiment || 0,
@@ -276,7 +275,8 @@ async function createDefaultSeason(db: GrassrootsDB): Promise<void> {
         created_by_user_id: 'migration-system',
         deleted_at: undefined,
         deleted_by_user_id: undefined,
-        is_deleted: false
+        is_deleted: false,
+        synced: false
       };
       
       // Use put instead of add to handle potential duplicates

@@ -560,4 +560,271 @@ describe('Match Periods API Integration', () => {
       expect(response.body).toHaveProperty('data');
     });
   });
+
+  describe('Period Import (Guest Data Import)', () => {
+    it('should import a period with preserved timestamps', async () => {
+      const startedAt = new Date('2025-01-15T14:00:00.000Z');
+      const endedAt = new Date('2025-01-15T14:45:00.000Z');
+      const durationSeconds = 2700; // 45 minutes
+
+      const response = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          periodNumber: 1,
+          periodType: 'REGULAR',
+          startedAt: startedAt.toISOString(),
+          endedAt: endedAt.toISOString(),
+          durationSeconds
+        })
+        .expect(201);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data).toHaveProperty('id');
+      expect(response.body.data.periodNumber).toBe(1);
+      expect(response.body.data.periodType).toBe('REGULAR');
+      // Verify timestamps are preserved (not server-generated)
+      expect(new Date(response.body.data.startedAt).toISOString()).toBe(startedAt.toISOString());
+      expect(new Date(response.body.data.endedAt).toISOString()).toBe(endedAt.toISOString());
+      expect(response.body.data.durationSeconds).toBe(durationSeconds);
+    });
+
+    it('should import a period without endedAt (in-progress period)', async () => {
+      const startedAt = new Date('2025-01-15T15:00:00.000Z');
+
+      const response = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          periodNumber: 2,
+          periodType: 'REGULAR',
+          startedAt: startedAt.toISOString()
+        })
+        .expect(201);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.periodNumber).toBe(2);
+      expect(new Date(response.body.data.startedAt).toISOString()).toBe(startedAt.toISOString());
+      expect(response.body.data.endedAt).toBeUndefined();
+    });
+
+    it('should calculate duration if not provided but endedAt is', async () => {
+      const startedAt = new Date('2025-01-15T16:00:00.000Z');
+      const endedAt = new Date('2025-01-15T16:30:00.000Z'); // 30 minutes later
+
+      const response = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          periodNumber: 3,
+          periodType: 'REGULAR',
+          startedAt: startedAt.toISOString(),
+          endedAt: endedAt.toISOString()
+          // durationSeconds not provided - should be calculated
+        })
+        .expect(201);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.durationSeconds).toBe(1800); // 30 minutes = 1800 seconds
+    });
+
+    it('should update existing period if same match/number/type exists', async () => {
+      const originalStartedAt = new Date('2025-01-15T17:00:00.000Z');
+      const updatedStartedAt = new Date('2025-01-15T17:05:00.000Z');
+      const updatedEndedAt = new Date('2025-01-15T17:50:00.000Z');
+
+      // First import
+      await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          periodNumber: 4,
+          periodType: 'REGULAR',
+          startedAt: originalStartedAt.toISOString()
+        })
+        .expect(201);
+
+      // Second import with same period number and type - should update
+      const response = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          periodNumber: 4,
+          periodType: 'REGULAR',
+          startedAt: updatedStartedAt.toISOString(),
+          endedAt: updatedEndedAt.toISOString()
+        })
+        .expect(201);
+
+      expect(response.body.success).toBe(true);
+      expect(new Date(response.body.data.startedAt).toISOString()).toBe(updatedStartedAt.toISOString());
+      expect(new Date(response.body.data.endedAt).toISOString()).toBe(updatedEndedAt.toISOString());
+
+      // Verify only one period with number 4 exists
+      const periodsResponse = await request(app)
+        .get(`/api/v1/matches/${testMatch.id}/periods`)
+        .set(authHelper.getAuthHeader(testUser))
+        .expect(200);
+
+      const period4Count = periodsResponse.body.data.filter((p: any) => p.periodNumber === 4).length;
+      expect(period4Count).toBe(1);
+    });
+
+    it('should deny import for matches user does not own', async () => {
+      // Create a match owned by other user
+      const otherMatch = await request(app)
+        .post('/api/v1/matches')
+        .set(authHelper.getAuthHeader(otherUser))
+        .send({
+          seasonId: testSeason.id,
+          homeTeamId: otherTeam.id,
+          awayTeamId: testTeam.id,
+          kickoffTime: new Date().toISOString()
+        })
+        .expect(201)
+        .then(res => res.body);
+
+      const response = await request(app)
+        .post(`/api/v1/matches/${otherMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          periodNumber: 1,
+          periodType: 'REGULAR',
+          startedAt: new Date().toISOString()
+        })
+        .expect(403);
+
+      expect(response.body.message).toContain('You do not have permission');
+
+      // Cleanup
+      await prisma.match.deleteMany({ where: { match_id: otherMatch.id } });
+    });
+
+    it('should require authentication for import endpoint', async () => {
+      await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .send({
+          periodNumber: 1,
+          periodType: 'REGULAR',
+          startedAt: new Date().toISOString()
+        })
+        .expect(401);
+    });
+
+    it('should validate required fields', async () => {
+      // Missing periodNumber
+      await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          periodType: 'REGULAR',
+          startedAt: new Date().toISOString()
+        })
+        .expect(400);
+
+      // Missing periodType
+      await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          periodNumber: 1,
+          startedAt: new Date().toISOString()
+        })
+        .expect(400);
+
+      // Missing startedAt
+      await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          periodNumber: 1,
+          periodType: 'REGULAR'
+        })
+        .expect(400);
+    });
+
+    it('should validate periodType enum values', async () => {
+      const response = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          periodNumber: 1,
+          periodType: 'INVALID_TYPE',
+          startedAt: new Date().toISOString()
+        })
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation Error');
+    });
+
+    it('should validate timestamp format', async () => {
+      const response = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          periodNumber: 1,
+          periodType: 'REGULAR',
+          startedAt: 'not-a-valid-timestamp'
+        })
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation Error');
+    });
+
+    it('should reject endedAt before startedAt', async () => {
+      const startedAt = new Date('2025-01-15T14:00:00.000Z');
+      const endedAt = new Date('2025-01-15T13:00:00.000Z'); // Before startedAt
+
+      const response = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          periodNumber: 1,
+          periodType: 'REGULAR',
+          startedAt: startedAt.toISOString(),
+          endedAt: endedAt.toISOString()
+        })
+        .expect(400);
+
+      expect(response.body.message).toContain('endedAt must be after startedAt');
+    });
+
+    it('should import extra time period with preserved timestamps', async () => {
+      const startedAt = new Date('2025-01-15T15:45:00.000Z');
+      const endedAt = new Date('2025-01-15T16:00:00.000Z');
+
+      const response = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(testUser))
+        .send({
+          periodNumber: 1,
+          periodType: 'EXTRA_TIME',
+          startedAt: startedAt.toISOString(),
+          endedAt: endedAt.toISOString(),
+          durationSeconds: 900
+        })
+        .expect(201);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.periodType).toBe('EXTRA_TIME');
+      expect(new Date(response.body.data.startedAt).toISOString()).toBe(startedAt.toISOString());
+    });
+
+    it('should allow admin to import periods for any match', async () => {
+      const startedAt = new Date('2025-01-15T18:00:00.000Z');
+
+      const response = await request(app)
+        .post(`/api/v1/matches/${testMatch.id}/periods/import`)
+        .set(authHelper.getAuthHeader(adminUser))
+        .send({
+          periodNumber: 5,
+          periodType: 'REGULAR',
+          startedAt: startedAt.toISOString()
+        })
+        .expect(201);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.periodNumber).toBe(5);
+    });
+  });
 });

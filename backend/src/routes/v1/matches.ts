@@ -21,7 +21,8 @@ import {
   matchCancelSchema,
   matchPostponeSchema,
   periodStartSchema, 
-  periodEndSchema 
+  periodEndSchema,
+  periodImportSchema
 } from '../../validation/schemas';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { extractApiError } from '../../utils/prismaErrorHandler';
@@ -728,7 +729,39 @@ router.get('/:id/periods', authenticateToken, validateUUID(), asyncHandler(async
   }
 }));
 
-
+// POST /api/v1/matches/:id/periods/import - Import a period with preserved timestamps (for guest data import)
+router.post('/:id/periods/import',
+  authenticateToken,
+  validateUUID(),
+  validateRequest(periodImportSchema),
+  asyncHandler(async (req, res) => {
+    try {
+      const period = await matchPeriodsService.importPeriod(
+        req.params['id']!,
+        req.body,
+        req.user!.id,
+        req.user!.role
+      );
+      
+      return res.status(201).json({
+        success: true,
+        data: period
+      });
+    } catch (error: any) {
+      const apiError = extractApiError(error);
+      if (apiError) {
+        return res.status(apiError.statusCode).json({
+          success: false,
+          error: apiError.error,
+          message: apiError.message,
+          field: apiError.field,
+          constraint: apiError.constraint
+        });
+      }
+      throw error;
+    }
+  })
+);
 
 export default router;
 // ===== Viewer Sharing & Public Read/SSE Endpoints =====

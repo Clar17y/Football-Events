@@ -276,7 +276,7 @@ export const transformTeamCreateRequest = (
   
   const result = {
     name: request.name,
-    is_opponent: (request as any).is_opponent ?? false,
+    is_opponent: (request as any).isOpponent ?? false,
     home_kit_primary: request.homeKitPrimary ?? null,
     home_kit_secondary: request.homeKitSecondary ?? null,
     away_kit_primary: request.awayKitPrimary ?? null,
