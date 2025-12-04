@@ -42,24 +42,24 @@
     - Test network failure handling
     - _Requirements: 1.6_
 
-- [ ] 3. Checkpoint - Verify Import Flow
+- [x] 3. Checkpoint - Verify Import Flow
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Sync Service Updates (Milestone 5)
-  - [ ] 4.1 Implement table-based sync for events
+- [x] 4. Sync Service Updates (Milestone 5)
+  - [x] 4.1 Implement table-based sync for events
     - Query events table where `synced` equals false
     - Exclude records where `created_by_user_id` starts with 'guest-'
     - POST to events API endpoint
     - Update `synced` to true and set `synced_at` on success
     - Batch operations (50 records per batch)
     - _Requirements: 2.1, 2.4, 2.6_
-  - [ ] 4.2 Implement table-based sync for match periods
+  - [x] 4.2 Implement table-based sync for match periods
     - Query match_periods table where `synced` equals false
     - Exclude guest records
     - Use appropriate API based on period completion status
     - Update sync flags on success
     - _Requirements: 2.2, 2.4, 2.6_
-  - [ ] 4.3 Implement table-based sync for match state
+  - [x] 4.3 Implement table-based sync for match state
     - Query match_state table where `synced` equals false
     - Exclude guest records
     - Sync state changes to server
@@ -74,7 +74,8 @@
   - [ ]* 4.6 Write property test for guest data sync exclusion
     - **Property 6: Guest Data Sync Exclusion**
     - **Validates: Requirements 2.6**
-  - [ ] 4.7 Remove outbox-based sync code
+  - [x] 4.7 Remove outbox-based sync code
+
     - Remove outbox processing from flushOnce()
     - Keep outbox table for migration period
     - _Requirements: 5.2_
