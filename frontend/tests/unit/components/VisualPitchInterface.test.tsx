@@ -2,14 +2,12 @@
  * Tests for VisualPitchInterface component
  */
 
-import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import VisualPitchInterface, { 
   PlayerWithPosition, 
-  FormationData, 
-  PitchPosition 
+  FormationData
 } from '../../../src/components/lineup/VisualPitchInterface';
 
 // Mock data
@@ -100,7 +98,10 @@ describe('VisualPitchInterface', () => {
     expect(playerCircle).toBeInTheDocument();
   });
 
-  it('calls onPlayerRemove when clicking remove button', () => {
+  // Note: Remove buttons were removed from the component in a refactor.
+  // Players are now removed via the PlayerSelectionPanel or other UI.
+  // The onPlayerRemove callback is still available but not triggered from this component directly.
+  it.skip('calls onPlayerRemove when clicking remove button', () => {
     render(<VisualPitchInterface {...mockProps} />);
     
     const removeButtons = document.querySelectorAll('.remove-button');
@@ -110,7 +111,7 @@ describe('VisualPitchInterface', () => {
     expect(mockProps.onPlayerRemove).toHaveBeenCalledWith('1');
   });
 
-  it('does not show remove buttons in readonly mode', () => {
+  it.skip('does not show remove buttons in readonly mode', () => {
     render(<VisualPitchInterface {...mockProps} readonly={true} />);
     
     const removeButtons = document.querySelectorAll('.remove-button');

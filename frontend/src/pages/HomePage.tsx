@@ -35,6 +35,7 @@ import UserProfile from '../components/UserProfile';
 import ImportGuestDataButton from '../components/ImportGuestDataButton';
 import GuestBanner from '../components/GuestBanner';
 import { useToast } from '../contexts/ToastContext';
+import OfflineSyncIndicator from '../components/OfflineSyncIndicator';
 import './HomePage.css';
 import { teamsApi } from '../services/api/teamsApi';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -230,6 +231,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             </div>
           </IonTitle>
           <IonButtons slot="end" style={{ gap: 8 }}>
+            <OfflineSyncIndicator />
             <ImportGuestDataButton />
             <ThemeToggle />
             <UserProfile />

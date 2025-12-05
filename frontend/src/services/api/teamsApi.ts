@@ -1,18 +1,34 @@
 /**
  * Teams API Service
  * Handles all team-related API operations with proper error handling and type safety
+ * 
+ * Requirements: 3.1 - Create teams while offline with synced equals false
+ * Requirements: 5.1 - Use authenticated user ID for offline-created records
  */
 
 import apiClient from './baseApi';
 import { authApi } from './authApi';
 import { canCreateTeam } from '../../utils/guestQuota';
 import { getGuestId } from '../../utils/guest';
+import { isOnline, shouldUseOfflineFallback, getCurrentUserId } from '../../utils/network';
 import type { 
   Team, 
   TeamCreateRequest, 
   TeamUpdateRequest, 
   PaginatedResponse 
 } from '@shared/types';
+
+/**
+ * Show offline toast notification
+ * Requirements: 4.2 - Show toast when data is saved locally
+ */
+function showOfflineToast(message: string): void {
+  try {
+    (window as any).__toastApi?.current?.showInfo?.(message);
+  } catch {
+    console.log('[teamsApi] Offline:', message);
+  }
+}
 
 // API request/response interfaces
 export interface TeamsListParams {
@@ -157,11 +173,15 @@ export const teamsApi = {
   },
 
   /**
-   * Create a new team
+   * Create a new team with offline fallback
+   * 
+   * Requirements: 3.1 - Write to local teams table with synced equals false when offline
+   * Requirements: 5.1 - Use authenticated user ID for created_by_user_id
+   * Requirements: 6.1 - Fall back to local storage on network error
    */
   async createTeam(teamData: TeamCreateRequest): Promise<TeamResponse> {
+    // Guest mode: always create locally
     if (!authApi.isAuthenticated()) {
-      // Enforce guest team limit and create locally
       const q = await canCreateTeam();
       if (!q.ok) throw new Error(q.reason);
       const { db } = await import('../../db/indexedDB');
@@ -200,62 +220,77 @@ export const teamsApi = {
         message: 'Team created locally'
       };
     }
-    try {
-      const response = await apiClient.post('/teams', teamData);
-      return {
-        data: response.data as Team,
-        success: true,
-        message: 'Team created successfully'
-      };
-    } catch (e: any) {
-      // Authenticated but offline: create locally and add to outbox
-      const { db } = await import('../../db/indexedDB');
-      const { addToOutbox } = await import('../../db/utils');
-      const now = Date.now();
-      const id = crypto?.randomUUID ? crypto.randomUUID() : `team-${now}-${Math.random().toString(36).slice(2)}`;
-      const data = teamData as any;
-      await db.teams.add({
-        id,
-        team_id: id,
-        name: teamData.name,
-        color_primary: data.homeKitPrimary,
-        color_secondary: data.homeKitSecondary,
-        away_color_primary: data.awayKitPrimary,
-        away_color_secondary: data.awayKitSecondary,
-        logo_url: data.logoUrl,
-        is_opponent: !!data.isOpponent,
-        created_at: now,
-        updated_at: now,
-        created_by_user_id: 'offline',
-        is_deleted: false,
-        synced: false,
-      } as any);
-      await addToOutbox('teams', id, 'INSERT', teamData as any, 'offline');
-      try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
-      return {
-        data: {
-          id,
-          name: teamData.name,
-          homeKitPrimary: data.homeKitPrimary,
-          homeKitSecondary: data.homeKitSecondary,
-          awayKitPrimary: data.awayKitPrimary,
-          awayKitSecondary: data.awayKitSecondary,
-          logoUrl: data.logoUrl,
-          is_opponent: !!data.isOpponent
-        } as any,
-        success: true,
-        message: 'Team created (offline, pending sync)'
-      };
+
+    // Authenticated mode: try server first if online
+    if (isOnline()) {
+      try {
+        const response = await apiClient.post('/teams', teamData);
+        return {
+          data: response.data as Team,
+          success: true,
+          message: 'Team created successfully'
+        };
+      } catch (error) {
+        // If not a network error, re-throw (e.g., 400, 401, 403)
+        if (!shouldUseOfflineFallback(error)) {
+          throw error;
+        }
+        // Fall through to offline handling for network errors
+      }
     }
+
+    // Offline fallback: write to local teams table with authenticated user ID
+    const { db } = await import('../../db/indexedDB');
+    const now = Date.now();
+    const id = crypto?.randomUUID ? crypto.randomUUID() : `team-${now}-${Math.random().toString(36).slice(2)}`;
+    const data = teamData as any;
+    const userId = getCurrentUserId();
+
+    await db.teams.add({
+      id,
+      team_id: id,
+      name: teamData.name,
+      color_primary: data.homeKitPrimary,
+      color_secondary: data.homeKitSecondary,
+      away_color_primary: data.awayKitPrimary,
+      away_color_secondary: data.awayKitSecondary,
+      logo_url: data.logoUrl,
+      is_opponent: !!data.isOpponent,
+      created_at: now,
+      updated_at: now,
+      created_by_user_id: userId,
+      is_deleted: false,
+      synced: false,
+    } as any);
+
+    showOfflineToast('Team saved locally - will sync when online');
+
+    return {
+      data: {
+        id,
+        name: teamData.name,
+        homeKitPrimary: data.homeKitPrimary,
+        homeKitSecondary: data.homeKitSecondary,
+        awayKitPrimary: data.awayKitPrimary,
+        awayKitSecondary: data.awayKitSecondary,
+        logoUrl: data.logoUrl,
+        is_opponent: !!data.isOpponent
+      } as any,
+      success: true,
+      message: 'Team created locally - will sync when online'
+    };
   },
 
   /**
-   * Update an existing team
+   * Update an existing team with offline fallback
+   * 
+   * Requirements: 3.1 - Update local record when offline
+   * Requirements: 6.1 - Fall back to local storage on network error
    */
   async updateTeam(id: string, teamData: TeamUpdateRequest): Promise<TeamResponse> {
+    // Guest mode: always update locally
     if (!authApi.isAuthenticated()) {
       const { db } = await import('../../db/indexedDB');
-      // Map frontend field names to DB schema field names
       const dbUpdate: any = { updated_at: Date.now() };
       if (teamData.name !== undefined) dbUpdate.name = teamData.name;
       if ((teamData as any).homeKitPrimary !== undefined) dbUpdate.color_primary = (teamData as any).homeKitPrimary;
@@ -280,16 +315,65 @@ export const teamsApi = {
         message: 'Team updated locally'
       };
     }
-    // Remove undefined values while preserving shared type keys
-    const cleanData = Object.fromEntries(
-      Object.entries(teamData).filter(([_, value]) => value !== undefined)
-    );
 
-    const response = await apiClient.put(`/teams/${id}`, cleanData);
+    // Authenticated mode: try server first if online
+    if (isOnline()) {
+      try {
+        // Remove undefined values while preserving shared type keys
+        const cleanData = Object.fromEntries(
+          Object.entries(teamData).filter(([_, value]) => value !== undefined)
+        );
+        const response = await apiClient.put(`/teams/${id}`, cleanData);
+        return {
+          data: response.data as Team,
+          success: true,
+          message: 'Team updated successfully'
+        };
+      } catch (error) {
+        // If not a network error, re-throw (e.g., 400, 401, 403)
+        if (!shouldUseOfflineFallback(error)) {
+          throw error;
+        }
+        // Fall through to offline handling for network errors
+      }
+    }
+
+    // Offline fallback: update local record
+    const { db } = await import('../../db/indexedDB');
+    const existingTeam = await db.teams.get(id);
+    if (!existingTeam) {
+      throw new Error(`Team ${id} not found in local storage`);
+    }
+
+    const now = Date.now();
+    const dbUpdate: any = { 
+      updated_at: now,
+      synced: false  // Mark as unsynced for later sync
+    };
+    if (teamData.name !== undefined) dbUpdate.name = teamData.name;
+    if ((teamData as any).homeKitPrimary !== undefined) dbUpdate.color_primary = (teamData as any).homeKitPrimary;
+    if ((teamData as any).homeKitSecondary !== undefined) dbUpdate.color_secondary = (teamData as any).homeKitSecondary;
+    if ((teamData as any).awayKitPrimary !== undefined) dbUpdate.away_color_primary = (teamData as any).awayKitPrimary;
+    if ((teamData as any).awayKitSecondary !== undefined) dbUpdate.away_color_secondary = (teamData as any).awayKitSecondary;
+    if ((teamData as any).logoUrl !== undefined) dbUpdate.logo_url = (teamData as any).logoUrl;
+
+    await db.teams.update(id, dbUpdate);
+    const updated = await db.teams.get(id);
+
+    showOfflineToast('Team updated locally - will sync when online');
+
     return {
-      data: response.data as Team,
+      data: {
+        id,
+        name: (updated as any)?.name || teamData.name,
+        homeKitPrimary: (updated as any)?.color_primary,
+        homeKitSecondary: (updated as any)?.color_secondary,
+        awayKitPrimary: (updated as any)?.away_color_primary,
+        awayKitSecondary: (updated as any)?.away_color_secondary,
+        logoUrl: (updated as any)?.logo_url
+      } as any,
       success: true,
-      message: 'Team updated successfully'
+      message: 'Team updated locally - will sync when online'
     };
   },
 

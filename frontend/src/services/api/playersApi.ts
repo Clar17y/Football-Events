@@ -1,18 +1,34 @@
 /**
  * Players API Service
  * Handles all player-related API operations with proper error handling and type safety
+ * 
+ * Requirements: 3.2 - Create players while offline with synced equals false
+ * Requirements: 5.1 - Use authenticated user ID for offline-created records
  */
 
 import apiClient from './baseApi';
 import { authApi } from './authApi';
 import { canAddPlayer } from '../../utils/guestQuota';
 import { getGuestId } from '../../utils/guest';
+import { isOnline, shouldUseOfflineFallback, getCurrentUserId } from '../../utils/network';
 import type { 
   Player, 
   PlayerCreateRequest, 
   PlayerUpdateRequest, 
   PaginatedResponse 
 } from '@shared/types';
+
+/**
+ * Show offline toast notification
+ * Requirements: 4.2 - Show toast when data is saved locally
+ */
+function showOfflineToast(message: string): void {
+  try {
+    (window as any).__toastApi?.current?.showInfo?.(message);
+  } catch {
+    console.log('[playersApi] Offline:', message);
+  }
+}
 
 // API request/response interfaces
 export interface PlayersListParams {
@@ -156,9 +172,14 @@ export const playersApi = {
   },
 
   /**
-   * Create a new player
+   * Create a new player with offline fallback
+   * 
+   * Requirements: 3.2 - Write to local players table with synced equals false when offline
+   * Requirements: 5.1 - Use authenticated user ID for created_by_user_id
+   * Requirements: 6.1 - Fall back to local storage on network error
    */
   async createPlayer(playerData: PlayerCreateRequest): Promise<PlayerResponse> {
+    // Guest mode: always create locally
     if (!authApi.isAuthenticated()) {
       const { db } = await import('../../db/indexedDB');
       const now = Date.now();
@@ -180,42 +201,63 @@ export const playersApi = {
       try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
       return { data: { id, name: playerData.name } as any, success: true, message: 'Player created locally' };
     }
-    try {
-      const response = await apiClient.post('/players', playerData);
-      return {
-        data: response.data as Player,
-        success: true,
-        message: 'Player created successfully'
-      };
-    } catch (e) {
-      // Authenticated but offline: create locally and add to outbox
-      const { db } = await import('../../db/indexedDB');
-      const { addToOutbox } = await import('../../db/utils');
-      const now = Date.now();
-      const id = crypto?.randomUUID ? crypto.randomUUID() : `player-${now}-${Math.random().toString(36).slice(2)}`;
-      await db.players.add({
-        id,
-        full_name: playerData.name,
-        squad_number: playerData.squadNumber,
-        preferred_pos: playerData.preferredPosition,
-        dob: playerData.dateOfBirth ? new Date(playerData.dateOfBirth).toISOString() : undefined,
-        notes: playerData.notes,
-        created_at: now,
-        updated_at: now,
-        created_by_user_id: 'offline',
-        is_deleted: false,
-        synced: false,
-      } as any);
-      await addToOutbox('players', id, 'INSERT', playerData as any, 'offline');
-      try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
-      return { data: { id, name: playerData.name } as any, success: true, message: 'Player created (offline, pending sync)' };
+
+    // Authenticated mode: try server first if online
+    if (isOnline()) {
+      try {
+        const response = await apiClient.post('/players', playerData);
+        return {
+          data: response.data as Player,
+          success: true,
+          message: 'Player created successfully'
+        };
+      } catch (error) {
+        // If not a network error, re-throw (e.g., 400, 401, 403)
+        if (!shouldUseOfflineFallback(error)) {
+          throw error;
+        }
+        // Fall through to offline handling for network errors
+      }
     }
+
+    // Offline fallback: write to local players table with authenticated user ID
+    const { db } = await import('../../db/indexedDB');
+    const now = Date.now();
+    const id = crypto?.randomUUID ? crypto.randomUUID() : `player-${now}-${Math.random().toString(36).slice(2)}`;
+    const userId = getCurrentUserId();
+
+    await db.players.add({
+      id,
+      full_name: playerData.name,
+      squad_number: playerData.squadNumber,
+      preferred_pos: playerData.preferredPosition,
+      dob: playerData.dateOfBirth ? new Date(playerData.dateOfBirth).toISOString() : undefined,
+      notes: playerData.notes,
+      current_team: (playerData as any).teamId,
+      created_at: now,
+      updated_at: now,
+      created_by_user_id: userId,
+      is_deleted: false,
+      synced: false,
+    } as any);
+
+    showOfflineToast('Player saved locally - will sync when online');
+
+    return {
+      data: { id, name: playerData.name } as any,
+      success: true,
+      message: 'Player created locally - will sync when online'
+    };
   },
 
   /**
-   * Update an existing player
+   * Update an existing player with offline fallback
+   * 
+   * Requirements: 3.2 - Update local record when offline
+   * Requirements: 6.1 - Fall back to local storage on network error
    */
   async updatePlayer(id: string, playerData: PlayerUpdateRequest): Promise<PlayerResponse> {
+    // Guest mode: always update locally
     if (!authApi.isAuthenticated()) {
       const { db } = await import('../../db/indexedDB');
       await db.players.update(id, { ...playerData, updated_at: Date.now() } as any);
@@ -227,16 +269,60 @@ export const playersApi = {
         message: 'Player updated locally'
       };
     }
-    // Remove undefined values
-    const cleanData = Object.fromEntries(
-      Object.entries(playerData).filter(([_, value]) => value !== undefined)
-    );
 
-    const response = await apiClient.put(`/players/${id}`, cleanData);
+    // Authenticated mode: try server first if online
+    if (isOnline()) {
+      try {
+        // Remove undefined values
+        const cleanData = Object.fromEntries(
+          Object.entries(playerData).filter(([_, value]) => value !== undefined)
+        );
+        const response = await apiClient.put(`/players/${id}`, cleanData);
+        return {
+          data: response.data as Player,
+          success: true,
+          message: 'Player updated successfully'
+        };
+      } catch (error) {
+        // If not a network error, re-throw (e.g., 400, 401, 403)
+        if (!shouldUseOfflineFallback(error)) {
+          throw error;
+        }
+        // Fall through to offline handling for network errors
+      }
+    }
+
+    // Offline fallback: update local record
+    const { db } = await import('../../db/indexedDB');
+    const existingPlayer = await db.players.get(id);
+    if (!existingPlayer) {
+      throw new Error(`Player ${id} not found in local storage`);
+    }
+
+    const now = Date.now();
+    const dbUpdate: any = {
+      updated_at: now,
+      synced: false,  // Mark as unsynced for later sync
+    };
+
+    // Map API fields to local schema fields
+    if (playerData.name !== undefined) dbUpdate.full_name = playerData.name;
+    if (playerData.squadNumber !== undefined) dbUpdate.squad_number = playerData.squadNumber;
+    if (playerData.preferredPosition !== undefined) dbUpdate.preferred_pos = playerData.preferredPosition;
+    if (playerData.dateOfBirth !== undefined) {
+      dbUpdate.dob = playerData.dateOfBirth ? new Date(playerData.dateOfBirth).toISOString() : undefined;
+    }
+    if (playerData.notes !== undefined) dbUpdate.notes = playerData.notes;
+
+    await db.players.update(id, dbUpdate);
+    const updated = await db.players.get(id);
+
+    showOfflineToast('Player updated locally - will sync when online');
+
     return {
-      data: response.data as Player,
+      data: { id, name: (updated as any)?.full_name || playerData.name } as any,
       success: true,
-      message: 'Player updated successfully'
+      message: 'Player updated locally - will sync when online'
     };
   },
 

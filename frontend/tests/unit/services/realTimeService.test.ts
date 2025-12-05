@@ -1,8 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach, vi, Mock } from 'vitest';
 import { RealTimeService } from '../../../src/services/realTimeService';
-import { db } from '../../../src/db/indexedDB';
 import type { MatchEvent } from '../../../src/types/events';
 import type { EnhancedOutboxEvent } from '../../../src/db/schema';
+
+// Create mock db object that will be used by dynamic imports
+const mockDb = {
+  addEvent: vi.fn(),
+  getUnsyncedEvents: vi.fn(),
+  markEventSynced: vi.fn(),
+  markEventSyncFailed: vi.fn(),
+  outbox: {
+    where: vi.fn(() => ({
+      equals: vi.fn(() => ({
+        toArray: vi.fn()
+      }))
+    }))
+  }
+};
 
 // Mock Socket.IO
 vi.mock('socket.io-client', () => {
@@ -18,21 +32,15 @@ vi.mock('socket.io-client', () => {
   };
 });
 
-// Mock database
+// Mock database - needs to handle dynamic imports
 vi.mock('../../../src/db/indexedDB', () => ({
-  db: {
-    addEvent: vi.fn(),
-    getUnsyncedEvents: vi.fn(),
-    markEventSynced: vi.fn(),
-    markEventSyncFailed: vi.fn(),
-    outbox: {
-      where: vi.fn(() => ({
-        equals: vi.fn(() => ({
-          toArray: vi.fn()
-        }))
-      }))
-    }
-  }
+  db: mockDb
+}));
+
+// Mock guest utilities used by addToOutbox
+vi.mock('../../../src/utils/guest', () => ({
+  isGuest: vi.fn(() => false),
+  getGuestId: vi.fn(() => 'guest-123')
 }));
 
 describe('RealTimeService', () => {
@@ -61,16 +69,17 @@ describe('RealTimeService', () => {
     mockEvent = {
       id: 'test-event-1',
       kind: 'goal',
-      match_id: 'test-match-1',
-      season_id: 'test-season-1',
-      team_id: 'test-team-1',
-      player_id: 'test-player-1',
-      period_number: 1,
-      clock_ms: 300000,
+      matchId: 'test-match-1',
+      teamId: 'test-team-1',
+      playerId: 'test-player-1',
+      periodNumber: 1,
+      clockMs: 300000,
       sentiment: 3,
       notes: 'Test goal',
-      created: Date.now()
-    };
+      createdAt: new Date(),
+      created_by_user_id: 'user-1',
+      is_deleted: false
+    } as MatchEvent;
   });
 
   afterEach(() => {
@@ -84,7 +93,7 @@ describe('RealTimeService', () => {
       (realTimeService as any).socket = mockSocket;
       
       // Mock successful real-time publish
-      mockSocket.emit.mockImplementation((event, data, callback) => {
+      mockSocket.emit.mockImplementation((event: string, data: any, callback?: (response: { success: boolean }) => void) => {
         if (event === 'match_event' && callback) {
           callback({ success: true });
         }
@@ -95,7 +104,7 @@ describe('RealTimeService', () => {
       expect(result.success).toBe(true);
       expect(result.method).toBe('realtime');
       expect(mockSocket.emit).toHaveBeenCalledWith('match_event', mockEvent, expect.any(Function));
-      expect(db.addEvent).not.toHaveBeenCalled();
+      expect(mockDb.addEvent).not.toHaveBeenCalled();
     });
 
     it('should fallback to outbox when real-time fails', async () => {
@@ -104,21 +113,21 @@ describe('RealTimeService', () => {
       (realTimeService as any).socket = mockSocket;
       
       // Mock failed real-time publish
-      mockSocket.emit.mockImplementation((event, data, callback) => {
+      mockSocket.emit.mockImplementation((event: string, data: any, callback?: (response: { success: boolean }) => void) => {
         if (event === 'match_event' && callback) {
           callback({ success: false });
         }
       });
 
       // Mock successful outbox add
-      (db.addEvent as Mock).mockResolvedValue({ success: true, data: 1 });
+      mockDb.addEvent.mockResolvedValue({ success: true, data: 1 });
 
       const result = await realTimeService.publishEvent(mockEvent);
 
       expect(result.success).toBe(true);
       expect(result.method).toBe('outbox');
       expect(mockSocket.emit).toHaveBeenCalledWith('match_event', mockEvent, expect.any(Function));
-      expect(db.addEvent).toHaveBeenCalled();
+      expect(mockDb.addEvent).toHaveBeenCalled();
     });
 
     it('should use outbox when disconnected', async () => {
@@ -127,14 +136,14 @@ describe('RealTimeService', () => {
       (realTimeService as any).socket = null;
       
       // Mock successful outbox add
-      (db.addEvent as Mock).mockResolvedValue({ success: true, data: 1 });
+      mockDb.addEvent.mockResolvedValue({ success: true, data: 1 });
 
       const result = await realTimeService.publishEvent(mockEvent);
 
       expect(result.success).toBe(true);
       expect(result.method).toBe('outbox');
       expect(mockSocket.emit).not.toHaveBeenCalled();
-      expect(db.addEvent).toHaveBeenCalled();
+      expect(mockDb.addEvent).toHaveBeenCalled();
     });
 
     it('should handle outbox failure gracefully', async () => {
@@ -143,7 +152,7 @@ describe('RealTimeService', () => {
       (realTimeService as any).socket = null;
       
       // Mock failed outbox add
-      (db.addEvent as Mock).mockResolvedValue({ 
+      mockDb.addEvent.mockResolvedValue({ 
         success: false, 
         error: 'Database error' 
       });
@@ -161,14 +170,14 @@ describe('RealTimeService', () => {
       (realTimeService as any).isConnected = true;
       (realTimeService as any).socket = mockSocket;
       
-      // Mock unsynced events with payload structure that realTimeService expects
+      // Mock unsynced events with data structure that realTimeService expects
       const unsyncedEvents: any[] = [
         {
           id: 1,
           table_name: 'events',
           record_id: 'event-1',
           operation: 'INSERT',
-          payload: {
+          data: {
             kind: 'goal',
             match_id: 'test-match-1',
             team_id: 'test-team-1',
@@ -176,7 +185,7 @@ describe('RealTimeService', () => {
             minute: 5,
             second: 0,
             period: 1,
-            data: { notes: 'Test goal' },
+            notes: 'Test goal',
             created: Date.now()
           },
           synced: false,
@@ -185,33 +194,33 @@ describe('RealTimeService', () => {
         }
       ];
 
-      (db.getUnsyncedEvents as Mock).mockResolvedValue({
+      mockDb.getUnsyncedEvents.mockResolvedValue({
         success: true,
         data: unsyncedEvents
       });
 
       // Mock successful real-time publish
-      mockSocket.emit.mockImplementation((event, data, callback) => {
+      mockSocket.emit.mockImplementation((event: string, data: any, callback?: (response: { success: boolean }) => void) => {
         if (event === 'match_event' && callback) {
           callback({ success: true });
         }
       });
 
-      (db.markEventSynced as Mock).mockResolvedValue({ success: true });
+      mockDb.markEventSynced.mockResolvedValue({ success: true });
 
       // Trigger sync
       await (realTimeService as any).syncOutboxEvents();
 
-      expect(db.getUnsyncedEvents).toHaveBeenCalled();
+      expect(mockDb.getUnsyncedEvents).toHaveBeenCalled();
       expect(mockSocket.emit).toHaveBeenCalledWith(
         'match_event',
         expect.objectContaining({
           kind: 'goal',
-          match_id: 'test-match-1'
+          matchId: 'test-match-1'
         }),
         expect.any(Function)
       );
-      expect(db.markEventSynced).toHaveBeenCalledWith(1);
+      expect(mockDb.markEventSynced).toHaveBeenCalledWith(1);
     });
 
     it('should mark events as failed when real-time sync fails', async () => {
@@ -219,14 +228,14 @@ describe('RealTimeService', () => {
       (realTimeService as any).isConnected = true;
       (realTimeService as any).socket = mockSocket;
       
-      // Mock unsynced events with payload structure that realTimeService expects
+      // Mock unsynced events with data structure that realTimeService expects
       const unsyncedEvents: any[] = [
         {
           id: 1,
           table_name: 'events',
           record_id: 'event-1',
           operation: 'INSERT',
-          payload: {
+          data: {
             kind: 'goal',
             match_id: 'test-match-1',
             team_id: 'test-team-1',
@@ -234,7 +243,7 @@ describe('RealTimeService', () => {
             minute: 5,
             second: 0,
             period: 1,
-            data: { notes: 'Test goal' },
+            notes: 'Test goal',
             created: Date.now()
           },
           synced: false,
@@ -243,24 +252,24 @@ describe('RealTimeService', () => {
         }
       ];
 
-      (db.getUnsyncedEvents as Mock).mockResolvedValue({
+      mockDb.getUnsyncedEvents.mockResolvedValue({
         success: true,
         data: unsyncedEvents
       });
 
       // Mock failed real-time publish
-      mockSocket.emit.mockImplementation((event, data, callback) => {
+      mockSocket.emit.mockImplementation((event: string, data: any, callback?: (response: { success: boolean }) => void) => {
         if (event === 'match_event' && callback) {
           callback({ success: false });
         }
       });
 
-      (db.markEventSyncFailed as Mock).mockResolvedValue({ success: true });
+      mockDb.markEventSyncFailed.mockResolvedValue({ success: true });
 
       // Trigger sync
       await (realTimeService as any).syncOutboxEvents();
 
-      expect(db.markEventSyncFailed).toHaveBeenCalledWith(1, 'Real-time sync failed');
+      expect(mockDb.markEventSyncFailed).toHaveBeenCalledWith(1, 'Real-time sync failed');
     });
 
     it('should handle invalid outbox events gracefully', async () => {
@@ -268,26 +277,25 @@ describe('RealTimeService', () => {
       (realTimeService as any).isConnected = true;
       (realTimeService as any).socket = mockSocket;
       
-      // Mock invalid unsynced events
+      // Mock invalid unsynced events - missing kind and match_id
       const unsyncedEvents = [
         {
           id: 1,
-          // Missing required fields
-          data: {}
+          data: {}  // Missing required fields: kind, match_id
         }
       ] as EnhancedOutboxEvent[];
 
-      (db.getUnsyncedEvents as Mock).mockResolvedValue({
+      mockDb.getUnsyncedEvents.mockResolvedValue({
         success: true,
         data: unsyncedEvents
       });
 
-      (db.markEventSyncFailed as Mock).mockResolvedValue({ success: true });
+      mockDb.markEventSyncFailed.mockResolvedValue({ success: true });
 
       // Trigger sync
       await (realTimeService as any).syncOutboxEvents();
 
-      expect(db.markEventSyncFailed).toHaveBeenCalledWith(1, 'Missing required fields');
+      expect(mockDb.markEventSyncFailed).toHaveBeenCalledWith(1, 'Missing required fields');
     });
 
     it('should not sync when already in progress', async () => {
@@ -297,7 +305,7 @@ describe('RealTimeService', () => {
 
       await (realTimeService as any).syncOutboxEvents();
 
-      expect(db.getUnsyncedEvents).not.toHaveBeenCalled();
+      expect(mockDb.getUnsyncedEvents).not.toHaveBeenCalled();
     });
 
     it('should not sync when disconnected', async () => {
@@ -307,7 +315,7 @@ describe('RealTimeService', () => {
 
       await (realTimeService as any).syncOutboxEvents();
 
-      expect(db.getUnsyncedEvents).not.toHaveBeenCalled();
+      expect(mockDb.getUnsyncedEvents).not.toHaveBeenCalled();
     });
   });
 

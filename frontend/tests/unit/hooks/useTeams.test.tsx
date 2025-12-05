@@ -209,7 +209,7 @@ describe('useTeams Hook', () => {
         name: 'Invalid Team'
       };
 
-      const errorMessage = 'Team name already exists';
+      const errorMessage = 'A team with that name already exists. Please choose a different name.';
       mockTeamsApi.createTeam.mockRejectedValue({
         response: { data: { message: errorMessage } }
       });

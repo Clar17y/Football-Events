@@ -5,12 +5,9 @@
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import PlayerSelectionPanel from '../../../src/components/lineup/PlayerSelectionPanel';
 import { PlayerWithPosition } from '../../../src/components/lineup/VisualPitchInterface';
-import { it } from 'node:test';
-import { describe } from 'node:test';
-import { beforeEach } from 'node:test';
 
 // Mock Ionic components
 vi.mock('@ionic/react', () => ({

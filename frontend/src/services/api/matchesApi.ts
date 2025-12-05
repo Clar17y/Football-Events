@@ -1,13 +1,73 @@
 /**
  * Matches API Service
  * Handles all match-related API operations
+ * 
+ * Requirements: 2.1, 2.2, 2.3 - Offline fallback for match state operations
  */
 
 import apiClient from './baseApi';
 import { createLocalQuickMatch } from '../guestQuickMatch';
 import { addToOutbox } from '../../db/utils';
+import { isOnline, shouldUseOfflineFallback, getCurrentUserId } from '../../utils/network';
+import { db } from '../../db/indexedDB';
 import type { Match, MatchUpdateRequest } from '@shared/types';
 import type { MatchState, MatchPeriod } from '@shared/types';
+import type { LocalMatchState, LocalMatchPeriod } from '../../db/schema';
+
+/**
+ * Show offline toast notification
+ * Requirements: 4.2 - Show toast when data is saved locally
+ */
+function showOfflineToast(message: string): void {
+  try {
+    (window as any).__toastApi?.current?.showInfo?.(message);
+  } catch {
+    console.log('[matchesApi] Offline:', message);
+  }
+}
+
+/**
+ * Transform local LocalMatchState to API MatchState format
+ */
+function transformToApiMatchState(localState: LocalMatchState): MatchState {
+  return {
+    id: localState.match_id,
+    matchId: localState.match_id,
+    status: localState.status === 'NOT_STARTED' ? 'SCHEDULED' : localState.status,
+    currentPeriod: undefined, // Will be set from period data if available
+    currentPeriodType: undefined,
+    matchStartedAt: localState.status !== 'NOT_STARTED' ? new Date(localState.created_at) : undefined,
+    matchEndedAt: localState.status === 'COMPLETED' ? new Date(localState.updated_at) : undefined,
+    totalElapsedSeconds: Math.floor(localState.timer_ms / 1000),
+    createdAt: new Date(localState.created_at),
+    updatedAt: new Date(localState.updated_at),
+    created_by_user_id: localState.created_by_user_id,
+    deleted_at: localState.deleted_at ? new Date(localState.deleted_at) : undefined,
+    deleted_by_user_id: localState.deleted_by_user_id,
+    is_deleted: localState.is_deleted,
+  };
+}
+
+/**
+ * Transform local LocalMatchPeriod to API MatchPeriod format
+ */
+function transformToApiMatchPeriod(localPeriod: LocalMatchPeriod): MatchPeriod {
+  return {
+    id: localPeriod.id,
+    matchId: localPeriod.match_id,
+    periodNumber: localPeriod.period_number,
+    periodType: localPeriod.period_type,
+    startedAt: localPeriod.started_at ? new Date(localPeriod.started_at) : undefined,
+    endedAt: localPeriod.ended_at ? new Date(localPeriod.ended_at) : undefined,
+    durationSeconds: localPeriod.duration_seconds,
+    createdAt: new Date(localPeriod.created_at),
+    updatedAt: new Date(localPeriod.updated_at),
+    created_by_user_id: localPeriod.created_by_user_id,
+    deleted_at: localPeriod.deleted_at ? new Date(localPeriod.deleted_at) : undefined,
+    deleted_by_user_id: localPeriod.deleted_by_user_id,
+    is_deleted: localPeriod.is_deleted,
+  };
+}
 
 export interface QuickStartPayload {
   myTeamId?: string;
@@ -328,24 +388,256 @@ export const matchesApi = {
     const response = await apiClient.get<MatchPeriod[]>(`/matches/${id}/periods`);
     return response.data as unknown as MatchPeriod[];
   },
+  /**
+   * Start a match with offline fallback
+   * 
+   * Requirements: 2.1 - Create local match_state with status LIVE and first match_period record
+   * Requirements: 6.1 - Fall back to local storage on network error
+   */
   async startMatch(id: string): Promise<MatchState> {
-    const response = await apiClient.post<MatchState>(`/matches/${id}/start`);
-    return response.data as unknown as MatchState;
+    // Try server first if online
+    if (isOnline()) {
+      try {
+        const response = await apiClient.post<MatchState>(`/matches/${id}/start`);
+        return response.data as unknown as MatchState;
+      } catch (error) {
+        // If not a network error, re-throw (e.g., 400, 401, 403)
+        if (!shouldUseOfflineFallback(error)) {
+          throw error;
+        }
+        // Fall through to offline handling for network errors
+      }
+    }
+
+    // Offline fallback: create local match_state with status LIVE
+    const now = Date.now();
+    const userId = getCurrentUserId();
+    const periodId = `period-${now}-${Math.random().toString(36).slice(2, 11)}`;
+
+    // Check if match_state already exists
+    const existingState = await db.match_state.get(id);
+    
+    if (existingState) {
+      // Update existing state to LIVE
+      await db.match_state.update(id, {
+        status: 'LIVE',
+        current_period_id: periodId,
+        timer_ms: 0,
+        last_updated_at: now,
+        updated_at: now,
+        synced: false,
+      });
+    } else {
+      // Create new match_state
+      const localState: LocalMatchState = {
+        match_id: id,
+        status: 'LIVE',
+        current_period_id: periodId,
+        timer_ms: 0,
+        last_updated_at: now,
+        created_at: now,
+        updated_at: now,
+        created_by_user_id: userId,
+        is_deleted: false,
+        synced: false,
+      };
+      await db.match_state.add(localState);
+    }
+
+    // Create first match_period record
+    const localPeriod: LocalMatchPeriod = {
+      id: periodId,
+      match_id: id,
+      period_number: 1,
+      period_type: 'REGULAR',
+      started_at: now,
+      created_at: now,
+      updated_at: now,
+      created_by_user_id: userId,
+      is_deleted: false,
+      synced: false,
+    };
+    await db.match_periods.add(localPeriod);
+
+    showOfflineToast('Match started locally - will sync when online');
+
+    // Return the updated state
+    const updatedState = await db.match_state.get(id);
+    if (!updatedState) {
+      throw new Error(`Failed to retrieve match state for ${id}`);
+    }
+    return transformToApiMatchState(updatedState);
   },
+  /**
+   * Pause a match with offline fallback
+   * 
+   * Requirements: 2.2 - Update local match_state to PAUSED
+   * Requirements: 6.1 - Fall back to local storage on network error
+   */
   async pauseMatch(id: string): Promise<MatchState> {
-    const response = await apiClient.post<MatchState>(`/matches/${id}/pause`);
-    return response.data as unknown as MatchState;
+    // Try server first if online
+    if (isOnline()) {
+      try {
+        const response = await apiClient.post<MatchState>(`/matches/${id}/pause`);
+        return response.data as unknown as MatchState;
+      } catch (error) {
+        // If not a network error, re-throw (e.g., 400, 401, 403)
+        if (!shouldUseOfflineFallback(error)) {
+          throw error;
+        }
+        // Fall through to offline handling for network errors
+      }
+    }
+
+    // Offline fallback: update local match_state to PAUSED
+    const now = Date.now();
+    const existingState = await db.match_state.get(id);
+    
+    if (!existingState) {
+      throw new Error(`Match state not found for match ${id}`);
+    }
+
+    await db.match_state.update(id, {
+      status: 'PAUSED',
+      last_updated_at: now,
+      updated_at: now,
+      synced: false,
+    });
+
+    showOfflineToast('Match paused locally - will sync when online');
+
+    const updatedState = await db.match_state.get(id);
+    if (!updatedState) {
+      throw new Error(`Failed to retrieve match state for ${id}`);
+    }
+    return transformToApiMatchState(updatedState);
   },
+  /**
+   * Resume a match with offline fallback
+   * 
+   * Requirements: 2.2 - Update local match_state to LIVE
+   * Requirements: 6.1 - Fall back to local storage on network error
+   */
   async resumeMatch(id: string): Promise<MatchState> {
-    const response = await apiClient.post<MatchState>(`/matches/${id}/resume`);
-    return response.data as unknown as MatchState;
+    // Try server first if online
+    if (isOnline()) {
+      try {
+        const response = await apiClient.post<MatchState>(`/matches/${id}/resume`);
+        return response.data as unknown as MatchState;
+      } catch (error) {
+        // If not a network error, re-throw (e.g., 400, 401, 403)
+        if (!shouldUseOfflineFallback(error)) {
+          throw error;
+        }
+        // Fall through to offline handling for network errors
+      }
+    }
+
+    // Offline fallback: update local match_state to LIVE
+    const now = Date.now();
+    const existingState = await db.match_state.get(id);
+    
+    if (!existingState) {
+      throw new Error(`Match state not found for match ${id}`);
+    }
+
+    await db.match_state.update(id, {
+      status: 'LIVE',
+      last_updated_at: now,
+      updated_at: now,
+      synced: false,
+    });
+
+    showOfflineToast('Match resumed locally - will sync when online');
+
+    const updatedState = await db.match_state.get(id);
+    if (!updatedState) {
+      throw new Error(`Failed to retrieve match state for ${id}`);
+    }
+    return transformToApiMatchState(updatedState);
   },
+  /**
+   * Complete a match with offline fallback
+   * 
+   * Requirements: 2.3 - Update local match_state to COMPLETED and end any open periods
+   * Requirements: 6.1 - Fall back to local storage on network error
+   */
   async completeMatch(id: string, finalScore?: { home: number; away: number }, notes?: string): Promise<MatchState> {
     const body: any = {};
     if (finalScore) body.finalScore = finalScore;
     if (notes) body.notes = notes;
-    const response = await apiClient.post<MatchState>(`/matches/${id}/complete`, body);
-    return response.data as unknown as MatchState;
+
+    // Try server first if online
+    if (isOnline()) {
+      try {
+        const response = await apiClient.post<MatchState>(`/matches/${id}/complete`, body);
+        return response.data as unknown as MatchState;
+      } catch (error) {
+        // If not a network error, re-throw (e.g., 400, 401, 403)
+        if (!shouldUseOfflineFallback(error)) {
+          throw error;
+        }
+        // Fall through to offline handling for network errors
+      }
+    }
+
+    // Offline fallback: update local match_state to COMPLETED
+    const now = Date.now();
+    const existingState = await db.match_state.get(id);
+    
+    if (!existingState) {
+      throw new Error(`Match state not found for match ${id}`);
+    }
+
+    // End any open periods (periods without ended_at)
+    const openPeriods = await db.match_periods
+      .where('match_id')
+      .equals(id)
+      .filter(p => !p.ended_at && !p.is_deleted)
+      .toArray();
+
+    for (const period of openPeriods) {
+      const durationSeconds = period.started_at 
+        ? Math.floor((now - period.started_at) / 1000) 
+        : 0;
+      await db.match_periods.update(period.id, {
+        ended_at: now,
+        duration_seconds: durationSeconds,
+        updated_at: now,
+        synced: false,
+      });
+    }
+
+    // Update match_state to COMPLETED
+    await db.match_state.update(id, {
+      status: 'COMPLETED',
+      current_period_id: undefined,
+      last_updated_at: now,
+      updated_at: now,
+      synced: false,
+    });
+
+    // Update match scores if provided
+    if (finalScore) {
+      try {
+        await db.matches.update(id, {
+          home_score: finalScore.home,
+          away_score: finalScore.away,
+          updated_at: now,
+          synced: false,
+        } as any);
+      } catch {
+        // Match might not exist locally, ignore
+      }
+    }
+
+    showOfflineToast('Match completed locally - will sync when online');
+
+    const updatedState = await db.match_state.get(id);
+    if (!updatedState) {
+      throw new Error(`Failed to retrieve match state for ${id}`);
+    }
+    return transformToApiMatchState(updatedState);
   },
 
   /**
@@ -373,13 +665,134 @@ export const matchesApi = {
     const pagination = body?.pagination;
     return { data, pagination } as any;
   },
+  /**
+   * Start a new period with offline fallback
+   * 
+   * Requirements: 2.1 - Create local match_periods record
+   * Requirements: 6.1 - Fall back to local storage on network error
+   */
   async startPeriod(id: string, periodType?: 'regular' | 'extra_time' | 'penalty_shootout'): Promise<MatchPeriod> {
-    const response = await apiClient.post<MatchPeriod>(`/matches/${id}/periods/start`, periodType ? { periodType } : undefined);
-    return response.data as unknown as MatchPeriod;
+    // Try server first if online
+    if (isOnline()) {
+      try {
+        const response = await apiClient.post<MatchPeriod>(`/matches/${id}/periods/start`, periodType ? { periodType } : undefined);
+        return response.data as unknown as MatchPeriod;
+      } catch (error) {
+        // If not a network error, re-throw (e.g., 400, 401, 403)
+        if (!shouldUseOfflineFallback(error)) {
+          throw error;
+        }
+        // Fall through to offline handling for network errors
+      }
+    }
+
+    // Offline fallback: create local match_periods record
+    const now = Date.now();
+    const userId = getCurrentUserId();
+    const periodId = `period-${now}-${Math.random().toString(36).slice(2, 11)}`;
+
+    // Get the next period number
+    const existingPeriods = await db.match_periods
+      .where('match_id')
+      .equals(id)
+      .filter(p => !p.is_deleted)
+      .toArray();
+    const nextPeriodNumber = existingPeriods.length + 1;
+
+    // Map period type to uppercase format
+    const mappedPeriodType: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT' = 
+      periodType === 'extra_time' ? 'EXTRA_TIME' :
+      periodType === 'penalty_shootout' ? 'PENALTY_SHOOTOUT' :
+      'REGULAR';
+
+    const localPeriod: LocalMatchPeriod = {
+      id: periodId,
+      match_id: id,
+      period_number: nextPeriodNumber,
+      period_type: mappedPeriodType,
+      started_at: now,
+      created_at: now,
+      updated_at: now,
+      created_by_user_id: userId,
+      is_deleted: false,
+      synced: false,
+    };
+    await db.match_periods.add(localPeriod);
+
+    // Update match_state with current period
+    const existingState = await db.match_state.get(id);
+    if (existingState) {
+      await db.match_state.update(id, {
+        current_period_id: periodId,
+        status: 'LIVE',
+        last_updated_at: now,
+        updated_at: now,
+        synced: false,
+      });
+    }
+
+    showOfflineToast('Period started locally - will sync when online');
+
+    return transformToApiMatchPeriod(localPeriod);
   },
+  /**
+   * End a period with offline fallback
+   * 
+   * Requirements: 2.1 - Update local match_periods with ended_at
+   * Requirements: 6.1 - Fall back to local storage on network error
+   */
   async endPeriod(id: string, periodId: string, payload?: { reason?: string; actualDurationSeconds?: number }): Promise<MatchPeriod> {
-    const response = await apiClient.post<MatchPeriod>(`/matches/${id}/periods/${periodId}/end`, payload || {});
-    return response.data as unknown as MatchPeriod;
+    // Try server first if online
+    if (isOnline()) {
+      try {
+        const response = await apiClient.post<MatchPeriod>(`/matches/${id}/periods/${periodId}/end`, payload || {});
+        return response.data as unknown as MatchPeriod;
+      } catch (error) {
+        // If not a network error, re-throw (e.g., 400, 401, 403)
+        if (!shouldUseOfflineFallback(error)) {
+          throw error;
+        }
+        // Fall through to offline handling for network errors
+      }
+    }
+
+    // Offline fallback: update local match_periods with ended_at
+    const now = Date.now();
+    const existingPeriod = await db.match_periods.get(periodId);
+    
+    if (!existingPeriod) {
+      throw new Error(`Period ${periodId} not found`);
+    }
+
+    // Calculate duration
+    const durationSeconds = payload?.actualDurationSeconds ?? 
+      (existingPeriod.started_at ? Math.floor((now - existingPeriod.started_at) / 1000) : 0);
+
+    await db.match_periods.update(periodId, {
+      ended_at: now,
+      duration_seconds: durationSeconds,
+      updated_at: now,
+      synced: false,
+    });
+
+    // Update match_state to clear current period
+    const existingState = await db.match_state.get(id);
+    if (existingState && existingState.current_period_id === periodId) {
+      await db.match_state.update(id, {
+        current_period_id: undefined,
+        last_updated_at: now,
+        updated_at: now,
+        synced: false,
+      });
+    }
+
+    showOfflineToast('Period ended locally - will sync when online');
+
+    const updatedPeriod = await db.match_periods.get(periodId);
+    if (!updatedPeriod) {
+      throw new Error(`Failed to retrieve period ${periodId}`);
+    }
+    return transformToApiMatchPeriod(updatedPeriod);
   },
   /**
    * Delete a match (soft delete)
