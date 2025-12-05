@@ -2,12 +2,11 @@
  * Unit tests for MatchesCalendar component
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import dayjs from 'dayjs';
 import MatchesCalendar from '../../../src/components/MatchesCalendar';
 import type { Match, Team } from '@shared/types';
-import { beforeEach } from 'node:test';
 
 // Mock data using shared types structure
 const mockTeam1: Team = {
@@ -220,8 +219,9 @@ describe('MatchesCalendar', () => {
       />
     );
 
-    // Should have match indicators as buttons with aria-labels
-    const matchIndicators = screen.getAllByRole('button', { name: /match:.*Click to view details/ });
+    // Should have match indicators as buttons with aria-labels containing "Click to view details"
+    // The actual aria-label format is: "Home/Away game: Team vs Team at time. Click to view details."
+    const matchIndicators = screen.getAllByRole('button', { name: /Click to view details/i });
     expect(matchIndicators.length).toBe(2); // We have 2 mock matches
     
     // Check that the match indicators contain the correct match IDs in their child elements
@@ -248,7 +248,8 @@ describe('MatchesCalendar', () => {
     );
 
     // Click on the first match indicator
-    const matchIndicators = screen.getAllByRole('button', { name: /match:.*Click to view details/ });
+    // The actual aria-label format is: "Home/Away game: Team vs Team at time. Click to view details."
+    const matchIndicators = screen.getAllByRole('button', { name: /Click to view details/i });
     fireEvent.click(matchIndicators[0]);
     
     expect(mockOnMatchClick).toHaveBeenCalledWith('match1');

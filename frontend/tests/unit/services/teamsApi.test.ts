@@ -8,14 +8,29 @@ import { teamsApi } from '../../../src/services/api/teamsApi';
 import apiClient from '../../../src/services/api/baseApi';
 import type { Team, TeamCreateRequest, TeamUpdateRequest } from '@shared/types';
 
-// Mock the API client
+// Mock the API client with all required methods
 vi.mock('../../../src/services/api/baseApi', () => ({
   default: {
     get: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
     delete: vi.fn(),
+    isAuthenticated: vi.fn(() => true), // Default to authenticated for these tests
+  },
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+    isAuthenticated: vi.fn(() => true),
   }
+}));
+
+// Mock network utilities to ensure online mode
+vi.mock('../../../src/utils/network', () => ({
+  isOnline: vi.fn(() => true),
+  shouldUseOfflineFallback: vi.fn(() => false),
+  getCurrentUserId: vi.fn(() => 'user-123'),
 }));
 
 const mockApiClient = apiClient as any;
