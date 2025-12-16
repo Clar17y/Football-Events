@@ -242,12 +242,22 @@ router.get('/:id/current-formation', authenticateToken, validateUUID(), asyncHan
 
 // POST /api/v1/matches/:id/formation-changes - Apply formation change with dual-table transaction
 router.post('/:id/formation-changes', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
-  const { startMin, formation, reason } = req.body || {};
+  const { startMin, formation, reason, eventId } = req.body || {};
   if (typeof startMin !== 'number' || !formation || !Array.isArray(formation.players)) {
     return res.status(400).json({
       error: 'Validation Error',
       message: 'startMin (number) and formation.players (array) are required'
     });
+  }
+  if (eventId != null) {
+    const isUuid = (value: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+    if (typeof eventId !== 'string' || !isUuid(eventId)) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'eventId must be a valid UUID'
+      });
+    }
   }
 
   try {
@@ -255,6 +265,7 @@ router.post('/:id/formation-changes', authenticateToken, validateUUID(), asyncHa
       matchId: req.params['id']!,
       startMin,
       formation,
+      eventId,
       userId: req.user!.id,
       userRole: req.user!.role,
       reason

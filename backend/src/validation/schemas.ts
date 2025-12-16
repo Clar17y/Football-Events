@@ -136,6 +136,9 @@ export const matchUpdateSchema = z.object({
 
 // Event validation schemas
 export const eventCreateSchema = z.object({
+  id: z.string()
+    .uuid('Event ID must be a valid UUID')
+    .optional(),
   matchId: z.string()
     .uuid('Match ID must be a valid UUID'),
   kind: z.enum([
@@ -169,6 +172,9 @@ export const eventCreateSchema = z.object({
 });
 
 export const eventUpdateSchema = z.object({
+  matchId: z.string()
+    .uuid('Match ID must be a valid UUID')
+    .optional(),
   kind: z.enum([
     'goal', 'assist', 'key_pass', 'save', 'interception', 
     'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal'

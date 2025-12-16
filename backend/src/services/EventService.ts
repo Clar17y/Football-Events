@@ -190,13 +190,28 @@ export class EventService {
     }
 
     // Transform the request data
-    const prismaInput = transformEventCreateRequest(data);
+    const prismaInput = transformEventCreateRequest(data, userId);
     
     // Add user ownership
     const eventData = {
       ...prismaInput,
       created_by_user_id: userId
     };
+
+    // If the client provides an ID, treat creation as idempotent for local-first sync:
+    // return the existing event instead of creating duplicates.
+    let existingById: any | null = null;
+    if (data.id) {
+      existingById = await this.prisma.event.findUnique({ where: { id: data.id } });
+      if (existingById && !existingById.is_deleted) {
+        if (existingById.match_id !== data.matchId) {
+          const error = new Error('Event ID already exists for a different match') as any;
+          error.statusCode = 409;
+          throw error;
+        }
+        return transformEvent(existingById);
+      }
+    }
 
     // Create unique constraint for event (match + team + player + kind + clock)
     const uniqueConstraints: any = { match_id: data.matchId };
@@ -205,15 +220,39 @@ export class EventService {
     if (data.kind) uniqueConstraints.kind = data.kind;
     if (data.clockMs !== undefined) uniqueConstraints.clock_ms = data.clockMs;
 
-    // Use the soft delete utility to create or restore
-    const createdEvent = await createOrRestoreSoftDeleted({
-      prisma: this.prisma,
-      model: 'event',
-      uniqueConstraints,
-      createData: eventData,
-      userId: userId,
-      transformer: (rawEvent: any) => rawEvent
-    });
+    let createdEvent: any;
+
+    if (data.id) {
+      if (existingById && existingById.is_deleted) {
+        // Restore by ID (avoid attempting to update the primary key field)
+        const { id: _id, ...rest } = eventData as any;
+        createdEvent = await this.prisma.event.update({
+          where: { id: data.id },
+          data: {
+            ...rest,
+            is_deleted: false,
+            deleted_at: null,
+            deleted_by_user_id: null,
+            updated_at: new Date(),
+            created_by_user_id: userId,
+          }
+        });
+      } else {
+        createdEvent = await this.prisma.event.create({
+          data: eventData as any,
+        });
+      }
+    } else {
+      // Use the soft delete utility to create or restore (natural-key based)
+      createdEvent = await createOrRestoreSoftDeleted({
+        prisma: this.prisma,
+        model: 'event',
+        uniqueConstraints,
+        createData: eventData,
+        userId: userId,
+        transformer: (rawEvent: any) => rawEvent
+      });
+    }
 
     // Get the event with includes for proper transformation
     const eventWithIncludes = await this.prisma.event.findUnique({

@@ -86,6 +86,8 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
 }) => {
   const { createPlayer, updatePlayer, loading } = usePlayers();
   const { teams, loadTeams } = useTeams();
+  const [submitting, setSubmitting] = useState(false); // Guard against double submissions
+  const submittingRef = React.useRef(false); // Synchronous guard (refs update immediately)
   
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -206,13 +208,23 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
   };
 
   const handleSubmit = async () => {
+    // Guard against double submissions using ref (synchronous check)
+    if (submittingRef.current) {
+      console.log('[CreatePlayerModal] Already submitting (ref), ignoring duplicate call');
+      return;
+    }
+    submittingRef.current = true; // Set immediately (synchronous)
+    
     // Mark all fields as touched
     const allFields = Object.keys(formData) as (keyof FormData)[];
     setTouched(allFields.reduce((acc, field) => ({ ...acc, [field]: true }), {}));
 
     if (!validateForm()) {
+      submittingRef.current = false;
       return;
     }
+    
+    setSubmitting(true);
 
     // Find team IDs from team names
     const selectedTeams = teams.filter(team => formData.currentTeams.includes(team.name));
@@ -230,35 +242,40 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
       name: formData.name.trim(),
       squadNumber: formData.squadNumber ? parseInt(formData.squadNumber, 10) : undefined,
       preferredPosition: formData.preferredPosition || undefined,
-      dateOfBirth: formData.dateOfBirth ? formData.dateOfBirth.format('DD-MM-YYYY') : undefined,
+      dateOfBirth: formData.dateOfBirth ? formData.dateOfBirth.format('YYYY-MM-DD') : undefined,
       notes: formData.notes || undefined,
       currentTeam: formData.currentTeams.join(', ') || undefined, // Join team names for backward compatibility
       teamIds: selectedTeams.map(team => team.id) // Add team IDs array
     };
 
     let result;
-    if (mode === 'edit' && editPlayer) {
-      console.log('Updating player with ID:', editPlayer.id, 'and data:', playerData);
-      // For updates, include teamIds to handle team changes
-      result = await updatePlayer(editPlayer.id, playerData);
-    } else {
-      console.log('Creating new player with data:', playerData);
-      result = await createPlayer(playerData);
-    }
-    
-    if (result) {
-      // Reset form and close modal
-      setFormData({
-        name: '',
-        squadNumber: '',
-        preferredPosition: '',
-        dateOfBirth: null,
-        notes: '',
-        currentTeams: []
-      });
-      setErrors({});
-      setTouched({});
-      onDidDismiss();
+    try {
+      if (mode === 'edit' && editPlayer) {
+        console.log('Updating player with ID:', editPlayer.id, 'and data:', playerData);
+        // For updates, include teamIds to handle team changes
+        result = await updatePlayer(editPlayer.id, playerData);
+      } else {
+        console.log('Creating new player with data:', playerData);
+        result = await createPlayer(playerData);
+      }
+      
+      if (result) {
+        // Reset form and close modal
+        setFormData({
+          name: '',
+          squadNumber: '',
+          preferredPosition: '',
+          dateOfBirth: null,
+          notes: '',
+          currentTeams: []
+        });
+        setErrors({});
+        setTouched({});
+        onDidDismiss();
+      }
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -613,7 +630,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
               expand="block" 
               color="indigo" 
               onClick={handleSubmit}
-              disabled={loading || !formData.name.trim()}
+              disabled={loading || submitting || !formData.name.trim()}
               className={styles.submitButton}
             >
               {loading ? (

@@ -212,6 +212,8 @@ export interface MatchUpdateRequest {
 }
 
 export interface EventCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   matchId: string;
   periodNumber?: number;
   clockMs?: number;

@@ -1,10 +1,13 @@
 /**
  * Default Lineups API Service
  * Handles all default lineup-related API operations
+ * 
+ * Local-first architecture: READ operations always read from IndexedDB.
+ * WRITE operations go through dataLayer which writes to IndexedDB first.
+ * Background sync handles server communication.
  */
 
 import apiClient from './baseApi';
-import { authApi } from './authApi';
 
 // API request/response interfaces
 export interface FormationPlayer {
@@ -51,199 +54,98 @@ export interface TeamsWithDefaultsResponse {
  */
 export const defaultLineupsApi = {
   /**
-   * Create or update default lineup for a team
+   * Create or update default lineup for a team - LOCAL-FIRST
    */
   async saveDefaultLineup(data: DefaultLineupCreateRequest): Promise<DefaultLineupResponse> {
-    // Guest fallback: store locally in default_lineups table
-    if (!authApi.isAuthenticated()) {
-      const { db } = await import('../../db/indexedDB');
-      const { getGuestId } = await import('../../utils/guest');
-      const now = Date.now();
-      const id = `default-lineup-${data.teamId}`;
-      
-      // Check if exists and update, otherwise create
-      const existing = await db.default_lineups.where('team_id').equals(data.teamId).first();
-      if (existing) {
-        await db.default_lineups.update(existing.id, {
-          formation: data.formation,
-          updated_at: now,
-        });
-      } else {
-        await db.default_lineups.add({
-          id,
-          team_id: data.teamId,
-          formation: data.formation,
-          created_at: now,
-          updated_at: now,
-          created_by_user_id: getGuestId(),
-          is_deleted: false,
-          synced: false,
-        } as any);
-      }
-      return { success: true, data: { id, teamId: data.teamId, formation: data.formation as any, createdAt: new Date(), is_deleted: false, created_by_user_id: 'guest' } as any };
-    }
-    try {
-      const response = await apiClient.post('/default-lineups', data);
-      return response.data as DefaultLineupResponse;
-    } catch (e) {
-      // Offline fallback: store locally in default_lineups table
-      const { db } = await import('../../db/indexedDB');
-      const { addToOutbox } = await import('../../db/utils');
-      const now = Date.now();
-      const id = `default-lineup-${data.teamId}`;
-      
-      const existing = await db.default_lineups.where('team_id').equals(data.teamId).first();
-      if (existing) {
-        await db.default_lineups.update(existing.id, {
-          formation: data.formation,
-          updated_at: now,
-        });
-      } else {
-        await db.default_lineups.add({
-          id,
-          team_id: data.teamId,
-          formation: data.formation,
-          created_at: now,
-          updated_at: now,
-          created_by_user_id: 'offline',
-          is_deleted: false,
-          synced: false,
-        } as any);
-      }
-      await addToOutbox('default_lineups', data.teamId, 'UPDATE', { teamId: data.teamId, formation: data.formation } as any, 'offline');
-      return { success: true, data: { id, teamId: data.teamId, formation: data.formation as any, createdAt: new Date(), is_deleted: false, created_by_user_id: 'offline' } as any };
-    }
+    const { defaultLineupsDataLayer } = await import('../dataLayer');
+
+    const result = await defaultLineupsDataLayer.save({
+      teamId: data.teamId,
+      formation: data.formation,
+    });
+
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
+
+    return {
+      success: true,
+      data: {
+        id: result.id,
+        teamId: data.teamId,
+        formation: result.formation as FormationPlayer[],
+        createdAt: new Date(result.created_at),
+        updatedAt: result.updated_at ? new Date(result.updated_at) : undefined,
+        created_by_user_id: result.created_by_user_id,
+        is_deleted: result.is_deleted,
+      },
+    };
   },
 
   /**
    * Get default lineup for a specific team
+   * Local-first: always reads from IndexedDB
    */
   async getDefaultLineup(teamId: string): Promise<DefaultLineupData | null> {
-    if (!authApi.isAuthenticated()) {
-      const { db } = await import('../../db/indexedDB');
-      const rec = await db.default_lineups.where('team_id').equals(teamId).and(r => !r.is_deleted).first();
-      if (!rec) return null;
-      return {
-        id: rec.id,
-        teamId: rec.team_id,
-        formation: rec.formation,
-        createdAt: new Date(rec.created_at),
-        updatedAt: rec.updated_at ? new Date(rec.updated_at) : undefined,
-        created_by_user_id: rec.created_by_user_id,
-        is_deleted: rec.is_deleted
-      } as any;
-    }
-    try {
-      console.log('[defaultLineupsApi] GET default lineup request:', teamId);
-      const response = await apiClient.get<DefaultLineupData>(`/default-lineups/${teamId}`);
-      console.log('[defaultLineupsApi] GET default lineup response:', response);
-      return response.data as DefaultLineupData;
-    } catch (error: any) {
-      if (error.response?.status === 404) {
-        return null; // No default lineup found
-      }
-      throw error;
-    }
+    // Local-first: always read from IndexedDB
+    const { db } = await import('../../db/indexedDB');
+    const rec = await db.default_lineups.where('team_id').equals(teamId).filter(r => !r.is_deleted).first();
+    if (!rec) return null;
+    return {
+      id: rec.id,
+      teamId: rec.team_id,
+      formation: rec.formation,
+      createdAt: new Date(rec.created_at),
+      updatedAt: rec.updated_at ? new Date(rec.updated_at) : undefined,
+      created_by_user_id: rec.created_by_user_id,
+      is_deleted: rec.is_deleted
+    } as any;
   },
 
   /**
-   * Update default lineup for a specific team
+   * Update default lineup for a specific team - LOCAL-FIRST
    */
   async updateDefaultLineup(teamId: string, formation: FormationPlayer[]): Promise<DefaultLineupResponse> {
-    if (!authApi.isAuthenticated()) {
-      // Use saveDefaultLineup which handles create/update
-      return this.saveDefaultLineup({ teamId, formation });
-    }
-    try {
-      const response = await apiClient.put(`/default-lineups/${teamId}`, { formation });
-      return response.data as DefaultLineupResponse;
-    } catch (e) {
-      // Offline fallback to default_lineups table
-      const { db } = await import('../../db/indexedDB');
-      const { addToOutbox } = await import('../../db/utils');
-      const now = Date.now();
-      
-      const existing = await db.default_lineups.where('team_id').equals(teamId).first();
-      if (existing) {
-        await db.default_lineups.update(existing.id, {
-          formation,
-          updated_at: now,
-        });
-      } else {
-        const id = `default-lineup-${teamId}`;
-        await db.default_lineups.add({
-          id,
-          team_id: teamId,
-          formation,
-          created_at: now,
-          updated_at: now,
-          created_by_user_id: 'offline',
-          is_deleted: false,
-          synced: false,
-        } as any);
-      }
-      await addToOutbox('default_lineups', teamId, 'UPDATE', { teamId, formation } as any, 'offline');
-      return { success: true, data: { id: `default-lineup-${teamId}`, teamId, formation: formation as any, createdAt: new Date(), updatedAt: new Date(), created_by_user_id: 'offline', is_deleted: false } as any };
-    }
+    // Delegate to saveDefaultLineup which handles upsert
+    return this.saveDefaultLineup({ teamId, formation });
   },
 
   /**
-   * Delete default lineup for a specific team
+   * Delete default lineup for a specific team - LOCAL-FIRST
    */
   async deleteDefaultLineup(teamId: string): Promise<{ success: boolean; message: string }> {
-    if (!authApi.isAuthenticated()) {
-      const { db } = await import('../../db/indexedDB');
-      const existing = await db.default_lineups.where('team_id').equals(teamId).first();
-      if (existing) {
-        await db.default_lineups.update(existing.id, { is_deleted: true, deleted_at: Date.now() });
-      }
-      return { success: true, message: 'Deleted local default lineup' };
-    }
-    try {
-      const response = await apiClient.delete(`/default-lineups/${teamId}`);
-      return response.data as { success: boolean; message: string };
-    } catch (e) {
-      const { db } = await import('../../db/indexedDB');
-      const { addToOutbox } = await import('../../db/utils');
-      const existing = await db.default_lineups.where('team_id').equals(teamId).first();
-      if (existing) {
-        await db.default_lineups.update(existing.id, { is_deleted: true, deleted_at: Date.now() });
-      }
-      await addToOutbox('default_lineups', teamId, 'DELETE', undefined, 'offline');
-      return { success: true, message: 'Deleted local default lineup' };
-    }
+    const { defaultLineupsDataLayer } = await import('../dataLayer');
+    await defaultLineupsDataLayer.delete(teamId);
+
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
+
+    return { success: true, message: 'Default lineup deleted' };
   },
 
   /**
    * Get all teams with default lineup status
+   * Local-first: always reads from IndexedDB
    */
   async getTeamsWithDefaults(): Promise<TeamsWithDefaultsResponse> {
-    if (!authApi.isAuthenticated()) {
-      const { db } = await import('../../db/indexedDB');
-      const teams = await db.teams.toArray();
-      const defaultLineups = await db.default_lineups.filter(dl => !dl.is_deleted).toArray();
-      const lineupTeamIds = new Set(defaultLineups.map(dl => dl.team_id));
-      const results = teams.map(t => ({
-        teamId: t.id,
-        teamName: t.name,
-        hasDefaultLineup: lineupTeamIds.has(t.id)
-      }));
-      return { success: true, data: results } as any;
-    }
-    const response = await apiClient.get('/default-lineups');
-    return response.data as TeamsWithDefaultsResponse;
+    // Local-first: always read from IndexedDB
+    const { db } = await import('../../db/indexedDB');
+    const teams = await db.teams.filter((t: any) => !t.is_deleted).toArray();
+    const defaultLineups = await db.default_lineups.filter(dl => !dl.is_deleted).toArray();
+    const lineupTeamIds = new Set(defaultLineups.map(dl => dl.team_id));
+    const results = teams.map(t => ({
+      teamId: t.id,
+      teamName: t.name,
+      hasDefaultLineup: lineupTeamIds.has(t.id)
+    }));
+    return { success: true, data: results } as any;
   },
 
   /**
    * Apply default lineup to a specific match
+   * Local-first: reads default lineup from IndexedDB and applies locally
    */
   async applyDefaultToMatch(teamId: string, matchId: string): Promise<any> {
-    if (!authApi.isAuthenticated()) {
-      // In guest mode, nothing to persist server-side; caller should read getDefaultLineup() and apply locally.
-      return { success: true, applied: 'local' } as any;
-    }
-    const response = await apiClient.post(`/default-lineups/${teamId}/apply-to-match`, { matchId });
-    return response.data;
+    // Local-first: read default lineup and apply locally
+    // The caller should use getDefaultLineup() and apply via lineupsDataLayer
+    return { success: true, applied: 'local' } as any;
   },
 
   /**

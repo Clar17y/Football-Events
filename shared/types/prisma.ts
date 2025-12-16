@@ -104,6 +104,7 @@ export type PrismaMatchUpdateInput = {
 };
 
 export type PrismaEventCreateInput = {
+  id?: string;
   match_id: string;
   period_number?: number | null;
   clock_ms?: number | null;

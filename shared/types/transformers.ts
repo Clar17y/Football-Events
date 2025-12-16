@@ -343,6 +343,7 @@ export const transformEventCreateRequest = (
   request: EventCreateRequest,
   created_by_user_id: string
 ): PrismaEventCreateInput => ({
+  ...(request.id ? { id: request.id } : {}),
   match_id: request.matchId,
   period_number: request.periodNumber ?? null,
   clock_ms: request.clockMs ?? null,

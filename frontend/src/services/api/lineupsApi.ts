@@ -148,98 +148,43 @@ export const lineupsApi = {
   },
 
   /**
-   * Create a new lineup entry with offline fallback
-   * 
-   * Requirements: 3.3 - Write to local lineup table with synced equals false when offline
-   * Requirements: 5.1 - Use authenticated user ID for created_by_user_id
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * Create a new lineup entry - LOCAL-FIRST
    */
   async create(lineup: LineupCreateRequest): Promise<Lineup> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<Lineup>('/lineups', lineup);
-        return response.data as unknown as Lineup;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
+    const { lineupsDataLayer } = await import('../dataLayer');
 
-    // Offline fallback: write to local lineup table
-    const now = Date.now();
     const startMin = lineup.startMinute ?? 0;
-    const lineupId = generateLineupId(lineup.matchId, lineup.playerId, startMin);
-    const userId = getCurrentUserId();
-
-    const localLineup: EnhancedLineup = {
-      id: lineupId,
-      match_id: lineup.matchId,
-      player_id: lineup.playerId,
-      start_min: startMin,
-      end_min: lineup.endMinute,
+    const localLineup = await lineupsDataLayer.create({
+      matchId: lineup.matchId,
+      playerId: lineup.playerId,
+      startMin: startMin,
+      endMin: lineup.endMinute,
       position: lineup.position,
-      created_at: now,
-      updated_at: now,
-      created_by_user_id: userId,
-      is_deleted: false,
-      synced: false,
-    };
+    });
 
-    await db.lineup.add(localLineup);
-    showOfflineToast('Lineup saved locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     return transformToApiLineup(localLineup);
   },
 
   /**
-   * Update a lineup by ID with offline fallback
-   * 
-   * Requirements: 3.3 - Update local lineup record if exists when offline
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * Update a lineup by ID - LOCAL-FIRST
    */
   async update(id: string, data: LineupUpdateRequest): Promise<Lineup> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.put<Lineup>(`/lineups/${id}`, data);
-        return response.data as unknown as Lineup;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
+    const { lineupsDataLayer } = await import('../dataLayer');
 
-    // Offline fallback: update local record
-    const existingLineup = await db.lineup.get(id);
-    if (!existingLineup) {
-      throw new Error(`Lineup ${id} not found in local storage`);
-    }
-
-    const now = Date.now();
-    const updates: Partial<EnhancedLineup> = {
-      updated_at: now,
-      synced: false,
-    };
-
-    // Map API fields to local schema fields
-    if (data.startMinute !== undefined) updates.start_min = data.startMinute;
-    if (data.endMinute !== undefined) updates.end_min = data.endMinute;
-    if (data.position !== undefined) updates.position = data.position;
-
-    await db.lineup.update(id, updates);
-    showOfflineToast('Lineup updated locally - will sync when online');
+    await lineupsDataLayer.update(id, {
+      startMin: data.startMinute,
+      endMin: data.endMinute,
+      position: data.position,
+    });
 
     const updatedLineup = await db.lineup.get(id);
     if (!updatedLineup) {
-      throw new Error(`Failed to retrieve updated lineup ${id}`);
+      throw new Error(`Lineup ${id} not found`);
     }
+
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     return transformToApiLineup(updatedLineup);
   },
@@ -253,45 +198,12 @@ export const lineupsApi = {
   },
 
   /**
-   * Delete a lineup by ID with offline fallback
-   * 
-   * Requirements: 3.3 - Mark local lineup record as deleted (soft delete) when offline
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * Delete a lineup by ID - LOCAL-FIRST
    */
   async delete(id: string): Promise<void> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        await apiClient.delete(`/lineups/${id}`);
-        return;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: mark local record as deleted (soft delete)
-    const existingLineup = await db.lineup.get(id);
-    if (!existingLineup) {
-      // Lineup doesn't exist locally - nothing to delete
-      return;
-    }
-
-    const now = Date.now();
-    const userId = getCurrentUserId();
-
-    await db.lineup.update(id, {
-      is_deleted: true,
-      deleted_at: now,
-      deleted_by_user_id: userId,
-      updated_at: now,
-      synced: false,
-    });
-
-    showOfflineToast('Lineup deleted locally - will sync when online');
+    const { lineupsDataLayer } = await import('../dataLayer');
+    await lineupsDataLayer.delete(id);
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
   },
 
   /**
@@ -325,7 +237,7 @@ export const lineupsApi = {
     // Offline fallback: process batch operations locally
     const now = Date.now();
     const userId = getCurrentUserId();
-    
+
     const result: LineupBatchResult = {
       created: { success: 0, failed: 0, items: [] },
       updated: { success: 0, failed: 0, items: [] },
@@ -338,7 +250,7 @@ export const lineupsApi = {
         try {
           const startMin = createReq.startMinute ?? 0;
           const lineupId = generateLineupId(createReq.matchId, createReq.playerId, startMin);
-          
+
           const localLineup: EnhancedLineup = {
             id: lineupId,
             match_id: createReq.matchId,
@@ -382,7 +294,7 @@ export const lineupsApi = {
           if (updateOp.data.position !== undefined) updates.position = updateOp.data.position;
 
           await db.lineup.update(updateOp.id, updates);
-          
+
           const updatedLineup = await db.lineup.get(updateOp.id);
           if (updatedLineup) {
             result.updated.success++;

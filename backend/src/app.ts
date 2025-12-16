@@ -20,10 +20,14 @@ const app = express();
 const server = createServer(app);
 const prisma = new PrismaClient();
 
-// Socket.io setup
+// Socket.io setup - Allow both localhost and network access
 const io = new Server(server, {
   cors: {
-    origin: env.FRONTEND_URL,
+    origin: [
+      'http://localhost:5173',
+      'http://192.168.1.58:5173',
+      env.FRONTEND_URL
+    ],
     methods: ["GET", "POST"]
   }
 });
@@ -32,9 +36,13 @@ const io = new Server(server, {
 app.use(helmet());
 app.use(compression());
 
-// CORS configuration
+// CORS configuration - Allow both localhost and network access
 app.use(cors({
-  origin: env.FRONTEND_URL,
+  origin: [
+    'http://localhost:5173',
+    'http://192.168.1.58:5173',
+    env.FRONTEND_URL
+  ],
   credentials: true
 }));
 
@@ -140,10 +148,11 @@ app.use(errorHandler);
 
 const PORT = getNumericEnv(env.PORT, 3001);
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📱 Frontend URL: ${env.FRONTEND_URL}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`🌐 Network access: http://192.168.1.58:${PORT}/api/health`);
 });
 
 // Export io for use in route handlers

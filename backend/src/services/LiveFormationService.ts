@@ -63,6 +63,8 @@ export class LiveFormationService {
     matchId: string;
     startMin: number; // current minute
     formation: FormationData;
+    /** Optional client-generated UUID for local-first idempotency */
+    eventId?: string;
     userId: string;
     userRole: string;
     reason?: string | null;
@@ -72,7 +74,7 @@ export class LiveFormationService {
   }> {
     return withPrismaErrorHandling(async () => {
       console.log('[LiveFormationService] applyFormationChange:start', params.matchId, params.startMin, params.reason);
-      const { matchId, startMin, formation, userId, userRole, reason } = params;
+      const { matchId, startMin, formation, eventId, userId, userRole, reason } = params;
 
       // Authorization via match ownership
       const matchWhere: any = { match_id: matchId, is_deleted: false };
@@ -83,6 +85,28 @@ export class LiveFormationService {
         (error as any).code = 'MATCH_ACCESS_DENIED';
         (error as any).statusCode = 403;
         throw error;
+      }
+
+      // Idempotency for local-first sync retries: if we've already persisted the formation_change event,
+      // treat this call as a success and avoid applying the formation twice.
+      if (eventId) {
+        try {
+          const existing = await this.prisma.event.findUnique({ where: { id: eventId } });
+          if (existing && !existing.is_deleted) {
+            if (existing.match_id !== matchId || existing.kind !== ('formation_change' as any)) {
+              const error = new Error('eventId already exists for a different event') as any;
+              error.statusCode = 409;
+              throw error;
+            }
+            const active = await this.prisma.live_formations.findFirst({
+              where: { match_id: matchId, end_min: null },
+              orderBy: [{ start_min: 'desc' }]
+            });
+            return { liveFormationId: active?.id || '', substitutions: [] };
+          }
+        } catch {
+          // ignore lookup errors; proceed to apply change
+        }
       }
 
       // Capture current active lineup players to compute substitutions
@@ -105,7 +129,9 @@ export class LiveFormationService {
       }
 
       // Transaction: end active snapshot and lineups, create new snapshot and lineups
-      const result = await this.prisma.$transaction(async (tx) => {
+      let result: any;
+      try {
+        result = await this.prisma.$transaction(async (tx) => {
         // Capture current active formation snapshot (if any) for timeline
         const activeBefore = await tx.live_formations.findFirst({
           where: { match_id: matchId, end_min: null },
@@ -232,6 +258,7 @@ export class LiveFormationService {
           };
           const event = await tx.event.create({
             data: {
+              ...(eventId ? { id: eventId } : {}),
               match_id: matchId,
               kind: 'formation_change' as any,
               period_number: activePeriod?.period_number || null,
@@ -265,6 +292,16 @@ export class LiveFormationService {
 
         return { created, start, activeBefore };
       });
+      } catch (error: any) {
+        if (eventId && error?.code === 'P2002') {
+          const active = await this.prisma.live_formations.findFirst({
+            where: { match_id: matchId, end_min: null },
+            orderBy: [{ start_min: 'desc' }]
+          });
+          return { liveFormationId: active?.id || '', substitutions: [] };
+        }
+        throw error;
+      }
 
       // subs already prepared
 

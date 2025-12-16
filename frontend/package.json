@@ -25,6 +25,7 @@
     "@popperjs/core": "^2.11.8",
     "dayjs": "^1.11.13",
     "dexie": "^4.0.11",
+    "dexie-react-hooks": "^4.2.0",
     "history": "^4.10.1",
     "ionicons": "^8.0.8",
     "react": "^18.2.0",

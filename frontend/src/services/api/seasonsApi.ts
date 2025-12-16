@@ -4,11 +4,11 @@
  */
 
 import apiClient from './baseApi';
-import type { 
-  Season, 
-  SeasonCreateRequest, 
-  SeasonUpdateRequest, 
-  PaginatedResponse 
+import type {
+  Season,
+  SeasonCreateRequest,
+  SeasonUpdateRequest,
+  PaginatedResponse
 } from '@shared/types';
 
 // API request/response interfaces
@@ -18,7 +18,7 @@ export interface SeasonsListParams {
   search?: string;
 }
 
-export interface SeasonsListResponse extends PaginatedResponse<Season> {}
+export interface SeasonsListResponse extends PaginatedResponse<Season> { }
 
 export interface SeasonResponse {
   data: Season;
@@ -32,217 +32,153 @@ export interface SeasonResponse {
 export const seasonsApi = {
   /**
    * Get paginated list of user's seasons with optional search
+   * Local-first: always reads from IndexedDB
    */
   async getSeasons(params: SeasonsListParams = {}): Promise<SeasonsListResponse> {
     const { page = 1, limit = 25, search } = params;
-    const { authApi } = await import('./authApi');
-    if (!authApi.isAuthenticated()) {
-      const { db } = await import('../../db/indexedDB');
-      let rows = await db.seasons.toArray();
-      rows = rows.filter((s: any) => s && !s.is_deleted);
-      if (search && search.trim()) {
-        const term = search.trim().toLowerCase();
-        rows = rows.filter((s: any) => (s.label || '').toLowerCase().includes(term));
-      }
-      rows.sort((a: any, b: any) => (a.label || '').localeCompare(b.label || ''));
-      const total = rows.length;
-      const start = (page - 1) * limit;
-      const paged = rows.slice(start, start + limit);
-      const data = paged.map((s: any) => ({
-        id: s.season_id || s.id,
-        seasonId: s.season_id || s.id,
-        label: s.label,
-        startDate: s.start_date,
-        endDate: s.end_date,
-        isCurrent: !!s.is_current,
-        description: s.description,
-        createdAt: new Date(s.created_at),
-        updatedAt: s.updated_at ? new Date(s.updated_at) : undefined,
-        created_by_user_id: s.created_by_user_id,
-        deleted_at: s.deleted_at ? new Date(s.deleted_at) : undefined,
-        deleted_by_user_id: s.deleted_by_user_id,
-        is_deleted: !!s.is_deleted
-      })) as Season[];
-      return {
-        data,
-        total,
-        page,
-        limit,
-        hasMore: start + limit < total
-      } as SeasonsListResponse;
+    
+    // Local-first: always read from IndexedDB
+    const { db } = await import('../../db/indexedDB');
+    let rows = await db.seasons.toArray();
+    rows = rows.filter((s: any) => s && !s.is_deleted);
+    if (search && search.trim()) {
+      const term = search.trim().toLowerCase();
+      rows = rows.filter((s: any) => (s.label || '').toLowerCase().includes(term));
     }
-    const queryParams = new URLSearchParams({ page: String(page), limit: String(limit) });
-    if (search && search.trim()) queryParams.append('search', search.trim());
-    const response = await apiClient.get(`/seasons?${queryParams.toString()}`);
-    return response.data as SeasonsListResponse;
+    rows.sort((a: any, b: any) => (a.label || '').localeCompare(b.label || ''));
+    const total = rows.length;
+    const start = (page - 1) * limit;
+    const paged = rows.slice(start, start + limit);
+    const data = paged.map((s: any) => ({
+      id: s.season_id || s.id,
+      seasonId: s.season_id || s.id,
+      label: s.label,
+      startDate: s.start_date,
+      endDate: s.end_date,
+      isCurrent: !!s.is_current,
+      description: s.description,
+      createdAt: new Date(s.created_at),
+      updatedAt: s.updated_at ? new Date(s.updated_at) : undefined,
+      created_by_user_id: s.created_by_user_id,
+      deleted_at: s.deleted_at ? new Date(s.deleted_at) : undefined,
+      deleted_by_user_id: s.deleted_by_user_id,
+      is_deleted: !!s.is_deleted
+    })) as Season[];
+    return {
+      data,
+      total,
+      page,
+      limit,
+      hasMore: start + limit < total
+    } as SeasonsListResponse;
   },
 
   /**
    * Get a specific season by ID
+   * Local-first: always reads from IndexedDB
    */
   async getSeasonById(id: string): Promise<SeasonResponse> {
-    const { authApi } = await import('./authApi');
-    if (!authApi.isAuthenticated()) {
-      // Guest fallback: query local season by ID
-      const { db } = await import('../../db/indexedDB');
-      const season = await db.seasons.get(id);
-      if (!season || season.is_deleted) {
-        throw new Error('Season not found');
-      }
-      return {
-        data: {
-          id: season.season_id || season.id,
-          seasonId: season.season_id || season.id,
-          label: season.label,
-          startDate: season.start_date,
-          endDate: season.end_date,
-          isCurrent: !!season.is_current,
-          description: season.description,
-          createdAt: new Date(season.created_at),
-          updatedAt: season.updated_at ? new Date(season.updated_at) : undefined,
-          created_by_user_id: season.created_by_user_id,
-          deleted_at: season.deleted_at ? new Date(season.deleted_at) : undefined,
-          deleted_by_user_id: season.deleted_by_user_id,
-          is_deleted: !!season.is_deleted
-        } as Season,
-        success: true
-      };
+    // Local-first: always read from IndexedDB
+    const { db } = await import('../../db/indexedDB');
+    const season = await db.seasons.get(id);
+    if (!season || season.is_deleted) {
+      throw new Error('Season not found');
     }
-    const response = await apiClient.get(`/seasons/${id}`);
     return {
-      data: response.data as Season,
+      data: {
+        id: season.season_id || season.id,
+        seasonId: season.season_id || season.id,
+        label: season.label,
+        startDate: season.start_date,
+        endDate: season.end_date,
+        isCurrent: !!season.is_current,
+        description: season.description,
+        createdAt: new Date(season.created_at),
+        updatedAt: season.updated_at ? new Date(season.updated_at) : undefined,
+        created_by_user_id: season.created_by_user_id,
+        deleted_at: season.deleted_at ? new Date(season.deleted_at) : undefined,
+        deleted_by_user_id: season.deleted_by_user_id,
+        is_deleted: !!season.is_deleted
+      } as Season,
       success: true
     };
   },
 
   /**
-   * Create a new season
+   * Create a new season - LOCAL-FIRST
    */
   async createSeason(seasonData: SeasonCreateRequest): Promise<SeasonResponse> {
-    // Transform frontend data to match backend schema
-    const backendData = {
-      label: seasonData.label,
-      startDate: seasonData.startDate ? seasonData.startDate.split('T')[0] : '', // Normalize to YYYY-MM-DD
-      endDate: seasonData.endDate ? seasonData.endDate.split('T')[0] : '',       // Normalize to YYYY-MM-DD
-      isCurrent: seasonData.isCurrent ?? false,
-      description: seasonData.description
-    };
+    const { seasonsDataLayer } = await import('../dataLayer');
 
-    try {
-      const response = await apiClient.post('/seasons', backendData);
-      return {
-        data: response.data as Season,
-        success: true,
-        message: 'Season created successfully'
-      };
-    } catch (e) {
-      // Offline fallback: create locally and enqueue outbox
-      const now = Date.now();
-      const id = (crypto?.randomUUID ? crypto.randomUUID() : `season-${now}-${Math.random().toString(36).slice(2)}`);
-      await (await import('../../db/indexedDB')).db.seasons.add({
-        id,
-        season_id: id,
-        label: seasonData.label,
-        start_date: seasonData.startDate,
-        end_date: seasonData.endDate,
-        is_current: !!seasonData.isCurrent,
-        description: seasonData.description,
-        created_at: now,
-        updated_at: now,
-        created_by_user_id: 'offline',
-        is_deleted: false,
-      } as any);
-      await (await import('../../db/utils')).addToOutbox('seasons', id, 'INSERT', seasonData as any, 'offline');
-      return {
-        data: {
-          id,
-          seasonId: id,
-          label: seasonData.label,
-          startDate: seasonData.startDate,
-          endDate: seasonData.endDate,
-          isCurrent: !!seasonData.isCurrent,
-          description: seasonData.description,
-          createdAt: new Date(now),
-          created_by_user_id: 'offline',
-          is_deleted: false
-        } as any,
-        success: true,
-        message: 'Season created (offline, pending sync)'
-      };
-    }
+    const season = await seasonsDataLayer.create({
+      label: seasonData.label,
+      startDate: seasonData.startDate,
+      endDate: seasonData.endDate,
+      isCurrent: seasonData.isCurrent,
+      description: seasonData.description,
+    });
+
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
+
+    return {
+      data: {
+        id: season.season_id,
+        seasonId: season.season_id,
+        label: season.label,
+        startDate: (season as any).start_date,
+        endDate: (season as any).end_date,
+        isCurrent: (season as any).is_current || false,
+        description: (season as any).description,
+        createdAt: new Date(season.created_at),
+      } as any,
+      success: true,
+      message: 'Season created'
+    };
   },
 
   /**
-   * Update an existing season
+   * Update an existing season - LOCAL-FIRST
    */
   async updateSeason(id: string, seasonData: SeasonUpdateRequest): Promise<SeasonResponse> {
-    // Transform frontend data to match backend schema
-    const backendData = {
+    const { seasonsDataLayer } = await import('../dataLayer');
+    const { db } = await import('../../db/indexedDB');
+
+    await seasonsDataLayer.update(id, {
       label: seasonData.label,
-      startDate: seasonData.startDate ? seasonData.startDate.split('T')[0] : undefined, // Normalize to YYYY-MM-DD
-      endDate: seasonData.endDate ? seasonData.endDate.split('T')[0] : undefined,       // Normalize to YYYY-MM-DD
+      startDate: seasonData.startDate,
+      endDate: seasonData.endDate,
       isCurrent: seasonData.isCurrent,
-      description: seasonData.description
-    } as const;
+      description: seasonData.description,
+    });
 
-    // Remove undefined values
-    const cleanData = Object.fromEntries(
-      Object.entries(backendData).filter(([_, value]) => value !== undefined)
-    );
+    const updated = await db.seasons.get(id);
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
-    try {
-      const response = await apiClient.put(`/seasons/${id}`, cleanData);
-      return {
-        data: response.data as Season,
-        success: true,
-        message: 'Season updated successfully'
-      };
-    } catch (e) {
-      // Offline fallback: update local and enqueue outbox
-      const now = Date.now();
-      try {
-        await (await import('../../db/indexedDB')).db.seasons.update(id, {
-          label: seasonData.label,
-          start_date: seasonData.startDate,
-          end_date: seasonData.endDate,
-          is_current: seasonData.isCurrent,
-          description: seasonData.description,
-          updated_at: now,
-        } as any);
-      } catch {}
-      await (await import('../../db/utils')).addToOutbox('seasons', id, 'UPDATE', seasonData as any, 'offline');
-      return {
-        data: {
-          id,
-          seasonId: id,
-          label: seasonData.label || '',
-          startDate: seasonData.startDate,
-          endDate: seasonData.endDate,
-          isCurrent: !!seasonData.isCurrent,
-          description: seasonData.description,
-          created_by_user_id: 'offline',
-          is_deleted: false
-        } as any,
-        success: true,
-        message: 'Season updated (offline, pending sync)'
-      };
-    }
+    return {
+      data: {
+        id,
+        seasonId: id,
+        label: updated?.label || seasonData.label || '',
+        startDate: (updated as any)?.start_date,
+        endDate: (updated as any)?.end_date,
+        isCurrent: (updated as any)?.is_current || false,
+        description: (updated as any)?.description,
+      } as any,
+      success: true,
+      message: 'Season updated'
+    };
   },
 
   /**
-   * Delete a season (soft delete)
+   * Delete a season (soft delete) - LOCAL-FIRST
    */
   async deleteSeason(id: string): Promise<{ success: boolean; message: string }> {
-    try {
-      await apiClient.delete(`/seasons/${id}`);
-      return { success: true, message: 'Season deleted successfully' };
-    } catch (e) {
-      try {
-        await (await import('../../db/indexedDB')).db.seasons.update(id, { is_deleted: true, deleted_at: Date.now() } as any);
-      } catch {}
-      await (await import('../../db/utils')).addToOutbox('seasons', id, 'DELETE', undefined, 'offline');
-      return { success: true, message: 'Season deleted (offline, pending sync)' };
-    }
+    const { seasonsDataLayer } = await import('../dataLayer');
+    await seasonsDataLayer.delete(id);
+
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
+
+    return { success: true, message: 'Season deleted' };
   }
 };
 

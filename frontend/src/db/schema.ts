@@ -107,10 +107,18 @@ export interface EnhancedTeam extends SyncableRecord {
   id: ID;
   /** Team name (unique) */
   name: string;
-  /** Primary team color */
+  /** Primary team color (home kit) */
   color_primary?: string;
-  /** Secondary team color */
+  /** Secondary team color (home kit) */
   color_secondary?: string;
+  /** Primary away kit color */
+  away_color_primary?: string;
+  /** Secondary away kit color */
+  away_color_secondary?: string;
+  /** Team logo URL */
+  logo_url?: string;
+  /** Whether this is an opponent team (not user's own team) */
+  is_opponent?: boolean;
   /** Client timestamps */
   created_at: Timestamp;
   updated_at: Timestamp;
@@ -155,8 +163,18 @@ export interface EnhancedPlayer extends SyncableRecord {
 export interface EnhancedSeason extends SyncableRecord {
   /** UUID primary key */
   season_id: ID;
+  /** Legacy compatibility - some code uses 'id' */
+  id?: ID;
   /** Season label (unique) */
   label: string;
+  /** Season start date (ISO string) */
+  start_date?: string;
+  /** Season end date (ISO string) */
+  end_date?: string;
+  /** Whether this is the current season */
+  is_current?: boolean;
+  /** Season description/notes */
+  description?: string;
   /** Client timestamps */
   created_at: Timestamp;
   updated_at: Timestamp;
@@ -399,7 +417,7 @@ export const SCHEMA_INDEXES = {
     'synced',                            // Sync status
     '[synced+created_by_user_id]'       // Unsynced guest data
   ],
-  
+
   // Matches table
   matches: [
     'season_id',                         // Season filtering
@@ -415,7 +433,7 @@ export const SCHEMA_INDEXES = {
     'synced',                            // Sync status
     '[synced+created_by_user_id]'       // Unsynced guest data
   ],
-  
+
   // Players table
   players: [
     'current_team',                      // Team roster queries
@@ -461,14 +479,14 @@ export const SCHEMA_INDEXES = {
     'synced',                            // Sync status
     '[synced+created_by_user_id]'       // Unsynced guest data
   ],
-  
+
   // Match notes table
   match_notes: [
     'match_id',                          // Match-specific notes
     '[match_id+period_number]',         // Period-specific notes
     'updated_at'                         // Change tracking
   ],
-  
+
   // Outbox table - sync optimization
   outbox: [
     'synced',                            // Unsynced items
@@ -480,7 +498,7 @@ export const SCHEMA_INDEXES = {
     'retry_count',                       // Failed sync tracking
     'last_sync_attempt'                  // Retry timing
   ],
-  
+
   // Sync metadata table
   sync_metadata: [
     'table_name',                        // Table-specific metadata
@@ -489,7 +507,7 @@ export const SCHEMA_INDEXES = {
     '[table_name+last_synced]',         // Table sync status
     'last_synced'                        // Global sync status
   ],
-  
+
   // Settings table
   settings: [
     'key',                               // Key-based lookup
@@ -536,13 +554,13 @@ export const EVENT_RELATIONSHIPS = {
   'goal': ['assist', 'key_pass'],
   'assist': ['goal'],
   'key_pass': ['goal'],
-  
+
   'penalty': ['foul'],
   'foul': ['penalty', 'free_kick'],
-  
+
   'free_kick': ['foul'],
   'save': [],
-  
+
   'own_goal': [],
   'interception': ['tackle'], // Add missing interception
   'tackle': ['interception'], // Add missing tackle
@@ -556,13 +574,13 @@ export const EVENT_RELATIONSHIPS = {
 export const LINKING_CONFIG = {
   /** Time window for auto-linking events (60 seconds) */
   TIME_WINDOW_MS: 60000,
-  
+
   /** Maximum number of events to link to a single event */
   MAX_LINKS_PER_EVENT: 5,
-  
+
   /** Whether to link events across different teams */
   CROSS_TEAM_LINKING: true,
-  
+
   /** Whether to perform retroactive linking when new events are added */
   RETROACTIVE_LINKING: true
 } as const;
@@ -573,17 +591,17 @@ export const LINKING_CONFIG = {
 export const SENTIMENT_SCALE = {
   /** Minimum sentiment value */
   MIN: -4,
-  
+
   /** Maximum sentiment value */
   MAX: 4,
-  
+
   /** Neutral sentiment value */
   NEUTRAL: 0,
-  
+
   /** Scale descriptions */
   DESCRIPTIONS: {
     '-4': 'Very Poor Performance',
-    '-3': 'Poor Performance', 
+    '-3': 'Poor Performance',
     '-2': 'Below Average',
     '-1': 'Slightly Below Average',
     '0': 'Average/Neutral',

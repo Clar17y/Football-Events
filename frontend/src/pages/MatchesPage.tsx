@@ -1,13 +1,11 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import type { HTMLIonContentElement } from '@ionic/core/components';
 import {
   IonPage,
   IonContent,
   IonButton,
   IonIcon,
   IonRefresher,
-  IonRefresherContent,
-  IonToast
+  IonRefresherContent
 } from '@ionic/react';
 import {
   add,
@@ -22,8 +20,9 @@ import CreateMatchModal from '../components/CreateMatchModal';
 import UpcomingMatchesList from '../components/UpcomingMatchesList';
 import CompletedMatchesList from '../components/CompletedMatchesList';
 import LiveMatchesList from '../components/LiveMatchesList';
+import { useLocalMatches, useLocalTeams, useLocalMatchState } from '../hooks/useLocalData';
+import { useInitialSync } from '../hooks/useInitialSync';
 import { matchesApi } from '../services/api/matchesApi';
-import { teamsApi } from '../services/api/teamsApi';
 import { authApi } from '../services/api/authApi';
 import type { Match, Team, MatchState } from '@shared/types';
 import './PageStyles.css';
@@ -35,15 +34,41 @@ interface MatchesPageProps {
 }
 
 const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
-  // State management
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Trigger initial sync from server for authenticated users
+  useInitialSync();
+
+  // Reactive data from IndexedDB
+  const { matches: rawMatches, loading } = useLocalMatches();
+  const { teams: teamsList } = useLocalTeams({ includeOpponents: true });
+
+  // For match states, we'll use the date-based fallback in the UI
+  // since loading all states reactively would be complex
+  const matchStates: MatchState[] = [];
+
+  // Convert teams array to Map for quick lookup
+  const teamsCache = useMemo(() => {
+    const cache = new Map<string, Team>();
+    teamsList.forEach((team: any) => {
+      if (team.id) cache.set(team.id, team as Team);
+    });
+    return cache;
+  }, [teamsList]);
+
+  // Enrich matches with team data and sort
+  const matches = useMemo(() => {
+    return rawMatches
+      .map((match: any) => ({
+        ...match,
+        homeTeam: match.homeTeam || teamsCache.get(match.homeTeamId || match.home_team_id),
+        awayTeam: match.awayTeam || teamsCache.get(match.awayTeamId || match.away_team_id),
+      }))
+      .sort((a: any, b: any) =>
+        new Date(a.kickoffTime || a.kickoff_time).getTime() - new Date(b.kickoffTime || b.kickoff_time).getTime()
+      ) as Match[];
+  }, [rawMatches, teamsCache]);
+
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [showErrorToast, setShowErrorToast] = useState(false);
-  const [teamsCache, setTeamsCache] = useState<Map<string, Team>>(new Map());
-  const [matchStates, setMatchStates] = useState<MatchState[]>([]);
 
   // UpcomingMatchesList state
   const [expandedMatches, setExpandedMatches] = useState<Set<string>>(new Set());
@@ -53,9 +78,6 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
 
   // Edit match state
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
-
-  // Ref to prevent multiple concurrent API calls
-  const loadingRef = useRef(false);
 
   const navigate = (page: string) => {
     if (onNavigate) {
@@ -72,144 +94,15 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
     return undefined;
   }, [teamsCache]);
 
-  // Load teams data for the cache
-  const loadTeams = async () => {
-    try {
-      // Include opponent teams for calendar display
-      const response = await teamsApi.getTeams({ limit: 100, includeOpponents: true });
-      const newTeamsCache = new Map<string, Team>();
-      response.data.forEach(team => {
-        newTeamsCache.set(team.id, team);
-      });
-      setTeamsCache(newTeamsCache);
-    } catch (err) {
-      console.error('Error loading teams for cache:', err);
-      // Don't show error to user for teams cache - it's not critical
-    }
-  };
-
-  // Load matches data with loading state protection
-  const loadMatches = async (showLoadingState = true) => {
-    // Prevent multiple concurrent API calls
-    if (loadingRef.current) {
-      return;
-    }
-
-    loadingRef.current = true;
-
-    if (showLoadingState) {
-      setLoading(true);
-    }
-    setError(null);
-
-    try {
-      // Fetch all matches for the user (increased limit to get comprehensive data)
-      const response = await matchesApi.getMatches({ limit: 500 });
-      console.log("📊 Matches API Response:", response.data);
-
-      // Debug: Log each match with team info
-      response.data.forEach((match, index) => {
-        console.log(`🏈 Match ${index + 1}:`, {
-          id: match.id.slice(0, 8),
-          homeTeam: match.homeTeam ? {
-            name: match.homeTeam.name,
-            id: match.homeTeam.id.slice(0, 8),
-            is_opponent: match.homeTeam.is_opponent,
-            homeKitPrimary: match.homeTeam.homeKitPrimary,
-            awayKitPrimary: match.homeTeam.awayKitPrimary
-          } : 'No homeTeam data',
-          awayTeam: match.awayTeam ? {
-            name: match.awayTeam.name,
-            id: match.awayTeam.id.slice(0, 8),
-            is_opponent: match.awayTeam.is_opponent,
-            homeKitPrimary: match.awayTeam.homeKitPrimary,
-            awayKitPrimary: match.awayTeam.awayKitPrimary
-          } : 'No awayTeam data'
-        });
-      });
-
-      setMatches(response.data);
-      setError(null);
-      // Fetch match states for status-driven sections
-      if (authApi.isAuthenticated()) {
-        try {
-          const ids = (response.data || []).map(m => m.id);
-          const states = await matchesApi.getMatchStates(1, 500, ids);
-          const allStates = (states.data || []) as any[];
-          console.log('🧭 Match states loaded:', allStates.length, allStates.slice(0, 3));
-          setMatchStates(allStates as any);
-        } catch (e) {
-          console.warn('Failed to load match states', e);
-          setMatchStates([]);
-        }
-      } else {
-        // Guest mode: check local_live_state for each match
-        try {
-          const { db } = await import('../db/indexedDB');
-          const localStates: MatchState[] = [];
-          for (const match of response.data) {
-            const stateRec = await db.settings.get(`local_live_state:${match.id}`);
-            if (stateRec?.value) {
-              try {
-                const parsed = JSON.parse(stateRec.value);
-                localStates.push({
-                  matchId: match.id,
-                  status: parsed.status || 'SCHEDULED',
-                  currentPeriod: parsed.currentPeriod || null,
-                  totalElapsedSeconds: parsed.timerMs ? Math.floor(parsed.timerMs / 1000) : 0,
-                } as any);
-              } catch {}
-            }
-          }
-          console.log('🧭 Guest local states loaded:', localStates.length);
-          setMatchStates(localStates as any);
-        } catch {
-          setMatchStates([]);
-        }
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load matches';
-      setError(errorMessage);
-      console.error('Error loading matches:', err);
-
-      // Show error toast for better user experience
-      setShowErrorToast(true);
-
-      // Don't clear matches on error - keep existing data if available
-      // This provides better UX when there's a temporary network issue
-    } finally {
-      if (showLoadingState) {
-        setLoading(false);
-      }
-      loadingRef.current = false;
-    }
-  };
-
-  useEffect(() => {
-    // Load both matches and teams data
-    loadMatches();
-    loadTeams();
-  }, []);
-
-  useEffect(() => {
-    console.log('📈 Matches loaded:', matches.length);
-    if (matchStates.length) {
-      const statusCounts = matchStates.reduce((acc: any, s) => { acc[s.status] = (acc[s.status]||0)+1; return acc; }, {});
-      console.log('📊 MatchStates counts by status:', statusCounts);
-    } else {
-      console.log('📊 MatchStates empty; UI will use date-based fallback');
-    }
-  }, [matches, matchStates]);
-
+  // Handle refresh - trigger cache refresh in background
   const handleRefresh = async (event: CustomEvent) => {
     try {
-      // Use loadMatches without loading state to avoid UI flicker during pull-to-refresh
-      await loadMatches(false);
-    } catch (err) {
-      console.error('Error during pull-to-refresh:', err);
-    } finally {
-      event.detail.complete();
+      const { refreshCache } = await import('../services/cacheService');
+      await refreshCache();
+    } catch (e) {
+      console.warn('Refresh failed:', e);
     }
+    event.detail.complete();
   };
 
   // Calendar event handlers
@@ -218,7 +111,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
     setCreateModalOpen(true);
   };
 
-  const contentRef = useRef<HTMLIonContentElement | null>(null);
+  const contentRef = useRef<any>(null);
 
   const handleMatchClick = async (matchId: string) => {
     // Locate the match card in the lists (avoid matching the calendar indicators)
@@ -382,109 +275,31 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
     if (!confirmed) return;
     try {
       await matchesApi.deleteMatch(match.id);
-      // Refresh lists and calendar
-      await loadMatches(false);
+      // Reactive data updates automatically from IndexedDB
     } catch (e) {
       console.error('Failed to delete match', e);
-      setShowErrorToast(true);
-      setError('Failed to delete match');
+      // Local-first: errors are rare, just log them
     }
   };
 
+  // Handle match created - with reactive hooks, data updates automatically
   const handleMatchCreated = (match: Match) => {
     console.log("🆕 New match created:", {
       id: match.id.slice(0, 8),
-      homeTeamId: match.homeTeamId?.slice(0, 8),
-      awayTeamId: match.awayTeamId?.slice(0, 8),
-      homeTeam: match.homeTeam ? {
-        id: match.homeTeam.id?.slice(0, 8),
-        name: match.homeTeam.name
-      } : 'No homeTeam data',
-      awayTeam: match.awayTeam ? {
-        id: match.awayTeam.id?.slice(0, 8),
-        name: match.awayTeam.name
-      } : 'No awayTeam data',
-      teamsInCache: teamsCache.size
+      homeTeam: match.homeTeam?.name || 'N/A',
+      awayTeam: match.awayTeam?.name || 'N/A'
     });
-
-    // Update teams cache optimistically with any embedded team data
-    setTeamsCache(prev => {
-      const next = new Map(prev);
-      if (match.homeTeam && match.homeTeam.id) {
-        next.set(match.homeTeam.id, match.homeTeam);
-      }
-      if (match.awayTeam && match.awayTeam.id) {
-        next.set(match.awayTeam.id, match.awayTeam);
-      }
-      return next;
-    });
-
-    // Optimistic update: immediately add the new match to the existing array
-    // This ensures the match appears on the calendar immediately without additional API calls
-    setMatches(prev => {
-      // Check if match already exists to avoid duplicates
-      const existingMatch = prev.find(m => m.id === match.id);
-      if (existingMatch) {
-        return prev;
-      }
-
-      // Ensure the match has proper team data from the cache
-      const enrichedMatch = { ...match };
-
-      // Prefer embedded homeTeam; otherwise enrich from cache
-      if (!enrichedMatch.homeTeam || !enrichedMatch.homeTeam.name) {
-        const homeTeamId = enrichedMatch.homeTeamId;
-        const cachedHomeTeam = teamsCache.get(homeTeamId);
-        if (cachedHomeTeam) {
-          console.log("✅ Enriched homeTeam from cache:", cachedHomeTeam.name);
-          enrichedMatch.homeTeam = cachedHomeTeam;
-        }
-      }
-
-      // Prefer embedded awayTeam; otherwise enrich from cache
-      if (!enrichedMatch.awayTeam || !enrichedMatch.awayTeam.name) {
-        const awayTeamId = enrichedMatch.awayTeamId;
-        const cachedAwayTeam = teamsCache.get(awayTeamId);
-        if (cachedAwayTeam) {
-          console.log("✅ Enriched awayTeam from cache:", cachedAwayTeam.name);
-          enrichedMatch.awayTeam = cachedAwayTeam;
-        }
-      }
-
-      // Add new match and sort by kickoff time for proper ordering
-      const updatedMatches = [...prev, enrichedMatch];
-      return updatedMatches.sort((a, b) =>
-        new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime()
-      );
-    });
-
-    // Clear any existing errors since we successfully created a match
-    setError(null);
-
-    // Refresh match states to update upcoming/completed/live sections
-    // Use loadMatches(false) to avoid showing loading spinner during refresh
-    loadMatches(false);
+    // Reactive data updates automatically from IndexedDB
   };
 
+  // Handle match updated - with reactive hooks, data updates automatically
   const handleMatchUpdated = (updatedMatch: Match) => {
     console.log("✏️ Match updated:", {
       id: updatedMatch.id.slice(0, 8),
       homeTeam: updatedMatch.homeTeam?.name,
       awayTeam: updatedMatch.awayTeam?.name
     });
-
-    // Update the match in the matches array
-    setMatches(prev => {
-      const updatedMatches = prev.map(match =>
-        match.id === updatedMatch.id ? updatedMatch : match
-      );
-      return updatedMatches.sort((a, b) =>
-        new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime()
-      );
-    });
-
-    // Clear any existing errors
-    setError(null);
+    // Reactive data updates automatically from IndexedDB
   };
 
   const renderEmptyState = () => (
@@ -513,7 +328,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
         additionalButtons={
           <IonButton
             fill="clear"
-            onClick={() => loadMatches()}
+            onClick={handleRefresh as any}
             style={{ color: 'white' }}
             disabled={loading}
           >
@@ -545,20 +360,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
         </div>
 
         <div className="matches-content">
-          {/* Error Display */}
-          {error && (
-            <div className="error-message">
-              <p>{error}</p>
-              <IonButton
-                fill="clear"
-                size="small"
-                onClick={() => loadMatches()}
-                disabled={loading}
-              >
-                {loading ? 'Loading...' : 'Try Again'}
-              </IonButton>
-            </div>
-          )}
+          {/* Error Display - removed for offline-first approach */}
 
           {/* Calendar Section */}
           <div className="matches-calendar-section">
@@ -670,31 +472,6 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
           onMatchCreated={handleMatchCreated}
           editingMatch={editingMatch}
           onMatchUpdated={handleMatchUpdated}
-        />
-
-        {/* Error Toast */}
-        <IonToast
-          isOpen={showErrorToast}
-          onDidDismiss={() => setShowErrorToast(false)}
-          message={error || 'An error occurred while loading matches'}
-          duration={5000}
-          color="danger"
-          position="bottom"
-          buttons={[
-            {
-              text: 'Retry',
-              role: 'cancel',
-              handler: () => {
-                setShowErrorToast(false);
-                loadMatches();
-              }
-            },
-            {
-              text: 'Dismiss',
-              role: 'cancel',
-              handler: () => setShowErrorToast(false)
-            }
-          ]}
         />
       </IonContent>
     </IonPage>

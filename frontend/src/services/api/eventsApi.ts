@@ -47,151 +47,60 @@ export const eventsApi = {
   },
 
   /**
-   * Create an event with offline fallback
-   * 
-   * Requirements: 1.1 - Write to local events table with synced equals false when offline
-   * Requirements: 1.2 - Return locally created event without throwing network error
-   * Requirements: 5.1 - Use authenticated user ID for created_by_user_id
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * Create an event - LOCAL-FIRST
    */
   async create(event: EventCreateRequest): Promise<Event> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<Event>('/events', event);
-        return response.data as unknown as Event;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
+    const { eventsDataLayer } = await import('../dataLayer');
 
-    // Offline fallback: write to local events table
-    const now = Date.now();
-    const eventId = `event-${now}-${Math.random().toString(36).slice(2, 11)}`;
-    const userId = getCurrentUserId();
-
-    const localEvent: EnhancedEvent = {
-      id: eventId,
-      match_id: event.matchId,
-      ts_server: now,
-      period_number: event.periodNumber ?? 1,
-      clock_ms: event.clockMs ?? 0,
+    const localEvent = await eventsDataLayer.create({
+      matchId: event.matchId,
       kind: event.kind,
-      team_id: event.teamId ?? '',
-      player_id: event.playerId ?? '',
-      sentiment: event.sentiment ?? 0,
+      periodNumber: event.periodNumber,
+      clockMs: event.clockMs,
+      teamId: event.teamId,
+      playerId: event.playerId,
       notes: event.notes,
-      created_at: now,
-      updated_at: now,
-      created_by_user_id: userId,
-      is_deleted: false,
-      synced: false,
-    };
+      sentiment: event.sentiment,
+    });
 
-    await db.events.add(localEvent);
-    showOfflineToast('Event saved locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     return transformToApiEvent(localEvent);
   },
 
   /**
-   * Update an event with offline fallback
-   * 
-   * Requirements: 1.1 - Update local record if exists when offline
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * Update an event - LOCAL-FIRST
    */
   async update(id: string, data: Partial<EventCreateRequest & { sentiment: number; notes?: string; playerId?: string | null }>): Promise<Event> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.put<Event>(`/events/${id}`, data);
-        return response.data as unknown as Event;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
+    const { eventsDataLayer } = await import('../dataLayer');
 
-    // Offline fallback: update local record
-    const existingEvent = await db.events.get(id);
-    if (!existingEvent) {
-      throw new Error(`Event ${id} not found in local storage`);
-    }
-
-    const now = Date.now();
-    const updates: Partial<EnhancedEvent> = {
-      updated_at: now,
-      synced: false,
-    };
-
-    // Map API fields to local schema fields
-    if (data.matchId !== undefined) updates.match_id = data.matchId;
-    if (data.periodNumber !== undefined) updates.period_number = data.periodNumber;
-    if (data.clockMs !== undefined) updates.clock_ms = data.clockMs;
-    if (data.kind !== undefined) updates.kind = data.kind;
-    if (data.teamId !== undefined) updates.team_id = data.teamId;
-    if (data.playerId !== undefined) updates.player_id = data.playerId ?? '';
-    if (data.notes !== undefined) updates.notes = data.notes;
-    if (data.sentiment !== undefined) updates.sentiment = data.sentiment;
-
-    await db.events.update(id, updates);
-    showOfflineToast('Event updated locally - will sync when online');
+    await eventsDataLayer.update(id, {
+      kind: data.kind,
+      periodNumber: data.periodNumber,
+      clockMs: data.clockMs,
+      teamId: data.teamId,
+      playerId: data.playerId ?? undefined,
+      notes: data.notes,
+      sentiment: data.sentiment,
+    });
 
     const updatedEvent = await db.events.get(id);
     if (!updatedEvent) {
-      throw new Error(`Failed to retrieve updated event ${id}`);
+      throw new Error(`Event ${id} not found`);
     }
+
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     return transformToApiEvent(updatedEvent);
   },
 
   /**
-   * Delete an event with offline fallback
-   * 
-   * Requirements: 1.1 - Mark local record as deleted when offline
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * Delete an event - LOCAL-FIRST
    */
   async delete(id: string): Promise<void> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        await apiClient.delete(`/events/${id}`);
-        return;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: mark local record as deleted (soft delete)
-    const existingEvent = await db.events.get(id);
-    if (!existingEvent) {
-      // Event doesn't exist locally - nothing to delete
-      return;
-    }
-
-    const now = Date.now();
-    const userId = getCurrentUserId();
-
-    await db.events.update(id, {
-      is_deleted: true,
-      deleted_at: now,
-      deleted_by_user_id: userId,
-      updated_at: now,
-      synced: false,
-    });
-
-    showOfflineToast('Event deleted locally - will sync when online');
+    const { eventsDataLayer } = await import('../dataLayer');
+    await eventsDataLayer.delete(id);
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
   }
 };
 

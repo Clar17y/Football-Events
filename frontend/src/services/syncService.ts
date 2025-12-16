@@ -1,11 +1,7 @@
 import { apiClient } from './api/baseApi';
-import eventsApi from './api/eventsApi';
 import { matchesApi } from './api/matchesApi';
 import { isGuestId } from './importService';
 import { db } from '../db/indexedDB';
-import { seasonsApi } from './api/seasonsApi';
-import { teamsApi } from './api/teamsApi';
-import { playersApi } from './api/playersApi';
 import { lineupsApi } from './api/lineupsApi';
 import { defaultLineupsApi } from './api/defaultLineupsApi';
 
@@ -29,6 +25,56 @@ export interface SyncError {
  * Requirements: 2.6 - Batch operations (50 records per batch)
  */
 const BATCH_SIZE = 50;
+
+/**
+ * Handle soft-deleted records:
+ * - If is_deleted && !synced_at → delete locally only (never synced to server)
+ * - If is_deleted && synced_at → call DELETE API, then delete locally
+ *
+ * Returns records that still need to be synced (non-deleted or delete failed)
+ */
+async function processSoftDeletes<T extends { id: string; is_deleted?: boolean; synced_at?: number }>(
+  table: any,
+  records: T[],
+  deleteApiCall: (id: string) => Promise<void>,
+  tableName: string,
+  result: SyncResult
+): Promise<T[]> {
+  const toSync: T[] = [];
+
+  for (const record of records) {
+    if (record.is_deleted) {
+      if (!record.synced_at) {
+        // Never synced to server - just delete locally
+        try {
+          await table.delete(record.id);
+          console.debug(`[SyncService] Deleted local-only ${tableName} record:`, record.id);
+        } catch (err) {
+          console.error(`[SyncService] Failed to delete local ${tableName}:`, err);
+        }
+      } else {
+        // Was synced before - tell server to delete, then delete locally
+        try {
+          await deleteApiCall(record.id);
+          await table.delete(record.id);
+          result.synced++;
+          console.debug(`[SyncService] Deleted synced ${tableName} record from server:`, record.id);
+        } catch (err) {
+          result.failed++;
+          result.errors.push({
+            table: tableName,
+            recordId: record.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+    } else {
+      toSync.push(record);
+    }
+  }
+
+  return toSync;
+}
 
 /**
  * Sync progress tracking interface
@@ -84,21 +130,38 @@ async function syncSeasons(): Promise<SyncResult> {
     }
 
     // Filter for unsynced, non-guest records
-    const seasonsToSync = allSeasons
+    const unsyncedSeasons = allSeasons
       .filter(s => s.synced === false && !isGuestId(s.created_by_user_id))
       .slice(0, BATCH_SIZE);
 
+    // Process soft deletes first
+    const seasonsToSync = await processSoftDeletes(
+      db.seasons,
+      unsyncedSeasons.map(s => ({ ...s, id: s.season_id })),
+      async (id) => { await apiClient.delete(`/seasons/${id}`); },
+      'seasons',
+      result
+    );
+
     for (const season of seasonsToSync) {
       try {
-        await seasonsApi.createSeason({
-          label: season.label,
+        const seasonData = {
+          label: (season as any).label,
           startDate: (season as any).start_date || new Date().toISOString().slice(0, 10),
           endDate: (season as any).end_date || new Date().toISOString().slice(0, 10),
           isCurrent: !!(season as any).is_current,
           description: (season as any).description,
-        });
+        };
 
-        await db.seasons.update(season.season_id, {
+        // If synced_at exists, this is an update; otherwise it's a create
+        // IMPORTANT: Call server API directly, not the local-first seasonsApi
+        if ((season as any).synced_at) {
+          await apiClient.put(`/seasons/${season.id}`, seasonData);
+        } else {
+          await apiClient.post('/seasons', seasonData);
+        }
+
+        await db.seasons.update(season.id, {
           synced: true,
           synced_at: Date.now(),
         });
@@ -108,7 +171,7 @@ async function syncSeasons(): Promise<SyncResult> {
         result.failed++;
         result.errors.push({
           table: 'seasons',
-          recordId: season.season_id,
+          recordId: season.id,
           error: err instanceof Error ? err.message : String(err),
         });
       }
@@ -144,13 +207,22 @@ async function syncTeams(): Promise<SyncResult> {
     }
 
     // Filter for unsynced, non-guest records
-    const teamsToSync = allTeams
+    const unsyncedTeams = allTeams
       .filter(t => t.synced === false && !isGuestId(t.created_by_user_id))
       .slice(0, BATCH_SIZE);
 
+    // Process soft deletes first
+    const teamsToSync = await processSoftDeletes(
+      db.teams,
+      unsyncedTeams,
+      async (id) => { await apiClient.delete(`/teams/${id}`); },
+      'teams',
+      result
+    );
+
     for (const team of teamsToSync) {
       try {
-        await teamsApi.createTeam({
+        const teamData = {
           name: team.name,
           homeKitPrimary: (team as any).color_primary,
           homeKitSecondary: (team as any).color_secondary,
@@ -158,7 +230,15 @@ async function syncTeams(): Promise<SyncResult> {
           awayKitSecondary: (team as any).away_color_secondary,
           logoUrl: (team as any).logo_url,
           isOpponent: !!(team as any).is_opponent,
-        } as any);
+        };
+
+        // If synced_at exists, this is an update; otherwise it's a create
+        // IMPORTANT: Call server API directly, not the local-first teamsApi
+        if ((team as any).synced_at) {
+          await apiClient.put(`/teams/${team.id}`, teamData);
+        } else {
+          await apiClient.post('/teams', teamData);
+        }
 
         await db.teams.update(team.id, {
           synced: true,
@@ -206,29 +286,49 @@ async function syncPlayers(): Promise<SyncResult> {
     }
 
     // Filter for unsynced, non-guest records
-    const playersToSync = allPlayers
+    const unsyncedPlayers = allPlayers
       .filter(p => p.synced === false && !isGuestId(p.created_by_user_id))
       .slice(0, BATCH_SIZE);
 
+    // Process soft deletes first
+    const playersToSync = await processSoftDeletes(
+      db.players,
+      unsyncedPlayers,
+      async (id) => { await apiClient.delete(`/players/${id}`); },
+      'players',
+      result
+    );
+
     for (const player of playersToSync) {
       try {
-        if (player.current_team) {
-          await playersApi.createPlayerWithTeam({
-            name: player.full_name,
-            squadNumber: player.squad_number,
-            preferredPosition: player.preferred_pos,
-            dateOfBirth: player.dob,
-            notes: player.notes,
-            teamId: player.current_team,
-          } as any);
+        const playerData = {
+          name: player.full_name,
+          squadNumber: player.squad_number,
+          preferredPosition: player.preferred_pos,
+          dateOfBirth: player.dob,
+          notes: player.notes,
+        };
+
+        // If synced_at exists, this is an update; otherwise it's a create
+        // IMPORTANT: Call server API directly, not the local-first playersApi
+        if ((player as any).synced_at) {
+          // Update existing player
+          await apiClient.put(`/players/${player.id}`, playerData);
         } else {
-          await playersApi.createPlayer({
-            name: player.full_name,
-            squadNumber: player.squad_number,
-            preferredPosition: player.preferred_pos,
-            dateOfBirth: player.dob ? new Date(player.dob) : undefined,
-            notes: player.notes,
-          });
+          // Create new player
+          if (player.current_team) {
+            await apiClient.post('/players-with-team', {
+              ...playerData,
+              teamId: player.current_team,
+              startDate: new Date().toISOString().slice(0, 10),
+              isActive: true,
+            });
+          } else {
+            await apiClient.post('/players', {
+              ...playerData,
+              dateOfBirth: player.dob ? player.dob : undefined,
+            });
+          }
         }
 
         await db.players.update(player.id, {
@@ -277,13 +377,22 @@ async function syncMatches(): Promise<SyncResult> {
     }
 
     // Filter for unsynced, non-guest records
-    const matchesToSync = allMatches
+    const unsyncedMatches = allMatches
       .filter(m => m.synced === false && !isGuestId(m.created_by_user_id))
       .slice(0, BATCH_SIZE);
 
+    // Process soft deletes first
+    const matchesToSync = await processSoftDeletes(
+      db.matches,
+      unsyncedMatches,
+      async (id) => { await matchesApi.deleteMatch(id); },
+      'matches',
+      result
+    );
+
     for (const match of matchesToSync) {
       try {
-        await apiClient.post('/matches', {
+        const matchData = {
           seasonId: match.season_id,
           kickoffTime: match.kickoff_ts,
           homeTeamId: match.home_team_id,
@@ -293,7 +402,14 @@ async function syncMatches(): Promise<SyncResult> {
           durationMinutes: match.duration_mins,
           periodFormat: match.period_format,
           notes: match.notes,
-        });
+        };
+
+        // If synced_at exists, this is an update; otherwise it's a create
+        if ((match as any).synced_at) {
+          await apiClient.put(`/matches/${match.id}`, matchData);
+        } else {
+          await apiClient.post('/matches', matchData);
+        }
 
         await db.matches.update(match.id, {
           synced: true,
@@ -341,9 +457,23 @@ async function syncLineups(): Promise<SyncResult> {
     }
 
     // Filter for unsynced, non-guest records
-    const lineupsToSync = allLineups
+    const unsyncedLineups = allLineups
       .filter(l => l.synced === false && !isGuestId(l.created_by_user_id))
       .slice(0, BATCH_SIZE);
+
+    // Process soft deletes first
+    const lineupsToSync = await processSoftDeletes(
+      db.lineup,
+      unsyncedLineups,
+      async (id) => {
+        const lineup = unsyncedLineups.find(l => l.id === id);
+        if (lineup) {
+          await lineupsApi.deleteByKey(lineup.match_id, lineup.player_id, lineup.start_min);
+        }
+      },
+      'lineup',
+      result
+    );
 
     for (const lineup of lineupsToSync) {
       try {
@@ -401,9 +531,23 @@ async function syncDefaultLineups(): Promise<SyncResult> {
     }
 
     // Filter for unsynced, non-guest records
-    const defaultLineupsToSync = allDefaultLineups
+    const unsyncedDefaultLineups = allDefaultLineups
       .filter(dl => dl.synced === false && !isGuestId(dl.created_by_user_id))
       .slice(0, BATCH_SIZE);
+
+    // Process soft deletes first
+    const defaultLineupsToSync = await processSoftDeletes(
+      db.default_lineups,
+      unsyncedDefaultLineups,
+      async (id) => {
+        const dl = unsyncedDefaultLineups.find(d => d.id === id);
+        if (dl) {
+          await defaultLineupsApi.deleteDefaultLineup(dl.team_id);
+        }
+      },
+      'default_lineups',
+      result
+    );
 
     for (const defaultLineup of defaultLineupsToSync) {
       try {
@@ -460,25 +604,97 @@ async function syncEvents(): Promise<SyncResult> {
       console.debug('[SyncService] Events table not ready:', dbErr);
       return result;
     }
-    
+
     // Filter for unsynced, non-guest records (Requirements: 2.6)
-    const eventsToSync = allEvents
+    const unsyncedEvents = allEvents
       .filter(e => e.synced === false && !isGuestId(e.created_by_user_id))
       .slice(0, BATCH_SIZE);
 
+    const isUuid = (value: string): boolean =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+    const deleteEventOnServer = async (eventId: string): Promise<void> => {
+      const local = unsyncedEvents.find(e => e.id === eventId);
+      if (!local) return;
+
+      // If we have a server UUID id, delete directly.
+      if (isUuid(local.id)) {
+        await apiClient.delete(`/events/${local.id}`);
+        return;
+      }
+
+      // Otherwise, best-effort: resolve the server event by its natural keys and delete that.
+      try {
+        const resp = await apiClient.get<any>(`/events/match/${local.match_id}`);
+        const list = Array.isArray(resp.data) ? resp.data : (resp.data?.events || []);
+        const serverMatch = list.find((e: any) => {
+          const teamId = e.teamId ?? e.team_id ?? null;
+          const playerId = e.playerId ?? e.player_id ?? null;
+          const clockMs = e.clockMs ?? e.clock_ms ?? null;
+          const kind = e.kind ?? null;
+          return (
+            kind === local.kind &&
+            String(teamId || '') === String(local.team_id || '') &&
+            String(playerId || '') === String(local.player_id || '') &&
+            Number(clockMs || 0) === Number(local.clock_ms || 0)
+          );
+        });
+
+        if (serverMatch?.id && isUuid(String(serverMatch.id))) {
+          await apiClient.delete(`/events/${serverMatch.id}`);
+        }
+      } catch {
+        // Ignore lookup failures; deletion will be retried on next sync cycle if needed.
+      }
+    };
+
+    // Process soft deletes first
+    const eventsToSync = await processSoftDeletes(
+      db.events,
+      unsyncedEvents,
+      deleteEventOnServer,
+      'events',
+      result
+    );
+
     for (const event of eventsToSync) {
       try {
-        // POST to events API endpoint
-        await eventsApi.create({
-          matchId: event.match_id,
-          kind: event.kind,
-          periodNumber: event.period_number,
-          clockMs: event.clock_ms,
-          teamId: event.team_id,
-          playerId: event.player_id,
-          notes: event.notes,
-          sentiment: event.sentiment,
-        } as any);
+        if (event.kind === 'formation_change') {
+          const parsed = (() => {
+            try { return event.notes ? JSON.parse(event.notes) : null; } catch { return null; }
+          })();
+
+          const formation = parsed?.formation;
+          if (!formation || !Array.isArray(formation.players)) {
+            throw new Error('Invalid formation_change payload: missing formation.players');
+          }
+
+          const startMin = (event.clock_ms ?? 0) / 60_000;
+          await apiClient.post(`/matches/${event.match_id}/formation-changes`, {
+            ...(isUuid(event.id) ? { eventId: event.id } : {}),
+            startMin,
+            formation,
+            reason: parsed?.reason ?? null,
+          });
+        } else {
+          const payload = {
+            matchId: event.match_id,
+            kind: event.kind,
+            periodNumber: event.period_number,
+            clockMs: event.clock_ms,
+            teamId: event.team_id || undefined,
+            playerId: event.player_id || null,
+            notes: event.notes,
+            sentiment: event.sentiment,
+          };
+
+          // Use PUT upsert when we have a UUID id (local-first parity + update support)
+          if (isUuid(event.id)) {
+            await apiClient.put(`/events/${event.id}`, payload);
+          } else {
+            await apiClient.post('/events', payload);
+          }
+        }
 
         // Update synced to true and set synced_at on success (Requirements: 2.4)
         await db.events.update(event.id, {
@@ -530,11 +746,24 @@ async function syncMatchPeriods(): Promise<SyncResult> {
       console.debug('[SyncService] Match periods table not ready:', dbErr);
       return result;
     }
-    
+
     // Filter for unsynced, non-guest records (Requirements: 2.6)
-    const periodsToSync = allPeriods
+    const unsyncedPeriods = allPeriods
       .filter(p => p.synced === false && !isGuestId(p.created_by_user_id))
       .slice(0, BATCH_SIZE);
+
+    // Process soft deletes first (periods are rarely deleted, but handle it)
+    const periodsToSync = await processSoftDeletes(
+      db.match_periods,
+      unsyncedPeriods,
+      async (id) => {
+        // Match periods don't have a dedicated delete endpoint - just remove locally
+        // Server will eventually sync and remove orphans
+        console.debug('[SyncService] Period delete - removing locally only:', id);
+      },
+      'match_periods',
+      result
+    );
 
     for (const period of periodsToSync) {
       try {
@@ -546,7 +775,7 @@ async function syncMatchPeriods(): Promise<SyncResult> {
             periodType: period.period_type || 'REGULAR',
             startedAt: new Date(period.started_at).toISOString(),
             endedAt: new Date(period.ended_at).toISOString(),
-            durationSeconds: period.duration_seconds,
+            // Do not send durationSeconds: backend validation caps it (2h) but server can derive it from timestamps.
           });
         } else {
           // Period is still in progress - start it on the server
@@ -769,30 +998,32 @@ class SyncService {
   async flushOnce(): Promise<SyncResult> {
     const combinedResult: SyncResult = { synced: 0, failed: 0, errors: [] };
 
+    // Prevent concurrent flushes (important: set immediately to avoid async race conditions)
     if (this.running) return combinedResult;
-    // If no network, skip
-    if (typeof navigator !== 'undefined' && !navigator.onLine) return combinedResult;
-    // Only attempt sync when authenticated; guests keep data local
-    if (!apiClient.isAuthenticated()) return combinedResult;
-
-    // If guest data exists locally, pause automatic sync to avoid 400/403s until import completes
-    try {
-      const { hasGuestData } = await import('../services/importService');
-      const needsImport = await hasGuestData();
-      if (needsImport) {
-        console.warn('[SyncService] Guest data detected - pausing sync until import completes');
-        try {
-          (window as any).__toastApi?.current?.showInfo?.('Local guest data detected — import it to sync.');
-          window.dispatchEvent(new CustomEvent('import:needed'));
-        } catch {}
-        return combinedResult;
-      }
-    } catch (err) {
-      console.error('[SyncService] Error checking for guest data:', err);
-    }
-
     this.running = true;
+
     try {
+      // If no network, skip
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return combinedResult;
+      // Only attempt sync when authenticated; guests keep data local
+      if (!apiClient.isAuthenticated()) return combinedResult;
+
+      // If guest data exists locally, pause automatic sync to avoid 400/403s until import completes
+      try {
+        const { hasGuestData } = await import('../services/importService');
+        const needsImport = await hasGuestData();
+        if (needsImport) {
+          console.warn('[SyncService] Guest data detected - pausing sync until import completes');
+          try {
+            (window as any).__toastApi?.current?.showInfo?.('Local guest data detected — import it to sync.');
+            window.dispatchEvent(new CustomEvent('import:needed'));
+          } catch {}
+          return combinedResult;
+        }
+      } catch (err) {
+        console.error('[SyncService] Error checking for guest data:', err);
+      }
+
       // Get initial pending counts for progress tracking (Requirements: 4.3)
       const initialProgress = await this.getPendingCounts();
       emitSyncProgress(initialProgress);

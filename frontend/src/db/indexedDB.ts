@@ -389,7 +389,7 @@ export class GrassrootsDB extends Dexie {
       }
 
       const now = Date.now();
-      const eventId = `event-${now}-${Math.random().toString(36).substr(2, 9)}`;
+      const eventId = globalThis.crypto?.randomUUID?.() ?? `event-${now}-${Math.random().toString(36).substr(2, 9)}`;
       
       const event: EnhancedEvent = {
         id: eventId,
@@ -528,7 +528,7 @@ export class GrassrootsDB extends Dexie {
       }
 
       const now = Date.now();
-      const eventId = `event-${now}-${Math.random().toString(36).substr(2, 9)}`;
+      const eventId = globalThis.crypto?.randomUUID?.() ?? `event-${now}-${Math.random().toString(36).substr(2, 9)}`;
 
       // Calculate clock_ms if not provided
       const clockMs = payload.clock_ms ??
@@ -854,18 +854,29 @@ export class GrassrootsDB extends Dexie {
   }
 
   /**
-   * Get players for a specific team
+   * Get players for a specific team using player_teams junction table
    */
   async getPlayersByTeam(teamId: ID): Promise<DatabaseResult<Player[]>> {
     try {
       console.log('[getPlayersByTeam] Querying players for team:', teamId);
-      const allPlayers = await this.players.toArray();
-      console.log('[getPlayersByTeam] All players in DB:', allPlayers.map(p => ({ id: p.id, name: p.full_name, current_team: p.current_team })));
       
-      const enhancedPlayers = await this.players
-        .where('current_team')
+      // Get active player-team relationships for this team
+      const playerTeamRelations = await this.player_teams
+        .where('team_id')
         .equals(teamId)
-        .and(p => !p.is_deleted)
+        .filter((pt: any) => !pt.is_deleted && pt.is_active !== false)
+        .toArray();
+      
+      console.log('[getPlayersByTeam] Found player-team relations:', playerTeamRelations.length);
+      
+      // Get the player IDs from the relationships
+      const playerIds = playerTeamRelations.map((pt: any) => pt.player_id);
+      
+      // Fetch the actual player records
+      const enhancedPlayers = await this.players
+        .where('id')
+        .anyOf(playerIds)
+        .filter(p => !p.is_deleted)
         .sortBy('squad_number');
       
       console.log('[getPlayersByTeam] Found players:', enhancedPlayers.length);

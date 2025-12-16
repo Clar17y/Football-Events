@@ -12,11 +12,13 @@ async function startServer() {
 
     // Start the server
     const port = config.PORT || 3001;
-    app.listen(port, () => {
+    app.listen(port, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${port}`);
       console.log(`📋 Environment: ${config.NODE_ENV}`);
       console.log(`🔗 Health check: http://localhost:${port}/health`);
+      console.log(`🌐 Network access: http://192.168.1.58:${port}/health`);
       console.log(`📡 API v1: http://localhost:${port}/api/v1`);
+      console.log(`📡 Network API: http://192.168.1.58:${port}/api/v1`);
     });
 
   } catch (error) {
