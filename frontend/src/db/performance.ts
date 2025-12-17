@@ -252,14 +252,14 @@ export async function getMatchEventsWithMonitoring(matchId: ID): Promise<any[]> 
     'events',
     async () => {
       const events = await db.events
-        .where('match_id')
+        .where('matchId')
         .equals(matchId)
         .toArray();
       
-      // Sort by clock_ms manually
-      return events.sort((a, b) => a.clock_ms - b.clock_ms);
+      // Sort by clockMs manually
+      return events.sort((a, b) => a.clockMs - b.clockMs);
     },
-    'match_id'
+    'matchId'
   );
 }
 
@@ -276,11 +276,11 @@ export async function getEventsInTimeWindowWithMonitoring(
     'events',
     async () => {
       return await db.events
-        .where('[match_id+clock_ms]')
+        .where('[matchId+clockMs]')
         .between([matchId, startTime], [matchId, endTime])
         .toArray();
     },
-    '[match_id+clock_ms]'
+    '[matchId+clockMs]'
   );
 }
 
@@ -293,14 +293,14 @@ export async function getPlayerEventsWithMonitoring(playerId: ID): Promise<any[]
     'events',
     async () => {
       const events = await db.events
-        .where('player_id')
+        .where('playerId')
         .equals(playerId)
         .toArray();
       
-      // Sort by ts_server manually
-      return events.sort((a, b) => a.ts_server - b.ts_server);
+      // Sort by tsServer manually
+      return events.sort((a, b) => a.tsServer - b.tsServer);
     },
-    'player_id'
+    'playerId'
   );
 }
 
@@ -411,14 +411,14 @@ export async function analyzeIndexUsage(): Promise<{
     const operationCounts = stats.operationBreakdown;
     
     if (operationCounts['get_events_time_window']?.count > 10) {
-      if (!indexUsage['[match_id+clock_ms]']) {
-        missingIndexes.push('[match_id+clock_ms] - for time window queries');
+      if (!indexUsage['[matchId+clockMs]']) {
+        missingIndexes.push('[matchId+clockMs] - for time window queries');
       }
     }
 
     if (operationCounts['get_player_events']?.count > 10) {
-      if (!indexUsage['player_id']) {
-        missingIndexes.push('player_id - for player event queries');
+      if (!indexUsage['playerId']) {
+        missingIndexes.push('playerId - for player event queries');
       }
     }
 
@@ -460,17 +460,16 @@ export async function runPerformanceBenchmark(): Promise<{
     const insertStart = performance.now();
     const testEvents = Array.from({ length: 100 }, (_, i) => ({
       id: `test-event-${i}`,
-      match_id: 'test-match',
-      season_id: 'test-season',
-      ts_server: Date.now(),
-      period_number: 1,
-      clock_ms: i * 1000,
+      matchId: 'test-match',
+      tsServer: Date.now(),
+      periodNumber: 1,
+      clockMs: i * 1000,
       kind: 'test',
-      team_id: 'test-team',
-      player_id: 'test-player',
+      teamId: 'test-team',
+      playerId: 'test-player',
       sentiment: 0,
-      created_at: Date.now(),
-      updated_at: Date.now()
+      createdAt: Date.now(),
+      updatedAt: Date.now()
     }));
     
     // Note: This is a test, so we won't actually insert
@@ -491,7 +490,7 @@ export async function runPerformanceBenchmark(): Promise<{
 
     // Benchmark: Index query
     const indexQueryStart = performance.now();
-    await db.events.where('match_id').equals('non-existent').toArray();
+    await db.events.where('matchId').equals('non-existent').toArray();
     const indexQueryDuration = performance.now() - indexQueryStart;
     results['index_query'] = {
       duration: indexQueryDuration,

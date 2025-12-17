@@ -102,10 +102,10 @@ describe('Sync Service Unit Tests', () => {
     await db.players.clear();
     await db.matches.clear();
     await db.lineup.clear();
-    await db.default_lineups.clear();
+    await db.defaultLineups.clear();
     await db.events.clear();
-    await db.match_periods.clear();
-    await db.match_state.clear();
+    await db.matchPeriods.clear();
+    await db.matchState.clear();
 
     // Reset all mocks
     vi.clearAllMocks();
@@ -131,10 +131,10 @@ describe('Sync Service Unit Tests', () => {
     await db.players.clear();
     await db.matches.clear();
     await db.lineup.clear();
-    await db.default_lineups.clear();
+    await db.defaultLineups.clear();
     await db.events.clear();
-    await db.match_periods.clear();
-    await db.match_state.clear();
+    await db.matchPeriods.clear();
+    await db.matchState.clear();
   });
 
   describe('syncSeasons', () => {
@@ -142,24 +142,24 @@ describe('Sync Service Unit Tests', () => {
       // Add unsynced season with authenticated user
       await db.seasons.add({
         id: 'season-1',
-        season_id: 'season-1',
+        seasonId: 'season-1',
         label: 'Test Season',
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'user-123',
-        is_deleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'user-123',
+        isDeleted: false,
         synced: false,
       } as any);
 
       // Add unsynced season with guest user (should be excluded)
       await db.seasons.add({
         id: 'season-2',
-        season_id: 'season-2',
+        seasonId: 'season-2',
         label: 'Guest Season',
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'guest-456',
-        is_deleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'guest-456',
+        isDeleted: false,
         synced: false,
       } as any);
 
@@ -183,12 +183,12 @@ describe('Sync Service Unit Tests', () => {
     it('should not sync already synced seasons', async () => {
       await db.seasons.add({
         id: 'season-1',
-        season_id: 'season-1',
+        seasonId: 'season-1',
         label: 'Already Synced',
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'user-123',
-        is_deleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'user-123',
+        isDeleted: false,
         synced: true,
       } as any);
 
@@ -202,25 +202,25 @@ describe('Sync Service Unit Tests', () => {
     it('should sync unsynced teams excluding guest records', async () => {
       await db.teams.add({
         id: 'team-1',
-        team_id: 'team-1',
+        teamId: 'team-1',
         name: 'Test Team',
-        color_primary: '#ff0000',
-        color_secondary: '#0000ff',
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'user-123',
-        is_deleted: false,
+        colorPrimary: '#ff0000',
+        colorSecondary: '#0000ff',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'user-123',
+        isDeleted: false,
         synced: false,
       } as any);
 
       await db.teams.add({
         id: 'team-2',
-        team_id: 'team-2',
+        teamId: 'team-2',
         name: 'Guest Team',
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'guest-456',
-        is_deleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'guest-456',
+        isDeleted: false,
         synced: false,
       } as any);
 
@@ -243,13 +243,13 @@ describe('Sync Service Unit Tests', () => {
     it('should sync unsynced players without team', async () => {
       await db.players.add({
         id: 'player-1',
-        full_name: 'Test Player',
-        squad_number: 10,
-        preferred_pos: 'MID',
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'user-123',
-        is_deleted: false,
+        fullName: 'Test Player',
+        squadNumber: 10,
+        preferredPos: 'MID',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'user-123',
+        isDeleted: false,
         synced: false,
       } as any);
 
@@ -267,14 +267,14 @@ describe('Sync Service Unit Tests', () => {
     it('should sync unsynced players with team using createPlayerWithTeam', async () => {
       await db.players.add({
         id: 'player-1',
-        full_name: 'Team Player',
-        squad_number: 7,
-        preferred_pos: 'FWD',
-        current_team: 'team-123',
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'user-123',
-        is_deleted: false,
+        fullName: 'Team Player',
+        squadNumber: 7,
+        preferredPos: 'FWD',
+        currentTeam: 'team-123',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'user-123',
+        isDeleted: false,
         synced: false,
       } as any);
 
@@ -292,11 +292,11 @@ describe('Sync Service Unit Tests', () => {
     it('should exclude guest players from sync', async () => {
       await db.players.add({
         id: 'player-1',
-        full_name: 'Guest Player',
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'guest-789',
-        is_deleted: false,
+        fullName: 'Guest Player',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'guest-789',
+        isDeleted: false,
         synced: false,
       } as any);
 
@@ -311,19 +311,19 @@ describe('Sync Service Unit Tests', () => {
     it('should sync unsynced matches excluding guest records', async () => {
       await db.matches.add({
         id: 'match-1',
-        match_id: 'match-1',
-        season_id: 'season-1',
-        home_team_id: 'team-1',
-        away_team_id: 'team-2',
-        kickoff_ts: Date.now(),
-        duration_mins: 60,
-        period_format: 'quarter',
-        home_score: 0,
-        away_score: 0,
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'user-123',
-        is_deleted: false,
+        matchId: 'match-1',
+        seasonId: 'season-1',
+        homeTeamId: 'team-1',
+        awayTeamId: 'team-2',
+        kickoffTs: Date.now(),
+        durationMins: 60,
+        periodFormat: 'quarter',
+        homeScore: 0,
+        awayScore: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'user-123',
+        isDeleted: false,
         synced: false,
       } as any);
 
@@ -347,14 +347,14 @@ describe('Sync Service Unit Tests', () => {
     it('should sync unsynced lineups excluding guest records', async () => {
       await db.lineup.add({
         id: 'lineup-1',
-        match_id: 'match-1',
-        player_id: 'player-1',
-        start_min: 0,
+        matchId: 'match-1',
+        playerId: 'player-1',
+        startMin: 0,
         position: 'CM',
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'user-123',
-        is_deleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'user-123',
+        isDeleted: false,
         synced: false,
       } as any);
 
@@ -376,14 +376,14 @@ describe('Sync Service Unit Tests', () => {
 
   describe('syncDefaultLineups', () => {
     it('should sync unsynced default lineups excluding guest records', async () => {
-      await db.default_lineups.add({
+      await db.defaultLineups.add({
         id: 'default-lineup-1',
-        team_id: 'team-1',
+        teamId: 'team-1',
         formation: [{ playerId: 'p1', position: 'GK', pitchX: 50, pitchY: 90 }],
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'user-123',
-        is_deleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'user-123',
+        isDeleted: false,
         synced: false,
       } as any);
 
@@ -396,7 +396,7 @@ describe('Sync Service Unit Tests', () => {
         })
       );
 
-      const defaultLineup = await db.default_lineups.get('default-lineup-1');
+      const defaultLineup = await db.defaultLineups.get('default-lineup-1');
       expect(defaultLineup?.synced).toBe(true);
     });
   });
@@ -439,37 +439,37 @@ describe('Sync Service Unit Tests', () => {
 
       // Add one record to each table
       await db.seasons.add({
-        id: 's1', season_id: 's1', label: 'S1', created_at: Date.now(),
-        updated_at: Date.now(), created_by_user_id: 'user-1', is_deleted: false, synced: false,
+        id: 's1', seasonId: 's1', label: 'S1', createdAt: Date.now(),
+        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       await db.teams.add({
-        id: 't1', team_id: 't1', name: 'T1', created_at: Date.now(),
-        updated_at: Date.now(), created_by_user_id: 'user-1', is_deleted: false, synced: false,
+        id: 't1', teamId: 't1', name: 'T1', createdAt: Date.now(),
+        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       await db.players.add({
-        id: 'p1', full_name: 'P1', created_at: Date.now(),
-        updated_at: Date.now(), created_by_user_id: 'user-1', is_deleted: false, synced: false,
+        id: 'p1', fullName: 'P1', createdAt: Date.now(),
+        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       await db.matches.add({
-        id: 'm1', match_id: 'm1', season_id: 's1', home_team_id: 't1', away_team_id: 't2',
-        kickoff_ts: Date.now(), duration_mins: 60, period_format: 'quarter',
-        home_score: 0, away_score: 0, created_at: Date.now(), updated_at: Date.now(),
-        created_by_user_id: 'user-1', is_deleted: false, synced: false,
+        id: 'm1', matchId: 'm1', seasonId: 's1', homeTeamId: 't1', awayTeamId: 't2',
+        kickoffTs: Date.now(), durationMins: 60, periodFormat: 'quarter',
+        homeScore: 0, awayScore: 0, createdAt: Date.now(), updatedAt: Date.now(),
+        createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       await db.lineup.add({
-        id: 'l1', match_id: 'm1', player_id: 'p1', start_min: 0, position: 'CM',
-        created_at: Date.now(), updated_at: Date.now(),
-        created_by_user_id: 'user-1', is_deleted: false, synced: false,
+        id: 'l1', matchId: 'm1', playerId: 'p1', startMin: 0, position: 'CM',
+        createdAt: Date.now(), updatedAt: Date.now(),
+        createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
-      await db.default_lineups.add({
-        id: 'dl1', team_id: 't1', formation: [],
-        created_at: Date.now(), updated_at: Date.now(),
-        created_by_user_id: 'user-1', is_deleted: false, synced: false,
+      await db.defaultLineups.add({
+        id: 'dl1', teamId: 't1', formation: [],
+        createdAt: Date.now(), updatedAt: Date.now(),
+        createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       await syncService.flushOnce();
@@ -483,31 +483,31 @@ describe('Sync Service Unit Tests', () => {
     it('should return correct pending counts for all tables', async () => {
       // Add unsynced records for authenticated user
       await db.seasons.add({
-        id: 's1', season_id: 's1', label: 'S1', created_at: Date.now(),
-        updated_at: Date.now(), created_by_user_id: 'user-1', is_deleted: false, synced: false,
+        id: 's1', seasonId: 's1', label: 'S1', createdAt: Date.now(),
+        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
       await db.seasons.add({
-        id: 's2', season_id: 's2', label: 'S2', created_at: Date.now(),
-        updated_at: Date.now(), created_by_user_id: 'user-1', is_deleted: false, synced: false,
+        id: 's2', seasonId: 's2', label: 'S2', createdAt: Date.now(),
+        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       await db.teams.add({
-        id: 't1', team_id: 't1', name: 'T1', created_at: Date.now(),
-        updated_at: Date.now(), created_by_user_id: 'user-1', is_deleted: false, synced: false,
+        id: 't1', teamId: 't1', name: 'T1', createdAt: Date.now(),
+        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       // Add guest record (should not be counted)
       await db.players.add({
-        id: 'p1', full_name: 'Guest Player', created_at: Date.now(),
-        updated_at: Date.now(), created_by_user_id: 'guest-123', is_deleted: false, synced: false,
+        id: 'p1', fullName: 'Guest Player', createdAt: Date.now(),
+        updatedAt: Date.now(), createdByUserId: 'guest-123', isDeleted: false, synced: false,
       } as any);
 
       // Add synced record (should not be counted)
       await db.matches.add({
-        id: 'm1', match_id: 'm1', season_id: 's1', home_team_id: 't1', away_team_id: 't2',
-        kickoff_ts: Date.now(), duration_mins: 60, period_format: 'quarter',
-        home_score: 0, away_score: 0, created_at: Date.now(), updated_at: Date.now(),
-        created_by_user_id: 'user-1', is_deleted: false, synced: true,
+        id: 'm1', matchId: 'm1', seasonId: 's1', homeTeamId: 't1', awayTeamId: 't2',
+        kickoffTs: Date.now(), durationMins: 60, periodFormat: 'quarter',
+        homeScore: 0, awayScore: 0, createdAt: Date.now(), updatedAt: Date.now(),
+        createdByUserId: 'user-1', isDeleted: false, synced: true,
       } as any);
 
       const progress = await syncService.getPendingCounts();
@@ -530,8 +530,8 @@ describe('Sync Service Unit Tests', () => {
       window.addEventListener('sync:progress', handler);
 
       await db.seasons.add({
-        id: 's1', season_id: 's1', label: 'S1', created_at: Date.now(),
-        updated_at: Date.now(), created_by_user_id: 'user-1', is_deleted: false, synced: false,
+        id: 's1', seasonId: 's1', label: 'S1', createdAt: Date.now(),
+        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       await syncService.flushOnce();
@@ -551,13 +551,13 @@ describe('Sync Service Unit Tests', () => {
         .mockResolvedValueOnce({ data: { id: 'server-season' } });
 
       await db.seasons.add({
-        id: 's1', season_id: 's1', label: 'Fail Season', created_at: Date.now(),
-        updated_at: Date.now(), created_by_user_id: 'user-1', is_deleted: false, synced: false,
+        id: 's1', seasonId: 's1', label: 'Fail Season', createdAt: Date.now(),
+        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       await db.seasons.add({
-        id: 's2', season_id: 's2', label: 'Success Season', created_at: Date.now(),
-        updated_at: Date.now(), created_by_user_id: 'user-1', is_deleted: false, synced: false,
+        id: 's2', seasonId: 's2', label: 'Success Season', createdAt: Date.now(),
+        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       const result = await syncService.flushOnce();
@@ -572,8 +572,8 @@ describe('Sync Service Unit Tests', () => {
       Object.defineProperty(navigator, 'onLine', { value: false, writable: true });
 
       await db.seasons.add({
-        id: 's1', season_id: 's1', label: 'S1', created_at: Date.now(),
-        updated_at: Date.now(), created_by_user_id: 'user-1', is_deleted: false, synced: false,
+        id: 's1', seasonId: 's1', label: 'S1', createdAt: Date.now(),
+        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       const result = await syncService.flushOnce();
@@ -586,8 +586,8 @@ describe('Sync Service Unit Tests', () => {
       (apiClient.isAuthenticated as Mock).mockReturnValue(false);
 
       await db.seasons.add({
-        id: 's1', season_id: 's1', label: 'S1', created_at: Date.now(),
-        updated_at: Date.now(), created_by_user_id: 'user-1', is_deleted: false, synced: false,
+        id: 's1', seasonId: 's1', label: 'S1', createdAt: Date.now(),
+        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       const result = await syncService.flushOnce();

@@ -57,45 +57,45 @@ export const playersApi = {
     const { db } = await import('../../db/indexedDB');
     let rows = await db.players.toArray();
     // Filter non-deleted
-    rows = rows.filter((p: any) => p && !p.is_deleted);
+    rows = rows.filter((p: any) => p && !p.isDeleted);
     
     // Filter by team assignment using player_teams junction table
     if (teamIds && teamIds.length > 0) {
       // Get player IDs that belong to any of the specified teams
       const playerTeamRelations = await db.player_teams
-        .filter((pt: any) => !pt.is_deleted && pt.is_active !== false && teamIds.includes(pt.team_id))
+        .filter((pt: any) => !pt.isDeleted && pt.isActive !== false && teamIds.includes(pt.teamId))
         .toArray();
-      const playerIdsInTeams = new Set(playerTeamRelations.map((pt: any) => pt.player_id));
+      const playerIdsInTeams = new Set(playerTeamRelations.map((pt: any) => pt.playerId));
       rows = rows.filter((p: any) => playerIdsInTeams.has(p.id));
     } else if (teamId) {
       // Get player IDs that belong to the specified team
       const playerTeamRelations = await db.player_teams
-        .where('team_id')
+        .where('teamId')
         .equals(teamId)
-        .filter((pt: any) => !pt.is_deleted && pt.is_active !== false)
+        .filter((pt: any) => !pt.isDeleted && pt.isActive !== false)
         .toArray();
-      const playerIdsInTeam = new Set(playerTeamRelations.map((pt: any) => pt.player_id));
+      const playerIdsInTeam = new Set(playerTeamRelations.map((pt: any) => pt.playerId));
       rows = rows.filter((p: any) => playerIdsInTeam.has(p.id));
     } else if (noTeam) {
       // Get all player IDs that have any active team relationship
       const allPlayerTeamRelations = await db.player_teams
-        .filter((pt: any) => !pt.is_deleted && pt.is_active !== false)
+        .filter((pt: any) => !pt.isDeleted && pt.isActive !== false)
         .toArray();
-      const playerIdsWithTeams = new Set(allPlayerTeamRelations.map((pt: any) => pt.player_id));
+      const playerIdsWithTeams = new Set(allPlayerTeamRelations.map((pt: any) => pt.playerId));
       rows = rows.filter((p: any) => !playerIdsWithTeams.has(p.id));
     }
     
     // Filter by search text
     if (search && search.trim()) {
       const term = search.trim().toLowerCase();
-      rows = rows.filter((p: any) => (p.full_name || '').toLowerCase().includes(term));
+      rows = rows.filter((p: any) => (p.fullName || '').toLowerCase().includes(term));
     }
     // Filter by position
     if (position) {
-      rows = rows.filter((p: any) => (p.preferred_pos || '') === position);
+      rows = rows.filter((p: any) => (p.preferredPos || '') === position);
     }
     // Sort by name
-    rows.sort((a: any, b: any) => (a.full_name || '').localeCompare(b.full_name || ''));
+    rows.sort((a: any, b: any) => (a.fullName || '').localeCompare(b.fullName || ''));
     // Paginate
     const total = rows.length;
     const start = (page - 1) * limit;
@@ -118,7 +118,7 @@ export const playersApi = {
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
     const player = await db.players.get(id);
-    if (!player || player.is_deleted) {
+    if (!player || player.isDeleted) {
       throw new Error('Player not found');
     }
     return {
@@ -150,12 +150,12 @@ export const playersApi = {
     return {
       data: {
         id: player.id,
-        name: player.full_name,
-        squadNumber: player.squad_number,
-        preferredPosition: player.preferred_pos,
+        name: player.fullName,
+        squadNumber: player.squadNumber,
+        preferredPosition: player.preferredPos,
         dateOfBirth: player.dob ? new Date(player.dob) : undefined,
         notes: player.notes,
-        currentTeam: player.current_team,
+        currentTeam: player.currentTeam,
       } as any,
       success: true,
       message: 'Player created'
@@ -185,12 +185,12 @@ export const playersApi = {
     return {
       data: {
         id,
-        name: updated?.full_name || playerData.name,
-        squadNumber: updated?.squad_number,
-        preferredPosition: updated?.preferred_pos,
+        name: updated?.fullName || playerData.name,
+        squadNumber: updated?.squadNumber,
+        preferredPosition: updated?.preferredPos,
         dateOfBirth: updated?.dob ? new Date(updated.dob) : undefined,
         notes: updated?.notes,
-        currentTeam: updated?.current_team,
+        currentTeam: updated?.currentTeam,
       } as any,
       success: true,
       message: 'Player updated'
@@ -200,19 +200,80 @@ export const playersApi = {
   /**
    * Update an existing player with team changes - LOCAL-FIRST
    */
-  async updatePlayerWithTeams(id: string, playerData: PlayerUpdateRequest & { teamIds: string[] }): Promise<PlayerResponse> {
+  async updatePlayerWithTeams(id: string, playerData: PlayerUpdateRequest & { teamIds: string[], currentTeam?: string }): Promise<PlayerResponse> {
     const { playersDataLayer } = await import('../dataLayer');
     const { db } = await import('../../db/indexedDB');
+    const { authApi: auth } = await import('./authApi');
 
-    // Update player with first team as current_team
+    // Resolve team names from IDs if currentTeam not provided
+    let currentTeamNames = playerData.currentTeam;
+    const teamIds = playerData.teamIds || [];
+    if (!currentTeamNames && teamIds.length > 0) {
+      const teams = await db.teams.where('id').anyOf(teamIds).toArray();
+      currentTeamNames = teams.map(t => t.name).filter(Boolean).join(', ');
+    }
+
+    // Update player basic fields
     await playersDataLayer.update(id, {
       name: playerData.name,
       squadNumber: playerData.squadNumber,
       preferredPosition: playerData.preferredPosition,
       dateOfBirth: playerData.dateOfBirth ? new Date(playerData.dateOfBirth).toISOString() : undefined,
       notes: playerData.notes,
-      teamId: playerData.teamIds?.[0],
     });
+
+    // Update currentTeam with the resolved team names
+    if (currentTeamNames !== undefined) {
+      await db.players.update(id, { currentTeam: currentTeamNames, synced: false, updatedAt: Date.now() } as any);
+    }
+
+    // Manage player_teams junction table records
+    const now = Date.now();
+    const currentUser = auth.isAuthenticated() ? await auth.getCurrentUser().catch(() => null) : null;
+    const userId = currentUser?.data?.id || getGuestId();
+    const startDate = new Date();
+
+    // Get existing player-team relationships (cast to any to access stored fields)
+    const existingRelations = await db.player_teams
+      .filter((pt: any) => pt.playerId === id && !pt.isDeleted && !pt.is_deleted)
+      .toArray();
+
+    // Deactivate relationships for teams no longer in the list
+    for (const relation of existingRelations) {
+      if (!teamIds.includes(relation.teamId)) {
+        await db.player_teams.update(relation.id, {
+          endDate: startDate,
+          updatedAt: new Date(),
+        } as any);
+      }
+    }
+
+    // Add or reactivate relationships for new teams
+    for (const teamId of teamIds) {
+      const existing = existingRelations.find((pt: any) => pt.teamId === teamId);
+      if (existing) {
+        // Reactivate if it was deactivated (has endDate)
+        if ((existing as any).endDate) {
+          await db.player_teams.update(existing.id, {
+            endDate: undefined,
+            updatedAt: new Date(),
+          } as any);
+        }
+      } else {
+        // Create new relationship
+        const ptId = crypto?.randomUUID ? crypto.randomUUID() : `pt-${now}-${Math.random().toString(36).slice(2)}`;
+        await db.player_teams.put({
+          id: ptId,
+          playerId: id,
+          teamId: teamId,
+          startDate: startDate,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          created_by_user_id: userId,
+          is_deleted: false,
+        } as any);
+      }
+    }
 
     const updated = await db.players.get(id);
     try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
@@ -220,10 +281,10 @@ export const playersApi = {
     return {
       data: {
         id,
-        name: updated?.full_name || playerData.name,
-        squadNumber: updated?.squad_number,
-        preferredPosition: updated?.preferred_pos,
-        currentTeam: updated?.current_team,
+        name: updated?.fullName || playerData.name,
+        squadNumber: updated?.squadNumber,
+        preferredPosition: updated?.preferredPos,
+        currentTeam: updated?.currentTeam,
       } as any,
       success: true,
       message: 'Player updated'
@@ -252,19 +313,19 @@ export const playersApi = {
     
     // Get active player-team relationships for this team
     const playerTeamRelations = await db.player_teams
-      .where('team_id')
+      .where('teamId')
       .equals(teamId)
-      .filter((pt: any) => !pt.is_deleted && pt.is_active !== false)
+      .filter((pt: any) => !pt.isDeleted && pt.isActive !== false)
       .toArray();
     
     // Get the player IDs from the relationships
-    const playerIds = playerTeamRelations.map((pt: any) => pt.player_id);
+    const playerIds = playerTeamRelations.map((pt: any) => pt.playerId);
     
     // Fetch the actual player records
     const players = await db.players
       .where('id')
       .anyOf(playerIds)
-      .filter((p: any) => !p.is_deleted)
+      .filter((p: any) => !p.isDeleted)
       .toArray();
     
     return dbToPlayers(players as EnhancedPlayer[]);
@@ -280,27 +341,27 @@ export const playersApi = {
     
     // Get events for this player
     let events = await db.events
-      .where('player_id')
+      .where('playerId')
       .equals(playerId)
-      .filter((e: any) => !e.is_deleted)
+      .filter((e: any) => !e.isDeleted)
       .toArray();
     
     // Filter by season if provided
     if (seasonId) {
       const matchesInSeason = await db.matches
-        .where('season_id')
+        .where('seasonId')
         .equals(seasonId)
-        .filter((m: any) => !m.is_deleted)
+        .filter((m: any) => !m.isDeleted)
         .toArray();
       const matchIds = new Set(matchesInSeason.map(m => m.id));
-      events = events.filter((e: any) => matchIds.has(e.match_id));
+      events = events.filter((e: any) => matchIds.has(e.matchId));
     }
     
     // Get lineup entries for this player
     let lineups = await db.lineup
-      .where('player_id')
+      .where('playerId')
       .equals(playerId)
-      .filter((l: any) => !l.is_deleted)
+      .filter((l: any) => !l.isDeleted)
       .toArray();
     
     // Count stats
@@ -308,13 +369,13 @@ export const playersApi = {
     const assists = events.filter((e: any) => e.kind === 'assist').length;
     const yellowCards = events.filter((e: any) => e.kind === 'yellow_card').length;
     const redCards = events.filter((e: any) => e.kind === 'red_card').length;
-    const appearances = new Set(lineups.map((l: any) => l.match_id)).size;
+    const appearances = new Set(lineups.map((l: any) => l.matchId)).size;
     
     // Calculate minutes played from lineups
     let minutesPlayed = 0;
     for (const lineup of lineups) {
-      const start = (lineup as any).start_min || 0;
-      const end = (lineup as any).end_min || 90; // Default to 90 if not ended
+      const start = (lineup as any).startMin || 0;
+      const end = (lineup as any).endMin || 90; // Default to 90 if not ended
       minutesPlayed += (end - start);
     }
     
@@ -342,16 +403,16 @@ export const playersApi = {
       const id = crypto?.randomUUID ? crypto.randomUUID() : `player-${now}-${Math.random().toString(36).slice(2)}`;
       await db.players.add({
         id,
-        full_name: playerData.name,
-        squad_number: playerData.squadNumber,
-        preferred_pos: playerData.preferredPosition,
+        fullName: playerData.name,
+        squadNumber: playerData.squadNumber,
+        preferredPos: playerData.preferredPosition,
         dob: playerData.dateOfBirth ? new Date(playerData.dateOfBirth).toISOString() : undefined,
         notes: playerData.notes,
-        current_team: playerData.teamId,
-        created_at: now,
-        updated_at: now,
-        created_by_user_id: getGuestId(),
-        is_deleted: false,
+        currentTeam: playerData.teamId,
+        createdAt: now,
+        updatedAt: now,
+        createdByUserId: getGuestId(),
+        isDeleted: false,
         synced: false,
       } as any);
       try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch { }
@@ -382,16 +443,16 @@ export const playersApi = {
       const id = crypto?.randomUUID ? crypto.randomUUID() : `player-${now}-${Math.random().toString(36).slice(2)}`;
       await db.players.add({
         id,
-        full_name: playerData.name,
-        squad_number: playerData.squadNumber,
-        preferred_pos: playerData.preferredPosition,
+        fullName: playerData.name,
+        squadNumber: playerData.squadNumber,
+        preferredPos: playerData.preferredPosition,
         dob: playerData.dateOfBirth ? new Date(playerData.dateOfBirth).toISOString() : undefined,
         notes: playerData.notes,
-        current_team: firstTeam,
-        created_at: now,
-        updated_at: now,
-        created_by_user_id: getGuestId(),
-        is_deleted: false,
+        currentTeam: firstTeam,
+        createdAt: now,
+        updatedAt: now,
+        createdByUserId: getGuestId(),
+        isDeleted: false,
       } as any);
       try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch { }
       return { data: { id, name: playerData.name } as any, success: true, message: 'Player created locally' };

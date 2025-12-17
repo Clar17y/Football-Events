@@ -113,11 +113,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       const ps: MatchPeriod[] = localPeriods.map(p => ({
         id: p.id,
         matchId,
-        periodNumber: p.period_number,
-        periodType: p.period_type as any,
-        startedAt: new Date(p.started_at),
-        endedAt: p.ended_at ? new Date(p.ended_at) : undefined,
-        durationSeconds: p.duration_seconds
+        periodNumber: p.periodNumber,
+        periodType: p.periodType as any,
+        startedAt: new Date(p.startedAt),
+        endedAt: p.endedAt ? new Date(p.endedAt) : undefined,
+        durationSeconds: p.durationSeconds,
+        createdAt: new Date(p.createdAt),
+        created_by_user_id: p.createdByUserId,
+        is_deleted: p.isDeleted
       }));
       setPeriods(ps);
 
@@ -125,8 +128,8 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       const lastPeriod = ps.find(p => !p.endedAt) || ps[ps.length - 1];
 
       // Recalculate timer based on periods
-      let base = matchStateData.timer_ms || 0;
-      const lastUpdatedAt = matchStateData.last_updated_at || matchStateData.updated_at || matchStateData.created_at;
+      let base = matchStateData.timerMs || 0;
+      const lastUpdatedAt = matchStateData.lastUpdatedAt || matchStateData.updatedAt || matchStateData.createdAt;
       if (running && lastUpdatedAt) {
         base += Math.max(0, Date.now() - Number(lastUpdatedAt));
       }
@@ -272,11 +275,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     const ps: MatchPeriod[] = (localPeriodRecords || []).map((p: any) => ({
       id: p.id,
       matchId: selectedId,
-      periodNumber: p.period_number,
-      periodType: p.period_type as any,
-      startedAt: p.started_at ? new Date(p.started_at) : undefined,
-      endedAt: p.ended_at ? new Date(p.ended_at) : undefined,
-      durationSeconds: p.duration_seconds,
+      periodNumber: p.periodNumber,
+      periodType: p.periodType as any,
+      startedAt: p.startedAt ? new Date(p.startedAt) : undefined,
+      endedAt: p.endedAt ? new Date(p.endedAt) : undefined,
+      durationSeconds: p.durationSeconds,
+      createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
+      created_by_user_id: p.createdByUserId || 'system',
+      is_deleted: p.isDeleted || false,
     }));
     setPeriods(ps);
   }, [localPeriodRecords, selectedId, viewerToken]);
@@ -292,13 +298,13 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     }
 
     const status = (localMatchStateRecord?.status || 'NOT_STARTED') as any;
-    const open = (localPeriodRecords || []).find((p: any) => !p.ended_at);
+    const open = (localPeriodRecords || []).find((p: any) => !p.endedAt);
     const last = (localPeriodRecords || [])[localPeriodRecords.length - 1];
-    const periodNumber = open?.period_number || last?.period_number || 1;
+    const periodNumber = open?.periodNumber || last?.periodNumber || 1;
 
     const running = status === 'LIVE';
-    let base = Number(localMatchStateRecord?.timer_ms || 0);
-    const lastUpdatedAt = localMatchStateRecord?.last_updated_at || localMatchStateRecord?.updated_at || localMatchStateRecord?.created_at;
+    let base = Number(localMatchStateRecord?.timerMs || 0);
+    const lastUpdatedAt = localMatchStateRecord?.lastUpdatedAt || localMatchStateRecord?.updatedAt || localMatchStateRecord?.createdAt;
     if (running && lastUpdatedAt) {
       base += Math.max(0, Date.now() - Number(lastUpdatedAt));
     }
@@ -370,24 +376,24 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               const endedAt = toLocalTs(p.endedAt);
               const createdAt = toLocalTs(p.createdAt) ?? startedAt;
               const updatedAt = toLocalTs(p.updatedAt) ?? createdAt;
-              const deletedAt = toLocalTs(p.deleted_at);
+              const deletedAt = toLocalTs(p.deletedAt);
 
               return {
                 id: p.id,
-                match_id: selectedId,
-                period_number: p.periodNumber,
-                period_type: p.periodType,
-                started_at: startedAt,
-                ended_at: endedAt,
-                duration_seconds: p.durationSeconds,
-                created_at: createdAt,
-                updated_at: updatedAt,
-                created_by_user_id: p.created_by_user_id || (stateResp as any).created_by_user_id || 'server',
-                deleted_at: deletedAt,
-                deleted_by_user_id: p.deleted_by_user_id,
-                is_deleted: !!p.is_deleted,
+                matchId: selectedId,
+                periodNumber: p.periodNumber,
+                periodType: p.periodType,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                durationSeconds: p.durationSeconds,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                createdByUserId: p.createdByUserId || (stateResp as any).createdByUserId || 'server',
+                deletedAt: deletedAt,
+                deletedByUserId: p.deletedByUserId,
+                isDeleted: !!p.isDeleted,
                 synced: true,
-                synced_at: now,
+                syncedAt: now,
               } as any;
             });
 
@@ -407,19 +413,19 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                     : 'NOT_STARTED';
 
             await db.match_state.put({
-              match_id: selectedId,
+              matchId: selectedId,
               status: localStatus,
-              current_period_id: open?.id,
-              timer_ms: base,
-              last_updated_at: now,
-              created_at: toLocalTs((stateResp as any).createdAt) ?? now,
-              updated_at: toLocalTs((stateResp as any).updatedAt) ?? now,
-              created_by_user_id: (stateResp as any).created_by_user_id || 'server',
-              deleted_at: toLocalTs((stateResp as any).deleted_at),
-              deleted_by_user_id: (stateResp as any).deleted_by_user_id,
-              is_deleted: !!(stateResp as any).is_deleted,
+              currentPeriodId: open?.id,
+              timerMs: base,
+              lastUpdatedAt: now,
+              createdAt: toLocalTs((stateResp as any).createdAt) ?? now,
+              updatedAt: toLocalTs((stateResp as any).updatedAt) ?? now,
+              createdByUserId: (stateResp as any).createdByUserId || 'server',
+              deletedAt: toLocalTs((stateResp as any).deletedAt),
+              deletedByUserId: (stateResp as any).deletedByUserId,
+              isDeleted: !!(stateResp as any).isDeleted,
               synced: true,
-              synced_at: now,
+              syncedAt: now,
             } as any);
           }
 
@@ -447,27 +453,27 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               .map((ev: any) => {
                 const createdAt = toLocalTs(ev.createdAt) ?? now;
                 const updatedAt = toLocalTs(ev.updatedAt) ?? createdAt;
-                const deletedAt = toLocalTs(ev.deleted_at);
+                const deletedAt = toLocalTs(ev.deletedAt);
 
                 return {
                   id: ev.id,
-                  match_id: selectedId,
-                  ts_server: createdAt,
-                  period_number: ev.periodNumber ?? 1,
-                  clock_ms: ev.clockMs ?? 0,
+                  matchId: selectedId,
+                  tsServer: createdAt,
+                  periodNumber: ev.periodNumber ?? 1,
+                  clockMs: ev.clockMs ?? 0,
                   kind: ev.kind,
-                  team_id: ev.teamId ?? '',
-                  player_id: ev.playerId ?? '',
+                  teamId: ev.teamId ?? '',
+                  playerId: ev.playerId ?? '',
                   notes: ev.notes ?? undefined,
                   sentiment: ev.sentiment ?? 0,
-                  created_at: createdAt,
-                  updated_at: updatedAt,
-                  created_by_user_id: ev.created_by_user_id || 'server',
-                  deleted_at: deletedAt,
-                  deleted_by_user_id: ev.deleted_by_user_id,
-                  is_deleted: !!ev.is_deleted,
+                  createdAt: createdAt,
+                  updatedAt: updatedAt,
+                  createdByUserId: ev.createdByUserId || 'server',
+                  deletedAt: deletedAt,
+                  deletedByUserId: ev.deletedByUserId,
+                  isDeleted: !!ev.isDeleted,
                   synced: true,
-                  synced_at: now,
+                  syncedAt: now,
                 } as any;
               });
 
@@ -1255,11 +1261,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         const { db } = await import('../db/indexedDB');
         const result = await db.addEventToTable({
           kind: payload.kind,
-          match_id: payload.matchId,
-          team_id: payload.teamId,
-          player_id: payload.playerId,
-          clock_ms: payload.clockMs || 0,
-          period_number: payload.periodNumber,
+          matchId: payload.matchId,
+          teamId: payload.teamId,
+          playerId: payload.playerId,
+          clockMs: payload.clockMs || 0,
+          periodNumber: payload.periodNumber,
           sentiment: sentiment,
           notes: payload.notes,
         });
@@ -1318,17 +1324,17 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   // ===== Timeline helpers =====
   const transformCreated = (ev: any): MatchEvent => ({
     id: ev.id,
-    matchId: ev.matchId || ev.match_id,
-    createdAt: new Date(ev.createdAt || ev.created_at || Date.now()),
+    matchId: ev.matchId,
+    createdAt: new Date(ev.createdAt || Date.now()),
     kind: ev.kind,
-    periodNumber: ev.periodNumber ?? ev.period_number ?? undefined,
-    clockMs: ev.clockMs ?? ev.clock_ms ?? undefined,
-    teamId: ev.teamId ?? ev.team_id ?? undefined,
-    playerId: ev.playerId ?? ev.player_id ?? undefined,
+    periodNumber: ev.periodNumber ?? undefined,
+    clockMs: ev.clockMs ?? undefined,
+    teamId: ev.teamId ?? undefined,
+    playerId: ev.playerId ?? undefined,
     notes: ev.notes,
     sentiment: typeof ev.sentiment === 'number' ? ev.sentiment : 0,
-    created_by_user_id: ev.created_by_user_id || 'system',
-    is_deleted: !!ev.is_deleted,
+    created_by_user_id: ev.createdByUserId || 'system',
+    is_deleted: !!ev.isDeleted,
   });
   const sortFeed = (list: FeedItem[]) => list.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const minuteLabel = (ev: MatchEvent) => {
@@ -1448,23 +1454,23 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     if (viewerToken) return;
     try {
       const feed: FeedItem[] = (localEventRecords || []).map((e: any) => {
-        const createdAt = new Date(e.created_at || Date.now());
+        const createdAt = new Date(e.createdAt || Date.now());
         const ev: MatchEvent = {
           id: String(e.id || crypto.randomUUID()),
           matchId: selectedId,
           createdAt,
           kind: e.kind,
-          periodNumber: e.period_number || undefined,
-          clockMs: e.clock_ms || 0,
-          teamId: e.team_id || undefined,
-          playerId: e.player_id || undefined,
+          periodNumber: e.periodNumber || undefined,
+          clockMs: e.clockMs || 0,
+          teamId: e.teamId || undefined,
+          playerId: e.playerId || undefined,
           notes: e.notes,
           sentiment: typeof e.sentiment === 'number' ? e.sentiment : 0,
-          updatedAt: e.updated_at ? new Date(e.updated_at) : undefined,
-          created_by_user_id: e.created_by_user_id,
-          deleted_at: e.deleted_at ? new Date(e.deleted_at) : undefined,
-          deleted_by_user_id: e.deleted_by_user_id,
-          is_deleted: !!e.is_deleted,
+          updatedAt: e.updatedAt ? new Date(e.updatedAt) : undefined,
+          created_by_user_id: e.createdByUserId,
+          deleted_at: e.deletedAt ? new Date(e.deletedAt) : undefined,
+          deleted_by_user_id: e.deletedByUserId,
+          is_deleted: !!e.isDeleted,
         } as any;
 
         return {

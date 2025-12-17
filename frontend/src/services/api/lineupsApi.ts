@@ -226,15 +226,15 @@ export const lineupsApi = {
 
           const localLineup: EnhancedLineup = {
             id: lineupId,
-            match_id: createReq.matchId,
-            player_id: createReq.playerId,
-            start_min: startMin,
-            end_min: createReq.endMinute,
+            matchId: createReq.matchId,
+            playerId: createReq.playerId,
+            startMin: startMin,
+            endMin: createReq.endMinute,
             position: createReq.position,
-            created_at: now,
-            updated_at: now,
-            created_by_user_id: userId,
-            is_deleted: false,
+            createdAt: now,
+            updatedAt: now,
+            createdByUserId: userId,
+            isDeleted: false,
             synced: false,
           };
 
@@ -258,12 +258,12 @@ export const lineupsApi = {
           }
 
           const updates: Partial<EnhancedLineup> = {
-            updated_at: now,
+            updatedAt: now,
             synced: false,
           };
 
-          if (updateOp.data.startMinute !== undefined) updates.start_min = updateOp.data.startMinute;
-          if (updateOp.data.endMinute !== undefined) updates.end_min = updateOp.data.endMinute;
+          if (updateOp.data.startMinute !== undefined) updates.startMin = updateOp.data.startMinute;
+          if (updateOp.data.endMinute !== undefined) updates.endMin = updateOp.data.endMinute;
           if (updateOp.data.position !== undefined) updates.position = updateOp.data.position;
 
           await db.lineup.update(updateOp.id, updates);
@@ -292,10 +292,10 @@ export const lineupsApi = {
           }
 
           await db.lineup.update(deleteId, {
-            is_deleted: true,
-            deleted_at: now,
-            deleted_by_user_id: userId,
-            updated_at: now,
+            isDeleted: true,
+            deletedAt: now,
+            deletedByUserId: userId,
+            updatedAt: now,
             synced: false,
           });
 
@@ -357,11 +357,11 @@ export const lineupsApi = {
     const userId = getCurrentUserId();
     const currentTime = substitution.currentTime;
 
-    // Find the player going off - they should have an active lineup entry (no end_min)
+    // Find the player going off - they should have an active lineup entry (no endMin)
     const playerOffLineups = await db.lineup
-      .where('match_id')
+      .where('matchId')
       .equals(matchId)
-      .filter(l => l.player_id === substitution.playerOffId && !l.end_min && !l.is_deleted)
+      .filter(l => l.playerId === substitution.playerOffId && !l.endMin && !l.isDeleted)
       .toArray();
 
     if (playerOffLineups.length === 0) {
@@ -369,12 +369,12 @@ export const lineupsApi = {
     }
 
     // Get the most recent lineup entry for the player going off
-    const playerOffLineup = playerOffLineups.sort((a, b) => b.start_min - a.start_min)[0];
+    const playerOffLineup = playerOffLineups.sort((a, b) => b.startMin - a.startMin)[0];
 
-    // Update player off - set end_min to current time
+    // Update player off - set endMin to current time
     await db.lineup.update(playerOffLineup.id, {
-      end_min: currentTime,
-      updated_at: now,
+      endMin: currentTime,
+      updatedAt: now,
       synced: false,
     });
 
@@ -387,15 +387,15 @@ export const lineupsApi = {
     const playerOnId = generateLineupId(matchId, substitution.playerOnId, currentTime);
     const playerOnLineup: EnhancedLineup = {
       id: playerOnId,
-      match_id: matchId,
-      player_id: substitution.playerOnId,
-      start_min: currentTime,
-      end_min: undefined,
+      matchId: matchId,
+      playerId: substitution.playerOnId,
+      startMin: currentTime,
+      endMin: undefined,
       position: substitution.position,
-      created_at: now,
-      updated_at: now,
-      created_by_user_id: userId,
-      is_deleted: false,
+      createdAt: now,
+      updatedAt: now,
+      createdByUserId: userId,
+      isDeleted: false,
       synced: false,
     };
 

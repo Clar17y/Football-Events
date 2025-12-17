@@ -46,10 +46,10 @@ function generateId(): string {
 function createCommonFields() {
     const now = Date.now();
     return {
-        created_at: now,
-        updated_at: now,
-        created_by_user_id: getUserId(),
-        is_deleted: false,
+        createdAt: now,
+        updatedAt: now,
+        createdByUserId: getUserId(),
+        isDeleted: false,
         synced: false,
     };
 }
@@ -59,7 +59,7 @@ function createCommonFields() {
  */
 function updateFields() {
     return {
-        updated_at: Date.now(),
+        updatedAt: Date.now(),
         synced: false,
     };
 }
@@ -93,14 +93,14 @@ export const teamsDataLayer = {
         const id = generateId();
         const team: EnhancedTeam = {
             id,
-            team_id: id,
+            teamId: id,
             name: data.name,
-            color_primary: data.homeKitPrimary,
-            color_secondary: data.homeKitSecondary,
-            away_color_primary: data.awayKitPrimary,
-            away_color_secondary: data.awayKitSecondary,
-            logo_url: data.logoUrl,
-            is_opponent: data.isOpponent ?? false,
+            colorPrimary: data.homeKitPrimary,
+            colorSecondary: data.homeKitSecondary,
+            awayColorPrimary: data.awayKitPrimary,
+            awayColorSecondary: data.awayKitSecondary,
+            logoUrl: data.logoUrl,
+            isOpponent: data.isOpponent ?? false,
             ...createCommonFields(),
         } as EnhancedTeam;
 
@@ -120,12 +120,12 @@ export const teamsDataLayer = {
     }>): Promise<void> {
         const updateData: any = updateFields();
         if (data.name !== undefined) updateData.name = data.name;
-        if (data.homeKitPrimary !== undefined) updateData.color_primary = data.homeKitPrimary;
-        if (data.homeKitSecondary !== undefined) updateData.color_secondary = data.homeKitSecondary;
-        if (data.awayKitPrimary !== undefined) updateData.away_color_primary = data.awayKitPrimary;
-        if (data.awayKitSecondary !== undefined) updateData.away_color_secondary = data.awayKitSecondary;
-        if (data.logoUrl !== undefined) updateData.logo_url = data.logoUrl;
-        if (data.isOpponent !== undefined) updateData.is_opponent = data.isOpponent;
+        if (data.homeKitPrimary !== undefined) updateData.colorPrimary = data.homeKitPrimary;
+        if (data.homeKitSecondary !== undefined) updateData.colorSecondary = data.homeKitSecondary;
+        if (data.awayKitPrimary !== undefined) updateData.awayColorPrimary = data.awayKitPrimary;
+        if (data.awayKitSecondary !== undefined) updateData.awayColorSecondary = data.awayKitSecondary;
+        if (data.logoUrl !== undefined) updateData.logoUrl = data.logoUrl;
+        if (data.isOpponent !== undefined) updateData.isOpponent = data.isOpponent;
 
         await db.teams.update(id, updateData);
         triggerSync();
@@ -133,9 +133,9 @@ export const teamsDataLayer = {
 
     async delete(id: string): Promise<void> {
         await db.teams.update(id, {
-            is_deleted: true,
-            deleted_at: Date.now(),
-            deleted_by_user_id: getUserId(),
+            isDeleted: true,
+            deletedAt: Date.now(),
+            deletedByUserId: getUserId(),
             ...updateFields(),
         });
         triggerSync();
@@ -146,9 +146,9 @@ export const teamsDataLayer = {
     },
 
     async getAll(options?: { includeOpponents?: boolean }): Promise<EnhancedTeam[]> {
-        let query = db.teams.filter(t => !t.is_deleted);
+        let query = db.teams.filter(t => !t.isDeleted);
         if (!options?.includeOpponents) {
-            query = query.filter(t => !(t as any).is_opponent);
+            query = query.filter(t => !(t as any).isOpponent);
         }
         return query.sortBy('name');
     },
@@ -170,12 +170,12 @@ export const playersDataLayer = {
         const id = generateId();
         const player: EnhancedPlayer = {
             id,
-            full_name: data.name,
-            squad_number: data.squadNumber,
-            preferred_pos: data.preferredPosition,
+            fullName: data.name,
+            squadNumber: data.squadNumber,
+            preferredPos: data.preferredPosition,
             dob: data.dateOfBirth,
             notes: data.notes,
-            current_team: data.teamId,
+            currentTeam: data.teamId,
             ...createCommonFields(),
         } as EnhancedPlayer;
 
@@ -193,12 +193,12 @@ export const playersDataLayer = {
         teamId: string;
     }>): Promise<void> {
         const updateData: any = updateFields();
-        if (data.name !== undefined) updateData.full_name = data.name;
-        if (data.squadNumber !== undefined) updateData.squad_number = data.squadNumber;
-        if (data.preferredPosition !== undefined) updateData.preferred_pos = data.preferredPosition;
+        if (data.name !== undefined) updateData.fullName = data.name;
+        if (data.squadNumber !== undefined) updateData.squadNumber = data.squadNumber;
+        if (data.preferredPosition !== undefined) updateData.preferredPos = data.preferredPosition;
         if (data.dateOfBirth !== undefined) updateData.dob = data.dateOfBirth;
         if (data.notes !== undefined) updateData.notes = data.notes;
-        if (data.teamId !== undefined) updateData.current_team = data.teamId;
+        if (data.teamId !== undefined) updateData.currentTeam = data.teamId;
 
         await db.players.update(id, updateData);
         triggerSync();
@@ -206,9 +206,9 @@ export const playersDataLayer = {
 
     async delete(id: string): Promise<void> {
         await db.players.update(id, {
-            is_deleted: true,
-            deleted_at: Date.now(),
-            deleted_by_user_id: getUserId(),
+            isDeleted: true,
+            deletedAt: Date.now(),
+            deletedByUserId: getUserId(),
             ...updateFields(),
         });
         triggerSync();
@@ -219,11 +219,11 @@ export const playersDataLayer = {
     },
 
     async getAll(options?: { teamId?: string }): Promise<EnhancedPlayer[]> {
-        let query = db.players.filter(p => !p.is_deleted);
+        let query = db.players.filter(p => !p.isDeleted);
         if (options?.teamId) {
-            query = query.filter(p => p.current_team === options.teamId);
+            query = query.filter(p => p.currentTeam === options.teamId);
         }
-        return query.sortBy('full_name');
+        return query.sortBy('fullName');
     },
 };
 
@@ -242,11 +242,11 @@ export const seasonsDataLayer = {
         const id = generateId();
         const season: EnhancedSeason = {
             id,
-            season_id: id,
+            seasonId: id,
             label: data.label,
-            start_date: data.startDate,
-            end_date: data.endDate,
-            is_current: data.isCurrent ?? false,
+            startDate: data.startDate,
+            endDate: data.endDate,
+            isCurrent: data.isCurrent ?? false,
             description: data.description,
             ...createCommonFields(),
         } as EnhancedSeason;
@@ -265,9 +265,9 @@ export const seasonsDataLayer = {
     }>): Promise<void> {
         const updateData: any = updateFields();
         if (data.label !== undefined) updateData.label = data.label;
-        if (data.startDate !== undefined) updateData.start_date = data.startDate;
-        if (data.endDate !== undefined) updateData.end_date = data.endDate;
-        if (data.isCurrent !== undefined) updateData.is_current = data.isCurrent;
+        if (data.startDate !== undefined) updateData.startDate = data.startDate;
+        if (data.endDate !== undefined) updateData.endDate = data.endDate;
+        if (data.isCurrent !== undefined) updateData.isCurrent = data.isCurrent;
         if (data.description !== undefined) updateData.description = data.description;
 
         await db.seasons.update(id, updateData);
@@ -276,9 +276,9 @@ export const seasonsDataLayer = {
 
     async delete(id: string): Promise<void> {
         await db.seasons.update(id, {
-            is_deleted: true,
-            deleted_at: Date.now(),
-            deleted_by_user_id: getUserId(),
+            isDeleted: true,
+            deletedAt: Date.now(),
+            deletedByUserId: getUserId(),
             ...updateFields(),
         });
         triggerSync();
@@ -289,7 +289,7 @@ export const seasonsDataLayer = {
     },
 
     async getAll(): Promise<EnhancedSeason[]> {
-        return db.seasons.filter(s => !s.is_deleted).sortBy('label');
+        return db.seasons.filter(s => !s.isDeleted).sortBy('label');
     },
 };
 
@@ -316,17 +316,17 @@ export const matchesDataLayer = {
 
         const match: EnhancedMatch = {
             id,
-            match_id: id,
-            season_id: data.seasonId,
-            kickoff_ts: kickoffTs,
-            home_team_id: data.homeTeamId,
-            away_team_id: data.awayTeamId,
+            matchId: id,
+            seasonId: data.seasonId,
+            kickoffTs: kickoffTs,
+            homeTeamId: data.homeTeamId,
+            awayTeamId: data.awayTeamId,
             competition: data.competition,
             venue: data.venue,
-            duration_mins: data.durationMinutes ?? 60,
-            period_format: data.periodFormat ?? 'quarter',
-            home_score: 0,
-            away_score: 0,
+            durationMins: data.durationMinutes ?? 60,
+            periodFormat: data.periodFormat ?? 'quarter',
+            homeScore: 0,
+            awayScore: 0,
             notes: data.notes,
             ...createCommonFields(),
         } as EnhancedMatch;
@@ -350,20 +350,20 @@ export const matchesDataLayer = {
         notes: string;
     }>): Promise<void> {
         const updateData: any = updateFields();
-        if (data.seasonId !== undefined) updateData.season_id = data.seasonId;
+        if (data.seasonId !== undefined) updateData.seasonId = data.seasonId;
         if (data.kickoffTime !== undefined) {
-            updateData.kickoff_ts = typeof data.kickoffTime === 'string'
+            updateData.kickoffTs = typeof data.kickoffTime === 'string'
                 ? new Date(data.kickoffTime).getTime()
                 : data.kickoffTime;
         }
-        if (data.homeTeamId !== undefined) updateData.home_team_id = data.homeTeamId;
-        if (data.awayTeamId !== undefined) updateData.away_team_id = data.awayTeamId;
+        if (data.homeTeamId !== undefined) updateData.homeTeamId = data.homeTeamId;
+        if (data.awayTeamId !== undefined) updateData.awayTeamId = data.awayTeamId;
         if (data.competition !== undefined) updateData.competition = data.competition;
         if (data.venue !== undefined) updateData.venue = data.venue;
-        if (data.durationMinutes !== undefined) updateData.duration_mins = data.durationMinutes;
-        if (data.periodFormat !== undefined) updateData.period_format = data.periodFormat;
-        if (data.homeScore !== undefined) updateData.home_score = data.homeScore;
-        if (data.awayScore !== undefined) updateData.away_score = data.awayScore;
+        if (data.durationMinutes !== undefined) updateData.durationMins = data.durationMinutes;
+        if (data.periodFormat !== undefined) updateData.periodFormat = data.periodFormat;
+        if (data.homeScore !== undefined) updateData.homeScore = data.homeScore;
+        if (data.awayScore !== undefined) updateData.awayScore = data.awayScore;
         if (data.notes !== undefined) updateData.notes = data.notes;
 
         await db.matches.update(id, updateData);
@@ -372,9 +372,9 @@ export const matchesDataLayer = {
 
     async delete(id: string): Promise<void> {
         await db.matches.update(id, {
-            is_deleted: true,
-            deleted_at: Date.now(),
-            deleted_by_user_id: getUserId(),
+            isDeleted: true,
+            deletedAt: Date.now(),
+            deletedByUserId: getUserId(),
             ...updateFields(),
         });
         triggerSync();
@@ -385,11 +385,11 @@ export const matchesDataLayer = {
     },
 
     async getAll(options?: { seasonId?: string }): Promise<EnhancedMatch[]> {
-        let query = db.matches.filter(m => !m.is_deleted);
+        let query = db.matches.filter(m => !m.isDeleted);
         if (options?.seasonId) {
-            query = query.filter(m => m.season_id === options.seasonId);
+            query = query.filter(m => m.seasonId === options.seasonId);
         }
-        return query.sortBy('kickoff_ts');
+        return query.sortBy('kickoffTs');
     },
 };
 
@@ -413,15 +413,15 @@ export const eventsDataLayer = {
 
         const event: EnhancedEvent = {
             id,
-            match_id: data.matchId,
+            matchId: data.matchId,
             kind: data.kind as any,
-            period_number: data.periodNumber ?? 1,
-            clock_ms: data.clockMs ?? 0,
-            team_id: data.teamId ?? '',
-            player_id: data.playerId ?? '',
+            periodNumber: data.periodNumber ?? 1,
+            clockMs: data.clockMs ?? 0,
+            teamId: data.teamId ?? '',
+            playerId: data.playerId ?? '',
             notes: data.notes,
             sentiment: data.sentiment ?? 0,
-            ts_server: now,
+            tsServer: now,
             ...createCommonFields(),
         } as EnhancedEvent;
 
@@ -441,10 +441,10 @@ export const eventsDataLayer = {
     }>): Promise<void> {
         const updateData: any = updateFields();
         if (data.kind !== undefined) updateData.kind = data.kind;
-        if (data.periodNumber !== undefined) updateData.period_number = data.periodNumber;
-        if (data.clockMs !== undefined) updateData.clock_ms = data.clockMs;
-        if (data.teamId !== undefined) updateData.team_id = data.teamId;
-        if (data.playerId !== undefined) updateData.player_id = data.playerId;
+        if (data.periodNumber !== undefined) updateData.periodNumber = data.periodNumber;
+        if (data.clockMs !== undefined) updateData.clockMs = data.clockMs;
+        if (data.teamId !== undefined) updateData.teamId = data.teamId;
+        if (data.playerId !== undefined) updateData.playerId = data.playerId;
         if (data.notes !== undefined) updateData.notes = data.notes;
         if (data.sentiment !== undefined) updateData.sentiment = data.sentiment;
 
@@ -454,9 +454,9 @@ export const eventsDataLayer = {
 
     async delete(id: string): Promise<void> {
         await db.events.update(id, {
-            is_deleted: true,
-            deleted_at: Date.now(),
-            deleted_by_user_id: getUserId(),
+            isDeleted: true,
+            deletedAt: Date.now(),
+            deletedByUserId: getUserId(),
             ...updateFields(),
         });
         triggerSync();
@@ -464,10 +464,10 @@ export const eventsDataLayer = {
 
     async getByMatch(matchId: string): Promise<EnhancedEvent[]> {
         return db.events
-            .where('match_id')
+            .where('matchId')
             .equals(matchId)
-            .filter(e => !e.is_deleted)
-            .sortBy('clock_ms');
+            .filter(e => !e.isDeleted)
+            .sortBy('clockMs');
     },
 };
 
@@ -487,10 +487,10 @@ export const lineupsDataLayer = {
 
         const lineup: EnhancedLineup = {
             id,
-            match_id: data.matchId,
-            player_id: data.playerId,
-            start_min: data.startMin,
-            end_min: data.endMin,
+            matchId: data.matchId,
+            playerId: data.playerId,
+            startMin: data.startMin,
+            endMin: data.endMin,
             position: data.position,
             ...createCommonFields(),
         } as EnhancedLineup;
@@ -506,8 +506,8 @@ export const lineupsDataLayer = {
         position: string;
     }>): Promise<void> {
         const updateData: any = updateFields();
-        if (data.startMin !== undefined) updateData.start_min = data.startMin;
-        if (data.endMin !== undefined) updateData.end_min = data.endMin;
+        if (data.startMin !== undefined) updateData.startMin = data.startMin;
+        if (data.endMin !== undefined) updateData.endMin = data.endMin;
         if (data.position !== undefined) updateData.position = data.position;
 
         await db.lineup.update(id, updateData);
@@ -516,9 +516,9 @@ export const lineupsDataLayer = {
 
     async delete(id: string): Promise<void> {
         await db.lineup.update(id, {
-            is_deleted: true,
-            deleted_at: Date.now(),
-            deleted_by_user_id: getUserId(),
+            isDeleted: true,
+            deletedAt: Date.now(),
+            deletedByUserId: getUserId(),
             ...updateFields(),
         });
         triggerSync();
@@ -526,10 +526,10 @@ export const lineupsDataLayer = {
 
     async getByMatch(matchId: string): Promise<EnhancedLineup[]> {
         return db.lineup
-            .where('match_id')
+            .where('matchId')
             .equals(matchId)
-            .filter(l => !l.is_deleted)
-            .sortBy('start_min');
+            .filter(l => !l.isDeleted)
+            .sortBy('startMin');
     },
 };
 
@@ -549,18 +549,18 @@ export const matchStateDataLayer = {
         if (existing) {
             await db.match_state.update(matchId, {
                 status: data.status,
-                current_period_id: data.currentPeriodId,
-                timer_ms: data.timerMs ?? existing.timer_ms,
-                last_updated_at: now,
+                currentPeriodId: data.currentPeriodId,
+                timerMs: data.timerMs ?? existing.timerMs,
+                lastUpdatedAt: now,
                 ...updateFields(),
             });
         } else {
             await db.match_state.add({
-                match_id: matchId,
+                matchId: matchId,
                 status: data.status,
-                current_period_id: data.currentPeriodId,
-                timer_ms: data.timerMs ?? 0,
-                last_updated_at: now,
+                currentPeriodId: data.currentPeriodId,
+                timerMs: data.timerMs ?? 0,
+                lastUpdatedAt: now,
                 ...createCommonFields(),
             } as LocalMatchState);
         }
@@ -588,10 +588,10 @@ export const matchPeriodsDataLayer = {
 
         const period: LocalMatchPeriod = {
             id,
-            match_id: data.matchId,
-            period_number: data.periodNumber,
-            period_type: data.periodType ?? 'REGULAR',
-            started_at: data.startedAt ?? now,
+            matchId: data.matchId,
+            periodNumber: data.periodNumber,
+            periodType: data.periodType ?? 'REGULAR',
+            startedAt: data.startedAt ?? now,
             ...createCommonFields(),
         } as LocalMatchPeriod;
 
@@ -604,11 +604,11 @@ export const matchPeriodsDataLayer = {
         const period = await db.match_periods.get(id);
         if (period) {
             const endTime = endedAt ?? Date.now();
-            const durationSeconds = Math.floor((endTime - period.started_at) / 1000);
+            const durationSeconds = Math.floor((endTime - period.startedAt) / 1000);
 
             await db.match_periods.update(id, {
-                ended_at: endTime,
-                duration_seconds: durationSeconds,
+                endedAt: endTime,
+                durationSeconds: durationSeconds,
                 ...updateFields(),
             });
             triggerSync();
@@ -617,10 +617,10 @@ export const matchPeriodsDataLayer = {
 
     async getByMatch(matchId: string): Promise<LocalMatchPeriod[]> {
         return db.match_periods
-            .where('match_id')
+            .where('matchId')
             .equals(matchId)
-            .filter(p => !p.is_deleted)
-            .sortBy('period_number');
+            .filter(p => !p.isDeleted)
+            .sortBy('periodNumber');
     },
 };
 
@@ -634,9 +634,9 @@ export const defaultLineupsDataLayer = {
         formation: Array<{ playerId: string; position: string; pitchX: number; pitchY: number }>;
     }): Promise<LocalDefaultLineup> {
         const existing = await db.default_lineups
-            .where('team_id')
+            .where('teamId')
             .equals(data.teamId)
-            .filter(dl => !dl.is_deleted)
+            .filter(dl => !dl.isDeleted)
             .first();
 
         const now = Date.now();
@@ -647,12 +647,12 @@ export const defaultLineupsDataLayer = {
                 ...updateFields(),
             });
             triggerSync();
-            return { ...existing, formation: data.formation, updated_at: now } as LocalDefaultLineup;
+            return { ...existing, formation: data.formation, updatedAt: now } as LocalDefaultLineup;
         } else {
             const id = generateId();
             const defaultLineup: LocalDefaultLineup = {
                 id,
-                team_id: data.teamId,
+                teamId: data.teamId,
                 formation: data.formation,
                 ...createCommonFields(),
             } as LocalDefaultLineup;
@@ -665,23 +665,23 @@ export const defaultLineupsDataLayer = {
 
     async getByTeam(teamId: string): Promise<LocalDefaultLineup | undefined> {
         return db.default_lineups
-            .where('team_id')
+            .where('teamId')
             .equals(teamId)
-            .filter(dl => !dl.is_deleted)
+            .filter(dl => !dl.isDeleted)
             .first();
     },
 
     async delete(teamId: string): Promise<void> {
         const existing = await db.default_lineups
-            .where('team_id')
+            .where('teamId')
             .equals(teamId)
             .first();
 
         if (existing) {
             await db.default_lineups.update(existing.id, {
-                is_deleted: true,
-                deleted_at: Date.now(),
-                deleted_by_user_id: getUserId(),
+                isDeleted: true,
+                deletedAt: Date.now(),
+                deletedByUserId: getUserId(),
                 ...updateFields(),
             });
             triggerSync();

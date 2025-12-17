@@ -22,28 +22,28 @@ describe('Outbox Sync Operations', () => {
   describe('Outbox Event Management', () => {
     const mockEventPayload = {
       kind: 'goal',
-      match_id: 'test-match-1',
-      team_id: 'test-team-1',
-      player_id: 'test-player-1',
+      matchId: 'test-match-1',
+      teamId: 'test-team-1',
+      playerId: 'test-player-1',
       minute: 5,
       second: 30,
       period: 1,
       data: { notes: 'Test goal' },
       created: Date.now(),
       // Required authentication fields
-      created_by_user_id: 'test-user-1'
+      createdByUserId: 'test-user-1'
     };
 
     it('should add event to outbox', async () => {
       // Use the correct method that actually exists
       const result = await db.addEnhancedEvent({
         kind: mockEventPayload.kind,
-        match_id: mockEventPayload.match_id,
-        season_id: 'test-season-1', // Required field
-        period_number: mockEventPayload.period || 1,
-        clock_ms: (mockEventPayload.minute * 60000) + (mockEventPayload.second * 1000),
-        team_id: mockEventPayload.team_id,
-        player_id: mockEventPayload.player_id,
+        matchId: mockEventPayload.matchId,
+        seasonId: 'test-season-1', // Required field
+        periodNumber: mockEventPayload.period || 1,
+        clockMs: (mockEventPayload.minute * 60000) + (mockEventPayload.second * 1000),
+        teamId: mockEventPayload.teamId,
+        playerId: mockEventPayload.playerId,
         sentiment: 0, // Default sentiment
         notes: mockEventPayload.data?.notes
       });
@@ -57,30 +57,30 @@ describe('Outbox Sync Operations', () => {
       // Add multiple events using the correct method
       await db.addEnhancedEvent({
         kind: mockEventPayload.kind,
-        match_id: mockEventPayload.match_id,
-        season_id: 'test-season-1',
-        period_number: 1,
-        clock_ms: 300000,
-        team_id: mockEventPayload.team_id,
-        player_id: mockEventPayload.player_id,
+        matchId: mockEventPayload.matchId,
+        seasonId: 'test-season-1',
+        periodNumber: 1,
+        clockMs: 300000,
+        teamId: mockEventPayload.teamId,
+        playerId: mockEventPayload.playerId,
         sentiment: 0,
         notes: 'Event 1'
       });
       
       await db.addEnhancedEvent({
         kind: mockEventPayload.kind,
-        match_id: mockEventPayload.match_id,
-        season_id: 'test-season-1',
-        period_number: 1,
-        clock_ms: 600000,
-        team_id: mockEventPayload.team_id,
-        player_id: mockEventPayload.player_id,
+        matchId: mockEventPayload.matchId,
+        seasonId: 'test-season-1',
+        periodNumber: 1,
+        clockMs: 600000,
+        teamId: mockEventPayload.teamId,
+        playerId: mockEventPayload.playerId,
         sentiment: 0,
         notes: 'Event 2'
       });
 
       // Check if events were added to the events table (not outbox directly)
-      const eventsResult = await db.getEnhancedMatchEvents(mockEventPayload.match_id);
+      const eventsResult = await db.getEnhancedMatchEvents(mockEventPayload.matchId);
       
       expect(eventsResult.success).toBe(true);
       expect(eventsResult.data).toHaveLength(2);
@@ -110,8 +110,8 @@ describe('Outbox Sync Operations', () => {
       // Verify retry count incremented
       const unsyncedResult = await db.getUnsyncedEvents();
       expect(unsyncedResult.data).toHaveLength(1);
-      expect(unsyncedResult.data![0].retry_count).toBe(1);
-      expect(unsyncedResult.data![0].sync_error).toBe('Network error');
+      expect(unsyncedResult.data![0].retryCount).toBe(1);
+      expect(unsyncedResult.data![0].syncError).toBe('Network error');
     });
 
     it('should exclude events with high retry count from unsynced list', async () => {
@@ -123,7 +123,7 @@ describe('Outbox Sync Operations', () => {
       await db.markEventSyncFailed(outboxId, 'Error 2');
       await db.markEventSyncFailed(outboxId, 'Error 3');
 
-      // Should be excluded from unsynced events (retry_count >= 3)
+      // Should be excluded from unsynced events (retryCount >= 3)
       const unsyncedResult = await db.getUnsyncedEvents();
       expect(unsyncedResult.data).toHaveLength(0);
     });
@@ -147,7 +147,7 @@ describe('Outbox Sync Operations', () => {
 
       const unsyncedResult = await db.getUnsyncedEvents();
       expect(unsyncedResult.data).toHaveLength(1); // Only the failed one
-      expect(unsyncedResult.data![0].retry_count).toBe(1);
+      expect(unsyncedResult.data![0].retryCount).toBe(1);
     });
   });
 
@@ -155,16 +155,16 @@ describe('Outbox Sync Operations', () => {
     it('should preserve event data structure in outbox', async () => {
       const eventPayload = {
         kind: 'goal',
-        match_id: 'test-match-1',
-        team_id: 'test-team-1',
-        player_id: 'test-player-1',
+        matchId: 'test-match-1',
+        teamId: 'test-team-1',
+        playerId: 'test-player-1',
         minute: 5,
         second: 30,
         period: 1,
         data: { 
           notes: 'Test goal',
-          assist_player_id: 'test-player-2',
-          custom_field: 'custom_value'
+          assistPlayerId: 'test-player-2',
+          customField: 'custom_value'
         },
         created: Date.now()
       };
@@ -177,13 +177,13 @@ describe('Outbox Sync Operations', () => {
 
       expect(storedEvent.data).toEqual(eventPayload);
       expect(storedEvent.operation).toBe('INSERT');
-      expect(storedEvent.table_name).toBe('events');
+      expect(storedEvent.tableName).toBe('events');
     });
 
     it('should handle events with missing optional fields', async () => {
       const minimalEvent = {
         kind: 'substitution',
-        match_id: 'test-match-1',
+        matchId: 'test-match-1',
         minute: 30,
         second: 0,
         period: 1,
@@ -220,9 +220,9 @@ describe('Outbox Sync Operations', () => {
       for (let i = 0; i < 100; i++) {
         promises.push(db.addEvent({
           kind: 'goal',
-          match_id: 'test-match-1',
-          team_id: 'test-team-1',
-          player_id: 'test-player-1',
+          matchId: 'test-match-1',
+          teamId: 'test-team-1',
+          playerId: 'test-player-1',
           minute: i,
           second: 0,
           period: 1,
@@ -252,9 +252,9 @@ describe('Outbox Sync Operations', () => {
       for (let i = 0; i < 50; i++) {
         const result = await db.addEvent({
           kind: 'goal',
-          match_id: 'test-match-1',
-          team_id: 'test-team-1',
-          player_id: 'test-player-1',
+          matchId: 'test-match-1',
+          teamId: 'test-team-1',
+          playerId: 'test-player-1',
           minute: i,
           second: 0,
           period: 1,
@@ -284,9 +284,9 @@ describe('Outbox Sync Operations', () => {
       // Add a valid event first
       const validResult = await db.addEvent({
         kind: 'goal',
-        match_id: 'test-match-1',
-        team_id: 'test-team-1',
-        player_id: 'test-player-1',
+        matchId: 'test-match-1',
+        teamId: 'test-team-1',
+        playerId: 'test-player-1',
         minute: 5,
         second: 0,
         period: 1,
@@ -311,9 +311,9 @@ describe('Outbox Sync Operations', () => {
     it('should recover from sync failures', async () => {
       const addResult = await db.addEvent({
         kind: 'goal',
-        match_id: 'test-match-1',
-        team_id: 'test-team-1',
-        player_id: 'test-player-1',
+        matchId: 'test-match-1',
+        teamId: 'test-team-1',
+        playerId: 'test-player-1',
         minute: 5,
         second: 0,
         period: 1,
@@ -330,7 +330,7 @@ describe('Outbox Sync Operations', () => {
       // Should still be available for retry
       const unsyncedResult = await db.getUnsyncedEvents();
       expect(unsyncedResult.data).toHaveLength(1);
-      expect(unsyncedResult.data![0].retry_count).toBe(2);
+      expect(unsyncedResult.data![0].retryCount).toBe(2);
 
       // Finally succeed
       await db.markEventSynced(outboxId);

@@ -1,6 +1,17 @@
 /**
- * Type transformation functions between Prisma database types and frontend types
- * These functions handle field name mapping and data structure conversion
+ * Backend Transform Layer - Prisma ↔ API Response
+ *
+ * These functions transform between Prisma database types and API response types.
+ * Used by backend services to format API responses.
+ *
+ * IMPORTANT: The frontend has its own transform layer at:
+ *   frontend/src/db/transforms/
+ * which handles IndexedDB ↔ Frontend type conversions.
+ *
+ * Transform directions in this file:
+ * - transformXxx: Prisma → API response (for GET endpoints)
+ * - transformXxxCreateRequest: API request → Prisma create input (for POST)
+ * - transformXxxUpdateRequest: API request → Prisma update input (for PUT)
  */
 
 import type {
@@ -248,7 +259,7 @@ export const transformPlayerCreateRequest = (
   name: request.name,
   squad_number: request.squadNumber ?? null,
   preferred_pos: request.preferredPosition ?? null,
-  dob: request.dateOfBirth || null,
+  dob: request.dateOfBirth ? new Date(request.dateOfBirth) : null,
   notes: request.notes ?? null,
   created_by_user_id,
 });
@@ -262,7 +273,7 @@ export const transformPlayerUpdateRequest = (
   if (request.squadNumber !== undefined) update.squad_number = request.squadNumber;
   if (request.preferredPosition !== undefined) update.preferred_pos = request.preferredPosition;
   if (request.dateOfBirth !== undefined) {
-    update.dob = request.dateOfBirth || null;
+    update.dob = request.dateOfBirth ? new Date(request.dateOfBirth) : null;
   }
   if (request.notes !== undefined) update.notes = request.notes;
   

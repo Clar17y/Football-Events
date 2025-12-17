@@ -34,15 +34,15 @@ describe('Database Operations', () => {
   describe('Enhanced Events', () => {
     const mockEvent = {
       kind: 'goal',
-      match_id: 'test-match-1',
-      season_id: 'test-season-1',
-      period_number: 1,
-      clock_ms: 300000,
-      team_id: 'test-team-1',
-      player_id: 'test-player-1',
+      matchId: 'test-match-1',
+      seasonId: 'test-season-1',
+      periodNumber: 1,
+      clockMs: 300000,
+      teamId: 'test-team-1',
+      playerId: 'test-player-1',
       sentiment: 3,
       notes: 'Test goal',
-      created_by_user_id: 'test-user'
+      createdByUserId: 'test-user'
     };
 
     it('should add event successfully', async () => {
@@ -55,18 +55,18 @@ describe('Database Operations', () => {
 
     it('should retrieve match events in order', async () => {
       // Add events at different times
-      await db.addEnhancedEvent({ ...mockEvent, clock_ms: 200000 });
-      await db.addEnhancedEvent({ ...mockEvent, clock_ms: 100000 });
-      await db.addEnhancedEvent({ ...mockEvent, clock_ms: 300000 });
+      await db.addEnhancedEvent({ ...mockEvent, clockMs: 200000 });
+      await db.addEnhancedEvent({ ...mockEvent, clockMs: 100000 });
+      await db.addEnhancedEvent({ ...mockEvent, clockMs: 300000 });
 
       const result = await db.getEnhancedMatchEvents('test-match-1');
       
       expect(result.success).toBe(true);
       expect(result.data).toHaveLength(3);
-      // Should be ordered by clock_ms
-      expect(result.data![0].clock_ms).toBe(100000);
-      expect(result.data![1].clock_ms).toBe(200000);
-      expect(result.data![2].clock_ms).toBe(300000);
+      // Should be ordered by clockMs
+      expect(result.data![0].clockMs).toBe(100000);
+      expect(result.data![1].clockMs).toBe(200000);
+      expect(result.data![2].clockMs).toBe(300000);
     });
 
     it('should delete event successfully', async () => {

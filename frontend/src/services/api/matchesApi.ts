@@ -62,22 +62,22 @@ export const matchesApi = {
   async getMatch(id: string): Promise<Match> {
     // Local-first: always read from IndexedDB
     const match = await db.matches.get(id);
-    if (!match || (match as any).is_deleted) {
+    if (!match || (match as any).isDeleted) {
       throw new Error('Match not found');
     }
 
     // Get team info for the match
     const [homeTeam, awayTeam] = await Promise.all([
-      db.teams.get((match as any).home_team_id),
-      db.teams.get((match as any).away_team_id)
+      db.teams.get((match as any).homeTeamId),
+      db.teams.get((match as any).awayTeamId)
     ]);
 
     // Use centralized transform and add team data
     const baseMatch = dbToMatch(match as EnhancedMatch);
     return {
       ...baseMatch,
-      homeTeam: homeTeam ? { id: homeTeam.id, name: homeTeam.name, is_opponent: !!(homeTeam as any).is_opponent } as any : undefined,
-      awayTeam: awayTeam ? { id: awayTeam.id, name: awayTeam.name, is_opponent: !!(awayTeam as any).is_opponent } as any : undefined,
+      homeTeam: homeTeam ? { id: homeTeam.id, name: homeTeam.name, isOpponent: !!(homeTeam as any).isOpponent } as any : undefined,
+      awayTeam: awayTeam ? { id: awayTeam.id, name: awayTeam.name, isOpponent: !!(awayTeam as any).isOpponent } as any : undefined,
     };
   },
   /**
@@ -95,38 +95,38 @@ export const matchesApi = {
         const kickoffTs = createdMatch.kickoffTime ? new Date(createdMatch.kickoffTime as any).getTime() : now;
         const createdAtTs = (createdMatch as any).createdAt ? new Date((createdMatch as any).createdAt).getTime() : now;
         const updatedAtTs = (createdMatch as any).updatedAt ? new Date((createdMatch as any).updatedAt).getTime() : createdAtTs;
-        const userId = createdMatch.created_by_user_id || getCurrentUserId();
+        const userId = (createdMatch as any).createdByUserId || createdMatch.created_by_user_id || getCurrentUserId();
 
         await db.matches.put({
           id: createdMatch.id,
-          match_id: createdMatch.id,
-          season_id: createdMatch.seasonId,
-          kickoff_ts: kickoffTs,
+          matchId: createdMatch.id,
+          seasonId: createdMatch.seasonId,
+          kickoffTs: kickoffTs,
           competition: createdMatch.competition,
-          home_team_id: createdMatch.homeTeamId,
-          away_team_id: createdMatch.awayTeamId,
+          homeTeamId: createdMatch.homeTeamId,
+          awayTeamId: createdMatch.awayTeamId,
           venue: createdMatch.venue,
-          duration_mins: createdMatch.durationMinutes ?? 60,
-          period_format: (createdMatch.periodFormat as any) || 'quarter',
-          home_score: createdMatch.homeScore ?? 0,
-          away_score: createdMatch.awayScore ?? 0,
+          durationMins: createdMatch.durationMinutes ?? 60,
+          periodFormat: (createdMatch.periodFormat as any) || 'quarter',
+          homeScore: createdMatch.homeScore ?? 0,
+          awayScore: createdMatch.awayScore ?? 0,
           notes: createdMatch.notes,
-          created_at: createdAtTs,
-          updated_at: updatedAtTs,
-          created_by_user_id: userId,
-          is_deleted: createdMatch.is_deleted ?? false,
+          createdAt: createdAtTs,
+          updatedAt: updatedAtTs,
+          createdByUserId: userId,
+          isDeleted: (createdMatch as any).isDeleted ?? createdMatch.is_deleted ?? false,
           synced: true,
-          synced_at: now,
+          syncedAt: now,
         } as any);
 
-        const upsertTeam = async (team: { id: string; name?: string; is_opponent?: boolean } | undefined) => {
+        const upsertTeam = async (team: { id: string; name?: string; isOpponent?: boolean } | undefined) => {
           if (!team?.id) return;
           const existing = await db.teams.get(team.id);
 
           // Avoid clobbering unsynced local edits; just ensure the name exists for display.
           if (existing && existing.synced === false) {
             if (!existing.name && team.name) {
-              await db.teams.update(team.id, { name: team.name, updated_at: now } as any);
+              await db.teams.update(team.id, { name: team.name, updatedAt: now } as any);
             }
             return;
           }
@@ -134,15 +134,15 @@ export const matchesApi = {
           await db.teams.put({
             ...existing,
             id: team.id,
-            team_id: team.id,
+            teamId: team.id,
             name: team.name ?? existing?.name ?? 'Team',
-            is_opponent: team.is_opponent ?? (existing as any)?.is_opponent ?? false,
-            created_at: existing?.created_at ?? now,
-            updated_at: now,
-            created_by_user_id: existing?.created_by_user_id ?? userId,
-            is_deleted: existing?.is_deleted ?? false,
+            isOpponent: team.isOpponent ?? (existing as any)?.isOpponent ?? false,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+            createdByUserId: existing?.createdByUserId ?? userId,
+            isDeleted: existing?.isDeleted ?? false,
             synced: true,
-            synced_at: now,
+            syncedAt: now,
           } as any);
         };
 
@@ -166,7 +166,7 @@ export const matchesApi = {
             opponentTeamId = payload.isHome ? createdMatch.awayTeamId : createdMatch.homeTeamId;
           }
 
-          await upsertTeam({ id: opponentTeamId, name: opponentName, is_opponent: true });
+          await upsertTeam({ id: opponentTeamId, name: opponentName, isOpponent: true });
         }
 
         try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
@@ -189,9 +189,9 @@ export const matchesApi = {
   async getMatchesBySeason(seasonId: string): Promise<Match[]> {
     // Local-first: always read from IndexedDB
     const matches = await db.matches
-      .where('season_id')
+      .where('seasonId')
       .equals(seasonId)
-      .filter((m: any) => !m.is_deleted)
+      .filter((m: any) => !m.isDeleted)
       .toArray();
     return dbToMatches(matches as EnhancedMatch[]);
   },
@@ -203,7 +203,7 @@ export const matchesApi = {
   async getMatchesByTeam(teamId: string): Promise<Match[]> {
     // Local-first: always read from IndexedDB
     const matches = await db.matches
-      .filter((m: any) => !m.is_deleted && (m.home_team_id === teamId || m.away_team_id === teamId))
+      .filter((m: any) => !m.isDeleted && (m.homeTeamId === teamId || m.awayTeamId === teamId))
       .toArray();
     return dbToMatches(matches as EnhancedMatch[]);
   },
@@ -229,15 +229,15 @@ export const matchesApi = {
     const teams = await db.teams.toArray();
     const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
     let rows = await db.matches.toArray();
-    rows = rows.filter((m: any) => m && !m.is_deleted);
-    if (seasonId) rows = rows.filter((m: any) => m.season_id === seasonId);
-    if (teamId) rows = rows.filter((m: any) => m.home_team_id === teamId || m.away_team_id === teamId);
+    rows = rows.filter((m: any) => m && !m.isDeleted);
+    if (seasonId) rows = rows.filter((m: any) => m.seasonId === seasonId);
+    if (teamId) rows = rows.filter((m: any) => m.homeTeamId === teamId || m.awayTeamId === teamId);
     if (competition) rows = rows.filter((m: any) => (m.competition || '').toLowerCase().includes(competition.toLowerCase()));
     if (search && search.trim()) {
       const term = search.trim().toLowerCase();
       rows = rows.filter((m: any) => {
-        const home = teamMap.get(m.home_team_id);
-        const away = teamMap.get(m.away_team_id);
+        const home = teamMap.get(m.homeTeamId);
+        const away = teamMap.get(m.awayTeamId);
         return (
           (m.competition || '').toLowerCase().includes(term) ||
           (home?.name || '').toLowerCase().includes(term) ||
@@ -245,18 +245,18 @@ export const matchesApi = {
         );
       });
     }
-    rows.sort((a: any, b: any) => new Date(a.kickoff_ts).getTime() - new Date(b.kickoff_ts).getTime());
+    rows.sort((a: any, b: any) => new Date(a.kickoffTs).getTime() - new Date(b.kickoffTs).getTime());
     const total = rows.length;
     const start = (page - 1) * limit;
     const paged = rows.slice(start, start + limit);
     const data: Match[] = paged.map((m: any) => {
-      const home = teamMap.get(m.home_team_id);
-      const away = teamMap.get(m.away_team_id);
+      const home = teamMap.get(m.homeTeamId);
+      const away = teamMap.get(m.awayTeamId);
       const baseMatch = dbToMatch(m as EnhancedMatch);
       return {
         ...baseMatch,
-        homeTeam: home ? { id: home.id, name: home.name, is_opponent: !!home.is_opponent, createdAt: new Date(home.created_at), created_by_user_id: home.created_by_user_id, is_deleted: !!home.is_deleted } as any : undefined,
-        awayTeam: away ? { id: away.id, name: away.name, is_opponent: !!away.is_opponent, createdAt: new Date(away.created_at), created_by_user_id: away.created_by_user_id, is_deleted: !!away.is_deleted } as any : undefined,
+        homeTeam: home ? { id: home.id, name: home.name, isOpponent: !!home.isOpponent, createdAt: new Date(home.createdAt), createdByUserId: home.createdByUserId, isDeleted: !!home.isDeleted } as any : undefined,
+        awayTeam: away ? { id: away.id, name: away.name, isOpponent: !!away.isOpponent, createdAt: new Date(away.createdAt), createdByUserId: away.createdByUserId, isDeleted: !!away.isDeleted } as any : undefined,
       };
     });
     return {
@@ -282,15 +282,15 @@ export const matchesApi = {
     const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
     let rows = await db.matches.toArray();
     const now = Date.now();
-    rows = rows.filter((m: any) => !m.is_deleted && new Date(m.kickoff_ts).getTime() >= now);
-    if (teamId) rows = rows.filter((m: any) => m.home_team_id === teamId || m.away_team_id === teamId);
-    rows.sort((a: any, b: any) => new Date(a.kickoff_ts).getTime() - new Date(b.kickoff_ts).getTime());
+    rows = rows.filter((m: any) => !m.isDeleted && new Date(m.kickoffTs).getTime() >= now);
+    if (teamId) rows = rows.filter((m: any) => m.homeTeamId === teamId || m.awayTeamId === teamId);
+    rows.sort((a: any, b: any) => new Date(a.kickoffTs).getTime() - new Date(b.kickoffTs).getTime());
     return rows.slice(0, limit).map((m: any) => {
       const baseMatch = dbToMatch(m as EnhancedMatch);
       return {
         ...baseMatch,
-        homeTeam: teamMap.get(m.home_team_id) ? { id: m.home_team_id, name: teamMap.get(m.home_team_id).name, is_opponent: !!teamMap.get(m.home_team_id).is_opponent } as any : undefined,
-        awayTeam: teamMap.get(m.away_team_id) ? { id: m.away_team_id, name: teamMap.get(m.away_team_id).name, is_opponent: !!teamMap.get(m.away_team_id).is_opponent } as any : undefined,
+        homeTeam: teamMap.get(m.homeTeamId) ? { id: m.homeTeamId, name: teamMap.get(m.homeTeamId).name, isOpponent: !!teamMap.get(m.homeTeamId).isOpponent } as any : undefined,
+        awayTeam: teamMap.get(m.awayTeamId) ? { id: m.awayTeamId, name: teamMap.get(m.awayTeamId).name, isOpponent: !!teamMap.get(m.awayTeamId).isOpponent } as any : undefined,
       };
     });
   },
@@ -305,15 +305,15 @@ export const matchesApi = {
     const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
     let rows = await db.matches.toArray();
     const now = Date.now();
-    rows = rows.filter((m: any) => !m.is_deleted && new Date(m.kickoff_ts).getTime() < now);
-    if (teamId) rows = rows.filter((m: any) => m.home_team_id === teamId || m.away_team_id === teamId);
-    rows.sort((a: any, b: any) => new Date(b.kickoff_ts).getTime() - new Date(a.kickoff_ts).getTime());
+    rows = rows.filter((m: any) => !m.isDeleted && new Date(m.kickoffTs).getTime() < now);
+    if (teamId) rows = rows.filter((m: any) => m.homeTeamId === teamId || m.awayTeamId === teamId);
+    rows.sort((a: any, b: any) => new Date(b.kickoffTs).getTime() - new Date(a.kickoffTs).getTime());
     return rows.slice(0, limit).map((m: any) => {
       const baseMatch = dbToMatch(m as EnhancedMatch);
       return {
         ...baseMatch,
-        homeTeam: teamMap.get(m.home_team_id) ? { id: m.home_team_id, name: teamMap.get(m.home_team_id).name, is_opponent: !!teamMap.get(m.home_team_id).is_opponent } as any : undefined,
-        awayTeam: teamMap.get(m.away_team_id) ? { id: m.away_team_id, name: teamMap.get(m.away_team_id).name, is_opponent: !!teamMap.get(m.away_team_id).is_opponent } as any : undefined,
+        homeTeam: teamMap.get(m.homeTeamId) ? { id: m.homeTeamId, name: teamMap.get(m.homeTeamId).name, isOpponent: !!teamMap.get(m.homeTeamId).isOpponent } as any : undefined,
+        awayTeam: teamMap.get(m.awayTeamId) ? { id: m.awayTeamId, name: teamMap.get(m.awayTeamId).name, isOpponent: !!teamMap.get(m.awayTeamId).isOpponent } as any : undefined,
       };
     });
   },
@@ -388,24 +388,24 @@ export const matchesApi = {
       // Update existing state to LIVE
       await db.match_state.update(id, {
         status: 'LIVE',
-        current_period_id: periodId,
-        timer_ms: 0,
-        last_updated_at: now,
-        updated_at: now,
+        currentPeriodId: periodId,
+        timerMs: 0,
+        lastUpdatedAt: now,
+        updatedAt: now,
         synced: false,
       });
     } else {
       // Create new match_state
       const localState: LocalMatchState = {
-        match_id: id,
+        matchId: id,
         status: 'LIVE',
-        current_period_id: periodId,
-        timer_ms: 0,
-        last_updated_at: now,
-        created_at: now,
-        updated_at: now,
-        created_by_user_id: userId,
-        is_deleted: false,
+        currentPeriodId: periodId,
+        timerMs: 0,
+        lastUpdatedAt: now,
+        createdAt: now,
+        updatedAt: now,
+        createdByUserId: userId,
+        isDeleted: false,
         synced: false,
       };
       await db.match_state.add(localState);
@@ -414,14 +414,14 @@ export const matchesApi = {
     // Create first match_period record
     const localPeriod: LocalMatchPeriod = {
       id: periodId,
-      match_id: id,
-      period_number: 1,
-      period_type: 'REGULAR',
-      started_at: now,
-      created_at: now,
-      updated_at: now,
-      created_by_user_id: userId,
-      is_deleted: false,
+      matchId: id,
+      periodNumber: 1,
+      periodType: 'REGULAR',
+      startedAt: now,
+      createdAt: now,
+      updatedAt: now,
+      createdByUserId: userId,
+      isDeleted: false,
       synced: false,
     };
     await db.match_periods.add(localPeriod);
@@ -466,8 +466,8 @@ export const matchesApi = {
 
     await db.match_state.update(id, {
       status: 'PAUSED',
-      last_updated_at: now,
-      updated_at: now,
+      lastUpdatedAt: now,
+      updatedAt: now,
       synced: false,
     });
 
@@ -510,8 +510,8 @@ export const matchesApi = {
 
     await db.match_state.update(id, {
       status: 'LIVE',
-      last_updated_at: now,
-      updated_at: now,
+      lastUpdatedAt: now,
+      updatedAt: now,
       synced: false,
     });
 
@@ -556,21 +556,21 @@ export const matchesApi = {
       throw new Error(`Match state not found for match ${id}`);
     }
 
-    // End any open periods (periods without ended_at)
+    // End any open periods (periods without endedAt)
     const openPeriods = await db.match_periods
-      .where('match_id')
+      .where('matchId')
       .equals(id)
-      .filter(p => !p.ended_at && !p.is_deleted)
+      .filter(p => !p.endedAt && !p.isDeleted)
       .toArray();
 
     for (const period of openPeriods) {
-      const durationSeconds = period.started_at
-        ? Math.floor((now - period.started_at) / 1000)
+      const durationSeconds = period.startedAt
+        ? Math.floor((now - period.startedAt) / 1000)
         : 0;
       await db.match_periods.update(period.id, {
-        ended_at: now,
-        duration_seconds: durationSeconds,
-        updated_at: now,
+        endedAt: now,
+        durationSeconds: durationSeconds,
+        updatedAt: now,
         synced: false,
       });
     }
@@ -578,9 +578,9 @@ export const matchesApi = {
     // Update match_state to COMPLETED
     await db.match_state.update(id, {
       status: 'COMPLETED',
-      current_period_id: undefined,
-      last_updated_at: now,
-      updated_at: now,
+      currentPeriodId: undefined,
+      lastUpdatedAt: now,
+      updatedAt: now,
       synced: false,
     });
 
@@ -588,9 +588,9 @@ export const matchesApi = {
     if (finalScore) {
       try {
         await db.matches.update(id, {
-          home_score: finalScore.home,
-          away_score: finalScore.away,
-          updated_at: now,
+          homeScore: finalScore.home,
+          awayScore: finalScore.away,
+          updatedAt: now,
           synced: false,
         } as any);
       } catch {
@@ -627,11 +627,11 @@ export const matchesApi = {
     // Filter by matchIds if provided
     if (matchIds && matchIds.length) {
       const matchIdSet = new Set(matchIds);
-      states = states.filter((s: any) => matchIdSet.has(s.match_id));
+      states = states.filter((s: any) => matchIdSet.has(s.matchId));
     }
     
     // Filter out deleted
-    states = states.filter((s: any) => !s.is_deleted);
+    states = states.filter((s: any) => !s.isDeleted);
     
     const total = states.length;
     const start = (page - 1) * limit;
@@ -679,9 +679,9 @@ export const matchesApi = {
 
     // Get the next period number
     const existingPeriods = await db.match_periods
-      .where('match_id')
+      .where('matchId')
       .equals(id)
-      .filter(p => !p.is_deleted)
+      .filter(p => !p.isDeleted)
       .toArray();
     const nextPeriodNumber = existingPeriods.length + 1;
 
@@ -693,14 +693,14 @@ export const matchesApi = {
 
     const localPeriod: LocalMatchPeriod = {
       id: periodId,
-      match_id: id,
-      period_number: nextPeriodNumber,
-      period_type: mappedPeriodType,
-      started_at: now,
-      created_at: now,
-      updated_at: now,
-      created_by_user_id: userId,
-      is_deleted: false,
+      matchId: id,
+      periodNumber: nextPeriodNumber,
+      periodType: mappedPeriodType,
+      startedAt: now,
+      createdAt: now,
+      updatedAt: now,
+      createdByUserId: userId,
+      isDeleted: false,
       synced: false,
     };
     await db.match_periods.add(localPeriod);
@@ -709,10 +709,10 @@ export const matchesApi = {
     const existingState = await db.match_state.get(id);
     if (existingState) {
       await db.match_state.update(id, {
-        current_period_id: periodId,
+        currentPeriodId: periodId,
         status: 'LIVE',
-        last_updated_at: now,
-        updated_at: now,
+        lastUpdatedAt: now,
+        updatedAt: now,
         synced: false,
       });
     }
@@ -724,7 +724,7 @@ export const matchesApi = {
   /**
    * End a period with offline fallback
    * 
-   * Requirements: 2.1 - Update local match_periods with ended_at
+   * Requirements: 2.1 - Update local matchPeriods with endedAt
    * Requirements: 6.1 - Fall back to local storage on network error
    */
   async endPeriod(id: string, periodId: string, payload?: { reason?: string; actualDurationSeconds?: number }): Promise<MatchPeriod> {
@@ -742,7 +742,7 @@ export const matchesApi = {
       }
     }
 
-    // Offline fallback: update local match_periods with ended_at
+    // Offline fallback: update local match_periods with endedAt
     const now = Date.now();
     const existingPeriod = await db.match_periods.get(periodId);
 
@@ -752,22 +752,22 @@ export const matchesApi = {
 
     // Calculate duration
     const durationSeconds = payload?.actualDurationSeconds ??
-      (existingPeriod.started_at ? Math.floor((now - existingPeriod.started_at) / 1000) : 0);
+      (existingPeriod.startedAt ? Math.floor((now - existingPeriod.startedAt) / 1000) : 0);
 
     await db.match_periods.update(periodId, {
-      ended_at: now,
-      duration_seconds: durationSeconds,
-      updated_at: now,
+      endedAt: now,
+      durationSeconds: durationSeconds,
+      updatedAt: now,
       synced: false,
     });
 
     // Update match_state to clear current period
     const existingState = await db.match_state.get(id);
-    if (existingState && existingState.current_period_id === periodId) {
+    if (existingState && existingState.currentPeriodId === periodId) {
       await db.match_state.update(id, {
-        current_period_id: undefined,
-        last_updated_at: now,
-        updated_at: now,
+        currentPeriodId: undefined,
+        lastUpdatedAt: now,
+        updatedAt: now,
         synced: false,
       });
     }

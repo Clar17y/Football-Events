@@ -13,8 +13,8 @@
 import apiClient from './baseApi';
 import { authApi } from './authApi';
 import { canCreateTeam } from '../../utils/guestQuota';
-import { dbToTeam, dbToTeams } from '../../db/transforms';
-import type { EnhancedTeam } from '../../db/schema';
+import { dbToTeam, dbToTeams, dbToPlayers } from '../../db/transforms';
+import type { EnhancedTeam, EnhancedPlayer } from '../../db/schema';
 import type {
   Team,
   TeamCreateRequest,
@@ -82,7 +82,7 @@ export const teamsApi = {
     const { db } = await import('../../db/indexedDB');
     let teams = await db.teams.toArray();
     // Exclude soft-deleted; include opponents only if requested
-    teams = teams.filter((t: any) => t && !t.is_deleted && (includeOpponents ? true : (t as any).is_opponent !== true));
+    teams = teams.filter((t: any) => t && !t.isDeleted && (includeOpponents ? true : (t as any).isOpponent !== true));
     if (search && search.trim()) {
       const term = search.trim().toLowerCase();
       teams = teams.filter(t => (t.name || '').toLowerCase().includes(term));
@@ -109,7 +109,7 @@ export const teamsApi = {
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
     const team = await db.teams.get(id);
-    if (!team || team.is_deleted) {
+    if (!team || team.isDeleted) {
       throw new Error('Team not found');
     }
     return {
@@ -214,27 +214,29 @@ export const teamsApi = {
     
     // Get player-team relationships for this team
     const playerTeamRelations = await db.player_teams
-      .where('team_id')
+      .where('teamId')
       .equals(id)
-      .filter((pt: any) => !pt.is_deleted)
+      .filter((pt: any) => !pt.isDeleted)
       .toArray();
     
     // Get the player IDs from the relationships
-    const playerIds = playerTeamRelations.map((pt: any) => pt.player_id);
+    const playerIds = playerTeamRelations.map((pt: any) => pt.playerId);
     
     // Fetch the actual player records
     const players = await db.players
       .where('id')
       .anyOf(playerIds)
-      .filter((p: any) => !p.is_deleted)
+      .filter((p: any) => !p.isDeleted)
       .toArray();
     
+    // Use centralized transform, then map to response format
+    const transformedPlayers = dbToPlayers(players as EnhancedPlayer[]);
     return {
-      data: players.map((p: any) => ({
+      data: transformedPlayers.map(p => ({
         id: p.id,
-        name: p.full_name || p.name || '',
-        squadNumber: p.squad_number,
-        preferredPosition: p.preferred_pos,
+        name: p.name,
+        squadNumber: p.squadNumber,
+        preferredPosition: p.preferredPosition,
         isActive: true
       })),
       success: true
@@ -248,30 +250,32 @@ export const teamsApi = {
   async getActiveTeamPlayers(id: string): Promise<TeamPlayersResponse> {
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
-    
+
     // Get active player-team relationships for this team
     const playerTeamRelations = await db.player_teams
-      .where('team_id')
+      .where('teamId')
       .equals(id)
-      .filter((pt: any) => !pt.is_deleted && pt.is_active !== false)
+      .filter((pt: any) => !pt.isDeleted && pt.isActive !== false)
       .toArray();
-    
+
     // Get the player IDs from the relationships
-    const playerIds = playerTeamRelations.map((pt: any) => pt.player_id);
-    
+    const playerIds = playerTeamRelations.map((pt: any) => pt.playerId);
+
     // Fetch the actual player records
     const players = await db.players
       .where('id')
       .anyOf(playerIds)
-      .filter((p: any) => !p.is_deleted)
+      .filter((p: any) => !p.isDeleted)
       .toArray();
-    
+
+    // Use centralized transform, then map to response format
+    const transformedPlayers = dbToPlayers(players as EnhancedPlayer[]);
     return {
-      data: players.map((p: any) => ({
+      data: transformedPlayers.map(p => ({
         id: p.id,
-        name: p.full_name || p.name || '',
-        squadNumber: p.squad_number,
-        preferredPosition: p.preferred_pos,
+        name: p.name,
+        squadNumber: p.squadNumber,
+        preferredPosition: p.preferredPosition,
         isActive: true
       })),
       success: true
@@ -304,7 +308,7 @@ export const teamsApi = {
   },
 
   /**
-   * List opponent teams (is_opponent=true) for current user
+   * List opponent teams (isOpponent=true) for current user
    * Local-first: always reads from IndexedDB
    */
   async getOpponentTeams(search?: string): Promise<Team[]> {
@@ -312,7 +316,7 @@ export const teamsApi = {
 
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
-    let teams = await db.teams.filter((t: any) => !t.is_deleted).toArray();
+    let teams = await db.teams.filter((t: any) => !t.isDeleted).toArray();
     if (search && search.trim()) {
       const term = normalize(search);
       teams = teams.filter(t => normalize(t.name || '').includes(term));

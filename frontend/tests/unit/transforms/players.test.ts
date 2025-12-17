@@ -5,16 +5,16 @@ import type { EnhancedPlayer } from '../../../src/db/schema';
 describe('players transforms', () => {
   const mockDbPlayer: EnhancedPlayer = {
     id: 'player-123',
-    full_name: 'John Smith',
-    squad_number: 10,
-    preferred_pos: 'MF',
+    fullName: 'John Smith',
+    squadNumber: 10,
+    preferredPos: 'MF',
     dob: '2010-05-15',
     notes: 'Great midfielder',
-    current_team: 'team-456',
-    created_at: 1700000000000,
-    updated_at: 1700000001000,
-    created_by_user_id: 'user-789',
-    is_deleted: false,
+    currentTeam: 'team-456',
+    createdAt: 1700000000000,
+    updatedAt: 1700000001000,
+    createdByUserId: 'user-789',
+    isDeleted: false,
     synced: true,
   };
 
@@ -38,11 +38,11 @@ describe('players transforms', () => {
     it('handles null/undefined optional fields', () => {
       const minimalPlayer: EnhancedPlayer = {
         id: 'player-minimal',
-        full_name: 'Jane Doe',
-        created_at: 1700000000000,
-        updated_at: 1700000000000,
-        created_by_user_id: 'user-1',
-        is_deleted: false,
+        fullName: 'Jane Doe',
+        createdAt: 1700000000000,
+        updatedAt: 1700000000000,
+        createdByUserId: 'user-1',
+        isDeleted: false,
         synced: false,
       };
 
@@ -59,9 +59,9 @@ describe('players transforms', () => {
     it('handles soft delete fields', () => {
       const deletedPlayer: EnhancedPlayer = {
         ...mockDbPlayer,
-        is_deleted: true,
-        deleted_at: 1700000002000,
-        deleted_by_user_id: 'user-admin',
+        isDeleted: true,
+        deletedAt: 1700000002000,
+        deletedByUserId: 'user-admin',
       };
 
       const result = dbToPlayer(deletedPlayer);
@@ -76,7 +76,7 @@ describe('players transforms', () => {
     it('transforms array of players', () => {
       const players = [
         mockDbPlayer,
-        { ...mockDbPlayer, id: 'player-456', full_name: 'Bob Jones' },
+        { ...mockDbPlayer, id: 'player-456', fullName: 'Bob Jones' },
       ];
       const result = dbToPlayers(players);
 
@@ -104,23 +104,23 @@ describe('players transforms', () => {
 
       const result = playerWriteToDb(input);
 
-      expect(result.full_name).toBe('New Player');
-      expect(result.squad_number).toBe(7);
-      expect(result.preferred_pos).toBe('FW');
+      expect(result.fullName).toBe('New Player');
+      expect(result.squadNumber).toBe(7);
+      expect(result.preferredPos).toBe('FW');
       expect(result.dob).toBe('2012-03-20');
       expect(result.notes).toBe('Promising striker');
-      expect(result.current_team).toBe('team-123');
+      expect(result.currentTeam).toBe('team-123');
     });
 
     it('handles minimal input', () => {
       const input = { name: 'Minimal Player' };
       const result = playerWriteToDb(input);
 
-      expect(result.full_name).toBe('Minimal Player');
-      expect(result.squad_number).toBeUndefined();
-      expect(result.preferred_pos).toBeUndefined();
+      expect(result.fullName).toBe('Minimal Player');
+      expect(result.squadNumber).toBeUndefined();
+      expect(result.preferredPos).toBeUndefined();
       expect(result.dob).toBeUndefined();
-      expect(result.current_team).toBeUndefined();
+      expect(result.currentTeam).toBeUndefined();
     });
   });
 
@@ -138,10 +138,10 @@ describe('players transforms', () => {
       const stored: EnhancedPlayer = {
         id: 'player-roundtrip',
         ...dbFormat,
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'user-1',
-        is_deleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'user-1',
+        isDeleted: false,
         synced: false,
       } as EnhancedPlayer;
 

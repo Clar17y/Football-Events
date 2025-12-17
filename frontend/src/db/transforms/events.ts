@@ -13,20 +13,20 @@ import { toDate, nullToUndefined, toBool } from './common';
 export function dbToEvent(e: EnhancedEvent): Event {
   return {
     id: e.id,
-    matchId: e.match_id,
-    periodNumber: e.period_number,
-    clockMs: e.clock_ms,
+    matchId: e.matchId,
+    periodNumber: e.periodNumber,
+    clockMs: e.clockMs,
     kind: e.kind,
-    teamId: e.team_id || undefined,
-    playerId: e.player_id || undefined,
+    teamId: e.teamId || undefined,
+    playerId: e.playerId || undefined,
     notes: nullToUndefined(e.notes),
     sentiment: e.sentiment,
-    createdAt: toDate(e.created_at) ?? new Date(),
-    updatedAt: toDate(e.updated_at),
-    created_by_user_id: e.created_by_user_id,
-    deleted_at: toDate(e.deleted_at),
-    deleted_by_user_id: nullToUndefined(e.deleted_by_user_id),
-    is_deleted: toBool(e.is_deleted),
+    createdAt: toDate(e.createdAt) ?? new Date(),
+    updatedAt: toDate(e.updatedAt),
+    created_by_user_id: e.createdByUserId,
+    deleted_at: toDate(e.deletedAt),
+    deleted_by_user_id: nullToUndefined(e.deletedByUserId),
+    is_deleted: toBool(e.isDeleted),
   };
 }
 
@@ -56,12 +56,12 @@ export interface EventWriteInput {
  */
 export function eventWriteToDb(data: EventWriteInput): Partial<EnhancedEvent> {
   return {
-    match_id: data.matchId,
+    matchId: data.matchId,
     kind: data.kind,
-    period_number: data.periodNumber ?? 1,
-    clock_ms: data.clockMs ?? 0,
-    team_id: data.teamId ?? '',
-    player_id: data.playerId ?? '',
+    periodNumber: data.periodNumber ?? 1,
+    clockMs: data.clockMs ?? 0,
+    teamId: data.teamId ?? '',
+    playerId: data.playerId ?? '',
     notes: data.notes,
     sentiment: data.sentiment ?? 0,
   };
@@ -90,12 +90,12 @@ export interface ServerEventPayload {
  */
 export function dbEventToServerPayload(e: EnhancedEvent): ServerEventPayload {
   return {
-    matchId: e.match_id,
+    matchId: e.matchId,
     kind: e.kind,
-    periodNumber: e.period_number,
-    clockMs: e.clock_ms,
-    teamId: e.team_id || undefined,
-    playerId: e.player_id || null,
+    periodNumber: e.periodNumber,
+    clockMs: e.clockMs,
+    teamId: e.teamId || undefined,
+    playerId: e.playerId || null,
     notes: nullToUndefined(e.notes),
     sentiment: e.sentiment,
   };

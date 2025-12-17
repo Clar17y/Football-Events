@@ -15,20 +15,20 @@ import { toDate, nullToUndefined, toBool } from './common';
  */
 export function dbToMatchState(s: LocalMatchState): MatchState {
   return {
-    id: s.match_id,
-    matchId: s.match_id,
+    id: s.matchId,
+    matchId: s.matchId,
     status: s.status === 'NOT_STARTED' ? 'SCHEDULED' : s.status,
     currentPeriod: undefined, // Set from period data if available
     currentPeriodType: undefined,
-    matchStartedAt: s.status !== 'NOT_STARTED' ? toDate(s.created_at) : undefined,
-    matchEndedAt: s.status === 'COMPLETED' ? toDate(s.updated_at) : undefined,
-    totalElapsedSeconds: Math.floor(s.timer_ms / 1000),
-    createdAt: toDate(s.created_at) ?? new Date(),
-    updatedAt: toDate(s.updated_at),
-    created_by_user_id: s.created_by_user_id,
-    deleted_at: toDate(s.deleted_at),
-    deleted_by_user_id: nullToUndefined(s.deleted_by_user_id),
-    is_deleted: toBool(s.is_deleted),
+    matchStartedAt: s.status !== 'NOT_STARTED' ? toDate(s.createdAt) : undefined,
+    matchEndedAt: s.status === 'COMPLETED' ? toDate(s.updatedAt) : undefined,
+    totalElapsedSeconds: Math.floor(s.timerMs / 1000),
+    createdAt: toDate(s.createdAt) ?? new Date(),
+    updatedAt: toDate(s.updatedAt),
+    created_by_user_id: s.createdByUserId,
+    deleted_at: toDate(s.deletedAt),
+    deleted_by_user_id: nullToUndefined(s.deletedByUserId),
+    is_deleted: toBool(s.isDeleted),
   };
 }
 
@@ -46,11 +46,11 @@ export interface MatchStateWriteInput {
  */
 export function matchStateWriteToDb(matchId: string, data: MatchStateWriteInput): Partial<LocalMatchState> {
   return {
-    match_id: matchId,
+    matchId: matchId,
     status: data.status,
-    current_period_id: data.currentPeriodId,
-    timer_ms: data.timerMs ?? 0,
-    last_updated_at: Date.now(),
+    currentPeriodId: data.currentPeriodId,
+    timerMs: data.timerMs ?? 0,
+    lastUpdatedAt: Date.now(),
   };
 }
 
@@ -64,18 +64,18 @@ export function matchStateWriteToDb(matchId: string, data: MatchStateWriteInput)
 export function dbToMatchPeriod(p: LocalMatchPeriod): MatchPeriod {
   return {
     id: p.id,
-    matchId: p.match_id,
-    periodNumber: p.period_number,
-    periodType: p.period_type,
-    startedAt: toDate(p.started_at),
-    endedAt: toDate(p.ended_at),
-    durationSeconds: nullToUndefined(p.duration_seconds),
-    createdAt: toDate(p.created_at) ?? new Date(),
-    updatedAt: toDate(p.updated_at),
-    created_by_user_id: p.created_by_user_id,
-    deleted_at: toDate(p.deleted_at),
-    deleted_by_user_id: nullToUndefined(p.deleted_by_user_id),
-    is_deleted: toBool(p.is_deleted),
+    matchId: p.matchId,
+    periodNumber: p.periodNumber,
+    periodType: p.periodType,
+    startedAt: toDate(p.startedAt),
+    endedAt: toDate(p.endedAt),
+    durationSeconds: nullToUndefined(p.durationSeconds),
+    createdAt: toDate(p.createdAt) ?? new Date(),
+    updatedAt: toDate(p.updatedAt),
+    created_by_user_id: p.createdByUserId,
+    deleted_at: toDate(p.deletedAt),
+    deleted_by_user_id: nullToUndefined(p.deletedByUserId),
+    is_deleted: toBool(p.isDeleted),
   };
 }
 
@@ -101,9 +101,9 @@ export interface MatchPeriodWriteInput {
  */
 export function matchPeriodWriteToDb(data: MatchPeriodWriteInput): Partial<LocalMatchPeriod> {
   return {
-    match_id: data.matchId,
-    period_number: data.periodNumber,
-    period_type: data.periodType ?? 'REGULAR',
-    started_at: data.startedAt ?? Date.now(),
+    matchId: data.matchId,
+    periodNumber: data.periodNumber,
+    periodType: data.periodType ?? 'REGULAR',
+    startedAt: data.startedAt ?? Date.now(),
   };
 }

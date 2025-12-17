@@ -35,12 +35,12 @@ const BATCH_SIZE = 50;
 
 /**
  * Handle soft-deleted records:
- * - If is_deleted && !synced_at → delete locally only (never synced to server)
- * - If is_deleted && synced_at → call DELETE API, then delete locally
+ * - If isDeleted && !syncedAt → delete locally only (never synced to server)
+ * - If isDeleted && syncedAt → call DELETE API, then delete locally
  *
  * Returns records that still need to be synced (non-deleted or delete failed)
  */
-async function processSoftDeletes<T extends { id: string; is_deleted?: boolean; synced_at?: number }>(
+async function processSoftDeletes<T extends { id: string; isDeleted?: boolean; syncedAt?: number }>(
   table: any,
   records: T[],
   deleteApiCall: (id: string) => Promise<void>,
@@ -50,8 +50,8 @@ async function processSoftDeletes<T extends { id: string; is_deleted?: boolean; 
   const toSync: T[] = [];
 
   for (const record of records) {
-    if (record.is_deleted) {
-      if (!record.synced_at) {
+    if (record.isDeleted) {
+      if (!record.syncedAt) {
         // Never synced to server - just delete locally
         try {
           await table.delete(record.id);
@@ -138,13 +138,13 @@ async function syncSeasons(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records
     const unsyncedSeasons = allSeasons
-      .filter(s => s.synced === false && !isGuestId(s.created_by_user_id))
+      .filter(s => s.synced === false && !isGuestId(s.createdByUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first
     const seasonsToSync = await processSoftDeletes(
       db.seasons,
-      unsyncedSeasons.map(s => ({ ...s, id: s.season_id })),
+      unsyncedSeasons.map(s => ({ ...s, id: s.seasonId })),
       async (id) => { await apiClient.delete(`/seasons/${id}`); },
       'seasons',
       result
@@ -155,9 +155,9 @@ async function syncSeasons(): Promise<SyncResult> {
         // Use centralized transform: IndexedDB → Server API payload
         const seasonData = dbSeasonToServerPayload(season as any);
 
-        // If synced_at exists, this is an update; otherwise it's a create
+        // If syncedAt exists, this is an update; otherwise it's a create
         // IMPORTANT: Call server API directly, not the local-first seasonsApi
-        if ((season as any).synced_at) {
+        if ((season as any).syncedAt) {
           await apiClient.put(`/seasons/${season.id}`, seasonData);
         } else {
           await apiClient.post('/seasons', seasonData);
@@ -165,7 +165,7 @@ async function syncSeasons(): Promise<SyncResult> {
 
         await db.seasons.update(season.id, {
           synced: true,
-          synced_at: Date.now(),
+          syncedAt: Date.now(),
         });
 
         result.synced++;
@@ -210,7 +210,7 @@ async function syncTeams(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records
     const unsyncedTeams = allTeams
-      .filter(t => t.synced === false && !isGuestId(t.created_by_user_id))
+      .filter(t => t.synced === false && !isGuestId(t.createdByUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first
@@ -227,9 +227,9 @@ async function syncTeams(): Promise<SyncResult> {
         // Use centralized transform: IndexedDB → Server API payload
         const teamData = dbTeamToServerPayload(team as any);
 
-        // If synced_at exists, this is an update; otherwise it's a create
+        // If syncedAt exists, this is an update; otherwise it's a create
         // IMPORTANT: Call server API directly, not the local-first teamsApi
-        if ((team as any).synced_at) {
+        if ((team as any).syncedAt) {
           await apiClient.put(`/teams/${team.id}`, teamData);
         } else {
           await apiClient.post('/teams', teamData);
@@ -237,7 +237,7 @@ async function syncTeams(): Promise<SyncResult> {
 
         await db.teams.update(team.id, {
           synced: true,
-          synced_at: Date.now(),
+          syncedAt: Date.now(),
         });
 
         result.synced++;
@@ -282,7 +282,7 @@ async function syncPlayers(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records
     const unsyncedPlayers = allPlayers
-      .filter(p => p.synced === false && !isGuestId(p.created_by_user_id))
+      .filter(p => p.synced === false && !isGuestId(p.createdByUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first
@@ -299,17 +299,17 @@ async function syncPlayers(): Promise<SyncResult> {
         // Use centralized transform: IndexedDB → Server API payload
         const playerData = dbPlayerToServerPayload(player);
 
-        // If synced_at exists, this is an update; otherwise it's a create
+        // If syncedAt exists, this is an update; otherwise it's a create
         // IMPORTANT: Call server API directly, not the local-first playersApi
-        if ((player as any).synced_at) {
+        if ((player as any).syncedAt) {
           // Update existing player
           await apiClient.put(`/players/${player.id}`, playerData);
         } else {
           // Create new player
-          if (player.current_team) {
+          if (player.currentTeam) {
             await apiClient.post('/players-with-team', {
               ...playerData,
-              teamId: player.current_team,
+              teamId: player.currentTeam,
               startDate: new Date().toISOString().slice(0, 10),
               isActive: true,
             });
@@ -320,7 +320,7 @@ async function syncPlayers(): Promise<SyncResult> {
 
         await db.players.update(player.id, {
           synced: true,
-          synced_at: Date.now(),
+          syncedAt: Date.now(),
         });
 
         result.synced++;
@@ -365,7 +365,7 @@ async function syncMatches(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records
     const unsyncedMatches = allMatches
-      .filter(m => m.synced === false && !isGuestId(m.created_by_user_id))
+      .filter(m => m.synced === false && !isGuestId(m.createdByUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first
@@ -382,8 +382,8 @@ async function syncMatches(): Promise<SyncResult> {
         // Use centralized transform: IndexedDB → Server API payload
         const matchData = dbMatchToServerPayload(match);
 
-        // If synced_at exists, this is an update; otherwise it's a create
-        if ((match as any).synced_at) {
+        // If syncedAt exists, this is an update; otherwise it's a create
+        if ((match as any).syncedAt) {
           await apiClient.put(`/matches/${match.id}`, matchData);
         } else {
           await apiClient.post('/matches', matchData);
@@ -391,7 +391,7 @@ async function syncMatches(): Promise<SyncResult> {
 
         await db.matches.update(match.id, {
           synced: true,
-          synced_at: Date.now(),
+          syncedAt: Date.now(),
         });
 
         result.synced++;
@@ -436,7 +436,7 @@ async function syncLineups(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records
     const unsyncedLineups = allLineups
-      .filter(l => l.synced === false && !isGuestId(l.created_by_user_id))
+      .filter(l => l.synced === false && !isGuestId(l.createdByUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first
@@ -446,7 +446,7 @@ async function syncLineups(): Promise<SyncResult> {
       async (id) => {
         const lineup = unsyncedLineups.find(l => l.id === id);
         if (lineup) {
-          await lineupsApi.deleteByKey(lineup.match_id, lineup.player_id, lineup.start_min);
+          await lineupsApi.deleteByKey(lineup.matchId, lineup.playerId, lineup.startMin);
         }
       },
       'lineup',
@@ -456,16 +456,16 @@ async function syncLineups(): Promise<SyncResult> {
     for (const lineup of lineupsToSync) {
       try {
         await lineupsApi.create({
-          matchId: lineup.match_id,
-          playerId: lineup.player_id,
-          startMinute: lineup.start_min,
-          endMinute: lineup.end_min,
+          matchId: lineup.matchId,
+          playerId: lineup.playerId,
+          startMinute: lineup.startMin,
+          endMinute: lineup.endMin,
           position: lineup.position,
         });
 
         await db.lineup.update(lineup.id, {
           synced: true,
-          synced_at: Date.now(),
+          syncedAt: Date.now(),
         });
 
         result.synced++;
@@ -510,7 +510,7 @@ async function syncDefaultLineups(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records
     const unsyncedDefaultLineups = allDefaultLineups
-      .filter(dl => dl.synced === false && !isGuestId(dl.created_by_user_id))
+      .filter(dl => dl.synced === false && !isGuestId(dl.createdByUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first
@@ -520,7 +520,7 @@ async function syncDefaultLineups(): Promise<SyncResult> {
       async (id) => {
         const dl = unsyncedDefaultLineups.find(d => d.id === id);
         if (dl) {
-          await defaultLineupsApi.deleteDefaultLineup(dl.team_id);
+          await defaultLineupsApi.deleteDefaultLineup(dl.teamId);
         }
       },
       'default_lineups',
@@ -530,13 +530,13 @@ async function syncDefaultLineups(): Promise<SyncResult> {
     for (const defaultLineup of defaultLineupsToSync) {
       try {
         await defaultLineupsApi.saveDefaultLineup({
-          teamId: defaultLineup.team_id,
+          teamId: defaultLineup.teamId,
           formation: defaultLineup.formation,
         });
 
         await db.default_lineups.update(defaultLineup.id, {
           synced: true,
-          synced_at: Date.now(),
+          syncedAt: Date.now(),
         });
 
         result.synced++;
@@ -585,7 +585,7 @@ async function syncEvents(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records (Requirements: 2.6)
     const unsyncedEvents = allEvents
-      .filter(e => e.synced === false && !isGuestId(e.created_by_user_id))
+      .filter(e => e.synced === false && !isGuestId(e.createdByUserId))
       .slice(0, BATCH_SIZE);
 
     const isUuid = (value: string): boolean =>
@@ -603,7 +603,7 @@ async function syncEvents(): Promise<SyncResult> {
 
       // Otherwise, best-effort: resolve the server event by its natural keys and delete that.
       try {
-        const resp = await apiClient.get<any>(`/events/match/${local.match_id}`);
+        const resp = await apiClient.get<any>(`/events/match/${local.matchId}`);
         const list = Array.isArray(resp.data) ? resp.data : (resp.data?.events || []);
         const serverMatch = list.find((e: any) => {
           const teamId = e.teamId ?? e.team_id ?? null;
@@ -612,9 +612,9 @@ async function syncEvents(): Promise<SyncResult> {
           const kind = e.kind ?? null;
           return (
             kind === local.kind &&
-            String(teamId || '') === String(local.team_id || '') &&
-            String(playerId || '') === String(local.player_id || '') &&
-            Number(clockMs || 0) === Number(local.clock_ms || 0)
+            String(teamId || '') === String(local.teamId || '') &&
+            String(playerId || '') === String(local.playerId || '') &&
+            Number(clockMs || 0) === Number(local.clockMs || 0)
           );
         });
 
@@ -647,8 +647,8 @@ async function syncEvents(): Promise<SyncResult> {
             throw new Error('Invalid formation_change payload: missing formation.players');
           }
 
-          const startMin = (event.clock_ms ?? 0) / 60_000;
-          await apiClient.post(`/matches/${event.match_id}/formation-changes`, {
+          const startMin = (event.clockMs ?? 0) / 60_000;
+          await apiClient.post(`/matches/${event.matchId}/formation-changes`, {
             ...(isUuid(event.id) ? { eventId: event.id } : {}),
             startMin,
             formation,
@@ -666,10 +666,10 @@ async function syncEvents(): Promise<SyncResult> {
           }
         }
 
-        // Update synced to true and set synced_at on success (Requirements: 2.4)
+        // Update synced to true and set syncedAt on success (Requirements: 2.4)
         await db.events.update(event.id, {
           synced: true,
-          synced_at: Date.now(),
+          syncedAt: Date.now(),
         });
 
         result.synced++;
@@ -719,7 +719,7 @@ async function syncMatchPeriods(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records (Requirements: 2.6)
     const unsyncedPeriods = allPeriods
-      .filter(p => p.synced === false && !isGuestId(p.created_by_user_id))
+      .filter(p => p.synced === false && !isGuestId(p.createdByUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first (periods are rarely deleted, but handle it)
@@ -738,42 +738,42 @@ async function syncMatchPeriods(): Promise<SyncResult> {
     for (const period of periodsToSync) {
       try {
         // Use appropriate API based on period completion status
-        if (period.ended_at) {
+        if (period.endedAt) {
           // Period is complete - use the import endpoint to preserve timestamps
-          await apiClient.post(`/matches/${period.match_id}/periods/import`, {
-            periodNumber: period.period_number,
-            periodType: period.period_type || 'REGULAR',
-            startedAt: new Date(period.started_at).toISOString(),
-            endedAt: new Date(period.ended_at).toISOString(),
+          await apiClient.post(`/matches/${period.matchId}/periods/import`, {
+            periodNumber: period.periodNumber,
+            periodType: period.periodType || 'REGULAR',
+            startedAt: new Date(period.startedAt).toISOString(),
+            endedAt: new Date(period.endedAt).toISOString(),
             // Do not send durationSeconds: backend validation caps it (2h) but server can derive it from timestamps.
           });
         } else {
           // Period is still in progress - start it on the server
           // First check if the match has been started
           try {
-            const state = await matchesApi.getMatchState(period.match_id);
+            const state = await matchesApi.getMatchState(period.matchId);
             // Server uses 'SCHEDULED' for not-started matches
             if (state.status === 'SCHEDULED') {
-              await matchesApi.startMatch(period.match_id);
+              await matchesApi.startMatch(period.matchId);
             }
           } catch {
             // Match state might not exist, try to start it
             try {
-              await matchesApi.startMatch(period.match_id);
+              await matchesApi.startMatch(period.matchId);
             } catch {
               // Match might already be started, continue
             }
           }
 
           // Start the period
-          const periodType = (period.period_type || 'REGULAR').toLowerCase() as 'regular' | 'extra_time' | 'penalty_shootout';
-          await matchesApi.startPeriod(period.match_id, periodType);
+          const periodType = (period.periodType || 'REGULAR').toLowerCase() as 'regular' | 'extra_time' | 'penalty_shootout';
+          await matchesApi.startPeriod(period.matchId, periodType);
         }
 
-        // Update synced to true and set synced_at on success (Requirements: 2.4)
+        // Update synced to true and set syncedAt on success (Requirements: 2.4)
         await db.match_periods.update(period.id, {
           synced: true,
-          synced_at: Date.now(),
+          syncedAt: Date.now(),
         });
 
         result.synced++;
@@ -822,7 +822,7 @@ async function syncMatchState(): Promise<SyncResult> {
     
     // Filter for unsynced, non-guest records (Requirements: 2.6)
     const statesToSync = allStates
-      .filter(s => s.synced === false && !isGuestId(s.created_by_user_id))
+      .filter(s => s.synced === false && !isGuestId(s.createdByUserId))
       .slice(0, BATCH_SIZE);
 
     for (const state of statesToSync) {
@@ -834,35 +834,35 @@ async function syncMatchState(): Promise<SyncResult> {
         if (status === 'LIVE') {
           // Ensure match is started
           try {
-            await matchesApi.startMatch(state.match_id);
+            await matchesApi.startMatch(state.matchId);
           } catch {
             // Match might already be started
           }
         } else if (status === 'PAUSED') {
-          await matchesApi.pauseMatch(state.match_id);
+          await matchesApi.pauseMatch(state.matchId);
         } else if (status === 'COMPLETED') {
           // Get match to retrieve final score
           try {
-            const match = await db.matches.get(state.match_id);
+            const match = await db.matches.get(state.matchId);
             if (match) {
-              await matchesApi.completeMatch(state.match_id, {
-                home: match.home_score || 0,
-                away: match.away_score || 0,
+              await matchesApi.completeMatch(state.matchId, {
+                home: match.homeScore || 0,
+                away: match.awayScore || 0,
               });
             } else {
-              await matchesApi.completeMatch(state.match_id);
+              await matchesApi.completeMatch(state.matchId);
             }
           } catch {
             // Try without score
-            await matchesApi.completeMatch(state.match_id);
+            await matchesApi.completeMatch(state.matchId);
           }
         }
         // For 'NOT_STARTED' status, nothing to sync
 
-        // Update synced to true and set synced_at on success (Requirements: 2.4)
-        await db.match_state.update(state.match_id, {
+        // Update synced to true and set syncedAt on success (Requirements: 2.4)
+        await db.match_state.update(state.matchId, {
           synced: true,
-          synced_at: Date.now(),
+          syncedAt: Date.now(),
         });
 
         result.synced++;
@@ -870,7 +870,7 @@ async function syncMatchState(): Promise<SyncResult> {
         result.failed++;
         result.errors.push({
           table: 'match_state',
-          recordId: state.match_id,
+          recordId: state.matchId,
           error: err instanceof Error ? err.message : String(err),
         });
       }
@@ -940,15 +940,15 @@ class SyncService {
         db.match_state?.toArray().catch(() => []) || [],
       ]);
 
-      progress.seasons = seasons.filter(s => s.synced === false && !isGuestId(s.created_by_user_id)).length;
-      progress.teams = teams.filter(t => t.synced === false && !isGuestId(t.created_by_user_id)).length;
-      progress.players = players.filter(p => p.synced === false && !isGuestId(p.created_by_user_id)).length;
-      progress.matches = matches.filter(m => m.synced === false && !isGuestId(m.created_by_user_id)).length;
-      progress.lineups = lineups.filter(l => l.synced === false && !isGuestId(l.created_by_user_id)).length;
-      progress.defaultLineups = defaultLineups.filter(dl => dl.synced === false && !isGuestId(dl.created_by_user_id)).length;
-      progress.events = events.filter(e => e.synced === false && !isGuestId(e.created_by_user_id)).length;
-      progress.matchPeriods = matchPeriods.filter(p => p.synced === false && !isGuestId(p.created_by_user_id)).length;
-      progress.matchState = matchState.filter(s => s.synced === false && !isGuestId(s.created_by_user_id)).length;
+      progress.seasons = seasons.filter(s => s.synced === false && !isGuestId(s.createdByUserId)).length;
+      progress.teams = teams.filter(t => t.synced === false && !isGuestId(t.createdByUserId)).length;
+      progress.players = players.filter(p => p.synced === false && !isGuestId(p.createdByUserId)).length;
+      progress.matches = matches.filter(m => m.synced === false && !isGuestId(m.createdByUserId)).length;
+      progress.lineups = lineups.filter(l => l.synced === false && !isGuestId(l.createdByUserId)).length;
+      progress.defaultLineups = defaultLineups.filter(dl => dl.synced === false && !isGuestId(dl.createdByUserId)).length;
+      progress.events = events.filter(e => e.synced === false && !isGuestId(e.createdByUserId)).length;
+      progress.matchPeriods = matchPeriods.filter(p => p.synced === false && !isGuestId(p.createdByUserId)).length;
+      progress.matchState = matchState.filter(s => s.synced === false && !isGuestId(s.createdByUserId)).length;
 
       progress.total = progress.seasons + progress.teams + progress.players + progress.matches +
         progress.lineups + progress.defaultLineups + progress.events + progress.matchPeriods + progress.matchState;

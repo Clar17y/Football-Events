@@ -5,10 +5,8 @@
  * Provides version-based migrations with rollback capabilities.
  */
 
-import Dexie from 'dexie';
 import type { GrassrootsDB } from './indexedDB';
-import type { EnhancedEvent, EnhancedMatch, EnhancedPlayer, EnhancedTeam, EnhancedSeason } from './schema';
-import { SCHEMA_INDEXES } from './schema';
+import type { EnhancedEvent, EnhancedMatch, EnhancedPlayer, EnhancedTeam } from './schema';
 import { retroactivelyLinkMatchEvents } from './eventLinking';
 
 /**
@@ -88,8 +86,8 @@ export const MIGRATIONS: Migration[] = [
       const events = await db.events.toArray();
       for (const event of events) {
         await db.events.update(event.id, {
-          linked_events: undefined,
-          auto_linked_at: undefined
+          linkedEvents: undefined,
+          autoLinkedAt: undefined
         });
       }
 
@@ -110,20 +108,20 @@ async function migrateEventsToEnhanced(db: GrassrootsDB): Promise<void> {
   for (const event of events) {
     const enhancedEvent: Partial<EnhancedEvent> = {
       // Ensure all required fields exist
-      ts_server: event.ts_server || event.created_at || now,
-      period_number: event.period_number || 1,
+      tsServer: event.tsServer || event.createdAt || now,
+      periodNumber: event.periodNumber || 1,
       sentiment: event.sentiment || 0,
       
       // Add new fields
-      linked_events: undefined, // Will be populated by retroactive linking
-      auto_linked_at: undefined,
-      updated_at: event.updated_at || event.created_at || now,
+      linkedEvents: undefined, // Will be populated by retroactive linking
+      autoLinkedAt: undefined,
+      updatedAt: event.updatedAt || event.createdAt || now,
       
       // Authentication and soft delete fields
-      created_by_user_id: 'migration-system',
-      deleted_at: undefined,
-      deleted_by_user_id: undefined,
-      is_deleted: false
+      createdByUserId: 'migration-system',
+      deletedAt: undefined,
+      deletedByUserId: undefined,
+      isDeleted: false
     };
     
     await db.events.update(event.id, enhancedEvent);
@@ -161,23 +159,23 @@ async function migrateMatchesToEnhanced(db: GrassrootsDB): Promise<void> {
     }
     
     const enhancedMatch: Partial<EnhancedMatch> = {
-      // Map old fields to new structure
-      match_id: oldMatch.id,
-      season_id: oldMatch.season_id || 'default-season',
-      kickoff_ts: oldMatch.date || now,
-      home_team_id: oldMatch.home_team_id,
-      away_team_id: oldMatch.away_team_id,
-      duration_mins: settings.duration_mins || 50,
-      period_format: settings.period_format || 'quarter',
-      home_score: 0, // Will be calculated from events
-      away_score: 0, // Will be calculated from events
-      updated_at: oldMatch.updated_at || oldMatch.created_at || now,
+      // Map old fields to new structure (camelCase)
+      matchId: oldMatch.id,
+      seasonId: oldMatch.seasonId || oldMatch.season_id || 'default-season',
+      kickoffTs: oldMatch.date || now,
+      homeTeamId: oldMatch.homeTeamId || oldMatch.home_team_id,
+      awayTeamId: oldMatch.awayTeamId || oldMatch.away_team_id,
+      durationMins: settings.durationMins || settings.duration_mins || 50,
+      periodFormat: settings.periodFormat || settings.period_format || 'quarter',
+      homeScore: 0, // Will be calculated from events
+      awayScore: 0, // Will be calculated from events
+      updatedAt: oldMatch.updatedAt || oldMatch.updated_at || oldMatch.createdAt || oldMatch.created_at || now,
       
       // Authentication and soft delete fields
-      created_by_user_id: 'migration-system',
-      deleted_at: undefined,
-      deleted_by_user_id: undefined,
-      is_deleted: false
+      createdByUserId: 'migration-system',
+      deletedAt: undefined,
+      deletedByUserId: undefined,
+      isDeleted: false
     };
     
     // Update with new structure
@@ -201,15 +199,15 @@ async function migrateTeamsToEnhanced(db: GrassrootsDB): Promise<void> {
     const oldTeam = team as any;
     
     const enhancedTeam: Partial<EnhancedTeam> = {
-      team_id: oldTeam.id,
+      teamId: oldTeam.id,
       name: oldTeam.name,
-      updated_at: oldTeam.updated_at || oldTeam.created_at || now,
+      updatedAt: oldTeam.updatedAt || oldTeam.updated_at || oldTeam.createdAt || oldTeam.created_at || now,
       
       // Authentication and soft delete fields
-      created_by_user_id: 'migration-system',
-      deleted_at: undefined,
-      deleted_by_user_id: undefined,
-      is_deleted: false
+      createdByUserId: 'migration-system',
+      deletedAt: undefined,
+      deletedByUserId: undefined,
+      isDeleted: false
     };
     
     await db.teams.update(oldTeam.id, enhancedTeam);
@@ -233,16 +231,16 @@ async function migratePlayersToEnhanced(db: GrassrootsDB): Promise<void> {
     
     const enhancedPlayer: Partial<EnhancedPlayer> = {
       id: oldPlayer.id,
-      full_name: oldPlayer.full_name,
-      squad_number: oldPlayer.jersey_number,
-      current_team: oldPlayer.team_id,
-      updated_at: oldPlayer.updated_at || oldPlayer.created_at || now,
+      fullName: oldPlayer.fullName || oldPlayer.full_name,
+      squadNumber: oldPlayer.squadNumber || oldPlayer.jersey_number,
+      currentTeam: oldPlayer.currentTeam || oldPlayer.team_id,
+      updatedAt: oldPlayer.updatedAt || oldPlayer.updated_at || oldPlayer.createdAt || oldPlayer.created_at || now,
       
       // Authentication and soft delete fields
-      created_by_user_id: 'migration-system',
-      deleted_at: undefined,
-      deleted_by_user_id: undefined,
-      is_deleted: false
+      createdByUserId: 'migration-system',
+      deletedAt: undefined,
+      deletedByUserId: undefined,
+      isDeleted: false
     };
     
     await db.players.update(oldPlayer.id, enhancedPlayer);
@@ -263,19 +261,19 @@ async function createDefaultSeason(db: GrassrootsDB): Promise<void> {
       const currentYear = new Date().getFullYear();
       const defaultSeason = {
         id: 'default-season', // For compatibility
-        season_id: 'default-season',
+        seasonId: 'default-season',
         label: `${currentYear} Season`,
-        start_date: undefined,
-        end_date: undefined,
-        is_current: true,
+        startDate: undefined,
+        endDate: undefined,
+        isCurrent: true,
         description: undefined,
-        created_at: Date.now(),
-        updated_at: Date.now(),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
         // Authentication and soft delete fields
-        created_by_user_id: 'migration-system',
-        deleted_at: undefined,
-        deleted_by_user_id: undefined,
-        is_deleted: false,
+        createdByUserId: 'migration-system',
+        deletedAt: undefined,
+        deletedByUserId: undefined,
+        isDeleted: false,
         synced: false
       };
       
@@ -378,6 +376,8 @@ async function getCurrentDatabaseVersion(db: GrassrootsDB): Promise<number> {
 async function setDatabaseVersion(db: GrassrootsDB, version: number): Promise<void> {
   try {
     const now = Date.now();
+    // Note: StoredSetting type still uses snake_case (created_at, updated_at)
+    // This will be updated when frontend/src/types/database.ts is migrated
     await db.settings.put({
       key: 'database_version',
       value: version.toString(),
@@ -485,25 +485,25 @@ export async function validateDatabaseIntegrity(db: GrassrootsDB): Promise<{
     const playerIds = new Set((await db.players.toArray()).map(p => p.id));
     
     for (const event of events) {
-      if (!matchIds.has(event.match_id)) {
-        warnings.push(`Event ${event.id} references non-existent match ${event.match_id}`);
+      if (!matchIds.has(event.matchId)) {
+        warnings.push(`Event ${event.id} references non-existent match ${event.matchId}`);
       }
-      if (event.team_id && !teamIds.has(event.team_id)) {
-        warnings.push(`Event ${event.id} references non-existent team ${event.team_id}`);
+      if (event.teamId && !teamIds.has(event.teamId)) {
+        warnings.push(`Event ${event.id} references non-existent team ${event.teamId}`);
       }
-      if (event.player_id && !playerIds.has(event.player_id)) {
-        warnings.push(`Event ${event.id} references non-existent player ${event.player_id}`);
+      if (event.playerId && !playerIds.has(event.playerId)) {
+        warnings.push(`Event ${event.id} references non-existent player ${event.playerId}`);
       }
     }
     
     // Check event linking integrity
     for (const event of events) {
-      if (event.linked_events) {
-        for (const linkedId of event.linked_events) {
+      if (event.linkedEvents) {
+        for (const linkedId of event.linkedEvents) {
           const linkedEvent = events.find(e => e.id === linkedId);
           if (!linkedEvent) {
             warnings.push(`Event ${event.id} links to non-existent event ${linkedId}`);
-          } else if (!linkedEvent.linked_events?.includes(event.id)) {
+          } else if (!linkedEvent.linkedEvents?.includes(event.id)) {
             warnings.push(`Event ${event.id} links to ${linkedId} but link is not bidirectional`);
           }
         }

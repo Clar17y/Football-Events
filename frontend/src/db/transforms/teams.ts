@@ -13,18 +13,18 @@ export function dbToTeam(t: EnhancedTeam): Team {
   return {
     id: t.id,
     name: t.name,
-    homeKitPrimary: nullToUndefined(t.color_primary),
-    homeKitSecondary: nullToUndefined(t.color_secondary),
-    awayKitPrimary: nullToUndefined(t.away_color_primary),
-    awayKitSecondary: nullToUndefined(t.away_color_secondary),
-    logoUrl: nullToUndefined(t.logo_url),
-    is_opponent: toBool(t.is_opponent),
-    createdAt: toDate(t.created_at) ?? new Date(),
-    updatedAt: toDate(t.updated_at),
-    created_by_user_id: t.created_by_user_id,
-    deleted_at: toDate(t.deleted_at),
-    deleted_by_user_id: nullToUndefined(t.deleted_by_user_id),
-    is_deleted: toBool(t.is_deleted),
+    homeKitPrimary: nullToUndefined(t.colorPrimary),
+    homeKitSecondary: nullToUndefined(t.colorSecondary),
+    awayKitPrimary: nullToUndefined(t.awayColorPrimary),
+    awayKitSecondary: nullToUndefined(t.awayColorSecondary),
+    logoUrl: nullToUndefined(t.logoUrl),
+    is_opponent: toBool(t.isOpponent),
+    createdAt: toDate(t.createdAt) ?? new Date(),
+    updatedAt: toDate(t.updatedAt),
+    created_by_user_id: t.createdByUserId,
+    deleted_at: toDate(t.deletedAt),
+    deleted_by_user_id: nullToUndefined(t.deletedByUserId),
+    is_deleted: toBool(t.isDeleted),
   };
 }
 
@@ -54,12 +54,12 @@ export interface TeamWriteInput {
 export function teamWriteToDb(data: TeamWriteInput): Partial<EnhancedTeam> {
   return {
     name: data.name,
-    color_primary: data.homeKitPrimary,
-    color_secondary: data.homeKitSecondary,
-    away_color_primary: data.awayKitPrimary,
-    away_color_secondary: data.awayKitSecondary,
-    logo_url: data.logoUrl,
-    is_opponent: data.isOpponent ?? false,
+    colorPrimary: data.homeKitPrimary,
+    colorSecondary: data.homeKitSecondary,
+    awayColorPrimary: data.awayKitPrimary,
+    awayColorSecondary: data.awayKitSecondary,
+    logoUrl: data.logoUrl,
+    isOpponent: data.isOpponent ?? false,
   };
 }
 
@@ -86,12 +86,12 @@ export interface ServerTeamPayload {
 export function dbTeamToServerPayload(t: EnhancedTeam): ServerTeamPayload {
   return {
     name: t.name,
-    homeKitPrimary: nullToUndefined(t.color_primary),
-    homeKitSecondary: nullToUndefined(t.color_secondary),
-    awayKitPrimary: nullToUndefined(t.away_color_primary),
-    awayKitSecondary: nullToUndefined(t.away_color_secondary),
-    logoUrl: nullToUndefined(t.logo_url),
-    isOpponent: toBool(t.is_opponent),
+    homeKitPrimary: nullToUndefined(t.colorPrimary),
+    homeKitSecondary: nullToUndefined(t.colorSecondary),
+    awayKitPrimary: nullToUndefined(t.awayColorPrimary),
+    awayKitSecondary: nullToUndefined(t.awayColorSecondary),
+    logoUrl: nullToUndefined(t.logoUrl),
+    isOpponent: toBool(t.isOpponent),
   };
 }
 
@@ -124,19 +124,19 @@ export function serverTeamToDb(t: ServerTeamResponse): EnhancedTeam {
   const now = Date.now();
   return {
     id: t.id,
-    team_id: t.id,
+    teamId: t.id,
     name: t.name,
-    color_primary: t.homeKitPrimary,
-    color_secondary: t.homeKitSecondary,
-    away_color_primary: t.awayKitPrimary,
-    away_color_secondary: t.awayKitSecondary,
-    logo_url: t.logoUrl,
-    is_opponent: t.is_opponent ?? false,
-    created_at: t.createdAt ? new Date(t.createdAt).getTime() : now,
-    updated_at: t.updatedAt ? new Date(t.updatedAt).getTime() : now,
-    created_by_user_id: t.created_by_user_id || 'server',
-    is_deleted: t.is_deleted ?? false,
+    colorPrimary: t.homeKitPrimary,
+    colorSecondary: t.homeKitSecondary,
+    awayColorPrimary: t.awayKitPrimary,
+    awayColorSecondary: t.awayKitSecondary,
+    logoUrl: t.logoUrl,
+    isOpponent: t.is_opponent ?? false,
+    createdAt: t.createdAt ? new Date(t.createdAt).getTime() : now,
+    updatedAt: t.updatedAt ? new Date(t.updatedAt).getTime() : now,
+    createdByUserId: t.created_by_user_id || 'server',
+    isDeleted: t.is_deleted ?? false,
     synced: true,
-    synced_at: now,
+    syncedAt: now,
   } as EnhancedTeam;
 }

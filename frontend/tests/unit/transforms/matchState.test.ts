@@ -11,15 +11,15 @@ import type { LocalMatchState, LocalMatchPeriod } from '../../../src/db/schema';
 describe('matchState transforms', () => {
   describe('dbToMatchState', () => {
     const mockDbState: LocalMatchState = {
-      match_id: 'match-123',
+      matchId: 'match-123',
       status: 'LIVE',
-      current_period_id: 'period-1',
-      timer_ms: 1800000, // 30 minutes
-      last_updated_at: 1700000001000,
-      created_at: 1700000000000,
-      updated_at: 1700000001000,
-      created_by_user_id: 'user-456',
-      is_deleted: false,
+      currentPeriodId: 'period-1',
+      timerMs: 1800000, // 30 minutes
+      lastUpdatedAt: 1700000001000,
+      createdAt: 1700000000000,
+      updatedAt: 1700000001000,
+      createdByUserId: 'user-456',
+      isDeleted: false,
       synced: true,
     };
 
@@ -51,16 +51,16 @@ describe('matchState transforms', () => {
       }
     });
 
-    it('calculates totalElapsedSeconds from timer_ms', () => {
+    it('calculates totalElapsedSeconds from timerMs', () => {
       const states = [
-        { timer_ms: 0, expected: 0 },
-        { timer_ms: 1000, expected: 1 },
-        { timer_ms: 60000, expected: 60 },
-        { timer_ms: 2700000, expected: 2700 },
+        { timerMs: 0, expected: 0 },
+        { timerMs: 1000, expected: 1 },
+        { timerMs: 60000, expected: 60 },
+        { timerMs: 2700000, expected: 2700 },
       ];
 
-      for (const { timer_ms, expected } of states) {
-        const state = { ...mockDbState, timer_ms };
+      for (const { timerMs, expected } of states) {
+        const state = { ...mockDbState, timerMs };
         const result = dbToMatchState(state);
         expect(result.totalElapsedSeconds).toBe(expected);
       }
@@ -85,9 +85,9 @@ describe('matchState transforms', () => {
     it('handles soft delete fields', () => {
       const deletedState: LocalMatchState = {
         ...mockDbState,
-        is_deleted: true,
-        deleted_at: 1700000002000,
-        deleted_by_user_id: 'user-admin',
+        isDeleted: true,
+        deletedAt: 1700000002000,
+        deletedByUserId: 'user-admin',
       };
 
       const result = dbToMatchState(deletedState);
@@ -101,16 +101,16 @@ describe('matchState transforms', () => {
   describe('dbToMatchPeriod', () => {
     const mockDbPeriod: LocalMatchPeriod = {
       id: 'period-123',
-      match_id: 'match-456',
-      period_number: 1,
-      period_type: 'REGULAR',
-      started_at: 1700000000000,
-      ended_at: 1700000900000,
-      duration_seconds: 900,
-      created_at: 1699999999000,
-      updated_at: 1700000900000,
-      created_by_user_id: 'user-789',
-      is_deleted: false,
+      matchId: 'match-456',
+      periodNumber: 1,
+      periodType: 'REGULAR',
+      startedAt: 1700000000000,
+      endedAt: 1700000900000,
+      durationSeconds: 900,
+      createdAt: 1699999999000,
+      updatedAt: 1700000900000,
+      createdByUserId: 'user-789',
+      isDeleted: false,
       synced: true,
     };
 
@@ -133,8 +133,8 @@ describe('matchState transforms', () => {
     it('handles active period (no endedAt)', () => {
       const activePeriod: LocalMatchPeriod = {
         ...mockDbPeriod,
-        ended_at: undefined,
-        duration_seconds: undefined,
+        endedAt: undefined,
+        durationSeconds: undefined,
       };
 
       const result = dbToMatchPeriod(activePeriod);
@@ -146,7 +146,7 @@ describe('matchState transforms', () => {
     it('handles different period types', () => {
       const types = ['REGULAR', 'EXTRA_TIME', 'PENALTY_SHOOTOUT'] as const;
       for (const periodType of types) {
-        const period = { ...mockDbPeriod, period_type: periodType };
+        const period = { ...mockDbPeriod, periodType };
         const result = dbToMatchPeriod(period);
         expect(result.periodType).toBe(periodType);
       }
@@ -155,9 +155,9 @@ describe('matchState transforms', () => {
     it('handles soft delete fields', () => {
       const deletedPeriod: LocalMatchPeriod = {
         ...mockDbPeriod,
-        is_deleted: true,
-        deleted_at: 1700000002000,
-        deleted_by_user_id: 'user-admin',
+        isDeleted: true,
+        deletedAt: 1700000002000,
+        deletedByUserId: 'user-admin',
       };
 
       const result = dbToMatchPeriod(deletedPeriod);
@@ -173,27 +173,27 @@ describe('matchState transforms', () => {
       const periods: LocalMatchPeriod[] = [
         {
           id: 'period-1',
-          match_id: 'match-1',
-          period_number: 1,
-          period_type: 'REGULAR',
-          started_at: 1700000000000,
-          ended_at: 1700000900000,
-          created_at: 1700000000000,
-          updated_at: 1700000900000,
-          created_by_user_id: 'user-1',
-          is_deleted: false,
+          matchId: 'match-1',
+          periodNumber: 1,
+          periodType: 'REGULAR',
+          startedAt: 1700000000000,
+          endedAt: 1700000900000,
+          createdAt: 1700000000000,
+          updatedAt: 1700000900000,
+          createdByUserId: 'user-1',
+          isDeleted: false,
           synced: false,
         },
         {
           id: 'period-2',
-          match_id: 'match-1',
-          period_number: 2,
-          period_type: 'REGULAR',
-          started_at: 1700001000000,
-          created_at: 1700001000000,
-          updated_at: 1700001000000,
-          created_by_user_id: 'user-1',
-          is_deleted: false,
+          matchId: 'match-1',
+          periodNumber: 2,
+          periodType: 'REGULAR',
+          startedAt: 1700001000000,
+          createdAt: 1700001000000,
+          updatedAt: 1700001000000,
+          createdByUserId: 'user-1',
+          isDeleted: false,
           synced: false,
         },
       ];
@@ -218,11 +218,11 @@ describe('matchState transforms', () => {
         timerMs: 60000,
       });
 
-      expect(result.match_id).toBe('match-123');
+      expect(result.matchId).toBe('match-123');
       expect(result.status).toBe('LIVE');
-      expect(result.current_period_id).toBe('period-1');
-      expect(result.timer_ms).toBe(60000);
-      expect(result.last_updated_at).toBeDefined();
+      expect(result.currentPeriodId).toBe('period-1');
+      expect(result.timerMs).toBe(60000);
+      expect(result.lastUpdatedAt).toBeDefined();
     });
 
     it('handles minimal input with defaults', () => {
@@ -230,10 +230,10 @@ describe('matchState transforms', () => {
         status: 'NOT_STARTED',
       });
 
-      expect(result.match_id).toBe('match-123');
+      expect(result.matchId).toBe('match-123');
       expect(result.status).toBe('NOT_STARTED');
-      expect(result.timer_ms).toBe(0);
-      expect(result.current_period_id).toBeUndefined();
+      expect(result.timerMs).toBe(0);
+      expect(result.currentPeriodId).toBeUndefined();
     });
   });
 
@@ -247,10 +247,10 @@ describe('matchState transforms', () => {
         startedAt: now,
       });
 
-      expect(result.match_id).toBe('match-123');
-      expect(result.period_number).toBe(2);
-      expect(result.period_type).toBe('EXTRA_TIME');
-      expect(result.started_at).toBe(now);
+      expect(result.matchId).toBe('match-123');
+      expect(result.periodNumber).toBe(2);
+      expect(result.periodType).toBe('EXTRA_TIME');
+      expect(result.startedAt).toBe(now);
     });
 
     it('handles minimal input with defaults', () => {
@@ -261,11 +261,11 @@ describe('matchState transforms', () => {
       });
       const after = Date.now();
 
-      expect(result.match_id).toBe('match-123');
-      expect(result.period_number).toBe(1);
-      expect(result.period_type).toBe('REGULAR');
-      expect(result.started_at).toBeGreaterThanOrEqual(before);
-      expect(result.started_at).toBeLessThanOrEqual(after);
+      expect(result.matchId).toBe('match-123');
+      expect(result.periodNumber).toBe(1);
+      expect(result.periodType).toBe('REGULAR');
+      expect(result.startedAt).toBeGreaterThanOrEqual(before);
+      expect(result.startedAt).toBeLessThanOrEqual(after);
     });
   });
 });

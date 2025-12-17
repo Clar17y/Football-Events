@@ -42,7 +42,7 @@ export const seasonsApi = {
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
     let rows = await db.seasons.toArray();
-    rows = rows.filter((s: any) => s && !s.is_deleted);
+    rows = rows.filter((s: any) => s && !s.isDeleted);
     if (search && search.trim()) {
       const term = search.trim().toLowerCase();
       rows = rows.filter((s: any) => (s.label || '').toLowerCase().includes(term));
@@ -69,7 +69,7 @@ export const seasonsApi = {
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
     const season = await db.seasons.get(id);
-    if (!season || season.is_deleted) {
+    if (!season || season.isDeleted) {
       throw new Error('Season not found');
     }
     return {
@@ -96,14 +96,14 @@ export const seasonsApi = {
 
     return {
       data: {
-        id: season.season_id,
-        seasonId: season.season_id,
+        id: season.seasonId,
+        seasonId: season.seasonId,
         label: season.label,
-        startDate: (season as any).start_date,
-        endDate: (season as any).end_date,
-        isCurrent: (season as any).is_current || false,
+        startDate: (season as any).startDate,
+        endDate: (season as any).endDate,
+        isCurrent: (season as any).isCurrent || false,
         description: (season as any).description,
-        createdAt: new Date(season.created_at),
+        createdAt: new Date(season.createdAt),
       } as any,
       success: true,
       message: 'Season created'
@@ -133,9 +133,9 @@ export const seasonsApi = {
         id,
         seasonId: id,
         label: updated?.label || seasonData.label || '',
-        startDate: (updated as any)?.start_date,
-        endDate: (updated as any)?.end_date,
-        isCurrent: (updated as any)?.is_current || false,
+        startDate: (updated as any)?.startDate,
+        endDate: (updated as any)?.endDate,
+        isCurrent: (updated as any)?.isCurrent || false,
         description: (updated as any)?.description,
       } as any,
       success: true,

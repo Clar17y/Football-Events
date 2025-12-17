@@ -5,18 +5,19 @@ import type { EnhancedEvent } from '../../../src/db/schema';
 describe('events transforms', () => {
   const mockDbEvent: EnhancedEvent = {
     id: 'event-123',
-    match_id: 'match-456',
-    period_number: 2,
-    clock_ms: 1234567,
+    matchId: 'match-456',
+    tsServer: 1700000000000,
+    periodNumber: 2,
+    clockMs: 1234567,
     kind: 'goal',
-    team_id: 'team-home',
-    player_id: 'player-789',
+    teamId: 'team-home',
+    playerId: 'player-789',
     notes: 'Great goal',
     sentiment: 1,
-    created_at: 1700000000000,
-    updated_at: 1700000001000,
-    created_by_user_id: 'user-123',
-    is_deleted: false,
+    createdAt: 1700000000000,
+    updatedAt: 1700000001000,
+    createdByUserId: 'user-123',
+    isDeleted: false,
     synced: true,
   };
 
@@ -42,17 +43,18 @@ describe('events transforms', () => {
     it('handles null/undefined optional fields', () => {
       const minimalEvent: EnhancedEvent = {
         id: 'event-minimal',
-        match_id: 'match-1',
-        period_number: 1,
-        clock_ms: 0,
+        matchId: 'match-1',
+        tsServer: 1700000000000,
+        periodNumber: 1,
+        clockMs: 0,
         kind: 'ball_out',
-        team_id: '',
-        player_id: '',
+        teamId: '',
+        playerId: '',
         sentiment: 0,
-        created_at: 1700000000000,
-        updated_at: 1700000000000,
-        created_by_user_id: 'user-1',
-        is_deleted: false,
+        createdAt: 1700000000000,
+        updatedAt: 1700000000000,
+        createdByUserId: 'user-1',
+        isDeleted: false,
         synced: false,
       };
 
@@ -66,9 +68,9 @@ describe('events transforms', () => {
     it('handles soft delete fields', () => {
       const deletedEvent: EnhancedEvent = {
         ...mockDbEvent,
-        is_deleted: true,
-        deleted_at: 1700000002000,
-        deleted_by_user_id: 'user-admin',
+        isDeleted: true,
+        deletedAt: 1700000002000,
+        deletedByUserId: 'user-admin',
       };
 
       const result = dbToEvent(deletedEvent);
@@ -123,12 +125,12 @@ describe('events transforms', () => {
 
       const result = eventWriteToDb(input);
 
-      expect(result.match_id).toBe('match-123');
+      expect(result.matchId).toBe('match-123');
       expect(result.kind).toBe('goal');
-      expect(result.period_number).toBe(2);
-      expect(result.clock_ms).toBe(5000);
-      expect(result.team_id).toBe('team-home');
-      expect(result.player_id).toBe('player-10');
+      expect(result.periodNumber).toBe(2);
+      expect(result.clockMs).toBe(5000);
+      expect(result.teamId).toBe('team-home');
+      expect(result.playerId).toBe('player-10');
       expect(result.notes).toBe('Header goal');
       expect(result.sentiment).toBe(1);
     });
@@ -141,12 +143,12 @@ describe('events transforms', () => {
 
       const result = eventWriteToDb(input);
 
-      expect(result.match_id).toBe('match-123');
+      expect(result.matchId).toBe('match-123');
       expect(result.kind).toBe('ball_out');
-      expect(result.period_number).toBe(1);
-      expect(result.clock_ms).toBe(0);
-      expect(result.team_id).toBe('');
-      expect(result.player_id).toBe('');
+      expect(result.periodNumber).toBe(1);
+      expect(result.clockMs).toBe(0);
+      expect(result.teamId).toBe('');
+      expect(result.playerId).toBe('');
       expect(result.sentiment).toBe(0);
       expect(result.notes).toBeUndefined();
     });
@@ -168,11 +170,12 @@ describe('events transforms', () => {
       const dbFormat = eventWriteToDb(original);
       const stored: EnhancedEvent = {
         id: 'event-roundtrip',
+        tsServer: Date.now(),
         ...dbFormat,
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'user-1',
-        is_deleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'user-1',
+        isDeleted: false,
         synced: false,
       } as EnhancedEvent;
 

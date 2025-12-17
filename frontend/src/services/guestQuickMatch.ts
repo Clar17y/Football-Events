@@ -27,28 +27,28 @@ export async function createLocalQuickMatch(payload: GuestQuickMatchPayload): Pr
   const seasonLabel = `${year}-${year + 1} Season`;
   const now = Date.now();
   // try to find existing (check both new and legacy names)
-  let season = await db.seasons.where('created_by_user_id').equals(guestId).and(s => s.label === seasonLabel || s.label === 'Demo Season').first();
+  let season = await db.seasons.where('createdByUserId').equals(guestId).and(s => s.label === seasonLabel || s.label === 'Demo Season').first();
   if (!season) {
     const start = new Date(now - 30 * 24 * 3600_000).toISOString();
     const end = new Date(now + 365 * 24 * 3600_000).toISOString();
     const seasonId = uuid();
     await db.seasons.add({
       id: seasonId,
-      season_id: seasonId,
+      seasonId: seasonId,
       label: seasonLabel,
-      start_date: start,
-      end_date: end,
-      is_current: true,
+      startDate: start,
+      endDate: end,
+      isCurrent: true,
       description: 'Auto-created season',
-      created_at: now,
-      updated_at: now,
-      created_by_user_id: guestId,
-      is_deleted: false,
+      createdAt: now,
+      updatedAt: now,
+      createdByUserId: guestId,
+      isDeleted: false,
       synced: false,
     } as any);
     season = await db.seasons.get(seasonId);
   }
-  const seasonId = season?.season_id || season?.id as string;
+  const seasonId = season?.seasonId || season?.id as string;
 
   // 2) Ensure our team exists (use provided id or create one)
   let homeTeamId = '';
@@ -63,13 +63,13 @@ export async function createLocalQuickMatch(payload: GuestQuickMatchPayload): Pr
       const id = uuid();
       await db.teams.add({
         id,
-        team_id: id,
+        teamId: id,
         name: payload.myTeamName,
-        created_at: now,
-        updated_at: now,
-        created_by_user_id: guestId,
-        is_deleted: false,
-        is_opponent: false,
+        createdAt: now,
+        updatedAt: now,
+        createdByUserId: guestId,
+        isDeleted: false,
+        isOpponent: false,
         synced: false,
       } as any);
       ourTeamId = id;
@@ -80,13 +80,13 @@ export async function createLocalQuickMatch(payload: GuestQuickMatchPayload): Pr
     const id = uuid();
     await db.teams.add({
       id,
-      team_id: id,
+      teamId: id,
       name: 'My Team',
-      created_at: now,
-      updated_at: now,
-      created_by_user_id: guestId,
-      is_deleted: false,
-      is_opponent: false,
+      createdAt: now,
+      updatedAt: now,
+      createdByUserId: guestId,
+      isDeleted: false,
+      isOpponent: false,
       synced: false,
     } as any);
     ourTeamId = id;
@@ -99,13 +99,13 @@ export async function createLocalQuickMatch(payload: GuestQuickMatchPayload): Pr
     const id = uuid();
     await db.teams.add({
       id,
-      team_id: id,
+      teamId: id,
       name: oppName,
-      created_at: now,
-      updated_at: now,
-      created_by_user_id: guestId,
-      is_deleted: false,
-      is_opponent: true,
+      createdAt: now,
+      updatedAt: now,
+      createdByUserId: guestId,
+      isDeleted: false,
+      isOpponent: true,
       synced: false,
     } as any);
     oppTeam = await db.teams.get(id);
@@ -121,22 +121,22 @@ export async function createLocalQuickMatch(payload: GuestQuickMatchPayload): Pr
   const duration = payload.durationMinutes || 50;
   await db.matches.add({
     id: matchId,
-    match_id: matchId,
-    season_id: seasonId,
-    kickoff_ts: kickoffTs,
+    matchId: matchId,
+    seasonId: seasonId,
+    kickoffTs: kickoffTs,
     competition: payload.competition,
-    home_team_id: homeTeamId,
-    away_team_id: awayTeamId,
+    homeTeamId: homeTeamId,
+    awayTeamId: awayTeamId,
     venue: payload.venue,
-    duration_mins: duration,
-    period_format: periodFormat,
-    home_score: 0,
-    away_score: 0,
+    durationMins: duration,
+    periodFormat: periodFormat,
+    homeScore: 0,
+    awayScore: 0,
     notes: payload.notes,
-    created_at: now,
-    updated_at: now,
-    created_by_user_id: guestId,
-    is_deleted: false,
+    createdAt: now,
+    updatedAt: now,
+    createdByUserId: guestId,
+    isDeleted: false,
     synced: false,
   } as any);
 
@@ -147,25 +147,25 @@ export async function getLocalMatch(id: string): Promise<any | null> {
   const { db } = await import('../db/indexedDB');
   const m = await db.matches.get(id);
   if (!m) return null;
-  const home = m.home_team_id ? await db.teams.get(m.home_team_id) : null;
-  const away = m.away_team_id ? await db.teams.get(m.away_team_id) : null;
+  const home = m.homeTeamId ? await db.teams.get(m.homeTeamId) : null;
+  const away = m.awayTeamId ? await db.teams.get(m.awayTeamId) : null;
   return {
     id: m.id,
-    seasonId: m.season_id,
-    kickoffTime: new Date(m.kickoff_ts),
+    seasonId: m.seasonId,
+    kickoffTime: new Date(m.kickoffTs),
     competition: m.competition,
-    homeTeamId: m.home_team_id,
-    awayTeamId: m.away_team_id,
+    homeTeamId: m.homeTeamId,
+    awayTeamId: m.awayTeamId,
     homeTeam: home ? { id: home.id, name: home.name } : undefined,
     awayTeam: away ? { id: away.id, name: away.name } : undefined,
     venue: m.venue,
-    durationMinutes: m.duration_mins,
-    periodFormat: m.period_format,
-    homeScore: m.home_score,
-    awayScore: m.away_score,
-    createdAt: new Date(m.created_at),
-    updatedAt: m.updated_at ? new Date(m.updated_at) : undefined,
-    created_by_user_id: m.created_by_user_id,
-    is_deleted: !!m.is_deleted,
+    durationMinutes: m.durationMins,
+    periodFormat: m.periodFormat,
+    homeScore: m.homeScore,
+    awayScore: m.awayScore,
+    createdAt: new Date(m.createdAt),
+    updatedAt: m.updatedAt ? new Date(m.updatedAt) : undefined,
+    createdByUserId: m.createdByUserId,
+    isDeleted: !!m.isDeleted,
   };
 }

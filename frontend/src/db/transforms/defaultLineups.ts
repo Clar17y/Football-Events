@@ -25,13 +25,13 @@ export function serverDefaultLineupToDb(dl: ServerDefaultLineupResponse): LocalD
   const now = Date.now();
   return {
     id: dl.id,
-    team_id: dl.teamId,
+    teamId: dl.teamId,
     formation: dl.formation || [],
-    created_at: dl.createdAt ? new Date(dl.createdAt).getTime() : now,
-    updated_at: dl.updatedAt ? new Date(dl.updatedAt).getTime() : now,
-    created_by_user_id: dl.created_by_user_id || 'server',
-    is_deleted: dl.is_deleted ?? false,
+    createdAt: dl.createdAt ? new Date(dl.createdAt).getTime() : now,
+    updatedAt: dl.updatedAt ? new Date(dl.updatedAt).getTime() : now,
+    createdByUserId: dl.created_by_user_id || 'server',
+    isDeleted: dl.is_deleted ?? false,
     synced: true,
-    synced_at: now,
+    syncedAt: now,
   } as LocalDefaultLineup;
 }

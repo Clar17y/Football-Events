@@ -26,7 +26,7 @@ const playerWithTeamsCreateSchema = z.object({
     .max(10, 'Position code must be less than 10 characters')
     .optional(),
   dateOfBirth: z.string()
-    .regex(/^\d{2}-\d{2}-\d{4}$/, 'Date of birth must be in YYYY-MM-DD format')
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be in YYYY-MM-DD format')
     .optional(),
   notes: z.string()
     .max(1000, 'Notes must be less than 1000 characters')
@@ -102,7 +102,7 @@ const playerWithTeamsUpdateSchema = z.object({
     .max(10, 'Position code must be less than 10 characters')
     .optional(),
   dateOfBirth: z.string()
-    .regex(/^\d{2}-\d{2}-\d{4}$/, 'Date of birth must be in YYYY-MM-DD format')
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be in YYYY-MM-DD format')
     .optional(),
   notes: z.string()
     .max(1000, 'Notes must be less than 1000 characters')

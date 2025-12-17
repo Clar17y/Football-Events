@@ -5,18 +5,18 @@ import type { EnhancedTeam } from '../../../src/db/schema';
 describe('teams transforms', () => {
   const mockDbTeam: EnhancedTeam = {
     id: 'team-123',
-    team_id: 'team-123',
+    teamId: 'team-123',
     name: 'Test FC',
-    color_primary: '#ff0000',
-    color_secondary: '#ffffff',
-    away_color_primary: '#0000ff',
-    away_color_secondary: '#ffff00',
-    logo_url: 'https://example.com/logo.png',
-    is_opponent: false,
-    created_at: 1700000000000,
-    updated_at: 1700000001000,
-    created_by_user_id: 'user-456',
-    is_deleted: false,
+    colorPrimary: '#ff0000',
+    colorSecondary: '#ffffff',
+    awayColorPrimary: '#0000ff',
+    awayColorSecondary: '#ffff00',
+    logoUrl: 'https://example.com/logo.png',
+    isOpponent: false,
+    createdAt: 1700000000000,
+    updatedAt: 1700000001000,
+    createdByUserId: 'user-456',
+    isDeleted: false,
     synced: true,
   };
 
@@ -41,12 +41,12 @@ describe('teams transforms', () => {
     it('handles null/undefined optional fields', () => {
       const minimalTeam: EnhancedTeam = {
         id: 'team-minimal',
-        team_id: 'team-minimal',
+        teamId: 'team-minimal',
         name: 'Minimal FC',
-        created_at: 1700000000000,
-        updated_at: 1700000000000,
-        created_by_user_id: 'user-1',
-        is_deleted: false,
+        createdAt: 1700000000000,
+        updatedAt: 1700000000000,
+        createdByUserId: 'user-1',
+        isDeleted: false,
         synced: false,
       };
 
@@ -60,20 +60,20 @@ describe('teams transforms', () => {
       expect(result.is_opponent).toBe(false);
     });
 
-    it('converts is_opponent to boolean', () => {
-      const opponentTeam = { ...mockDbTeam, is_opponent: true };
+    it('converts isOpponent to boolean', () => {
+      const opponentTeam = { ...mockDbTeam, isOpponent: true };
       expect(dbToTeam(opponentTeam).is_opponent).toBe(true);
 
-      const nonOpponentTeam = { ...mockDbTeam, is_opponent: undefined };
+      const nonOpponentTeam = { ...mockDbTeam, isOpponent: undefined };
       expect(dbToTeam(nonOpponentTeam).is_opponent).toBe(false);
     });
 
     it('handles soft delete fields', () => {
       const deletedTeam: EnhancedTeam = {
         ...mockDbTeam,
-        is_deleted: true,
-        deleted_at: 1700000002000,
-        deleted_by_user_id: 'user-admin',
+        isDeleted: true,
+        deletedAt: 1700000002000,
+        deletedByUserId: 'user-admin',
       };
 
       const result = dbToTeam(deletedTeam);
@@ -115,12 +115,12 @@ describe('teams transforms', () => {
       const result = teamWriteToDb(input);
 
       expect(result.name).toBe('New Team');
-      expect(result.color_primary).toBe('#ff0000');
-      expect(result.color_secondary).toBe('#ffffff');
-      expect(result.away_color_primary).toBe('#0000ff');
-      expect(result.away_color_secondary).toBe('#ffff00');
-      expect(result.logo_url).toBe('https://example.com/logo.png');
-      expect(result.is_opponent).toBe(true);
+      expect(result.colorPrimary).toBe('#ff0000');
+      expect(result.colorSecondary).toBe('#ffffff');
+      expect(result.awayColorPrimary).toBe('#0000ff');
+      expect(result.awayColorSecondary).toBe('#ffff00');
+      expect(result.logoUrl).toBe('https://example.com/logo.png');
+      expect(result.isOpponent).toBe(true);
     });
 
     it('handles minimal input', () => {
@@ -128,13 +128,13 @@ describe('teams transforms', () => {
       const result = teamWriteToDb(input);
 
       expect(result.name).toBe('Minimal Team');
-      expect(result.color_primary).toBeUndefined();
-      expect(result.is_opponent).toBe(false);
+      expect(result.colorPrimary).toBeUndefined();
+      expect(result.isOpponent).toBe(false);
     });
 
     it('defaults isOpponent to false', () => {
       const input = { name: 'Test' };
-      expect(teamWriteToDb(input).is_opponent).toBe(false);
+      expect(teamWriteToDb(input).isOpponent).toBe(false);
     });
   });
 
@@ -150,12 +150,12 @@ describe('teams transforms', () => {
       const dbFormat = teamWriteToDb(original);
       const stored: EnhancedTeam = {
         id: 'team-roundtrip',
-        team_id: 'team-roundtrip',
+        teamId: 'team-roundtrip',
         ...dbFormat,
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'user-1',
-        is_deleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'user-1',
+        isDeleted: false,
         synced: false,
       } as EnhancedTeam;
 

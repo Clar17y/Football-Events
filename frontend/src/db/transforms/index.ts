@@ -1,7 +1,7 @@
 /**
  * Transform Layer - Central re-exports
  *
- * This module provides all transformations between IndexedDB (snake_case)
+ * This module provides all transformations between IndexedDB (camelCase)
  * and frontend (camelCase) types in a single source of truth.
  *
  * Transform directions:

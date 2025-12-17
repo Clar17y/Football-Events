@@ -93,12 +93,11 @@ const EventModal: React.FC<EventModalProps> = ({
 
       const eventData = {
         kind: eventKind,
-        match_id: matchId,
-        season_id: seasonId,
-        period_number: period,
-        clock_ms: elapsedMs,
-        team_id: team.id,
-        player_id: playerId,
+        matchId: matchId,
+        periodNumber: period,
+        clockMs: elapsedMs,
+        teamId: team.id,
+        playerId: playerId,
         sentiment,
         notes,
       };

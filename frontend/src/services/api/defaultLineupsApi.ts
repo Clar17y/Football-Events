@@ -23,10 +23,10 @@ export interface DefaultLineupData {
   formation: FormationPlayer[];
   createdAt: Date;
   updatedAt?: Date;
-  created_by_user_id: string;
-  deleted_at?: Date;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  createdByUserId: string;
+  deletedAt?: Date;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 export interface DefaultLineupCreateRequest {
@@ -72,10 +72,10 @@ export const defaultLineupsApi = {
         id: result.id,
         teamId: data.teamId,
         formation: result.formation as FormationPlayer[],
-        createdAt: new Date(result.created_at),
-        updatedAt: result.updated_at ? new Date(result.updated_at) : undefined,
-        created_by_user_id: result.created_by_user_id,
-        is_deleted: result.is_deleted,
+        createdAt: new Date(result.createdAt),
+        updatedAt: result.updatedAt ? new Date(result.updatedAt) : undefined,
+        createdByUserId: result.createdByUserId,
+        isDeleted: result.isDeleted,
       },
     };
   },
@@ -87,17 +87,17 @@ export const defaultLineupsApi = {
   async getDefaultLineup(teamId: string): Promise<DefaultLineupData | null> {
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
-    const rec = await db.default_lineups.where('team_id').equals(teamId).filter(r => !r.is_deleted).first();
+    const rec = await db.default_lineups.where('teamId').equals(teamId).filter(r => !r.isDeleted).first();
     if (!rec) return null;
     return {
       id: rec.id,
-      teamId: rec.team_id,
+      teamId: rec.teamId,
       formation: rec.formation,
-      createdAt: new Date(rec.created_at),
-      updatedAt: rec.updated_at ? new Date(rec.updated_at) : undefined,
-      created_by_user_id: rec.created_by_user_id,
-      is_deleted: rec.is_deleted
-    } as any;
+      createdAt: new Date(rec.createdAt),
+      updatedAt: rec.updatedAt ? new Date(rec.updatedAt) : undefined,
+      createdByUserId: rec.createdByUserId,
+      isDeleted: rec.isDeleted
+    };
   },
 
   /**
@@ -127,9 +127,9 @@ export const defaultLineupsApi = {
   async getTeamsWithDefaults(): Promise<TeamsWithDefaultsResponse> {
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
-    const teams = await db.teams.filter((t: any) => !t.is_deleted).toArray();
-    const defaultLineups = await db.default_lineups.filter(dl => !dl.is_deleted).toArray();
-    const lineupTeamIds = new Set(defaultLineups.map(dl => dl.team_id));
+    const teams = await db.teams.filter((t: any) => !t.isDeleted).toArray();
+    const defaultLineups = await db.default_lineups.filter(dl => !dl.isDeleted).toArray();
+    const lineupTeamIds = new Set(defaultLineups.map(dl => dl.teamId));
     const results = teams.map(t => ({
       teamId: t.id,
       teamName: t.name,

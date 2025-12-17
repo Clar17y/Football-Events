@@ -22,23 +22,23 @@ export interface ServerPlayerTeamResponse {
 }
 
 /**
- * IndexedDB player-team record structure
+ * IndexedDB player-team record structure (camelCase)
  */
 export interface DbPlayerTeam {
   id: string;
-  player_id: string;
-  team_id: string;
-  start_date: string;
-  end_date?: string;
-  jersey_number?: number;
+  playerId: string;
+  teamId: string;
+  startDate: string;
+  endDate?: string;
+  jerseyNumber?: number;
   position?: string;
-  is_active: boolean;
-  created_at: number;
-  updated_at: number;
-  created_by_user_id: string;
-  is_deleted: boolean;
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
+  createdByUserId: string;
+  isDeleted: boolean;
   synced: boolean;
-  synced_at: number;
+  syncedAt: number;
 }
 
 /**
@@ -48,18 +48,18 @@ export function serverPlayerTeamToDb(pt: ServerPlayerTeamResponse): DbPlayerTeam
   const now = Date.now();
   return {
     id: pt.id,
-    player_id: pt.playerId,
-    team_id: pt.teamId,
-    start_date: pt.startDate || new Date().toISOString().split('T')[0],
-    end_date: pt.endDate,
-    jersey_number: pt.jerseyNumber,
+    playerId: pt.playerId,
+    teamId: pt.teamId,
+    startDate: pt.startDate || new Date().toISOString().split('T')[0],
+    endDate: pt.endDate,
+    jerseyNumber: pt.jerseyNumber,
     position: pt.position,
-    is_active: pt.isActive ?? true,
-    created_at: pt.createdAt ? new Date(pt.createdAt).getTime() : now,
-    updated_at: pt.updatedAt ? new Date(pt.updatedAt).getTime() : now,
-    created_by_user_id: pt.created_by_user_id || 'server',
-    is_deleted: pt.is_deleted ?? false,
+    isActive: pt.isActive ?? true,
+    createdAt: pt.createdAt ? new Date(pt.createdAt).getTime() : now,
+    updatedAt: pt.updatedAt ? new Date(pt.updatedAt).getTime() : now,
+    createdByUserId: pt.created_by_user_id || 'server',
+    isDeleted: pt.is_deleted ?? false,
     synced: true,
-    synced_at: now,
+    syncedAt: now,
   };
 }

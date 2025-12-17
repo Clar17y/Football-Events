@@ -148,15 +148,15 @@ export class RealTimeService {
       const { db } = await import('../db/indexedDB');
       const result = await db.addEvent({
         kind: event.kind,
-        match_id: event.matchId,
-        team_id: event.teamId || null,
-        player_id: event.playerId || null,
+        matchId: event.matchId,
+        teamId: event.teamId || null,
+        playerId: event.playerId || null,
         minute: Math.floor((event.clockMs || 0) / 60000), // Convert ms to minutes
         second: Math.floor(((event.clockMs || 0) % 60000) / 1000), // Convert remainder to seconds
         period: event.periodNumber,
         data: event.notes ? { notes: event.notes } : {},
         created: event.createdAt.getTime(),
-        created_by_user_id: (await import('../utils/guest')).isGuest() ? (await import('../utils/guest')).getGuestId() : 'authenticated-user'
+        createdByUserId: (await import('../utils/guest')).isGuest() ? (await import('../utils/guest')).getGuestId() : 'authenticated-user'
       });
 
       if (!result.success) {
@@ -235,7 +235,7 @@ export class RealTimeService {
             payload = outboxEvent;
           }
 
-          if (!payload.kind || !payload.match_id) {
+          if (!payload.kind || !payload.matchId) {
             console.warn('Missing required fields in outbox event:', payload);
             try {
               const { db: dbInstance } = await import('../db/indexedDB');
@@ -248,15 +248,15 @@ export class RealTimeService {
           const matchEvent: MatchEvent = {
             id: crypto.randomUUID(), // Generate new ID for real-time transmission
             kind: payload.kind,
-            matchId: payload.match_id,
-            teamId: payload.team_id,
-            playerId: payload.player_id,
+            matchId: payload.matchId,
+            teamId: payload.teamId,
+            playerId: payload.playerId,
             periodNumber: payload.period || 1,
             clockMs: ((payload.minute || 0) * 60000) + ((payload.second || 0) * 1000),
             sentiment: 0, // Default sentiment
             notes: payload.data?.notes || payload.notes || '',
             createdAt: new Date(payload.created || Date.now()),
-            created_by_user_id: payload.created_by_user_id || 'system',
+            created_by_user_id: payload.createdByUserId || 'system',
             is_deleted: false
           };
 

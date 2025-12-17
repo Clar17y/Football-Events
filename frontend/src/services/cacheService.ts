@@ -264,14 +264,14 @@ async function refreshSeasons(): Promise<void> {
     // Get local unsynced seasons to preserve
     const localSeasons = await db.seasons.toArray();
     const unsyncedSeasons = localSeasons.filter(s => s.synced === false);
-    const unsyncedIds = new Set(unsyncedSeasons.map(s => s.season_id));
+    const unsyncedIds = new Set(unsyncedSeasons.map(s => s.seasonId));
 
     // Build a map of server seasons by ID
     const serverSeasonMap = new Map(serverSeasons.map(s => [s.id || s.seasonId, s]));
 
     // Delete synced local seasons that are not in server response
     for (const localSeason of localSeasons) {
-      const localId = localSeason.season_id;
+      const localId = localSeason.seasonId;
       if (localSeason.synced && !serverSeasonMap.has(localId) && !unsyncedIds.has(localId)) {
         await db.seasons.delete(localId);
       }
@@ -362,7 +362,7 @@ async function refreshDefaultLineups(): Promise<void> {
     // Get local unsynced default lineups to preserve
     const localDefaultLineups = await db.default_lineups.toArray();
     const unsyncedDefaultLineups = localDefaultLineups.filter((dl: any) => dl.synced === false);
-    const unsyncedTeamIds = new Set(unsyncedDefaultLineups.map((dl: any) => dl.team_id));
+    const unsyncedTeamIds = new Set(unsyncedDefaultLineups.map((dl: any) => dl.teamId));
     
     // Fetch default lineup for each team that has one
     const serverDefaultLineups: any[] = [];
@@ -395,7 +395,7 @@ async function refreshDefaultLineups(): Promise<void> {
     
     // Delete synced local default lineups for teams that no longer have one on server
     for (const localDL of localDefaultLineups) {
-      const teamId = (localDL as any).team_id;
+      const teamId = (localDL as any).teamId;
       if ((localDL as any).synced && !serverLineupByTeamId.has(teamId) && !unsyncedTeamIds.has(teamId)) {
         await db.default_lineups.delete(localDL.id);
         console.log(`[CacheService] Deleted local default lineup for team ${teamId} - no longer on server`);
@@ -443,7 +443,7 @@ export async function cleanupOldTemporalData(): Promise<number> {
     const allEvents = await db.events.toArray();
     const eventsToDelete = allEvents.filter(e => 
       e.synced === true && 
-      (e.synced_at ?? e.created_at) < cutoffTime
+      (e.syncedAt ?? e.createdAt) < cutoffTime
     );
     
     if (eventsToDelete.length > 0) {
@@ -461,7 +461,7 @@ export async function cleanupOldTemporalData(): Promise<number> {
     const allPeriods = await db.match_periods.toArray();
     const periodsToDelete = allPeriods.filter(p => 
       p.synced === true && 
-      (p.synced_at ?? p.created_at) < cutoffTime
+      (p.syncedAt ?? p.createdAt) < cutoffTime
     );
     
     if (periodsToDelete.length > 0) {
@@ -479,11 +479,11 @@ export async function cleanupOldTemporalData(): Promise<number> {
     const allStates = await db.match_state.toArray();
     const statesToDelete = allStates.filter(s => 
       s.synced === true && 
-      (s.synced_at ?? s.created_at) < cutoffTime
+      (s.syncedAt ?? s.createdAt) < cutoffTime
     );
     
     if (statesToDelete.length > 0) {
-      const ids = statesToDelete.map(s => s.match_id);
+      const ids = statesToDelete.map(s => s.matchId);
       await db.match_state.bulkDelete(ids);
       totalDeleted += ids.length;
       console.log(`[CacheService] Deleted ${ids.length} old synced match states (not accessed in 30 days)`);
@@ -497,7 +497,7 @@ export async function cleanupOldTemporalData(): Promise<number> {
     const allLineups = await db.lineup.toArray();
     const lineupsToDelete = allLineups.filter(l => 
       l.synced === true && 
-      (l.synced_at ?? l.created_at) < cutoffTime
+      (l.syncedAt ?? l.createdAt) < cutoffTime
     );
     
     if (lineupsToDelete.length > 0) {

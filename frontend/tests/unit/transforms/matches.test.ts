@@ -5,22 +5,22 @@ import type { EnhancedMatch } from '../../../src/db/schema';
 describe('matches transforms', () => {
   const mockDbMatch: EnhancedMatch = {
     id: 'match-123',
-    match_id: 'match-123',
-    season_id: 'season-456',
-    kickoff_ts: 1700000000000,
+    matchId: 'match-123',
+    seasonId: 'season-456',
+    kickoffTs: 1700000000000,
     competition: 'League Cup',
-    home_team_id: 'team-home',
-    away_team_id: 'team-away',
+    homeTeamId: 'team-home',
+    awayTeamId: 'team-away',
     venue: 'Main Stadium',
-    duration_mins: 60,
-    period_format: 'quarter',
-    home_score: 2,
-    away_score: 1,
+    durationMins: 60,
+    periodFormat: 'quarter',
+    homeScore: 2,
+    awayScore: 1,
     notes: 'Great game',
-    created_at: 1699900000000,
-    updated_at: 1700000001000,
-    created_by_user_id: 'user-789',
-    is_deleted: false,
+    createdAt: 1699900000000,
+    updatedAt: 1700000001000,
+    createdByUserId: 'user-789',
+    isDeleted: false,
     synced: true,
   };
 
@@ -49,18 +49,20 @@ describe('matches transforms', () => {
     it('handles null/undefined optional fields', () => {
       const minimalMatch: EnhancedMatch = {
         id: 'match-minimal',
-        match_id: 'match-minimal',
-        season_id: 'season-1',
-        kickoff_ts: 1700000000000,
-        home_team_id: 'team-1',
-        away_team_id: 'team-2',
-        duration_mins: 60,
-        period_format: 'half',
-        created_at: 1700000000000,
-        updated_at: 1700000000000,
-        created_by_user_id: 'user-1',
-        is_deleted: false,
+        matchId: 'match-minimal',
+        seasonId: 'season-1',
+        kickoffTs: 1700000000000,
+        homeTeamId: 'team-1',
+        awayTeamId: 'team-2',
+        durationMins: 60,
+        periodFormat: 'half',
+        createdAt: 1700000000000,
+        updatedAt: 1700000000000,
+        createdByUserId: 'user-1',
+        isDeleted: false,
         synced: false,
+        homeScore: 0,
+        awayScore: 0,
       };
 
       const result = dbToMatch(minimalMatch);
@@ -73,7 +75,7 @@ describe('matches transforms', () => {
     });
 
     it('defaults scores to 0 when null/undefined', () => {
-      const matchNoScores = { ...mockDbMatch, home_score: undefined, away_score: null };
+      const matchNoScores = { ...mockDbMatch, homeScore: undefined, awayScore: null };
       const result = dbToMatch(matchNoScores as unknown as EnhancedMatch);
 
       expect(result.homeScore).toBe(0);
@@ -83,9 +85,9 @@ describe('matches transforms', () => {
     it('handles soft delete fields', () => {
       const deletedMatch: EnhancedMatch = {
         ...mockDbMatch,
-        is_deleted: true,
-        deleted_at: 1700000002000,
-        deleted_by_user_id: 'user-admin',
+        isDeleted: true,
+        deletedAt: 1700000002000,
+        deletedByUserId: 'user-admin',
       };
 
       const result = dbToMatch(deletedMatch);
@@ -133,16 +135,16 @@ describe('matches transforms', () => {
 
       const result = matchWriteToDb(input);
 
-      expect(result.season_id).toBe('season-123');
-      expect(result.kickoff_ts).toBe(1700000000000);
-      expect(result.home_team_id).toBe('team-home');
-      expect(result.away_team_id).toBe('team-away');
+      expect(result.seasonId).toBe('season-123');
+      expect(result.kickoffTs).toBe(1700000000000);
+      expect(result.homeTeamId).toBe('team-home');
+      expect(result.awayTeamId).toBe('team-away');
       expect(result.competition).toBe('Cup Final');
       expect(result.venue).toBe('Stadium');
-      expect(result.duration_mins).toBe(90);
-      expect(result.period_format).toBe('half');
-      expect(result.home_score).toBe(3);
-      expect(result.away_score).toBe(2);
+      expect(result.durationMins).toBe(90);
+      expect(result.periodFormat).toBe('half');
+      expect(result.homeScore).toBe(3);
+      expect(result.awayScore).toBe(2);
       expect(result.notes).toBe('Final match');
     });
 
@@ -155,7 +157,7 @@ describe('matches transforms', () => {
       };
 
       const result = matchWriteToDb(input);
-      expect(result.kickoff_ts).toBe(new Date('2024-01-15T14:00:00Z').getTime());
+      expect(result.kickoffTs).toBe(new Date('2024-01-15T14:00:00Z').getTime());
     });
 
     it('handles minimal input with defaults', () => {
@@ -168,10 +170,10 @@ describe('matches transforms', () => {
 
       const result = matchWriteToDb(input);
 
-      expect(result.duration_mins).toBe(60);
-      expect(result.period_format).toBe('quarter');
-      expect(result.home_score).toBe(0);
-      expect(result.away_score).toBe(0);
+      expect(result.durationMins).toBe(60);
+      expect(result.periodFormat).toBe('quarter');
+      expect(result.homeScore).toBe(0);
+      expect(result.awayScore).toBe(0);
       expect(result.competition).toBeUndefined();
       expect(result.venue).toBeUndefined();
       expect(result.notes).toBeUndefined();
@@ -197,12 +199,12 @@ describe('matches transforms', () => {
       const dbFormat = matchWriteToDb(original);
       const stored: EnhancedMatch = {
         id: 'match-roundtrip',
-        match_id: 'match-roundtrip',
+        matchId: 'match-roundtrip',
         ...dbFormat,
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'user-1',
-        is_deleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'user-1',
+        isDeleted: false,
         synced: false,
       } as EnhancedMatch;
 

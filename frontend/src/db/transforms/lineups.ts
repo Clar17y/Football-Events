@@ -12,17 +12,17 @@ import { toDate, nullToUndefined, toBool } from './common';
 export function dbToLineup(l: EnhancedLineup): Lineup {
   return {
     id: l.id,
-    matchId: l.match_id,
-    playerId: l.player_id,
-    startMinute: l.start_min,
-    endMinute: nullToUndefined(l.end_min),
+    matchId: l.matchId,
+    playerId: l.playerId,
+    startMinute: l.startMin,
+    endMinute: nullToUndefined(l.endMin),
     position: l.position,
-    createdAt: toDate(l.created_at) ?? new Date(),
-    updatedAt: toDate(l.updated_at),
-    created_by_user_id: l.created_by_user_id,
-    deleted_at: toDate(l.deleted_at),
-    deleted_by_user_id: nullToUndefined(l.deleted_by_user_id),
-    is_deleted: toBool(l.is_deleted),
+    createdAt: toDate(l.createdAt) ?? new Date(),
+    updatedAt: toDate(l.updatedAt),
+    created_by_user_id: l.createdByUserId,
+    deleted_at: toDate(l.deletedAt),
+    deleted_by_user_id: nullToUndefined(l.deletedByUserId),
+    is_deleted: toBool(l.isDeleted),
   };
 }
 
@@ -49,17 +49,17 @@ export interface LineupWriteInput {
  */
 export function lineupWriteToDb(data: LineupWriteInput): Partial<EnhancedLineup> {
   return {
-    match_id: data.matchId,
-    player_id: data.playerId,
-    start_min: data.startMin,
-    end_min: data.endMin,
+    matchId: data.matchId,
+    playerId: data.playerId,
+    startMin: data.startMin,
+    endMin: data.endMin,
     position: data.position,
   };
 }
 
 /**
  * Generate composite ID for lineup records
- * Format: match_id-player_id-start_min
+ * Format: matchId-playerId-startMin
  */
 export function generateLineupId(matchId: string, playerId: string, startMin: number): string {
   return `${matchId}-${playerId}-${startMin}`;

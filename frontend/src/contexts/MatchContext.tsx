@@ -307,17 +307,17 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const matchEvents: MatchEvent[] = result.data.map(event => ({
               id: event.id,
               kind: event.kind,
-              matchId: event.match_id,
-              createdAt: new Date(event.created_at),
-              periodNumber: event.period_number || 1,
-              clockMs: event.clock_ms || 0,
-              teamId: event.team_id,
-              playerId: event.player_id,
+              matchId: event.matchId,
+              createdAt: new Date(event.createdAt),
+              periodNumber: event.periodNumber || 1,
+              clockMs: event.clockMs || 0,
+              teamId: event.teamId,
+              playerId: event.playerId,
               sentiment: event.sentiment || 0,
               notes: event.notes || '',
               // Auth fields required by shared types
-              created_by_user_id: event.created_by_user_id || 'system',
-              is_deleted: event.is_deleted || false,
+              created_by_user_id: event.createdByUserId || 'system',
+              is_deleted: event.isDeleted || false,
             }));
             
             setEvents(matchEvents.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));

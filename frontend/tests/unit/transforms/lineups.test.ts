@@ -5,15 +5,15 @@ import type { EnhancedLineup } from '../../../src/db/schema';
 describe('lineups transforms', () => {
   const mockDbLineup: EnhancedLineup = {
     id: 'match-123-player-456-0',
-    match_id: 'match-123',
-    player_id: 'player-456',
-    start_min: 0,
-    end_min: 45,
+    matchId: 'match-123',
+    playerId: 'player-456',
+    startMin: 0,
+    endMin: 45,
     position: 'MF',
-    created_at: 1700000000000,
-    updated_at: 1700000001000,
-    created_by_user_id: 'user-789',
-    is_deleted: false,
+    createdAt: 1700000000000,
+    updatedAt: 1700000001000,
+    createdByUserId: 'user-789',
+    isDeleted: false,
     synced: true,
   };
 
@@ -36,14 +36,14 @@ describe('lineups transforms', () => {
     it('handles null/undefined optional fields', () => {
       const activeLineup: EnhancedLineup = {
         id: 'lineup-active',
-        match_id: 'match-1',
-        player_id: 'player-1',
-        start_min: 0,
+        matchId: 'match-1',
+        playerId: 'player-1',
+        startMin: 0,
         position: 'GK',
-        created_at: 1700000000000,
-        updated_at: 1700000000000,
-        created_by_user_id: 'user-1',
-        is_deleted: false,
+        createdAt: 1700000000000,
+        updatedAt: 1700000000000,
+        createdByUserId: 'user-1',
+        isDeleted: false,
         synced: false,
       };
 
@@ -55,9 +55,9 @@ describe('lineups transforms', () => {
     it('handles soft delete fields', () => {
       const deletedLineup: EnhancedLineup = {
         ...mockDbLineup,
-        is_deleted: true,
-        deleted_at: 1700000002000,
-        deleted_by_user_id: 'user-admin',
+        isDeleted: true,
+        deletedAt: 1700000002000,
+        deletedByUserId: 'user-admin',
       };
 
       const result = dbToLineup(deletedLineup);
@@ -72,7 +72,7 @@ describe('lineups transforms', () => {
     it('transforms array of lineups', () => {
       const lineups = [
         mockDbLineup,
-        { ...mockDbLineup, id: 'match-123-player-789-0', player_id: 'player-789', position: 'FW' },
+        { ...mockDbLineup, id: 'match-123-player-789-0', playerId: 'player-789', position: 'FW' },
       ];
       const result = dbToLineups(lineups);
 
@@ -99,10 +99,10 @@ describe('lineups transforms', () => {
 
       const result = lineupWriteToDb(input);
 
-      expect(result.match_id).toBe('match-123');
-      expect(result.player_id).toBe('player-456');
-      expect(result.start_min).toBe(0);
-      expect(result.end_min).toBe(60);
+      expect(result.matchId).toBe('match-123');
+      expect(result.playerId).toBe('player-456');
+      expect(result.startMin).toBe(0);
+      expect(result.endMin).toBe(60);
       expect(result.position).toBe('DF');
     });
 
@@ -116,7 +116,7 @@ describe('lineups transforms', () => {
 
       const result = lineupWriteToDb(input);
 
-      expect(result.end_min).toBeUndefined();
+      expect(result.endMin).toBeUndefined();
     });
   });
 
@@ -156,10 +156,10 @@ describe('lineups transforms', () => {
       const stored: EnhancedLineup = {
         id: generateLineupId(original.matchId, original.playerId, original.startMin),
         ...dbFormat,
-        created_at: Date.now(),
-        updated_at: Date.now(),
-        created_by_user_id: 'user-1',
-        is_deleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        createdByUserId: 'user-1',
+        isDeleted: false,
         synced: false,
       } as EnhancedLineup;
 
@@ -193,9 +193,9 @@ describe('lineups transforms', () => {
       const dbFirstHalf = lineupWriteToDb(firstHalf);
       const dbSubstitute = lineupWriteToDb(substitute);
 
-      expect(dbFirstHalf.end_min).toBe(60);
-      expect(dbSubstitute.start_min).toBe(60);
-      expect(dbSubstitute.end_min).toBeUndefined();
+      expect(dbFirstHalf.endMin).toBe(60);
+      expect(dbSubstitute.startMin).toBe(60);
+      expect(dbSubstitute.endMin).toBeUndefined();
 
       const firstHalfId = generateLineupId(firstHalf.matchId, firstHalf.playerId, firstHalf.startMin);
       const subId = generateLineupId(substitute.matchId, substitute.playerId, substitute.startMin);

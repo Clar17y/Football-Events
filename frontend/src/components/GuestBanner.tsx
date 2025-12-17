@@ -21,14 +21,14 @@ const GuestBanner: React.FC<GuestBannerProps> = ({ teamId, matchId }) => {
         const { db } = await import('../db/indexedDB');
         const guestId = getGuestId();
         const teams = await db.teams
-          .where('created_by_user_id')
+          .where('createdByUserId')
           .equals(guestId)
-          .and(t => !t.is_deleted && (t as any).is_opponent !== true)
+          .and(t => !t.isDeleted && !t.isOpponent)
           .count();
-        const matches = await db.matches.where('created_by_user_id').equals(guestId).and(m => !m.is_deleted).count();
+        const matches = await db.matches.where('createdByUserId').equals(guestId).and(m => !m.isDeleted).count();
         let players: number | undefined = undefined;
         if (teamId) {
-          players = await db.players.where('current_team').equals(teamId).and(p => p.created_by_user_id === guestId && !p.is_deleted).count();
+          players = await db.players.where('currentTeam').equals(teamId).and(p => p.createdByUserId === guestId && !p.isDeleted).count();
         }
         let nonScoringEvents: number | undefined = undefined;
         let formations: number | undefined = undefined;

@@ -110,7 +110,7 @@ export async function bulkUpdateEvents(
         try {
           const updatedChanges = {
             ...update.changes,
-            updated_at: Date.now()
+            updatedAt: Date.now()
           };
           
           await db.events.update(update.id, updatedChanges);
@@ -151,12 +151,12 @@ export async function getMatchEventsForJoin(matchId: ID): Promise<{
     
     // Get all events for the match, ordered by time
     const events = await db.events
-      .where('match_id')
+      .where('matchId')
       .equals(matchId)
       .toArray();
     
-    // Sort by clock_ms manually
-    events.sort((a, b) => a.clock_ms - b.clock_ms);
+    // Sort by clockMs manually
+    events.sort((a, b) => a.clockMs - b.clockMs);
 
     // Calculate current score from events
     let ourScore = 0;
@@ -165,16 +165,16 @@ export async function getMatchEventsForJoin(matchId: ID): Promise<{
     if (matchInfo) {
       for (const event of events) {
         if (event.kind === 'goal') {
-          if (event.team_id === matchInfo.home_team_id) {
+          if (event.teamId === matchInfo.homeTeamId) {
             ourScore++;
-          } else if (event.team_id === matchInfo.away_team_id) {
+          } else if (event.teamId === matchInfo.awayTeamId) {
             opponentScore++;
           }
         } else if (event.kind === 'own_goal') {
           // Own goal counts for the opposing team
-          if (event.team_id === matchInfo.home_team_id) {
+          if (event.teamId === matchInfo.homeTeamId) {
             opponentScore++;
-          } else if (event.team_id === matchInfo.away_team_id) {
+          } else if (event.teamId === matchInfo.awayTeamId) {
             ourScore++;
           }
         }
@@ -212,16 +212,16 @@ export async function getPlayerPerformanceSummary(
   recentEvents: EnhancedEvent[];
 }> {
   try {
-    let query = db.events.where('player_id').equals(playerId);
+    let query = db.events.where('playerId').equals(playerId);
     
     if (matchId) {
-      query = db.events.where('[match_id+player_id]').equals([matchId, playerId]);
+      query = db.events.where('[matchId+playerId]').equals([matchId, playerId]);
     }
     
     const events = await query.toArray();
     
-    // Sort by ts_server in descending order
-    events.sort((a, b) => b.ts_server - a.ts_server);
+    // Sort by tsServer in descending order
+    events.sort((a, b) => b.tsServer - a.tsServer);
     
     // Calculate statistics
     const totalEvents = events.length;
@@ -276,10 +276,10 @@ export async function getTeamPerformanceSummary(
   periodBreakdown: Record<number, number>;
 }> {
   try {
-    let query = db.events.where('team_id').equals(teamId);
+    let query = db.events.where('teamId').equals(teamId);
     
     if (matchId) {
-      query = db.events.where('[match_id+team_id]').equals([matchId, teamId]);
+      query = db.events.where('[matchId+teamId]').equals([matchId, teamId]);
     }
     
     const events = await query.toArray();
@@ -296,14 +296,14 @@ export async function getTeamPerformanceSummary(
       eventBreakdown[event.kind] = (eventBreakdown[event.kind] || 0) + 1;
       
       // Player contributions
-      if (!playerContributions[event.player_id]) {
-        playerContributions[event.player_id] = { events: 0, sentiment: 0 };
+      if (!playerContributions[event.playerId]) {
+        playerContributions[event.playerId] = { events: 0, sentiment: 0 };
       }
-      playerContributions[event.player_id].events++;
-      playerContributions[event.player_id].sentiment += event.sentiment;
+      playerContributions[event.playerId].events++;
+      playerContributions[event.playerId].sentiment += event.sentiment;
       
       // Period breakdown
-      periodBreakdown[event.period_number] = (periodBreakdown[event.period_number] || 0) + 1;
+      periodBreakdown[event.periodNumber] = (periodBreakdown[event.periodNumber] || 0) + 1;
       
       // Overall sentiment
       sentimentSum += event.sentiment;
@@ -338,18 +338,18 @@ export async function addToOutbox(
   recordId: ID,
   operation: 'INSERT' | 'UPDATE' | 'DELETE',
   data?: any,
-  created_by_user_id?: string
+  createdByUserId?: string
 ): Promise<void> {
   try {
     const outboxEvent: OutboxEvent = {
-      table_name: tableName,
-      record_id: recordId,
+      tableName: tableName,
+      recordId: recordId,
       operation,
       data,
       synced: 0,
-      created_at: Date.now(),
-      retry_count: 0,
-      created_by_user_id: created_by_user_id || 'temp-user-id'
+      createdAt: Date.now(),
+      retryCount: 0,
+      createdByUserId: createdByUserId || 'temp-user-id'
     };
     
     await db.outbox.add(outboxEvent);
@@ -370,8 +370,8 @@ export async function getUnsyncedItems(limit: number = 50): Promise<OutboxEvent[
       .equals(0)
       .toArray();
     
-    // Sort by created_at and limit
-    items.sort((a, b) => a.created_at - b.created_at);
+    // Sort by createdAt and limit
+    items.sort((a, b) => a.createdAt - b.createdAt);
     return items.slice(0, limit);
   } catch (error) {
     console.error('Error getting unsynced items:', error);
@@ -386,7 +386,7 @@ export async function markAsSynced(outboxId: number): Promise<void> {
   try {
     await db.outbox.update(outboxId, {
       synced: 1,
-      last_sync_attempt: Date.now()
+      lastSyncAttempt: Date.now()
     });
   } catch (error) {
     console.error(`Error marking outbox item ${outboxId} as synced:`, error);
@@ -402,10 +402,10 @@ export async function markSyncFailed(outboxId: number, error: string): Promise<v
     const item = await db.outbox.get(outboxId);
     if (item) {
       await db.outbox.update(outboxId, {
-        retry_count: (item.retry_count || 0) + 1,
-        last_sync_attempt: Date.now(),
-        sync_error: error,
-        failed_at: Date.now()
+        retryCount: (item.retryCount || 0) + 1,
+        lastSyncAttempt: Date.now(),
+        syncError: error,
+        failedAt: Date.now()
       });
     }
   } catch (updateError) {
@@ -424,7 +424,7 @@ export async function cleanupOutbox(olderThanDays: number = 7): Promise<number> 
     const itemsToDelete = await db.outbox
       .where('synced')
       .equals(1)
-      .and(item => Boolean(item.last_sync_attempt && item.last_sync_attempt < cutoffTime))
+      .and(item => Boolean(item.lastSyncAttempt && item.lastSyncAttempt < cutoffTime))
       .toArray();
     
     if (itemsToDelete.length > 0) {
@@ -515,15 +515,15 @@ export async function searchEvents(criteria: {
     
     // Apply filters
     if (criteria.matchId) {
-      query = query.and(event => event.match_id === criteria.matchId);
+      query = query.and(event => event.matchId === criteria.matchId);
     }
     
     if (criteria.playerId) {
-      query = query.and(event => event.player_id === criteria.playerId);
+      query = query.and(event => event.playerId === criteria.playerId);
     }
     
     if (criteria.teamId) {
-      query = query.and(event => event.team_id === criteria.teamId);
+      query = query.and(event => event.teamId === criteria.teamId);
     }
     
     if (criteria.eventKind) {
@@ -531,7 +531,7 @@ export async function searchEvents(criteria: {
     }
     
     if (criteria.periodNumber !== undefined) {
-      query = query.and(event => event.period_number === criteria.periodNumber);
+      query = query.and(event => event.periodNumber === criteria.periodNumber);
     }
     
     if (criteria.sentimentRange) {
@@ -543,8 +543,8 @@ export async function searchEvents(criteria: {
     
     if (criteria.timeRange) {
       query = query.and(event => 
-        event.clock_ms >= criteria.timeRange!.start && 
-        event.clock_ms <= criteria.timeRange!.end
+        event.clockMs >= criteria.timeRange!.start && 
+        event.clockMs <= criteria.timeRange!.end
       );
     }
     
@@ -556,15 +556,15 @@ export async function searchEvents(criteria: {
     
     if (criteria.isLinked !== undefined) {
       query = query.and(event => 
-        criteria.isLinked ? Boolean(event.linked_events && event.linked_events.length > 0) : !event.linked_events
+        criteria.isLinked ? Boolean(event.linkedEvents && event.linkedEvents.length > 0) : !event.linkedEvents
       );
     }
     
     // Get results and sort manually
     const events = await query.toArray();
     
-    // Sort by clock_ms
-    events.sort((a, b) => a.clock_ms - b.clock_ms);
+    // Sort by clockMs
+    events.sort((a, b) => a.clockMs - b.clockMs);
     
     // Apply limit if specified
     if (criteria.limit) {

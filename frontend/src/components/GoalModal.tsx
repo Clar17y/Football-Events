@@ -81,11 +81,11 @@ const GoalModal: React.FC<Props> = ({
       // Use addEventToTable to store in events table (not outbox)
       const result = await db.addEventToTable({
         kind: kind as 'goal' | 'own_goal',
-        match_id: matchId,
-        period_number: period,
-        clock_ms: elapsedMs,
-        team_id: targetTeam.id,
-        player_id: scorerId || undefined,
+        matchId: matchId,
+        periodNumber: period,
+        clockMs: elapsedMs,
+        teamId: targetTeam.id,
+        playerId: scorerId || undefined,
         sentiment: ownGoalFlag ? -2 : 2, // Default sentiment
         notes: assistId ? `${notes} (Assist: ${assistId})` : notes,
       });
