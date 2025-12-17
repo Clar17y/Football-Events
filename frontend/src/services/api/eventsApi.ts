@@ -2,6 +2,7 @@ import apiClient from './baseApi';
 import type { Event, EventCreateRequest } from '@shared/types';
 import { isOnline, shouldUseOfflineFallback, getCurrentUserId } from '../../utils/network';
 import { db } from '../../db/indexedDB';
+import { dbToEvent } from '../../db/transforms';
 import type { EnhancedEvent } from '../../db/schema';
 
 /**
@@ -16,29 +17,6 @@ function showOfflineToast(message: string): void {
   }
 }
 
-/**
- * Transform local EnhancedEvent to API Event format
- * Requirements: 1.2 - Return transformed local event
- */
-function transformToApiEvent(localEvent: EnhancedEvent): Event {
-  return {
-    id: localEvent.id,
-    matchId: localEvent.match_id,
-    createdAt: new Date(localEvent.created_at),
-    periodNumber: localEvent.period_number,
-    clockMs: localEvent.clock_ms,
-    kind: localEvent.kind,
-    teamId: localEvent.team_id || undefined,
-    playerId: localEvent.player_id || undefined,
-    notes: localEvent.notes,
-    sentiment: localEvent.sentiment,
-    updatedAt: localEvent.updated_at ? new Date(localEvent.updated_at) : undefined,
-    created_by_user_id: localEvent.created_by_user_id,
-    deleted_at: localEvent.deleted_at ? new Date(localEvent.deleted_at) : undefined,
-    deleted_by_user_id: localEvent.deleted_by_user_id,
-    is_deleted: localEvent.is_deleted,
-  };
-}
 
 export const eventsApi = {
   async getByMatch(matchId: string): Promise<Event[]> {
@@ -65,7 +43,7 @@ export const eventsApi = {
 
     try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
-    return transformToApiEvent(localEvent);
+    return dbToEvent(localEvent);
   },
 
   /**
@@ -91,7 +69,7 @@ export const eventsApi = {
 
     try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
-    return transformToApiEvent(updatedEvent);
+    return dbToEvent(updatedEvent);
   },
 
   /**

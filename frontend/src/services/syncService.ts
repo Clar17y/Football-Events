@@ -4,6 +4,13 @@ import { isGuestId } from './importService';
 import { db } from '../db/indexedDB';
 import { lineupsApi } from './api/lineupsApi';
 import { defaultLineupsApi } from './api/defaultLineupsApi';
+import {
+  dbTeamToServerPayload,
+  dbPlayerToServerPayload,
+  dbSeasonToServerPayload,
+  dbMatchToServerPayload,
+  dbEventToServerPayload,
+} from '../db/transforms';
 
 /**
  * Sync result interface for tracking sync progress and errors
@@ -145,13 +152,8 @@ async function syncSeasons(): Promise<SyncResult> {
 
     for (const season of seasonsToSync) {
       try {
-        const seasonData = {
-          label: (season as any).label,
-          startDate: (season as any).start_date || new Date().toISOString().slice(0, 10),
-          endDate: (season as any).end_date || new Date().toISOString().slice(0, 10),
-          isCurrent: !!(season as any).is_current,
-          description: (season as any).description,
-        };
+        // Use centralized transform: IndexedDB → Server API payload
+        const seasonData = dbSeasonToServerPayload(season as any);
 
         // If synced_at exists, this is an update; otherwise it's a create
         // IMPORTANT: Call server API directly, not the local-first seasonsApi
@@ -222,15 +224,8 @@ async function syncTeams(): Promise<SyncResult> {
 
     for (const team of teamsToSync) {
       try {
-        const teamData = {
-          name: team.name,
-          homeKitPrimary: (team as any).color_primary,
-          homeKitSecondary: (team as any).color_secondary,
-          awayKitPrimary: (team as any).away_color_primary,
-          awayKitSecondary: (team as any).away_color_secondary,
-          logoUrl: (team as any).logo_url,
-          isOpponent: !!(team as any).is_opponent,
-        };
+        // Use centralized transform: IndexedDB → Server API payload
+        const teamData = dbTeamToServerPayload(team as any);
 
         // If synced_at exists, this is an update; otherwise it's a create
         // IMPORTANT: Call server API directly, not the local-first teamsApi
@@ -301,13 +296,8 @@ async function syncPlayers(): Promise<SyncResult> {
 
     for (const player of playersToSync) {
       try {
-        const playerData = {
-          name: player.full_name,
-          squadNumber: player.squad_number,
-          preferredPosition: player.preferred_pos,
-          dateOfBirth: player.dob,
-          notes: player.notes,
-        };
+        // Use centralized transform: IndexedDB → Server API payload
+        const playerData = dbPlayerToServerPayload(player);
 
         // If synced_at exists, this is an update; otherwise it's a create
         // IMPORTANT: Call server API directly, not the local-first playersApi
@@ -324,10 +314,7 @@ async function syncPlayers(): Promise<SyncResult> {
               isActive: true,
             });
           } else {
-            await apiClient.post('/players', {
-              ...playerData,
-              dateOfBirth: player.dob ? player.dob : undefined,
-            });
+            await apiClient.post('/players', playerData);
           }
         }
 
@@ -392,17 +379,8 @@ async function syncMatches(): Promise<SyncResult> {
 
     for (const match of matchesToSync) {
       try {
-        const matchData = {
-          seasonId: match.season_id,
-          kickoffTime: match.kickoff_ts,
-          homeTeamId: match.home_team_id,
-          awayTeamId: match.away_team_id,
-          competition: match.competition,
-          venue: match.venue,
-          durationMinutes: match.duration_mins,
-          periodFormat: match.period_format,
-          notes: match.notes,
-        };
+        // Use centralized transform: IndexedDB → Server API payload
+        const matchData = dbMatchToServerPayload(match);
 
         // If synced_at exists, this is an update; otherwise it's a create
         if ((match as any).synced_at) {
@@ -677,16 +655,8 @@ async function syncEvents(): Promise<SyncResult> {
             reason: parsed?.reason ?? null,
           });
         } else {
-          const payload = {
-            matchId: event.match_id,
-            kind: event.kind,
-            periodNumber: event.period_number,
-            clockMs: event.clock_ms,
-            teamId: event.team_id || undefined,
-            playerId: event.player_id || null,
-            notes: event.notes,
-            sentiment: event.sentiment,
-          };
+          // Use centralized transform: IndexedDB → Server API payload
+          const payload = dbEventToServerPayload(event);
 
           // Use PUT upsert when we have a UUID id (local-first parity + update support)
           if (isUuid(event.id)) {

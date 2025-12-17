@@ -10,9 +10,10 @@ import { createLocalQuickMatch } from '../guestQuickMatch';
 import { addToOutbox } from '../../db/utils';
 import { isOnline, shouldUseOfflineFallback, getCurrentUserId } from '../../utils/network';
 import { db } from '../../db/indexedDB';
+import { dbToMatch, dbToMatches, dbToMatchState, dbToMatchPeriod } from '../../db/transforms';
 import type { Match, MatchUpdateRequest } from '@shared/types';
 import type { MatchState, MatchPeriod } from '@shared/types';
-import type { LocalMatchState, LocalMatchPeriod } from '../../db/schema';
+import type { EnhancedMatch, LocalMatchState, LocalMatchPeriod } from '../../db/schema';
 
 /**
  * Show offline toast notification
@@ -26,48 +27,6 @@ function showOfflineToast(message: string): void {
   }
 }
 
-/**
- * Transform local LocalMatchState to API MatchState format
- */
-function transformToApiMatchState(localState: LocalMatchState): MatchState {
-  return {
-    id: localState.match_id,
-    matchId: localState.match_id,
-    status: localState.status === 'NOT_STARTED' ? 'SCHEDULED' : localState.status,
-    currentPeriod: undefined, // Will be set from period data if available
-    currentPeriodType: undefined,
-    matchStartedAt: localState.status !== 'NOT_STARTED' ? new Date(localState.created_at) : undefined,
-    matchEndedAt: localState.status === 'COMPLETED' ? new Date(localState.updated_at) : undefined,
-    totalElapsedSeconds: Math.floor(localState.timer_ms / 1000),
-    createdAt: new Date(localState.created_at),
-    updatedAt: new Date(localState.updated_at),
-    created_by_user_id: localState.created_by_user_id,
-    deleted_at: localState.deleted_at ? new Date(localState.deleted_at) : undefined,
-    deleted_by_user_id: localState.deleted_by_user_id,
-    is_deleted: localState.is_deleted,
-  };
-}
-
-/**
- * Transform local LocalMatchPeriod to API MatchPeriod format
- */
-function transformToApiMatchPeriod(localPeriod: LocalMatchPeriod): MatchPeriod {
-  return {
-    id: localPeriod.id,
-    matchId: localPeriod.match_id,
-    periodNumber: localPeriod.period_number,
-    periodType: localPeriod.period_type,
-    startedAt: localPeriod.started_at ? new Date(localPeriod.started_at) : undefined,
-    endedAt: localPeriod.ended_at ? new Date(localPeriod.ended_at) : undefined,
-    durationSeconds: localPeriod.duration_seconds,
-    createdAt: new Date(localPeriod.created_at),
-    updatedAt: new Date(localPeriod.updated_at),
-    created_by_user_id: localPeriod.created_by_user_id,
-    deleted_at: localPeriod.deleted_at ? new Date(localPeriod.deleted_at) : undefined,
-    deleted_by_user_id: localPeriod.deleted_by_user_id,
-    is_deleted: localPeriod.is_deleted,
-  };
-}
 
 export interface QuickStartPayload {
   myTeamId?: string;
@@ -106,35 +65,20 @@ export const matchesApi = {
     if (!match || (match as any).is_deleted) {
       throw new Error('Match not found');
     }
-    const m = match as any;
-    
+
     // Get team info for the match
     const [homeTeam, awayTeam] = await Promise.all([
-      db.teams.get(m.home_team_id),
-      db.teams.get(m.away_team_id)
+      db.teams.get((match as any).home_team_id),
+      db.teams.get((match as any).away_team_id)
     ]);
-    
+
+    // Use centralized transform and add team data
+    const baseMatch = dbToMatch(match as EnhancedMatch);
     return {
-      id: m.id,
-      matchId: m.match_id || m.id,
-      seasonId: m.season_id,
-      kickoffTime: new Date(m.kickoff_ts),
-      competition: m.competition,
-      homeTeamId: m.home_team_id,
-      awayTeamId: m.away_team_id,
+      ...baseMatch,
       homeTeam: homeTeam ? { id: homeTeam.id, name: homeTeam.name, is_opponent: !!(homeTeam as any).is_opponent } as any : undefined,
       awayTeam: awayTeam ? { id: awayTeam.id, name: awayTeam.name, is_opponent: !!(awayTeam as any).is_opponent } as any : undefined,
-      venue: m.venue,
-      durationMinutes: m.duration_mins,
-      periodFormat: m.period_format,
-      homeScore: m.home_score || 0,
-      awayScore: m.away_score || 0,
-      notes: m.notes,
-      createdAt: new Date(m.created_at),
-      updatedAt: m.updated_at ? new Date(m.updated_at) : undefined,
-      created_by_user_id: m.created_by_user_id,
-      is_deleted: !!m.is_deleted,
-    } as Match;
+    };
   },
   /**
    * Quick-start a match
@@ -249,25 +193,7 @@ export const matchesApi = {
       .equals(seasonId)
       .filter((m: any) => !m.is_deleted)
       .toArray();
-    return matches.map((m: any) => ({
-      id: m.id,
-      matchId: m.match_id || m.id,
-      homeTeamId: m.home_team_id,
-      awayTeamId: m.away_team_id,
-      kickoffTime: m.kickoff_ts,
-      seasonId: m.season_id,
-      competition: m.competition,
-      venue: m.venue,
-      durationMinutes: m.duration_mins,
-      periodFormat: m.period_format,
-      homeScore: m.home_score || 0,
-      awayScore: m.away_score || 0,
-      notes: m.notes,
-      createdAt: new Date(m.created_at),
-      updatedAt: m.updated_at ? new Date(m.updated_at) : undefined,
-      created_by_user_id: m.created_by_user_id,
-      is_deleted: !!m.is_deleted
-    })) as Match[];
+    return dbToMatches(matches as EnhancedMatch[]);
   },
 
   /**
@@ -279,25 +205,7 @@ export const matchesApi = {
     const matches = await db.matches
       .filter((m: any) => !m.is_deleted && (m.home_team_id === teamId || m.away_team_id === teamId))
       .toArray();
-    return matches.map((m: any) => ({
-      id: m.id,
-      matchId: m.match_id || m.id,
-      homeTeamId: m.home_team_id,
-      awayTeamId: m.away_team_id,
-      kickoffTime: m.kickoff_ts,
-      seasonId: m.season_id,
-      competition: m.competition,
-      venue: m.venue,
-      durationMinutes: m.duration_mins,
-      periodFormat: m.period_format,
-      homeScore: m.home_score || 0,
-      awayScore: m.away_score || 0,
-      notes: m.notes,
-      createdAt: new Date(m.created_at),
-      updatedAt: m.updated_at ? new Date(m.updated_at) : undefined,
-      created_by_user_id: m.created_by_user_id,
-      is_deleted: !!m.is_deleted
-    })) as Match[];
+    return dbToMatches(matches as EnhancedMatch[]);
   },
 
   /**
@@ -344,28 +252,12 @@ export const matchesApi = {
     const data: Match[] = paged.map((m: any) => {
       const home = teamMap.get(m.home_team_id);
       const away = teamMap.get(m.away_team_id);
+      const baseMatch = dbToMatch(m as EnhancedMatch);
       return {
-        id: m.id,
-        seasonId: m.season_id,
-        kickoffTime: new Date(m.kickoff_ts),
-        competition: m.competition,
-        homeTeamId: m.home_team_id,
-        awayTeamId: m.away_team_id,
+        ...baseMatch,
         homeTeam: home ? { id: home.id, name: home.name, is_opponent: !!home.is_opponent, createdAt: new Date(home.created_at), created_by_user_id: home.created_by_user_id, is_deleted: !!home.is_deleted } as any : undefined,
         awayTeam: away ? { id: away.id, name: away.name, is_opponent: !!away.is_opponent, createdAt: new Date(away.created_at), created_by_user_id: away.created_by_user_id, is_deleted: !!away.is_deleted } as any : undefined,
-        venue: m.venue,
-        durationMinutes: m.duration_mins,
-        periodFormat: m.period_format,
-        homeScore: m.home_score || 0,
-        awayScore: m.away_score || 0,
-        notes: m.notes,
-        createdAt: new Date(m.created_at),
-        updatedAt: m.updated_at ? new Date(m.updated_at) : undefined,
-        created_by_user_id: m.created_by_user_id,
-        deleted_at: m.deleted_at ? new Date(m.deleted_at) : undefined,
-        deleted_by_user_id: m.deleted_by_user_id,
-        is_deleted: !!m.is_deleted,
-      } as Match;
+      };
     });
     return {
       data,
@@ -393,24 +285,14 @@ export const matchesApi = {
     rows = rows.filter((m: any) => !m.is_deleted && new Date(m.kickoff_ts).getTime() >= now);
     if (teamId) rows = rows.filter((m: any) => m.home_team_id === teamId || m.away_team_id === teamId);
     rows.sort((a: any, b: any) => new Date(a.kickoff_ts).getTime() - new Date(b.kickoff_ts).getTime());
-    return rows.slice(0, limit).map((m: any) => ({
-      id: m.id,
-      seasonId: m.season_id,
-      kickoffTime: new Date(m.kickoff_ts),
-      competition: m.competition,
-      homeTeamId: m.home_team_id,
-      awayTeamId: m.away_team_id,
-      homeTeam: teamMap.get(m.home_team_id) ? { id: m.home_team_id, name: teamMap.get(m.home_team_id).name, is_opponent: !!teamMap.get(m.home_team_id).is_opponent } as any : undefined,
-      awayTeam: teamMap.get(m.away_team_id) ? { id: m.away_team_id, name: teamMap.get(m.away_team_id).name, is_opponent: !!teamMap.get(m.away_team_id).is_opponent } as any : undefined,
-      venue: m.venue,
-      durationMinutes: m.duration_mins,
-      periodFormat: m.period_format,
-      homeScore: m.home_score || 0,
-      awayScore: m.away_score || 0,
-      createdAt: new Date(m.created_at),
-      is_deleted: !!m.is_deleted,
-      created_by_user_id: m.created_by_user_id,
-    } as Match));
+    return rows.slice(0, limit).map((m: any) => {
+      const baseMatch = dbToMatch(m as EnhancedMatch);
+      return {
+        ...baseMatch,
+        homeTeam: teamMap.get(m.home_team_id) ? { id: m.home_team_id, name: teamMap.get(m.home_team_id).name, is_opponent: !!teamMap.get(m.home_team_id).is_opponent } as any : undefined,
+        awayTeam: teamMap.get(m.away_team_id) ? { id: m.away_team_id, name: teamMap.get(m.away_team_id).name, is_opponent: !!teamMap.get(m.away_team_id).is_opponent } as any : undefined,
+      };
+    });
   },
 
   /**
@@ -426,24 +308,14 @@ export const matchesApi = {
     rows = rows.filter((m: any) => !m.is_deleted && new Date(m.kickoff_ts).getTime() < now);
     if (teamId) rows = rows.filter((m: any) => m.home_team_id === teamId || m.away_team_id === teamId);
     rows.sort((a: any, b: any) => new Date(b.kickoff_ts).getTime() - new Date(a.kickoff_ts).getTime());
-    return rows.slice(0, limit).map((m: any) => ({
-      id: m.id,
-      seasonId: m.season_id,
-      kickoffTime: new Date(m.kickoff_ts),
-      competition: m.competition,
-      homeTeamId: m.home_team_id,
-      awayTeamId: m.away_team_id,
-      homeTeam: teamMap.get(m.home_team_id) ? { id: m.home_team_id, name: teamMap.get(m.home_team_id).name, is_opponent: !!teamMap.get(m.home_team_id).is_opponent } as any : undefined,
-      awayTeam: teamMap.get(m.away_team_id) ? { id: m.away_team_id, name: teamMap.get(m.away_team_id).name, is_opponent: !!teamMap.get(m.away_team_id).is_opponent } as any : undefined,
-      venue: m.venue,
-      durationMinutes: m.duration_mins,
-      periodFormat: m.period_format,
-      homeScore: m.home_score || 0,
-      awayScore: m.away_score || 0,
-      createdAt: new Date(m.created_at),
-      is_deleted: !!m.is_deleted,
-      created_by_user_id: m.created_by_user_id,
-    } as Match));
+    return rows.slice(0, limit).map((m: any) => {
+      const baseMatch = dbToMatch(m as EnhancedMatch);
+      return {
+        ...baseMatch,
+        homeTeam: teamMap.get(m.home_team_id) ? { id: m.home_team_id, name: teamMap.get(m.home_team_id).name, is_opponent: !!teamMap.get(m.home_team_id).is_opponent } as any : undefined,
+        awayTeam: teamMap.get(m.away_team_id) ? { id: m.away_team_id, name: teamMap.get(m.away_team_id).name, is_opponent: !!teamMap.get(m.away_team_id).is_opponent } as any : undefined,
+      };
+    });
   },
 
   /**
@@ -561,7 +433,7 @@ export const matchesApi = {
     if (!updatedState) {
       throw new Error(`Failed to retrieve match state for ${id}`);
     }
-    return transformToApiMatchState(updatedState);
+    return dbToMatchState(updatedState);
   },
   /**
    * Pause a match with offline fallback
@@ -605,7 +477,7 @@ export const matchesApi = {
     if (!updatedState) {
       throw new Error(`Failed to retrieve match state for ${id}`);
     }
-    return transformToApiMatchState(updatedState);
+    return dbToMatchState(updatedState);
   },
   /**
    * Resume a match with offline fallback
@@ -649,7 +521,7 @@ export const matchesApi = {
     if (!updatedState) {
       throw new Error(`Failed to retrieve match state for ${id}`);
     }
-    return transformToApiMatchState(updatedState);
+    return dbToMatchState(updatedState);
   },
   /**
    * Complete a match with offline fallback
@@ -732,7 +604,7 @@ export const matchesApi = {
     if (!updatedState) {
       throw new Error(`Failed to retrieve match state for ${id}`);
     }
-    return transformToApiMatchState(updatedState);
+    return dbToMatchState(updatedState);
   },
 
   /**
@@ -765,7 +637,7 @@ export const matchesApi = {
     const start = (page - 1) * limit;
     const paged = states.slice(start, start + limit);
     
-    const data = paged.map((s: any) => transformToApiMatchState(s));
+    const data = paged.map((s: any) => dbToMatchState(s));
     
     return {
       data: data as any,
@@ -847,7 +719,7 @@ export const matchesApi = {
 
     showOfflineToast('Period started locally - will sync when online');
 
-    return transformToApiMatchPeriod(localPeriod);
+    return dbToMatchPeriod(localPeriod);
   },
   /**
    * End a period with offline fallback
@@ -906,7 +778,7 @@ export const matchesApi = {
     if (!updatedPeriod) {
       throw new Error(`Failed to retrieve period ${periodId}`);
     }
-    return transformToApiMatchPeriod(updatedPeriod);
+    return dbToMatchPeriod(updatedPeriod);
   },
   /**
    * Delete a match (soft delete) - LOCAL-FIRST

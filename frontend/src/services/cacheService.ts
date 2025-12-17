@@ -15,12 +15,69 @@
 
 import { db } from '../db/indexedDB';
 import { apiClient } from './api/baseApi';
+import {
+  serverTeamToDb,
+  serverPlayerToDb,
+  serverSeasonToDb,
+  serverMatchToDb,
+  serverPlayerTeamToDb,
+  serverDefaultLineupToDb,
+} from '../db/transforms';
 
 /**
  * 30 days in milliseconds
  * Requirements: 3.1 - Delete synced temporal data older than 30 days
  */
 export const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Default page size for paginated API requests
+ */
+const DEFAULT_PAGE_LIMIT = 100;
+
+/**
+ * Fetch all pages from a paginated API endpoint.
+ * Handles pagination automatically and collects all results.
+ * 
+ * @param endpoint - API endpoint path (e.g., '/teams', '/players')
+ * @param extraParams - Additional query parameters to include
+ * @param entityName - Name for logging purposes
+ * @returns Array of all fetched records
+ */
+async function fetchAllPages<T = any>(
+  endpoint: string,
+  extraParams: Record<string, string> = {},
+  entityName: string = 'records'
+): Promise<T[]> {
+  let page = 1;
+  const limit = DEFAULT_PAGE_LIMIT;
+  let hasMore = true;
+  const allRecords: T[] = [];
+
+  while (hasMore) {
+    const queryParams = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+      ...extraParams,
+    });
+    
+    console.log(`[CacheService] Fetching ${entityName} page ${page} from server...`);
+    const response = await apiClient.get(`${endpoint}?${queryParams.toString()}`);
+    const data = response.data as any;
+    const records = data.data || data;
+    
+    console.log(`[CacheService] Extracted ${Array.isArray(records) ? records.length : 'non-array'} ${entityName} from response`);
+    
+    if (Array.isArray(records)) {
+      allRecords.push(...records);
+    }
+    
+    hasMore = data.hasMore ?? (Array.isArray(records) && records.length === limit);
+    page++;
+  }
+
+  return allRecords;
+}
 
 /**
  * Cache statistics returned after refresh operations
@@ -118,29 +175,7 @@ export async function refreshReferenceData(): Promise<void> {
 async function refreshTeams(): Promise<void> {
   try {
     // Fetch all teams directly from server (paginated, get all pages)
-    let page = 1;
-    const limit = 100;
-    let hasMore = true;
-    const serverTeams: any[] = [];
-
-    while (hasMore) {
-      const queryParams = new URLSearchParams({
-        page: String(page),
-        limit: String(limit),
-        includeOpponents: 'true',
-      });
-      console.log(`[CacheService] Fetching teams page ${page} from server...`);
-      const response = await apiClient.get(`/teams?${queryParams.toString()}`);
-      console.log(`[CacheService] Teams response:`, response);
-      const data = response.data as any;
-      const teams = data.data || data;
-      console.log(`[CacheService] Extracted ${Array.isArray(teams) ? teams.length : 'non-array'} teams from response`);
-      if (Array.isArray(teams)) {
-        serverTeams.push(...teams);
-      }
-      hasMore = data.hasMore ?? (Array.isArray(teams) && teams.length === limit);
-      page++;
-    }
+    const serverTeams = await fetchAllPages('/teams', { includeOpponents: 'true' }, 'teams');
 
     // Get local unsynced teams to preserve
     const localTeams = await db.teams.toArray();
@@ -164,24 +199,8 @@ async function refreshTeams(): Promise<void> {
         continue;
       }
 
-      const now = Date.now();
-      await db.teams.put({
-        id: serverTeam.id,
-        team_id: serverTeam.id,
-        name: serverTeam.name,
-        color_primary: serverTeam.homeKitPrimary,
-        color_secondary: serverTeam.homeKitSecondary,
-        away_color_primary: serverTeam.awayKitPrimary,
-        away_color_secondary: serverTeam.awayKitSecondary,
-        logo_url: serverTeam.logoUrl,
-        is_opponent: serverTeam.is_opponent ?? false,
-        created_at: serverTeam.createdAt ? new Date(serverTeam.createdAt).getTime() : now,
-        updated_at: serverTeam.updatedAt ? new Date(serverTeam.updatedAt).getTime() : now,
-        created_by_user_id: serverTeam.created_by_user_id || 'server',
-        is_deleted: serverTeam.is_deleted ?? false,
-        synced: true,
-        synced_at: now,
-      } as any);
+      // Use centralized transform: Server API → IndexedDB
+      await db.teams.put(serverTeamToDb(serverTeam) as any);
     }
 
     console.log(`[CacheService] Refreshed ${serverTeams.length} teams, preserved ${unsyncedTeams.length} unsynced`);
@@ -198,25 +217,7 @@ async function refreshTeams(): Promise<void> {
 async function refreshPlayers(): Promise<void> {
   try {
     // Fetch all players directly from server (paginated, get all pages)
-    let page = 1;
-    const limit = 100;
-    let hasMore = true;
-    const serverPlayers: any[] = [];
-
-    while (hasMore) {
-      const queryParams = new URLSearchParams({ page: String(page), limit: String(limit) });
-      console.log(`[CacheService] Fetching players page ${page} from server...`);
-      const response = await apiClient.get(`/players?${queryParams.toString()}`);
-      console.log(`[CacheService] Players response:`, response);
-      const data = response.data as any;
-      const players = data.data || data;
-      console.log(`[CacheService] Extracted ${Array.isArray(players) ? players.length : 'non-array'} players from response`);
-      if (Array.isArray(players)) {
-        serverPlayers.push(...players);
-      }
-      hasMore = data.hasMore ?? (Array.isArray(players) && players.length === limit);
-      page++;
-    }
+    const serverPlayers = await fetchAllPages('/players', {}, 'players');
 
     // Get local unsynced players to preserve
     const localPlayers = await db.players.toArray();
@@ -240,22 +241,8 @@ async function refreshPlayers(): Promise<void> {
         continue;
       }
 
-      const now = Date.now();
-      await db.players.put({
-        id: serverPlayer.id,
-        full_name: serverPlayer.name,
-        squad_number: serverPlayer.squadNumber,
-        preferred_pos: serverPlayer.preferredPosition,
-        dob: serverPlayer.dateOfBirth ? new Date(serverPlayer.dateOfBirth).toISOString() : undefined,
-        notes: serverPlayer.notes,
-        current_team: serverPlayer.currentTeam,
-        created_at: serverPlayer.createdAt ? new Date(serverPlayer.createdAt).getTime() : now,
-        updated_at: serverPlayer.updatedAt ? new Date(serverPlayer.updatedAt).getTime() : now,
-        created_by_user_id: serverPlayer.created_by_user_id || 'server',
-        is_deleted: serverPlayer.is_deleted ?? false,
-        synced: true,
-        synced_at: now,
-      } as any);
+      // Use centralized transform: Server API → IndexedDB
+      await db.players.put(serverPlayerToDb(serverPlayer) as any);
     }
 
     console.log(`[CacheService] Refreshed ${serverPlayers.length} players, preserved ${unsyncedPlayers.length} unsynced`);
@@ -272,25 +259,7 @@ async function refreshPlayers(): Promise<void> {
 async function refreshSeasons(): Promise<void> {
   try {
     // Fetch all seasons directly from server (paginated, get all pages)
-    let page = 1;
-    const limit = 100;
-    let hasMore = true;
-    const serverSeasons: any[] = [];
-
-    while (hasMore) {
-      const queryParams = new URLSearchParams({ page: String(page), limit: String(limit) });
-      console.log(`[CacheService] Fetching seasons page ${page} from server...`);
-      const response = await apiClient.get(`/seasons?${queryParams.toString()}`);
-      console.log(`[CacheService] Seasons response:`, response);
-      const data = response.data as any;
-      const seasons = data.data || data;
-      console.log(`[CacheService] Extracted ${Array.isArray(seasons) ? seasons.length : 'non-array'} seasons from response`);
-      if (Array.isArray(seasons)) {
-        serverSeasons.push(...seasons);
-      }
-      hasMore = data.hasMore ?? (Array.isArray(seasons) && seasons.length === limit);
-      page++;
-    }
+    const serverSeasons = await fetchAllPages('/seasons', {}, 'seasons');
 
     // Get local unsynced seasons to preserve
     const localSeasons = await db.seasons.toArray();
@@ -316,22 +285,8 @@ async function refreshSeasons(): Promise<void> {
         continue;
       }
 
-      const now = Date.now();
-      await db.seasons.put({
-        id: seasonId,
-        season_id: seasonId,
-        label: serverSeason.label,
-        start_date: serverSeason.startDate,
-        end_date: serverSeason.endDate,
-        is_current: serverSeason.isCurrent ?? false,
-        description: serverSeason.description,
-        created_at: serverSeason.createdAt ? new Date(serverSeason.createdAt).getTime() : now,
-        updated_at: serverSeason.updatedAt ? new Date(serverSeason.updatedAt).getTime() : now,
-        created_by_user_id: serverSeason.created_by_user_id || 'server',
-        is_deleted: serverSeason.is_deleted ?? false,
-        synced: true,
-        synced_at: now,
-      } as any);
+      // Use centralized transform: Server API → IndexedDB
+      await db.seasons.put(serverSeasonToDb(serverSeason) as any);
     }
 
     console.log(`[CacheService] Refreshed ${serverSeasons.length} seasons, preserved ${unsyncedSeasons.length} unsynced`);
@@ -348,25 +303,7 @@ async function refreshSeasons(): Promise<void> {
 async function refreshPlayerTeams(): Promise<void> {
   try {
     // Fetch all player-team relationships directly from server (paginated, get all pages)
-    let page = 1;
-    const limit = 100;
-    let hasMore = true;
-    const serverPlayerTeams: any[] = [];
-
-    while (hasMore) {
-      const queryParams = new URLSearchParams({ page: String(page), limit: String(limit) });
-      console.log(`[CacheService] Fetching player-teams page ${page} from server...`);
-      const response = await apiClient.get(`/player-teams?${queryParams.toString()}`);
-      console.log(`[CacheService] Player-teams response:`, response);
-      const data = response.data as any;
-      const playerTeams = data.data || data;
-      console.log(`[CacheService] Extracted ${Array.isArray(playerTeams) ? playerTeams.length : 'non-array'} player-teams from response`);
-      if (Array.isArray(playerTeams)) {
-        serverPlayerTeams.push(...playerTeams);
-      }
-      hasMore = data.hasMore ?? (Array.isArray(playerTeams) && playerTeams.length === limit);
-      page++;
-    }
+    const serverPlayerTeams = await fetchAllPages('/player-teams', {}, 'player-teams');
 
     // Get local unsynced player-teams to preserve
     const localPlayerTeams = await db.player_teams.toArray();
@@ -390,23 +327,8 @@ async function refreshPlayerTeams(): Promise<void> {
         continue;
       }
 
-      const now = Date.now();
-      await db.player_teams.put({
-        id: serverPT.id,
-        player_id: serverPT.playerId,
-        team_id: serverPT.teamId,
-        start_date: serverPT.startDate || new Date().toISOString().split('T')[0],
-        end_date: serverPT.endDate,
-        jersey_number: serverPT.jerseyNumber,
-        position: serverPT.position,
-        is_active: serverPT.isActive ?? true,
-        created_at: serverPT.createdAt ? new Date(serverPT.createdAt).getTime() : now,
-        updated_at: serverPT.updatedAt ? new Date(serverPT.updatedAt).getTime() : now,
-        created_by_user_id: serverPT.created_by_user_id || 'server',
-        is_deleted: serverPT.is_deleted ?? false,
-        synced: true,
-        synced_at: now,
-      } as any);
+      // Use centralized transform: Server API → IndexedDB
+      await db.player_teams.put(serverPlayerTeamToDb(serverPT) as any);
     }
 
     console.log(`[CacheService] Refreshed ${serverPlayerTeams.length} player-teams, preserved ${unsyncedPlayerTeams.length} unsynced`);
@@ -482,18 +404,8 @@ async function refreshDefaultLineups(): Promise<void> {
     
     // Upsert server default lineups
     for (const serverDL of serverDefaultLineups) {
-      const now = Date.now();
-      await db.default_lineups.put({
-        id: serverDL.id,
-        team_id: serverDL.teamId,
-        formation: serverDL.formation || [],
-        created_at: serverDL.createdAt ? new Date(serverDL.createdAt).getTime() : now,
-        updated_at: serverDL.updatedAt ? new Date(serverDL.updatedAt).getTime() : now,
-        created_by_user_id: serverDL.created_by_user_id || 'server',
-        is_deleted: serverDL.is_deleted ?? false,
-        synced: true,
-        synced_at: now,
-      } as any);
+      // Use centralized transform: Server API → IndexedDB
+      await db.default_lineups.put(serverDefaultLineupToDb(serverDL) as any);
     }
     
     console.log(`[CacheService] Refreshed ${serverDefaultLineups.length} default lineups, preserved ${unsyncedDefaultLineups.length} unsynced`);
@@ -505,101 +417,94 @@ async function refreshDefaultLineups(): Promise<void> {
 
 
 /**
- * Clean up old synced temporal data (matches, events, periods, state, lineups).
- * Deletes synced records older than 30 days while preserving all unsynced records.
+ * Clean up old synced temporal data (events, periods, state, lineups).
+ * Deletes synced records that haven't been accessed in 30 days while preserving unsynced records.
  * 
- * Requirements: 3.1 - Delete synced temporal data older than 30 days
+ * Uses synced_at (last access/sync time) instead of created_at so that:
+ * - Recently viewed historical matches keep their cached data
+ * - Data you haven't accessed in 30 days gets cleaned up
+ * - When you open an old match, fresh data is fetched and cached with new synced_at
+ * 
+ * NOTE: Matches are NOT cleaned up - they are retained indefinitely for full history access.
+ * Only the heavy temporal data (events, periods, state, lineups) is cleaned up to keep IndexedDB lean.
+ * 
+ * Requirements: 3.1 - Delete synced temporal data not accessed in 30 days
  * Requirements: 3.2 - Preserve all records where synced equals false regardless of age
  */
 export async function cleanupOldTemporalData(): Promise<number> {
   const cutoffTime = Date.now() - THIRTY_DAYS_MS;
   let totalDeleted = 0;
 
-  // Clean up old synced matches
-  try {
-    const allMatches = await db.matches.toArray();
-    const matchesToDelete = allMatches.filter(m => 
-      m.synced === true && 
-      m.created_at < cutoffTime
-    );
-    
-    if (matchesToDelete.length > 0) {
-      const ids = matchesToDelete.map(m => m.id);
-      await db.matches.bulkDelete(ids);
-      totalDeleted += ids.length;
-      console.log(`[CacheService] Deleted ${ids.length} old synced matches`);
-    }
-  } catch (err) {
-    console.error('[CacheService] Failed to cleanup old matches:', err);
-  }
+  // NOTE: Matches are NOT cleaned up - retained indefinitely for full history browsing
+  // The matches table is lightweight (just metadata), so this is acceptable.
 
-  // Clean up old synced events
+  // Clean up old synced events (not accessed in 30 days)
   try {
     const allEvents = await db.events.toArray();
     const eventsToDelete = allEvents.filter(e => 
       e.synced === true && 
-      e.created_at < cutoffTime
+      (e.synced_at ?? e.created_at) < cutoffTime
     );
     
     if (eventsToDelete.length > 0) {
       const ids = eventsToDelete.map(e => e.id);
       await db.events.bulkDelete(ids);
       totalDeleted += ids.length;
-      console.log(`[CacheService] Deleted ${ids.length} old synced events`);
+      console.log(`[CacheService] Deleted ${ids.length} old synced events (not accessed in 30 days)`);
     }
   } catch (err) {
     console.error('[CacheService] Failed to cleanup old events:', err);
   }
 
-  // Clean up old synced match periods
+  // Clean up old synced match periods (not accessed in 30 days)
   try {
     const allPeriods = await db.match_periods.toArray();
     const periodsToDelete = allPeriods.filter(p => 
       p.synced === true && 
-      p.created_at < cutoffTime
+      (p.synced_at ?? p.created_at) < cutoffTime
     );
     
     if (periodsToDelete.length > 0) {
       const ids = periodsToDelete.map(p => p.id);
       await db.match_periods.bulkDelete(ids);
       totalDeleted += ids.length;
-      console.log(`[CacheService] Deleted ${ids.length} old synced match periods`);
+      console.log(`[CacheService] Deleted ${ids.length} old synced match periods (not accessed in 30 days)`);
     }
   } catch (err) {
     console.error('[CacheService] Failed to cleanup old match periods:', err);
   }
 
-  // Clean up old synced match state
+  // Clean up old synced match state (not accessed in 30 days)
   try {
     const allStates = await db.match_state.toArray();
     const statesToDelete = allStates.filter(s => 
       s.synced === true && 
-      s.created_at < cutoffTime
+      (s.synced_at ?? s.created_at) < cutoffTime
     );
     
     if (statesToDelete.length > 0) {
       const ids = statesToDelete.map(s => s.match_id);
       await db.match_state.bulkDelete(ids);
       totalDeleted += ids.length;
-      console.log(`[CacheService] Deleted ${ids.length} old synced match states`);
+      console.log(`[CacheService] Deleted ${ids.length} old synced match states (not accessed in 30 days)`);
     }
   } catch (err) {
     console.error('[CacheService] Failed to cleanup old match states:', err);
   }
 
-  // Clean up old synced lineups
+  // Clean up old synced lineups (not accessed in 30 days)
   try {
     const allLineups = await db.lineup.toArray();
     const lineupsToDelete = allLineups.filter(l => 
       l.synced === true && 
-      l.created_at < cutoffTime
+      (l.synced_at ?? l.created_at) < cutoffTime
     );
     
     if (lineupsToDelete.length > 0) {
       const ids = lineupsToDelete.map(l => l.id);
       await db.lineup.bulkDelete(ids);
       totalDeleted += ids.length;
-      console.log(`[CacheService] Deleted ${ids.length} old synced lineups`);
+      console.log(`[CacheService] Deleted ${ids.length} old synced lineups (not accessed in 30 days)`);
     }
   } catch (err) {
     console.error('[CacheService] Failed to cleanup old lineups:', err);
@@ -609,26 +514,20 @@ export async function cleanupOldTemporalData(): Promise<number> {
 }
 
 /**
- * Cache recent matches from the server (last 30 days).
- * Adds matches to local cache with synced: true.
+ * Cache matches from the server using progressive loading.
+ * First page loads immediately, then remaining pages load in background.
  * Fetches directly from server API (not through local-first matchesApi).
  * 
- * Requirements: 3.4 - Cache recent matches
+ * Requirements: 3.4 - Cache matches with progressive loading
  */
 export async function cacheRecentMatches(): Promise<number> {
   try {
-    // Fetch recent matches directly from server
-    const queryParams = new URLSearchParams({ page: '1', limit: '100' });
-    const response = await apiClient.get(`/matches?${queryParams.toString()}`);
-    const data = response.data as any;
-    const serverMatches = data.data || data;
-
-    // Filter to matches from last 30 days
-    const cutoffTime = Date.now() - THIRTY_DAYS_MS;
-    const recentMatches = serverMatches.filter((m: any) => {
-      const kickoffTime = m.kickoffTime ? new Date(m.kickoffTime).getTime() : 0;
-      return kickoffTime >= cutoffTime;
-    });
+    // Fetch first page immediately (recent matches first from server)
+    const limit = DEFAULT_PAGE_LIMIT;
+    const firstPageResponse = await apiClient.get(`/matches?page=1&limit=${limit}`);
+    const firstPageData = firstPageResponse.data as any;
+    const firstPageMatches = firstPageData.data || firstPageData;
+    const hasMore = firstPageData.hasMore ?? (Array.isArray(firstPageMatches) && firstPageMatches.length === limit);
 
     // Get local unsynced matches to preserve
     const localMatches = await db.matches.toArray();
@@ -636,47 +535,102 @@ export async function cacheRecentMatches(): Promise<number> {
       localMatches.filter(m => m.synced === false).map(m => m.id)
     );
 
-    let cachedCount = 0;
+    // Cache first page immediately
+    let cachedCount = await cacheMatchBatch(firstPageMatches, unsyncedIds);
+    console.log(`[CacheService] Cached ${cachedCount} matches from first page`);
 
-    // Add/update recent matches in local cache
-    for (const serverMatch of recentMatches) {
-      if (unsyncedIds.has(serverMatch.id)) {
-        // Preserve unsynced local version
-        continue;
-      }
-
-      const now = Date.now();
-      await db.matches.put({
-        id: serverMatch.id,
-        match_id: serverMatch.id,
-        season_id: serverMatch.seasonId,
-        kickoff_ts: serverMatch.kickoffTime ? new Date(serverMatch.kickoffTime).getTime() : now,
-        competition: serverMatch.competition,
-        home_team_id: serverMatch.homeTeamId,
-        away_team_id: serverMatch.awayTeamId,
-        venue: serverMatch.venue,
-        duration_mins: serverMatch.durationMinutes || 60,
-        period_format: serverMatch.periodFormat || 'quarter',
-        home_score: serverMatch.homeScore || 0,
-        away_score: serverMatch.awayScore || 0,
-        notes: serverMatch.notes,
-        created_at: serverMatch.createdAt ? new Date(serverMatch.createdAt).getTime() : now,
-        updated_at: serverMatch.updatedAt ? new Date(serverMatch.updatedAt).getTime() : now,
-        created_by_user_id: serverMatch.created_by_user_id || 'server',
-        is_deleted: serverMatch.is_deleted ?? false,
-        synced: true,
-        synced_at: now,
-      } as any);
-
-      cachedCount++;
+    // Start background loading of remaining pages if there are more
+    if (hasMore) {
+      // Don't await - let it run in background
+      loadRemainingMatchesInBackground(2, limit, unsyncedIds).catch(err => {
+        console.error('[CacheService] Background match loading failed:', err);
+      });
     }
 
-    console.log(`[CacheService] Cached ${cachedCount} recent matches`);
     return cachedCount;
   } catch (err) {
-    console.error('[CacheService] Failed to cache recent matches:', err);
+    console.error('[CacheService] Failed to cache matches:', err);
     throw err;
   }
+}
+
+/**
+ * Cache a batch of matches to IndexedDB.
+ * @returns Number of matches cached
+ */
+async function cacheMatchBatch(serverMatches: any[], unsyncedIds: Set<string>): Promise<number> {
+  if (!Array.isArray(serverMatches)) return 0;
+
+  let cachedCount = 0;
+
+  for (const serverMatch of serverMatches) {
+    if (unsyncedIds.has(serverMatch.id)) {
+      // Preserve unsynced local version
+      continue;
+    }
+
+    // Use centralized transform: Server API → IndexedDB
+    await db.matches.put(serverMatchToDb(serverMatch) as any);
+
+    cachedCount++;
+  }
+
+  return cachedCount;
+}
+
+/**
+ * Load remaining match pages in the background.
+ * Runs asynchronously without blocking the main cache refresh.
+ */
+async function loadRemainingMatchesInBackground(
+  startPage: number,
+  limit: number,
+  unsyncedIds: Set<string>
+): Promise<void> {
+  let page = startPage;
+  let hasMore = true;
+  let totalCached = 0;
+
+  console.log(`[CacheService] Starting background match loading from page ${startPage}...`);
+
+  while (hasMore) {
+    // Check if still online before each request
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      console.log('[CacheService] Went offline - pausing background match loading');
+      break;
+    }
+
+    try {
+      const response = await apiClient.get(`/matches?page=${page}&limit=${limit}`);
+      const data = response.data as any;
+      const matches = data.data || data;
+
+      if (!Array.isArray(matches) || matches.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      const cached = await cacheMatchBatch(matches, unsyncedIds);
+      totalCached += cached;
+
+      hasMore = data.hasMore ?? (matches.length === limit);
+      page++;
+
+      // Small delay between pages to avoid overwhelming the server/browser
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch (err) {
+      console.error(`[CacheService] Failed to load matches page ${page}:`, err);
+      // Stop on error - don't retry indefinitely
+      break;
+    }
+  }
+
+  console.log(`[CacheService] Background loading complete: ${totalCached} additional matches cached from ${page - startPage} pages`);
+  
+  // Dispatch event to notify UI that more data is available
+  try {
+    window.dispatchEvent(new CustomEvent('cache:matches:updated', { detail: { totalCached } }));
+  } catch { }
 }
 
 /**

@@ -10,6 +10,7 @@ import apiClient from './baseApi';
 import type { Lineup, LineupCreateRequest, LineupUpdateRequest } from '@shared/types';
 import { isOnline, shouldUseOfflineFallback, getCurrentUserId } from '../../utils/network';
 import { db } from '../../db/indexedDB';
+import { dbToLineup, generateLineupId } from '../../db/transforms';
 import type { EnhancedLineup } from '../../db/schema';
 
 export interface LineupBatchRequest {
@@ -56,34 +57,6 @@ function showOfflineToast(message: string): void {
   }
 }
 
-/**
- * Generate a composite ID for lineup records
- * Format: match_id-player_id-start_min
- */
-function generateLineupId(matchId: string, playerId: string, startMin: number): string {
-  return `${matchId}-${playerId}-${startMin}`;
-}
-
-/**
- * Transform local EnhancedLineup to API Lineup format
- * Requirements: 3.3 - Return transformed local lineup
- */
-function transformToApiLineup(localLineup: EnhancedLineup): Lineup {
-  return {
-    id: localLineup.id,
-    matchId: localLineup.match_id,
-    playerId: localLineup.player_id,
-    startMinute: localLineup.start_min,
-    endMinute: localLineup.end_min,
-    position: localLineup.position,
-    createdAt: new Date(localLineup.created_at),
-    updatedAt: localLineup.updated_at ? new Date(localLineup.updated_at) : undefined,
-    created_by_user_id: localLineup.created_by_user_id,
-    deleted_at: localLineup.deleted_at ? new Date(localLineup.deleted_at) : undefined,
-    deleted_by_user_id: localLineup.deleted_by_user_id,
-    is_deleted: localLineup.is_deleted,
-  };
-}
 
 export const lineupsApi = {
   /**
@@ -164,7 +137,7 @@ export const lineupsApi = {
 
     try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
-    return transformToApiLineup(localLineup);
+    return dbToLineup(localLineup);
   },
 
   /**
@@ -186,7 +159,7 @@ export const lineupsApi = {
 
     try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
-    return transformToApiLineup(updatedLineup);
+    return dbToLineup(updatedLineup);
   },
 
   /**
@@ -267,7 +240,7 @@ export const lineupsApi = {
 
           await db.lineup.add(localLineup);
           result.created.success++;
-          result.created.items.push(transformToApiLineup(localLineup));
+          result.created.items.push(dbToLineup(localLineup));
         } catch {
           result.created.failed++;
         }
@@ -298,7 +271,7 @@ export const lineupsApi = {
           const updatedLineup = await db.lineup.get(updateOp.id);
           if (updatedLineup) {
             result.updated.success++;
-            result.updated.items.push(transformToApiLineup(updatedLineup));
+            result.updated.items.push(dbToLineup(updatedLineup));
           } else {
             result.updated.failed++;
           }
@@ -430,8 +403,8 @@ export const lineupsApi = {
     showOfflineToast('Substitution saved locally - will sync when online');
 
     return {
-      playerOff: transformToApiLineup(updatedPlayerOff),
-      playerOn: transformToApiLineup(playerOnLineup),
+      playerOff: dbToLineup(updatedPlayerOff),
+      playerOn: dbToLineup(playerOnLineup),
     };
   }
 };

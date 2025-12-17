@@ -4,6 +4,8 @@
  */
 
 import apiClient from './baseApi';
+import { dbToSeason, dbToSeasons } from '../../db/transforms';
+import type { EnhancedSeason } from '../../db/schema';
 import type {
   Season,
   SeasonCreateRequest,
@@ -49,21 +51,7 @@ export const seasonsApi = {
     const total = rows.length;
     const start = (page - 1) * limit;
     const paged = rows.slice(start, start + limit);
-    const data = paged.map((s: any) => ({
-      id: s.season_id || s.id,
-      seasonId: s.season_id || s.id,
-      label: s.label,
-      startDate: s.start_date,
-      endDate: s.end_date,
-      isCurrent: !!s.is_current,
-      description: s.description,
-      createdAt: new Date(s.created_at),
-      updatedAt: s.updated_at ? new Date(s.updated_at) : undefined,
-      created_by_user_id: s.created_by_user_id,
-      deleted_at: s.deleted_at ? new Date(s.deleted_at) : undefined,
-      deleted_by_user_id: s.deleted_by_user_id,
-      is_deleted: !!s.is_deleted
-    })) as Season[];
+    const data = dbToSeasons(paged as EnhancedSeason[]);
     return {
       data,
       total,
@@ -85,21 +73,7 @@ export const seasonsApi = {
       throw new Error('Season not found');
     }
     return {
-      data: {
-        id: season.season_id || season.id,
-        seasonId: season.season_id || season.id,
-        label: season.label,
-        startDate: season.start_date,
-        endDate: season.end_date,
-        isCurrent: !!season.is_current,
-        description: season.description,
-        createdAt: new Date(season.created_at),
-        updatedAt: season.updated_at ? new Date(season.updated_at) : undefined,
-        created_by_user_id: season.created_by_user_id,
-        deleted_at: season.deleted_at ? new Date(season.deleted_at) : undefined,
-        deleted_by_user_id: season.deleted_by_user_id,
-        is_deleted: !!season.is_deleted
-      } as Season,
+      data: dbToSeason(season as EnhancedSeason),
       success: true
     };
   },

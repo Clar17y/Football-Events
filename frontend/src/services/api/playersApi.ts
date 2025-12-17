@@ -14,6 +14,8 @@ import apiClient from './baseApi';
 import { authApi } from './authApi';
 import { canAddPlayer } from '../../utils/guestQuota';
 import { getGuestId } from '../../utils/guest';
+import { dbToPlayer, dbToPlayers } from '../../db/transforms';
+import type { EnhancedPlayer } from '../../db/schema';
 import type {
   Player,
   PlayerCreateRequest,
@@ -98,22 +100,7 @@ export const playersApi = {
     const total = rows.length;
     const start = (page - 1) * limit;
     const paged = rows.slice(start, start + limit);
-    // Map to shared Player shape
-    const data = paged.map((p: any) => ({
-      id: p.id,
-      name: p.full_name,
-      squadNumber: p.squad_number,
-      preferredPosition: p.preferred_pos,
-      dateOfBirth: p.dob ? new Date(p.dob) : undefined,
-      notes: p.notes,
-      currentTeam: p.current_team,
-      createdAt: new Date(p.created_at),
-      updatedAt: p.updated_at ? new Date(p.updated_at) : undefined,
-      created_by_user_id: p.created_by_user_id,
-      deleted_at: p.deleted_at ? new Date(p.deleted_at) : undefined,
-      deleted_by_user_id: p.deleted_by_user_id,
-      is_deleted: !!p.is_deleted,
-    })) as Player[];
+    const data = dbToPlayers(paged as EnhancedPlayer[]);
     return {
       data,
       total,
@@ -135,21 +122,7 @@ export const playersApi = {
       throw new Error('Player not found');
     }
     return {
-      data: {
-        id: player.id,
-        name: player.full_name,
-        squadNumber: player.squad_number,
-        preferredPosition: player.preferred_pos,
-        dateOfBirth: player.dob ? new Date(player.dob) : undefined,
-        notes: player.notes,
-        currentTeam: player.current_team,
-        createdAt: new Date(player.created_at),
-        updatedAt: player.updated_at ? new Date(player.updated_at) : undefined,
-        created_by_user_id: player.created_by_user_id,
-        deleted_at: player.deleted_at ? new Date(player.deleted_at) : undefined,
-        deleted_by_user_id: player.deleted_by_user_id,
-        is_deleted: !!player.is_deleted,
-      } as Player,
+      data: dbToPlayer(player as EnhancedPlayer),
       success: true
     };
   },
@@ -294,19 +267,7 @@ export const playersApi = {
       .filter((p: any) => !p.is_deleted)
       .toArray();
     
-    return players.map((p: any) => ({
-      id: p.id,
-      name: p.full_name,
-      squadNumber: p.squad_number,
-      preferredPosition: p.preferred_pos,
-      dateOfBirth: p.dob ? new Date(p.dob) : undefined,
-      notes: p.notes,
-      currentTeam: p.current_team,
-      createdAt: new Date(p.created_at),
-      updatedAt: p.updated_at ? new Date(p.updated_at) : undefined,
-      created_by_user_id: p.created_by_user_id,
-      is_deleted: !!p.is_deleted,
-    })) as Player[];
+    return dbToPlayers(players as EnhancedPlayer[]);
   },
 
   /**

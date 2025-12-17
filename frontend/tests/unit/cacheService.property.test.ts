@@ -108,7 +108,7 @@ describe('Cache Service Property Tests', () => {
     // Helper to create a timestamp older than 30 days
     const createOldTimestamp = (daysOld: number) => Date.now() - daysOld * 24 * 60 * 60 * 1000;
 
-    it('should delete synced matches older than 30 days', async () => {
+    it('should NOT delete synced matches older than 30 days (matches retained for full history)', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.array(matchArbitrary, { minLength: 1, maxLength: 10 }),
@@ -134,16 +134,16 @@ describe('Cache Service Property Tests', () => {
             // Run cleanup
             await cleanupOldTemporalData();
 
-            // All old synced matches should be deleted
+            // Matches are NOT deleted - retained indefinitely for full history access
             const countAfter = await db.matches.count();
-            expect(countAfter).toBe(0);
+            expect(countAfter).toBe(oldSyncedMatches.length);
           }
         ),
         { numRuns: 100 }
       );
     });
 
-    it('should delete synced events older than 30 days', async () => {
+    it('should delete synced events not accessed in 30 days (based on synced_at)', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.array(eventArbitrary, { minLength: 1, maxLength: 10 }),
@@ -156,6 +156,7 @@ describe('Cache Service Property Tests', () => {
               id: `old-event-${i}-${e.id}`,
               created_at: createOldTimestamp(daysOld),
               synced: true,
+              synced_at: createOldTimestamp(daysOld), // Last accessed 30+ days ago
             }));
 
             await db.events.bulkAdd(oldSyncedEvents as any);
@@ -173,7 +174,7 @@ describe('Cache Service Property Tests', () => {
       );
     });
 
-    it('should delete synced match periods older than 30 days', async () => {
+    it('should delete synced match periods not accessed in 30 days (based on synced_at)', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.array(matchPeriodArbitrary, { minLength: 1, maxLength: 10 }),
@@ -186,6 +187,7 @@ describe('Cache Service Property Tests', () => {
               id: `old-period-${i}-${p.id}`,
               created_at: createOldTimestamp(daysOld),
               synced: true,
+              synced_at: createOldTimestamp(daysOld), // Last accessed 30+ days ago
             }));
 
             await db.match_periods.bulkAdd(oldSyncedPeriods as any);
@@ -203,7 +205,7 @@ describe('Cache Service Property Tests', () => {
       );
     });
 
-    it('should delete synced match state older than 30 days', async () => {
+    it('should delete synced match state not accessed in 30 days (based on synced_at)', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.array(matchStateArbitrary, { minLength: 1, maxLength: 10 }),
@@ -217,6 +219,7 @@ describe('Cache Service Property Tests', () => {
               match_id: `old-state-match-${i}-${s.match_id}`,
               created_at: createOldTimestamp(daysOld),
               synced: true,
+              synced_at: createOldTimestamp(daysOld), // Last accessed 30+ days ago
             }));
 
             await db.match_state.bulkAdd(oldSyncedStates as any);
@@ -234,7 +237,7 @@ describe('Cache Service Property Tests', () => {
       );
     });
 
-    it('should delete synced lineups older than 30 days', async () => {
+    it('should delete synced lineups not accessed in 30 days (based on synced_at)', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.array(lineupArbitrary, { minLength: 1, maxLength: 10 }),
@@ -247,6 +250,7 @@ describe('Cache Service Property Tests', () => {
               id: `old-lineup-${i}-${l.id}`,
               created_at: createOldTimestamp(daysOld),
               synced: true,
+              synced_at: createOldTimestamp(daysOld), // Last accessed 30+ days ago
             }));
 
             await db.lineup.bulkAdd(oldSyncedLineups as any);
@@ -264,7 +268,7 @@ describe('Cache Service Property Tests', () => {
       );
     });
 
-    it('should NOT delete synced temporal data that is less than 30 days old', async () => {
+    it('should NOT delete synced temporal data that was accessed within 30 days (based on synced_at)', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.record({
@@ -274,8 +278,8 @@ describe('Cache Service Property Tests', () => {
             state: matchStateArbitrary,
             lineup: lineupArbitrary,
           }),
-          fc.integer({ min: 0, max: 29 }), // days old (must be < 30)
-          async ({ match, event, period, state, lineup }, daysOld) => {
+          fc.integer({ min: 0, max: 29 }), // days since last access (must be < 30)
+          async ({ match, event, period, state, lineup }, daysSinceAccess) => {
             // Clear all tables
             await db.matches.clear();
             await db.events.clear();
@@ -283,39 +287,45 @@ describe('Cache Service Property Tests', () => {
             await db.match_state.clear();
             await db.lineup.clear();
 
-            const recentTimestamp = createOldTimestamp(daysOld);
+            const recentAccessTimestamp = createOldTimestamp(daysSinceAccess);
+            const oldCreatedTimestamp = createOldTimestamp(90); // Created 90 days ago
 
-            // Create recent synced records
+            // Create records with old created_at but recent synced_at (recently accessed)
             const recentMatch = {
               ...match,
               id: 'recent-match',
               match_id: 'recent-match',
-              created_at: recentTimestamp,
+              created_at: oldCreatedTimestamp,
               synced: true,
+              synced_at: recentAccessTimestamp, // Recently accessed
             };
             const recentEvent = {
               ...event,
               id: 'recent-event',
-              created_at: recentTimestamp,
+              created_at: oldCreatedTimestamp,
               synced: true,
+              synced_at: recentAccessTimestamp, // Recently accessed
             };
             const recentPeriod = {
               ...period,
               id: 'recent-period',
-              created_at: recentTimestamp,
+              created_at: oldCreatedTimestamp,
               synced: true,
+              synced_at: recentAccessTimestamp, // Recently accessed
             };
             const recentState = {
               ...state,
               match_id: 'recent-state-match',
-              created_at: recentTimestamp,
+              created_at: oldCreatedTimestamp,
               synced: true,
+              synced_at: recentAccessTimestamp, // Recently accessed
             };
             const recentLineup = {
               ...lineup,
               id: 'recent-lineup',
-              created_at: recentTimestamp,
+              created_at: oldCreatedTimestamp,
               synced: true,
+              synced_at: recentAccessTimestamp, // Recently accessed
             };
 
             await db.matches.add(recentMatch as any);
@@ -327,7 +337,7 @@ describe('Cache Service Property Tests', () => {
             // Run cleanup
             await cleanupOldTemporalData();
 
-            // All recent records should still exist
+            // All recently accessed records should still exist (even though created_at is old)
             expect(await db.matches.get('recent-match')).toBeDefined();
             expect(await db.events.get('recent-event')).toBeDefined();
             expect(await db.match_periods.get('recent-period')).toBeDefined();
@@ -386,7 +396,7 @@ describe('Cache Service Property Tests', () => {
       );
     });
 
-    it('should delete old synced records while preserving recent synced records in the same table', async () => {
+    it('should preserve all matches regardless of age (matches retained for full history)', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.array(matchArbitrary, { minLength: 2, maxLength: 5 }),
@@ -420,14 +430,14 @@ describe('Cache Service Property Tests', () => {
 
             await cleanupOldTemporalData();
 
-            // Only recent matches should remain
+            // ALL matches should remain - matches are retained indefinitely for full history
             const countAfter = await db.matches.count();
-            expect(countAfter).toBe(recentSyncedMatches.length);
+            expect(countAfter).toBe(oldSyncedMatches.length + recentSyncedMatches.length);
 
-            // Verify old matches are gone
+            // Verify old matches still exist
             for (const oldMatch of oldSyncedMatches) {
               const found = await db.matches.get(oldMatch.id);
-              expect(found).toBeUndefined();
+              expect(found).toBeDefined();
             }
 
             // Verify recent matches still exist
@@ -1129,7 +1139,7 @@ describe('Cache Service Property Tests', () => {
       );
     });
 
-    it('should delete old synced records while preserving old unsynced records in the same table', { timeout: 30000 }, async () => {
+    it('should preserve all matches regardless of sync status or age (matches retained for full history)', { timeout: 30000 }, async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.array(matchArbitrary, { minLength: 2, maxLength: 5 }),
@@ -1137,7 +1147,7 @@ describe('Cache Service Property Tests', () => {
           async (syncedMatches, unsyncedMatches) => {
             await db.matches.clear();
 
-            // Create old SYNCED matches (> 30 days) - should be deleted
+            // Create old SYNCED matches (> 30 days) - should be preserved (matches not cleaned up)
             const oldSyncedMatches = syncedMatches.map((m, i) => ({
               ...m,
               id: `old-synced-match-${i}`,
@@ -1163,14 +1173,14 @@ describe('Cache Service Property Tests', () => {
 
             await cleanupOldTemporalData();
 
-            // Only unsynced matches should remain
+            // ALL matches should remain - matches are retained indefinitely for full history
             const countAfter = await db.matches.count();
-            expect(countAfter).toBe(oldUnsyncedMatches.length);
+            expect(countAfter).toBe(oldSyncedMatches.length + oldUnsyncedMatches.length);
 
-            // Verify synced matches are gone
+            // Verify synced matches still exist
             for (const syncedMatch of oldSyncedMatches) {
               const found = await db.matches.get(syncedMatch.id);
-              expect(found).toBeUndefined();
+              expect(found).toBeDefined();
             }
 
             // Verify unsynced matches still exist

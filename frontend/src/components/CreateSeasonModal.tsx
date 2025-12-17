@@ -159,8 +159,8 @@ const CreateSeasonModal: React.FC<CreateSeasonModalProps> = ({
 
     const seasonData = {
       label: formData.name.trim(),
-      startDate: formData.startDate?.toISOString() || '',
-      endDate: formData.endDate?.toISOString() || '',
+      startDate: formData.startDate?.format('YYYY-MM-DD') || '',
+      endDate: formData.endDate?.format('YYYY-MM-DD') || '',
       isCurrent: formData.isActive
     };
 

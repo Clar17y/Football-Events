@@ -13,6 +13,8 @@
 import apiClient from './baseApi';
 import { authApi } from './authApi';
 import { canCreateTeam } from '../../utils/guestQuota';
+import { dbToTeam, dbToTeams } from '../../db/transforms';
+import type { EnhancedTeam } from '../../db/schema';
 import type {
   Team,
   TeamCreateRequest,
@@ -85,25 +87,11 @@ export const teamsApi = {
       const term = search.trim().toLowerCase();
       teams = teams.filter(t => (t.name || '').toLowerCase().includes(term));
     }
-    teams.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
+    teams.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     const total = teams.length;
     const start = (page - 1) * limit;
     const paged = teams.slice(start, start + limit);
-    // Map to shared Team shape including colors
-    const data = paged.map((t: any) => ({
-      id: t.id,
-      name: t.name,
-      homeKitPrimary: t.color_primary || t.homeKitPrimary,
-      homeKitSecondary: t.color_secondary || t.homeKitSecondary,
-      awayKitPrimary: t.away_color_primary || t.awayKitPrimary,
-      awayKitSecondary: t.away_color_secondary || t.awayKitSecondary,
-      logoUrl: t.logo_url || t.logoUrl,
-      is_opponent: !!t.is_opponent,
-      createdAt: t.created_at ? new Date(t.created_at) : undefined,
-      updatedAt: t.updated_at ? new Date(t.updated_at) : undefined,
-      created_by_user_id: t.created_by_user_id,
-      is_deleted: !!t.is_deleted
-    })) as any;
+    const data = dbToTeams(paged as EnhancedTeam[]);
     return {
       data,
       total,
@@ -121,25 +109,11 @@ export const teamsApi = {
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
     const team = await db.teams.get(id);
-    if (!team || (team as any).is_deleted) {
+    if (!team || team.is_deleted) {
       throw new Error('Team not found');
     }
-    const t = team as any;
     return {
-      data: {
-        id: t.id,
-        name: t.name,
-        homeKitPrimary: t.color_primary || t.homeKitPrimary,
-        homeKitSecondary: t.color_secondary || t.homeKitSecondary,
-        awayKitPrimary: t.away_color_primary || t.awayKitPrimary,
-        awayKitSecondary: t.away_color_secondary || t.awayKitSecondary,
-        logoUrl: t.logo_url || t.logoUrl,
-        is_opponent: !!t.is_opponent,
-        createdAt: t.created_at ? new Date(t.created_at) : undefined,
-        updatedAt: t.updated_at ? new Date(t.updated_at) : undefined,
-        created_by_user_id: t.created_by_user_id,
-        is_deleted: !!t.is_deleted
-      } as Team,
+      data: dbToTeam(team as EnhancedTeam),
       success: true
     };
   },
@@ -175,16 +149,7 @@ export const teamsApi = {
     try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     return {
-      data: {
-        id: team.id,
-        name: team.name,
-        homeKitPrimary: team.color_primary,
-        homeKitSecondary: team.color_secondary,
-        awayKitPrimary: team.away_color_primary,
-        awayKitSecondary: team.away_color_secondary,
-        logoUrl: team.logo_url,
-        is_opponent: team.is_opponent,
-      } as any,
+      data: dbToTeam(team as EnhancedTeam),
       success: true,
       message: 'Team created'
     };
@@ -216,17 +181,12 @@ export const teamsApi = {
 
     try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
+    if (!updated) {
+      throw new Error('Team not found after update');
+    }
+
     return {
-      data: {
-        id,
-        name: updated?.name || teamData.name,
-        homeKitPrimary: updated?.color_primary,
-        homeKitSecondary: updated?.color_secondary,
-        awayKitPrimary: updated?.away_color_primary,
-        awayKitSecondary: updated?.away_color_secondary,
-        logoUrl: updated?.logo_url,
-        is_opponent: updated?.is_opponent,
-      } as any,
+      data: dbToTeam(updated as EnhancedTeam),
       success: true,
       message: 'Team updated'
     };
@@ -349,7 +309,7 @@ export const teamsApi = {
    */
   async getOpponentTeams(search?: string): Promise<Team[]> {
     const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
-    
+
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
     let teams = await db.teams.filter((t: any) => !t.is_deleted).toArray();
@@ -357,12 +317,8 @@ export const teamsApi = {
       const term = normalize(search);
       teams = teams.filter(t => normalize(t.name || '').includes(term));
     }
-    teams.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
-    return teams.map(t => ({
-      id: t.id,
-      name: t.name,
-      is_opponent: !!(t as any).is_opponent,
-    } as any));
+    teams.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    return dbToTeams(teams as EnhancedTeam[]);
   }
 };
 
