@@ -8,7 +8,12 @@ export function generateShortCode(length = 10): string {
     for (let i = 0; i < length; i++) bytes[i] = Math.floor(Math.random() * 256);
   }
   let out = '';
-  for (let i = 0; i < length; i++) out += alphabet[bytes[i] % alphabet.length];
+  for (let i = 0; i < length; i++) {
+    const byte = bytes[i];
+    if (byte !== undefined) {
+      out += alphabet[byte % alphabet.length];
+    }
+  }
   return out;
 }
 

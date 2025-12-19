@@ -11,7 +11,7 @@ const router = Router();
 const seasonService = new SeasonService();
 
 // GET /api/v1/seasons/current - Get current active season
-router.get('/current', asyncHandler(async (req, res) => {
+router.get('/current', asyncHandler(async (_req, res) => {
   try {
     const currentSeason = await seasonService.getCurrentSeason();
     
@@ -22,13 +22,13 @@ router.get('/current', asyncHandler(async (req, res) => {
       });
     }
     
-    res.json({
+    return res.json({
       success: true,
       season: currentSeason
     });
   } catch (error) {
     console.error('Error fetching current season:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: 'Failed to fetch current season',
       message: 'Unable to retrieve current season information'
     });
@@ -49,7 +49,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
     }
   );
   
-  res.json(result);
+  return res.json(result);
 }));
 
 // POST /api/v1/seasons - Create new season
@@ -59,7 +59,7 @@ router.post('/',
   asyncHandler(async (req, res) => {
     try {
       const season = await seasonService.createSeason(req.body, req.user!.id);
-      res.status(201).json(season);
+      return res.status(201).json(season);
     } catch (error: any) {
       const apiError = extractApiError(error);
       if (apiError) {

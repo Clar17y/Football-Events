@@ -4,7 +4,9 @@ import {
   transformLineupCreateRequest, 
   transformLineupUpdateRequest,
   transformLineups,
-  safeTransformLineup
+  safeTransformLineup,
+  transformPlayer,
+  transformEvent
 } from '@shared/types';
 import type { 
   Lineup, 
@@ -248,8 +250,8 @@ export class LineupService {
       const lineup = await createOrRestoreSoftDeleted({
         prisma: this.prisma,
         model: 'lineup',
-        uniqueConstraints: SoftDeletePatterns.lineup(data.matchId, data.playerId, data.startMinute),
-        createData: transformLineupCreateRequest(data),
+        uniqueConstraints: SoftDeletePatterns.lineup(data.matchId, data.playerId, data.startMinute ?? 0),
+        createData: transformLineupCreateRequest(data, userId),
         userId,
         transformer: transformLineup
       });
@@ -291,7 +293,7 @@ export class LineupService {
 
       const lineup = await this.prisma.lineup.update({
         where: { id },
-        data: prismaInput
+        data: prismaInput as any // Cast to bypass exactOptionalPropertyTypes for position enum
       });
 
       return transformLineup(lineup);
@@ -680,20 +682,7 @@ export class LineupService {
     // Transform to LineupWithDetails
     return lineups.map(lineup => ({
       ...transformLineup(lineup),
-      player: {
-        id: lineup.players.id,
-        name: lineup.players.name,
-        squadNumber: lineup.players.squad_number,
-        preferredPosition: lineup.players.preferred_pos,
-        dateOfBirth: lineup.players.dob,
-        notes: lineup.players.notes,
-        createdAt: lineup.players.created_at,
-        updatedAt: lineup.players.updated_at,
-        createdByUserId: lineup.players.created_by_user_id,
-        deletedAt: lineup.players.deleted_at,
-        deletedByUserId: lineup.players.deleted_by_user_id,
-        isDeleted: lineup.players.is_deleted
-      }
+      player: transformPlayer(lineup.players)
     }));
   }
 
@@ -755,24 +744,14 @@ export class LineupService {
     
     lineups.forEach(lineup => {
       if (!playerMap.has(lineup.player_id)) {
+        const player = transformPlayer(lineup.players);
         playerMap.set(lineup.player_id, {
-          id: lineup.players.id,
-          name: lineup.players.name,
-          squadNumber: lineup.players.squad_number,
-          preferredPosition: lineup.players.preferred_pos,
-          dateOfBirth: lineup.players.dob,
-          notes: lineup.players.notes,
-          createdAt: lineup.players.created_at,
-          updatedAt: lineup.players.updated_at,
-          createdByUserId: lineup.players.created_by_user_id,
-          deletedAt: lineup.players.deleted_at,
-          deletedByUserId: lineup.players.deleted_by_user_id,
-          isDeleted: lineup.players.is_deleted,
+          ...player,
           position: {
             code: lineup.position,
-            name: lineup.position // Using position code as name for now
+            longName: lineup.position // Using position code as longName for now
           }
-        });
+        } as PlayerWithPosition);
       }
     });
 
@@ -857,7 +836,7 @@ export class LineupService {
           data: {
             end_min: currentTime,
             updated_at: new Date(),
-            substitution_reason: substitutionReason
+            substitution_reason: substitutionReason ?? null
           },
           include: {
             players: {
@@ -888,7 +867,7 @@ export class LineupService {
             end_min: null,
             position: position as any, // Cast to position_code enum
             created_by_user_id: userId,
-            substitution_reason: substitutionReason
+            substitution_reason: substitutionReason ?? null
           },
           include: {
             players: {
@@ -917,7 +896,7 @@ export class LineupService {
             kind: 'ball_out', // Using ball_out as closest available event type for substitution
             player_id: playerOffId,
             team_id: match.home_team_id, // Assuming home team for now - this should be determined properly
-            notes: `${updatedLineupOff.players.name} substituted off`,
+            notes: `${(updatedLineupOff as any).players.name} substituted off`,
             clock_ms: Math.round(currentTime * 60 * 1000), // Convert minutes to milliseconds
             created_by_user_id: userId
           }
@@ -929,7 +908,7 @@ export class LineupService {
             kind: 'ball_out', // Using ball_out as closest available event type for substitution
             player_id: playerOnId,
             team_id: match.home_team_id, // Assuming home team for now - this should be determined properly
-            notes: `${newLineup.players.name} substituted on`,
+            notes: `${(newLineup as any).players.name} substituted on`,
             clock_ms: Math.round(currentTime * 60 * 1000), // Convert minutes to milliseconds
             created_by_user_id: userId
           }
@@ -942,63 +921,21 @@ export class LineupService {
         };
       });
 
-      // Transform the results to the expected format
+      // Transform the results to the expected format using transformers
       const playerOffLineup: LineupWithDetails = {
         ...transformLineup(result.updatedLineupOff),
-        player: {
-          id: result.updatedLineupOff.players.id,
-          name: result.updatedLineupOff.players.name,
-          squadNumber: result.updatedLineupOff.players.squad_number,
-          preferredPosition: result.updatedLineupOff.players.preferred_pos,
-          dateOfBirth: result.updatedLineupOff.players.dob,
-          notes: result.updatedLineupOff.players.notes,
-          createdAt: result.updatedLineupOff.players.created_at,
-          updatedAt: result.updatedLineupOff.players.updated_at,
-          createdByUserId: result.updatedLineupOff.players.created_by_user_id,
-          deletedAt: result.updatedLineupOff.players.deleted_at,
-          deletedByUserId: result.updatedLineupOff.players.deleted_by_user_id,
-          isDeleted: result.updatedLineupOff.players.is_deleted
-        }
+        player: transformPlayer((result.updatedLineupOff as any).players)
       };
 
       const playerOnLineup: LineupWithDetails = {
         ...transformLineup(result.newLineup),
-        player: {
-          id: result.newLineup.players.id,
-          name: result.newLineup.players.name,
-          squadNumber: result.newLineup.players.squad_number,
-          preferredPosition: result.newLineup.players.preferred_pos,
-          dateOfBirth: result.newLineup.players.dob,
-          notes: result.newLineup.players.notes,
-          createdAt: result.newLineup.players.created_at,
-          updatedAt: result.newLineup.players.updated_at,
-          createdByUserId: result.newLineup.players.created_by_user_id,
-          deletedAt: result.newLineup.players.deleted_at,
-          deletedByUserId: result.newLineup.players.deleted_by_user_id,
-          isDeleted: result.newLineup.players.is_deleted
-        }
+        player: transformPlayer((result.newLineup as any).players)
       };
 
       return {
         playerOff: playerOffLineup,
         playerOn: playerOnLineup,
-        timelineEvents: result.events.map(event => ({
-          id: event.id,
-          matchId: event.match_id,
-          createdAt: event.created_at,
-          periodNumber: event.period_number,
-          clockMs: event.clock_ms,
-          kind: event.kind,
-          teamId: event.team_id,
-          playerId: event.player_id,
-          notes: event.notes,
-          sentiment: event.sentiment,
-          updatedAt: event.updated_at,
-          createdByUserId: event.created_by_user_id,
-          deletedAt: event.deleted_at,
-          deletedByUserId: event.deleted_by_user_id,
-          isDeleted: event.is_deleted
-        }))
+        timelineEvents: result.events.map(event => transformEvent(event))
       };
     }, 'Substitution');
   }

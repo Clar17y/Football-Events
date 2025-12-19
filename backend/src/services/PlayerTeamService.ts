@@ -2,8 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { 
   transformPlayerTeam, 
   transformPlayerTeamCreateRequest, 
-  transformPlayerTeamUpdateRequest,
-  transformPlayerTeams 
+  transformPlayerTeamUpdateRequest
 } from '@shared/types';
 import type { 
   PlayerTeam, 
@@ -653,14 +652,12 @@ export class PlayerTeamService {
         userRole
       );
       
+      const { playerName, teamName, ...rest } = request;
       return {
-        ...request,
+        ...rest,
         playerId: resolved.playerId,
-        teamId: resolved.teamId,
-        // Remove natural key fields to avoid confusion
-        playerName: undefined,
-        teamName: undefined
-      };
+        teamId: resolved.teamId
+      } as PlayerTeamCreateRequest;
     } else {
       // Validate that we have both playerId and teamId for UUID-based requests
       if (!request.playerId || !request.teamId) {
@@ -668,78 +665,6 @@ export class PlayerTeamService {
       }
       return request;
     }
-  }
-
-  /**
-   * Resolve natural keys to UUIDs for batch operations (kept for potential future use)
-   */
-  private async resolveNaturalKeysForBatch(createRequests: PlayerTeamCreateRequest[], userId: string, userRole: string): Promise<PlayerTeamCreateRequest[]> {
-    const resolved: PlayerTeamCreateRequest[] = [];
-    
-    // Separate requests that need natural key resolution from those that don't
-    const naturalKeyRequests: Array<{ index: number; playerName: string; teamName: string }> = [];
-    
-    for (let i = 0; i < createRequests.length; i++) {
-      const request = createRequests[i];
-      
-      if (NaturalKeyResolver.hasNaturalKeys(request)) {
-        // Validate that we have both playerName and teamName
-        if (!request.playerName || !request.teamName) {
-          throw new Error(`Natural key resolution requires both playerName and teamName. Request ${i} is missing required fields.`);
-        }
-        
-        naturalKeyRequests.push({
-          index: i,
-          playerName: request.playerName,
-          teamName: request.teamName
-        });
-      } else {
-        // Validate that we have both playerId and teamId for UUID-based requests
-        if (!request.playerId || !request.teamId) {
-          throw new Error(`UUID-based request requires both playerId and teamId. Request ${i} is missing required fields.`);
-        }
-      }
-    }
-    
-    // Resolve natural keys in batch if any exist
-    let resolvedKeys: Array<{ playerId: string; teamId: string }> = [];
-    if (naturalKeyRequests.length > 0) {
-      const keyRequests = naturalKeyRequests.map(req => ({
-        playerName: req.playerName,
-        teamName: req.teamName
-      }));
-      
-      const resolvedPlayerTeamKeys = await this.naturalKeyResolver.resolveMultiplePlayerTeamKeys(keyRequests, userId, userRole);
-      resolvedKeys = resolvedPlayerTeamKeys.map(resolved => ({
-        playerId: resolved.playerId,
-        teamId: resolved.teamId
-      }));
-    }
-    
-    // Build the resolved requests array
-    let naturalKeyIndex = 0;
-    for (let i = 0; i < createRequests.length; i++) {
-      const request = createRequests[i];
-      
-      if (NaturalKeyResolver.hasNaturalKeys(request)) {
-        // Use resolved UUIDs
-        const resolvedKey = resolvedKeys[naturalKeyIndex];
-        resolved.push({
-          ...request,
-          playerId: resolvedKey.playerId,
-          teamId: resolvedKey.teamId,
-          // Remove natural key fields to avoid confusion
-          playerName: undefined,
-          teamName: undefined
-        });
-        naturalKeyIndex++;
-      } else {
-        // Use existing UUIDs
-        resolved.push(request);
-      }
-    }
-    
-    return resolved;
   }
 
   async disconnect(): Promise<void> {

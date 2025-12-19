@@ -49,8 +49,8 @@ export class LiveFormationService {
     const players = current.map(lu => ({
       id: lu.player.id,
       name: lu.player.name,
-      squadNumber: lu.player.squadNumber,
-      preferredPosition: lu.player.preferredPosition || undefined,
+      squadNumber: lu.player.squadNumber ?? null,
+      preferredPosition: lu.player.preferredPosition ?? null,
       position: {
         x: (lu as any).pitchX ?? 0,
         y: (lu as any).pitchY ?? 0,
@@ -125,7 +125,14 @@ export class LiveFormationService {
       const inPlayers = ins.map(id => ({ id, name: formation.players.find(p => p.id === id)?.name || null }));
       const maxPairs = Math.max(outPlayers.length, inPlayers.length);
       for (let i = 0; i < maxPairs; i++) {
-        subs.push({ out: outPlayers[i], in: inPlayers[i] });
+        const outPlayer = outPlayers[i];
+        const inPlayer = inPlayers[i];
+        if (outPlayer || inPlayer) {
+          const sub: { out?: { id: string; name?: string | null }; in?: { id: string; name?: string | null } } = {};
+          if (outPlayer) sub.out = outPlayer;
+          if (inPlayer) sub.in = inPlayer;
+          subs.push(sub);
+        }
       }
 
       // Transaction: end active snapshot and lineups, create new snapshot and lineups
@@ -157,7 +164,7 @@ export class LiveFormationService {
         if (existing) {
           await tx.live_formations.update({
             where: { id: existing.id },
-            data: { end_min: start, substitution_reason: reason || existing.substitution_reason || undefined }
+            data: { end_min: start, substitution_reason: reason || existing.substitution_reason || null }
           });
         }
 
@@ -175,7 +182,7 @@ export class LiveFormationService {
         // End current lineup rows
         await tx.lineup.updateMany({
           where: { match_id: matchId, end_min: null, is_deleted: false },
-          data: { end_min: Number(start), updated_at: new Date(), substitution_reason: reason || undefined }
+          data: { end_min: Number(start), updated_at: new Date(), substitution_reason: reason || null }
         });
 
         // Create new lineup rows from formation

@@ -2,9 +2,9 @@ import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 
 // JWT Configuration
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';
-const REFRESH_TOKEN_EXPIRES_IN = process.env.REFRESH_TOKEN_EXPIRES_IN || '30d';
+const JWT_SECRET = process.env['JWT_SECRET'] || 'your-super-secret-jwt-key-change-in-production';
+const JWT_EXPIRES_IN = process.env['JWT_EXPIRES_IN'] || '15m';
+const REFRESH_TOKEN_EXPIRES_IN = process.env['REFRESH_TOKEN_EXPIRES_IN'] || '30d';
 
 export interface JWTPayload {
   userId: string;
@@ -97,5 +97,5 @@ export function extractTokenFromHeader(authHeader: string | undefined): string |
     return null;
   }
   
-  return parts[1];
+  return parts[1] ?? null;
 }

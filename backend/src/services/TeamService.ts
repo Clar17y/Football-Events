@@ -39,7 +39,7 @@ export class TeamService {
     this.prisma = new PrismaClient();
   }
 
-  async getOpponentTeams(userId: string, userRole: string, search?: string): Promise<Team[]> {
+  async getOpponentTeams(userId: string, _userRole: string, search?: string): Promise<Team[]> {
     const where: any = {
       is_deleted: false,
       is_opponent: true,
@@ -345,7 +345,7 @@ export class TeamService {
         {
           // Players who played in matches for this season
           player: {
-            lineups: {
+            lineup: {
               some: {
                 matches: {
                   season_id: seasonId
@@ -362,24 +362,23 @@ export class TeamService {
       ];
     }
 
-    const playerTeams = await this.prisma.player_team.findMany({
+    const playerTeams = await this.prisma.player_teams.findMany({
       where: playerTeamsWhere,
       include: {
         player: {
           select: {
             id: true,
-            first_name: true,
-            last_name: true,
-            jersey_number: true,
+            name: true,
+            squad_number: true,
             preferred_pos: true,
-            date_of_birth: true,
+            dob: true,
             created_at: true
           }
         }
       },
       orderBy: [
-        { player: { jersey_number: 'asc' } },
-        { player: { first_name: 'asc' } }
+        { player: { squad_number: 'asc' } },
+        { player: { name: 'asc' } }
       ]
     });
 
@@ -420,7 +419,6 @@ export class TeamService {
           this.prisma.lineup.count({
             where: {
               match_id: { in: matchIds },
-              team_id: teamId,
               is_deleted: false
             }
           })
@@ -437,11 +435,10 @@ export class TeamService {
 
     return {
       team: transformTeam(team),
-      players: playerTeams.map(pt => ({
+      players: playerTeams.map((pt: any) => ({
         playerId: pt.player_id,
         teamId: pt.team_id,
-        position: pt.position,
-        joinedAt: pt.joined_at,
+        startDate: pt.start_date,
         isActive: pt.is_active,
         player: pt.player
       })),

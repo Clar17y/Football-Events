@@ -18,7 +18,7 @@ export class MatchPeriodsService {
   /**
    * Valid period types (matching Prisma enum values)
    */
-  private static readonly VALID_PERIOD_TYPES = ['REGULAR', 'EXTRA_TIME', 'PENALTY_SHOOTOUT'] as const;
+
   
   /**
    * Map frontend period types to database enum values
@@ -68,7 +68,7 @@ export class MatchPeriodsService {
     const lastPeriod = await this.prisma.match_periods.findFirst({
       where: {
         match_id: matchId,
-        period_type: periodType,
+        period_type: periodType as any,
         is_deleted: false
       },
       orderBy: { period_number: 'desc' }
@@ -129,10 +129,10 @@ export class MatchPeriodsService {
       const periodNumber = await this.getNextPeriodNumber(matchId, dbPeriodType);
 
       // Create new period using soft delete restoration
-      const uniqueConstraints = {
+      const uniqueConstraints: Record<string, any> = {
         match_id: matchId,
         period_number: periodNumber,
-        period_type: dbPeriodType
+        period_type: dbPeriodType as any
       };
 
       const createData = {
@@ -399,7 +399,7 @@ export class MatchPeriodsService {
       const periods = await this.prisma.match_periods.findMany({
         where: {
           match_id: matchId,
-          period_type: dbPeriodType,
+          period_type: dbPeriodType as any,
           is_deleted: false
         },
         orderBy: { period_number: 'asc' }

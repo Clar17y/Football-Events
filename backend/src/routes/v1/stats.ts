@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
  * GET /api/v1/stats/global - Get global platform statistics
  * Returns aggregated stats across all users for community engagement
  */
-router.get('/global', asyncHandler(async (req, res) => {
+router.get('/global', asyncHandler(async (_req, res) => {
   try {
     // Get date boundaries for today
     const now = new Date();

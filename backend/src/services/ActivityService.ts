@@ -293,9 +293,10 @@ export class ActivityService {
       const suppressSet = new Set<string>();
       for (let i = 0; i < periodEvents.length; i++) {
         const ev = periodEvents[i];
-        if (ev.kind !== 'penalty') continue;
+        if (!ev || ev.kind !== 'penalty') continue;
         for (let j = i + 1; j < periodEvents.length; j++) {
           const next = periodEvents[j];
+          if (!next) continue;
           const dt = next.created_at.getTime() - ev.created_at.getTime();
           if (dt > 60 * 1000) break;
           if (next.kind === 'goal') { suppressSet.add(ev.id); break; }
@@ -409,18 +410,6 @@ export class ActivityService {
             break;
           case 'foul':
             t = playerName ? `Foul by ${playerName}.` : (teamName ? `Foul by ${teamName}.` : `Foul committed.`);
-            break;
-          case 'shot_on':
-            t = playerName && teamName ? `${playerName} tests the keeper for ${teamName}.` : (teamName ? `Shot on target for ${teamName}.` : `Shot on target.`);
-            break;
-          case 'shot_off':
-            t = playerName && teamName ? `${playerName} fires wide for ${teamName}.` : (teamName ? `Shot off target for ${teamName}.` : `Shot off target.`);
-            break;
-          case 'yellow_card':
-            t = playerName ? `Yellow card for ${playerName}.` : (teamName ? `Yellow card to ${teamName}.` : `Yellow card shown.`);
-            break;
-          case 'red_card':
-            t = playerName ? `Red card for ${playerName}.` : (teamName ? `Red card to ${teamName}.` : `Red card shown.`);
             break;
           default:
             t = `${ev.kind.replace('_', ' ')}.`;

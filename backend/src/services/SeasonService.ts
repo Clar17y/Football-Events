@@ -153,7 +153,7 @@ export class SeasonService {
         prisma: this.prisma,
         model: 'seasons',
         uniqueConstraints: UniqueConstraintBuilders.userScoped('label', data.label, userId),
-        createData: transformSeasonCreateRequest(data),
+        createData: transformSeasonCreateRequest(data, userId),
         userId,
         transformer: transformSeason,
         primaryKeyField: 'season_id'

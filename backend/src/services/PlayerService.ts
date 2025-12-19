@@ -11,7 +11,7 @@ import type {
   PlayerUpdateRequest 
 } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
-import { createOrRestoreSoftDeleted, UniqueConstraintBuilders } from '../utils/softDeleteUtils';
+import { createOrRestoreSoftDeleted } from '../utils/softDeleteUtils';
 
 export interface GetPlayersOptions {
   page: number;
@@ -175,10 +175,13 @@ export class PlayerService {
     // Group events by player_id for efficient lookup
     const eventsByPlayer: Record<string, any[]> = {};
     allEvents.forEach(event => {
-      if (!eventsByPlayer[event.player_id!]) {
-        eventsByPlayer[event.player_id!] = [];
+      const playerId = event.player_id;
+      if (playerId) {
+        if (!eventsByPlayer[playerId]) {
+          eventsByPlayer[playerId] = [];
+        }
+        eventsByPlayer[playerId]!.push(event);
       }
-      eventsByPlayer[event.player_id!].push(event);
     });
 
     // Build a match lookup to compute clean sheets using home/away scores.
@@ -326,7 +329,7 @@ export class PlayerService {
     return transformedPlayer;
   }
 
-  async createPlayer(data: PlayerCreateRequest, userId: string, userRole: string): Promise<Player> {
+  async createPlayer(data: PlayerCreateRequest, userId: string, _userRole: string): Promise<Player> {
     return withPrismaErrorHandling(async () => {
       // Build unique constraints for soft delete restoration
       const constraints: Record<string, any> = {
@@ -335,14 +338,14 @@ export class PlayerService {
       };
       
       if (data.squadNumber !== undefined) {
-        constraints.squad_number = data.squadNumber;
+        constraints['squad_number'] = data.squadNumber;
       }
 
       const player = await createOrRestoreSoftDeleted({
         prisma: this.prisma,
         model: 'player',
         uniqueConstraints: constraints,
-        createData: transformPlayerCreateRequest(data),
+        createData: transformPlayerCreateRequest(data, userId),
         userId,
         transformer: transformPlayer
       });
@@ -378,7 +381,7 @@ export class PlayerService {
         const player = await this.prisma.player.update({
           where: { id },
           data: {
-            ...prismaInput,
+            ...prismaInput as any,
             updated_at: new Date()
           },
           include: {

@@ -19,7 +19,7 @@ router.post('/', authenticateToken, validateRequest(defaultLineupCreateSchema), 
     const { teamId, formation } = req.body;
     const defaultLineup = await defaultLineupService.saveDefaultLineup(teamId, formation, req.user!.id);
     
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       data: defaultLineup,
       message: 'Default lineup saved successfully'

@@ -5,7 +5,7 @@ import {
   transformEvents,
   safeTransformEvent
 } from '@shared/types';
-import { createOrRestoreSoftDeleted, UniqueConstraintBuilders } from '../utils/softDeleteUtils';
+import { createOrRestoreSoftDeleted } from '../utils/softDeleteUtils';
 import type { 
   Event, 
   EventCreateRequest,
@@ -627,8 +627,6 @@ export class EventService {
    * Get all match IDs that a user can access (matches they created or involving their teams)
    */
   private async getAccessibleMatchIds(userId: string): Promise<string[]> {
-    const userTeamIds = await this.getUserTeamIds(userId);
-    
     const matches = await this.prisma.match.findMany({
       where: {
         is_deleted: false,
@@ -653,21 +651,6 @@ export class EventService {
     });
 
     return !!match;
-  }
-
-  /**
-   * Get all team IDs that belong to a user
-   */
-  private async getUserTeamIds(userId: string): Promise<string[]> {
-    const teams = await this.prisma.team.findMany({
-      where: { 
-        created_by_user_id: userId,
-        is_deleted: false 
-      },
-      select: { id: true }
-    });
-
-    return teams.map(team => team.id);
   }
 
   async disconnect(): Promise<void> {

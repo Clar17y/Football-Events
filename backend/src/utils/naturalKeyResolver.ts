@@ -113,7 +113,7 @@ export class NaturalKeyResolver {
       );
     }
 
-    return players[0].id;
+    return players[0]!.id;
   }
 
   async resolveMultiplePlayers(playerNames: string[], userId: string, userRole: string): Promise<ResolvedPlayerKeys[]> {
@@ -202,7 +202,7 @@ export class NaturalKeyResolver {
       );
     }
 
-    return teams[0].id;
+    return teams[0]!.id;
   }
 
   async resolveMultipleTeams(teamNames: string[], userId: string, userRole: string, opts?: { isOpponent?: boolean }): Promise<ResolvedTeamKeys[]> {
@@ -291,7 +291,7 @@ export class NaturalKeyResolver {
       );
     }
 
-    return seasons[0].season_id;
+    return seasons[0]!.season_id;
   }
 
   // ============================================================================
@@ -350,7 +350,7 @@ export class NaturalKeyResolver {
       );
     }
 
-    return matches[0].match_id;
+    return matches[0]!.match_id;
   }
 
   // ============================================================================

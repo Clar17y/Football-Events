@@ -36,7 +36,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
 router.post('/', authenticateToken, validateRequest(lineupCreateSchema), asyncHandler(async (req, res) => {
   try {
     const lineup = await lineupService.createLineup(req.body, req.user!.id, req.user!.role);
-    res.status(201).json(lineup);
+    return res.status(201).json(lineup);
   } catch (error: any) {
     const apiError = extractApiError(error);
     if (apiError) {

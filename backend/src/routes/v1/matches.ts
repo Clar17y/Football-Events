@@ -19,7 +19,6 @@ import {
   matchResumeSchema,
   matchCompleteSchema,
   matchCancelSchema,
-  matchPostponeSchema,
   periodStartSchema, 
   periodEndSchema,
   periodImportSchema
@@ -808,7 +807,7 @@ router.post('/:id/share', authenticateToken, validateUUID(), requireMatchCreator
   });
 
   // Build absolute frontend URL for sharing
-  const envBase = process.env.FRONTEND_URL && String(process.env.FRONTEND_URL);
+  const envBase = process.env['FRONTEND_URL'] && String(process.env['FRONTEND_URL']);
   const origin = req.get('origin');
   const hostBase = `${req.protocol}://${req.get('host')}`; // final fallback (API host)
   const base = (envBase || origin || hostBase).replace(/\/$/, '');

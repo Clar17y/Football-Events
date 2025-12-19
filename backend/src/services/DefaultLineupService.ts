@@ -16,12 +16,12 @@ export interface DefaultLineupData {
   id: string;
   teamId: string;
   formation: FormationPlayer[];
-  createdAt: Date;
-  updatedAt?: Date;
-  created_by_user_id: string;
-  deleted_at?: Date;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  createdAt: string;           // ISO date-time string
+  updatedAt?: string;          // ISO date-time string
+  createdByUserId: string;
+  deletedAt?: string;          // ISO date-time string
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 export interface DefaultLineupCreateRequest {
@@ -196,7 +196,7 @@ export class DefaultLineupService {
         const updated = await this.prisma.default_lineups.update({
           where: { id: existing.id },
           data: {
-            formation_data: formation,
+            formation_data: formation as any,
             updated_at: new Date()
           }
         });
@@ -219,7 +219,7 @@ export class DefaultLineupService {
             is_deleted: false,
             deleted_at: null,
             deleted_by_user_id: null,
-            formation_data: formation,
+            formation_data: formation as any,
             updated_at: new Date()
           }
         });
@@ -230,7 +230,7 @@ export class DefaultLineupService {
       const created = await this.prisma.default_lineups.create({
         data: {
           team_id: teamId,
-          formation_data: formation,
+          formation_data: formation as any,
           created_by_user_id: userId
         }
       });
@@ -456,12 +456,12 @@ export class DefaultLineupService {
       formation: Array.isArray(prismaDefaultLineup.formation_data) 
         ? prismaDefaultLineup.formation_data 
         : [],
-      createdAt: prismaDefaultLineup.created_at,
-      updatedAt: prismaDefaultLineup.updated_at || undefined,
-      created_by_user_id: prismaDefaultLineup.created_by_user_id,
-      deleted_at: prismaDefaultLineup.deleted_at || undefined,
-      deleted_by_user_id: prismaDefaultLineup.deleted_by_user_id || undefined,
-      is_deleted: prismaDefaultLineup.is_deleted
+      createdAt: prismaDefaultLineup.created_at.toISOString(),
+      updatedAt: prismaDefaultLineup.updated_at?.toISOString() || undefined,
+      createdByUserId: prismaDefaultLineup.created_by_user_id,
+      deletedAt: prismaDefaultLineup.deleted_at?.toISOString() || undefined,
+      deletedByUserId: prismaDefaultLineup.deleted_by_user_id || undefined,
+      isDeleted: prismaDefaultLineup.is_deleted
     };
   }
 

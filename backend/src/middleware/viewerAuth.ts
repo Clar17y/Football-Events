@@ -21,8 +21,8 @@ declare global {
 export function authenticateViewerOrUser(matchParam: string = 'id') {
   return (req: Request, res: Response, next: NextFunction): void => {
     try {
-      const viewParam = (req.query?.view as string | undefined) || undefined;
-      const codeParam = (req.query?.code as string | undefined) || undefined;
+      const viewParam = (req.query?.['view'] as string | undefined) || undefined;
+      const codeParam = (req.query?.['code'] as string | undefined) || undefined;
       const paramMatchId = req.params?.[matchParam];
 
       if (viewParam) {
