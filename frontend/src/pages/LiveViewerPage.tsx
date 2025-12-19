@@ -44,9 +44,9 @@ const LiveViewerPage: React.FC<LiveViewerPageProps> = ({ onNavigate, matchId }) 
       if (!matchId || !token) return;
       try {
         const [s, p, e] = await Promise.all([
-          viewerApi.getSummary(matchId, token),
-          viewerApi.getPeriods(matchId, token),
-          viewerApi.getEvents(matchId, token),
+          viewerApi.getSummary(matchId, { name: 'view', value: token }),
+          viewerApi.getPeriods(matchId, { name: 'view', value: token }),
+          viewerApi.getEvents(matchId, { name: 'view', value: token }),
         ]);
         if (cancelled) return;
         setSummary(s);
@@ -61,7 +61,7 @@ const LiveViewerPage: React.FC<LiveViewerPageProps> = ({ onNavigate, matchId }) 
       if (!token) return;
       try {
         esRef.current?.close();
-        const es = viewerApi.openEventSource(matchId, token);
+        const es = viewerApi.openEventSource(matchId, { name: 'view', value: token });
         esRef.current = es;
         es.onopen = () => { setConnected(true); retryRef.current = 0; };
         es.onerror = () => {

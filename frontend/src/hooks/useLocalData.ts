@@ -55,16 +55,16 @@ export function useLocalTeams(options?: UseLocalTeamsOptions) {
             return results.map(t => ({
                 id: t.id,
                 name: t.name,
-                homeKitPrimary: t.colorPrimary,
-                homeKitSecondary: t.colorSecondary,
-                awayKitPrimary: t.awayColorPrimary,
-                awayKitSecondary: t.awayColorSecondary,
+                homeKitPrimary: t.homeKitPrimary || t.colorPrimary,
+                homeKitSecondary: t.homeKitSecondary || t.colorSecondary,
+                awayKitPrimary: t.awayKitPrimary || t.awayColorPrimary,
+                awayKitSecondary: t.awayKitSecondary || t.awayColorSecondary,
                 logoUrl: t.logoUrl,
-                is_opponent: !!t.isOpponent,
-                createdAt: t.createdAt ? new Date(t.createdAt) : undefined,
-                updatedAt: t.updatedAt ? new Date(t.updatedAt) : undefined,
-                created_by_user_id: t.createdByUserId,
-                is_deleted: !!t.isDeleted,
+                isOpponent: !!t.isOpponent,
+                createdAt: t.createdAt,
+                updatedAt: t.updatedAt,
+                createdByUserId: t.createdByUserId,
+                isDeleted: !!t.isDeleted,
                 synced: t.synced,
             }));
         },
@@ -87,16 +87,16 @@ export function useLocalTeam(teamId: string | undefined) {
             return {
                 id: t.id,
                 name: t.name,
-                homeKitPrimary: t.colorPrimary,
-                homeKitSecondary: t.colorSecondary,
-                awayKitPrimary: t.awayColorPrimary,
-                awayKitSecondary: t.awayColorSecondary,
+                homeKitPrimary: t.homeKitPrimary || t.colorPrimary,
+                homeKitSecondary: t.homeKitSecondary || t.colorSecondary,
+                awayKitPrimary: t.awayKitPrimary || t.awayColorPrimary,
+                awayKitSecondary: t.awayKitSecondary || t.awayColorSecondary,
                 logoUrl: t.logoUrl,
-                is_opponent: !!t.isOpponent,
-                createdAt: t.createdAt ? new Date(t.createdAt) : undefined,
-                updatedAt: t.updatedAt ? new Date(t.updatedAt) : undefined,
-                created_by_user_id: t.createdByUserId,
-                is_deleted: !!t.isDeleted,
+                isOpponent: !!t.isOpponent,
+                createdAt: t.createdAt,
+                updatedAt: t.updatedAt,
+                createdByUserId: t.createdByUserId,
+                isDeleted: !!t.isDeleted,
                 synced: t.synced,
             };
         },
@@ -128,17 +128,17 @@ export function useLocalPlayers(options?: UseLocalPlayersOptions) {
                 .filter(p => !p.isDeleted)
                 .toArray();
 
-            // Team filter using player_teams junction table
+            // Team filter using playerTeams junction table
             if (options?.teamIds && options.teamIds.length > 0) {
                 // Get player IDs that belong to any of the specified teams
-                const playerTeamRelations = await db.player_teams
+                const playerTeamRelations = await db.playerTeams
                     .filter((pt: any) => !pt.isDeleted && pt.isActive !== false && options.teamIds!.includes(pt.teamId))
                     .toArray();
                 const playerIdsInTeams = new Set(playerTeamRelations.map((pt: any) => pt.playerId));
                 results = results.filter(p => playerIdsInTeams.has(p.id));
             } else if (options?.teamId) {
                 // Get player IDs that belong to the specified team
-                const playerTeamRelations = await db.player_teams
+                const playerTeamRelations = await db.playerTeams
                     .where('teamId')
                     .equals(options.teamId)
                     .filter((pt: any) => !pt.isDeleted && pt.isActive !== false)
@@ -147,7 +147,7 @@ export function useLocalPlayers(options?: UseLocalPlayersOptions) {
                 results = results.filter(p => playerIdsInTeam.has(p.id));
             } else if (options?.noTeam) {
                 // Get all player IDs that have any active team relationship
-                const allPlayerTeamRelations = await db.player_teams
+                const allPlayerTeamRelations = await db.playerTeams
                     .filter((pt: any) => !pt.isDeleted && pt.isActive !== false)
                     .toArray();
                 const playerIdsWithTeams = new Set(allPlayerTeamRelations.map((pt: any) => pt.playerId));
@@ -157,30 +157,30 @@ export function useLocalPlayers(options?: UseLocalPlayersOptions) {
             // Search filter
             if (options?.search?.trim()) {
                 const term = options.search.toLowerCase();
-                results = results.filter(p => p.fullName.toLowerCase().includes(term));
+                results = results.filter(p => (p.name || p.fullName || '').toLowerCase().includes(term));
             }
 
             // Position filter
             if (options?.position) {
-                results = results.filter(p => p.preferredPos === options.position);
+                results = results.filter(p => (p.preferredPosition || p.preferredPos) === options.position);
             }
 
             // Sort by name
-            results.sort((a, b) => a.fullName.localeCompare(b.fullName));
+            results.sort((a, b) => (a.name || a.fullName || '').localeCompare(b.name || b.fullName || ''));
 
             // Transform to API format for UI consumption
             return results.map(p => ({
                 id: p.id,
-                name: p.fullName,
+                name: p.name || p.fullName || '',
                 squadNumber: p.squadNumber,
-                preferredPosition: p.preferredPos,
-                dateOfBirth: p.dob ? new Date(p.dob) : undefined,
+                preferredPosition: p.preferredPosition || p.preferredPos,
+                dateOfBirth: p.dateOfBirth || p.dob,
                 notes: p.notes,
                 currentTeam: p.currentTeam,
-                createdAt: new Date(p.createdAt),
-                updatedAt: p.updatedAt ? new Date(p.updatedAt) : undefined,
-                created_by_user_id: p.createdByUserId,
-                is_deleted: !!p.isDeleted,
+                createdAt: p.createdAt,
+                updatedAt: p.updatedAt,
+                createdByUserId: p.createdByUserId,
+                isDeleted: !!p.isDeleted,
                 synced: p.synced,
             }));
         },
@@ -202,16 +202,16 @@ export function useLocalPlayer(playerId: string | undefined) {
             // Transform to API format for UI consumption
             return {
                 id: p.id,
-                name: p.fullName,
+                name: p.name || p.fullName || '',
                 squadNumber: p.squadNumber,
-                preferredPosition: p.preferredPos,
-                dateOfBirth: p.dob ? new Date(p.dob) : undefined,
+                preferredPosition: p.preferredPosition || p.preferredPos,
+                dateOfBirth: p.dateOfBirth || p.dob,
                 notes: p.notes,
                 currentTeam: p.currentTeam,
-                createdAt: new Date(p.createdAt),
-                updatedAt: p.updatedAt ? new Date(p.updatedAt) : undefined,
-                created_by_user_id: p.createdByUserId,
-                is_deleted: !!p.isDeleted,
+                createdAt: p.createdAt,
+                updatedAt: p.updatedAt,
+                createdByUserId: p.createdByUserId,
+                isDeleted: !!p.isDeleted,
                 synced: p.synced,
             };
         },
@@ -257,10 +257,10 @@ export function useLocalSeasons(options?: UseLocalSeasonsOptions) {
                 endDate: s.endDate,
                 isCurrent: s.isCurrent,
                 description: s.description,
-                createdAt: s.createdAt ? new Date(s.createdAt) : undefined,
-                updatedAt: s.updatedAt ? new Date(s.updatedAt) : undefined,
-                created_by_user_id: s.createdByUserId,
-                is_deleted: !!s.isDeleted,
+                createdAt: s.createdAt,
+                updatedAt: s.updatedAt,
+                createdByUserId: s.createdByUserId,
+                isDeleted: !!s.isDeleted,
                 synced: s.synced,
             }));
         },
@@ -288,10 +288,10 @@ export function useLocalSeason(seasonId: string | undefined) {
                 endDate: s.endDate,
                 isCurrent: s.isCurrent,
                 description: s.description,
-                createdAt: s.createdAt ? new Date(s.createdAt) : undefined,
-                updatedAt: s.updatedAt ? new Date(s.updatedAt) : undefined,
-                created_by_user_id: s.createdByUserId,
-                is_deleted: !!s.isDeleted,
+                createdAt: s.createdAt,
+                updatedAt: s.updatedAt,
+                createdByUserId: s.createdByUserId,
+                isDeleted: !!s.isDeleted,
                 synced: s.synced,
             };
         },
@@ -327,36 +327,40 @@ export function useLocalMatches(options?: UseLocalMatchesOptions) {
                 results = results.filter(m => m.seasonId === options.seasonId);
             }
 
-            // Date range filter
+            // Date range filter (kickoffTime is ISO string, convert to timestamp for comparison)
             if (options?.fromDate) {
-                results = results.filter(m => m.kickoffTs >= options.fromDate!);
+                results = results.filter(m => m.kickoffTime && new Date(m.kickoffTime).getTime() >= options.fromDate!);
             }
             if (options?.toDate) {
-                results = results.filter(m => m.kickoffTs <= options.toDate!);
+                results = results.filter(m => m.kickoffTime && new Date(m.kickoffTime).getTime() <= options.toDate!);
             }
 
             // Sort by kickoff time (newest first)
-            results.sort((a, b) => b.kickoffTs - a.kickoffTs);
+            results.sort((a, b) => {
+                const aTime = a.kickoffTime ? new Date(a.kickoffTime).getTime() : 0;
+                const bTime = b.kickoffTime ? new Date(b.kickoffTime).getTime() : 0;
+                return bTime - aTime;
+            });
 
             // Transform to API format for UI consumption
             return results.map(m => ({
                 id: m.id,
                 matchId: m.id,
                 seasonId: m.seasonId,
-                kickoffTime: m.kickoffTs ? new Date(m.kickoffTs) : undefined,
+                kickoffTime: m.kickoffTime,
                 competition: m.competition,
                 homeTeamId: m.homeTeamId,
                 awayTeamId: m.awayTeamId,
                 venue: m.venue,
-                durationMinutes: m.durationMins,
+                durationMinutes: m.durationMinutes,
                 periodFormat: m.periodFormat,
                 homeScore: m.homeScore,
                 awayScore: m.awayScore,
                 notes: m.notes,
-                createdAt: m.createdAt ? new Date(m.createdAt) : undefined,
-                updatedAt: m.updatedAt ? new Date(m.updatedAt) : undefined,
-                created_by_user_id: m.createdByUserId,
-                is_deleted: !!m.isDeleted,
+                createdAt: m.createdAt,
+                updatedAt: m.updatedAt,
+                createdByUserId: m.createdByUserId,
+                isDeleted: !!m.isDeleted,
                 synced: m.synced,
             }));
         },
@@ -380,20 +384,20 @@ export function useLocalMatch(matchId: string | undefined) {
                 id: m.id,
                 matchId: m.id,
                 seasonId: m.seasonId,
-                kickoffTime: m.kickoffTs ? new Date(m.kickoffTs) : undefined,
+                kickoffTime: m.kickoffTime,
                 competition: m.competition,
                 homeTeamId: m.homeTeamId,
                 awayTeamId: m.awayTeamId,
                 venue: m.venue,
-                durationMinutes: m.durationMins,
+                durationMinutes: m.durationMinutes,
                 periodFormat: m.periodFormat,
                 homeScore: m.homeScore,
                 awayScore: m.awayScore,
                 notes: m.notes,
-                createdAt: m.createdAt ? new Date(m.createdAt) : undefined,
-                updatedAt: m.updatedAt ? new Date(m.updatedAt) : undefined,
-                created_by_user_id: m.createdByUserId,
-                is_deleted: !!m.isDeleted,
+                createdAt: m.createdAt,
+                updatedAt: m.updatedAt,
+                createdByUserId: m.createdByUserId,
+                isDeleted: !!m.isDeleted,
                 synced: m.synced,
             };
         },
@@ -442,7 +446,7 @@ export function useLocalLineups(matchId: string | undefined) {
                 .where('matchId')
                 .equals(matchId)
                 .filter(l => !l.isDeleted)
-                .sortBy('startMin');
+                .sortBy('startMinute');
         },
         [matchId]
     );
@@ -461,7 +465,7 @@ export function useLocalMatchState(matchId: string | undefined) {
     const matchState = useLiveQuery(
         async () => {
             if (!matchId) return undefined;
-            return db.match_state.get(matchId);
+            return db.matchState.get(matchId);
         },
         [matchId]
     );
@@ -480,7 +484,7 @@ export function useLocalMatchPeriods(matchId: string | undefined) {
     const periods = useLiveQuery(
         async () => {
             if (!matchId) return [];
-            return db.match_periods
+            return db.matchPeriods
                 .where('matchId')
                 .equals(matchId)
                 .filter(p => !p.isDeleted)
@@ -503,7 +507,7 @@ export function useLocalDefaultLineup(teamId: string | undefined) {
     const defaultLineup = useLiveQuery(
         async () => {
             if (!teamId) return null; // Return null (not undefined) when no teamId
-            const result = await db.default_lineups
+            const result = await db.defaultLineups
                 .where('teamId')
                 .equals(teamId)
                 .filter(dl => !dl.isDeleted)
@@ -535,9 +539,9 @@ export function useLocalSyncStatus() {
                 db.matches.filter(m => !m.synced).count(),
                 db.events.filter(e => !e.synced).count(),
                 db.lineup.filter(l => !l.synced).count(),
-                db.match_periods.filter(p => !p.synced).count(),
-                db.match_state.filter(s => !s.synced).count(),
-                db.default_lineups.filter(dl => !dl.synced).count(),
+                db.matchPeriods.filter(p => !p.synced).count(),
+                db.matchState.filter(s => !s.synced).count(),
+                db.defaultLineups.filter(dl => !dl.synced).count(),
             ]);
 
             const total = teams + players + seasons + matches + events + lineups + periods + states + defaultLineups;

@@ -46,7 +46,7 @@ class DatabasePerformanceMonitor {
     if (!this.isEnabled) return;
 
     this.metrics.push(metric);
-    
+
     // Keep only the most recent metrics
     if (this.metrics.length > this.maxMetrics) {
       this.metrics = this.metrics.slice(-this.maxMetrics);
@@ -79,12 +79,12 @@ class DatabasePerformanceMonitor {
 
     try {
       result = await fn();
-      
+
       // Try to determine record count if result is an array
       if (Array.isArray(result)) {
         recordCount = result.length;
       }
-      
+
       return result;
     } catch (err) {
       success = false;
@@ -92,7 +92,7 @@ class DatabasePerformanceMonitor {
       throw err;
     } finally {
       const duration = performance.now() - startTime;
-      
+
       this.recordMetric({
         operation,
         table,
@@ -134,7 +134,7 @@ class DatabasePerformanceMonitor {
         operationBreakdown[metric.operation] = { count: 0, avgDuration: 0 };
       }
       operationBreakdown[metric.operation].count++;
-      
+
       // Table stats
       if (!tableBreakdown[metric.table]) {
         tableBreakdown[metric.table] = { count: 0, avgDuration: 0 };
@@ -255,9 +255,9 @@ export async function getMatchEventsWithMonitoring(matchId: ID): Promise<any[]> 
         .where('matchId')
         .equals(matchId)
         .toArray();
-      
-      // Sort by clockMs manually
-      return events.sort((a, b) => a.clockMs - b.clockMs);
+
+      // Sort by clockMs manually (handle undefined values)
+      return events.sort((a, b) => (a.clockMs ?? 0) - (b.clockMs ?? 0));
     },
     'matchId'
   );
@@ -296,9 +296,9 @@ export async function getPlayerEventsWithMonitoring(playerId: ID): Promise<any[]
         .where('playerId')
         .equals(playerId)
         .toArray();
-      
-      // Sort by tsServer manually
-      return events.sort((a, b) => a.tsServer - b.tsServer);
+
+      // Sort by createdAt manually (ISO strings compare lexicographically)
+      return events.sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
     },
     'playerId'
   );
@@ -319,7 +319,7 @@ export async function performHealthCheck(): Promise<{
   try {
     // Test basic connectivity
     await db.events.limit(1).toArray();
-    
+
     // Check for large numbers of unsynced items
     const unsyncedCount = await db.outbox.where('synced').equals(0).count();
     if (unsyncedCount > 100) {
@@ -333,7 +333,7 @@ export async function performHealthCheck(): Promise<{
       .above(3)
       .and(item => !item.synced)
       .count();
-    
+
     if (failedSyncCount > 0) {
       issues.push(`${failedSyncCount} items have failed to sync multiple times`);
       isHealthy = false;
@@ -397,10 +397,10 @@ export async function analyzeIndexUsage(): Promise<{
 
   try {
     const stats = performanceMonitor.getStats();
-    
+
     // Analyze which indexes are being used
     const indexUsage: Record<string, number> = {};
-    
+
     for (const metric of performanceMonitor.exportMetrics()) {
       if (metric.indexUsed) {
         indexUsage[metric.indexUsed] = (indexUsage[metric.indexUsed] || 0) + 1;
@@ -409,7 +409,7 @@ export async function analyzeIndexUsage(): Promise<{
 
     // Check for common query patterns that might need indexes
     const operationCounts = stats.operationBreakdown;
-    
+
     if (operationCounts['get_events_time_window']?.count > 10) {
       if (!indexUsage['[matchId+clockMs]']) {
         missingIndexes.push('[matchId+clockMs] - for time window queries');
@@ -454,24 +454,24 @@ export async function runPerformanceBenchmark(): Promise<{
   summary: string;
 }> {
   const results: Record<string, { duration: number; recordsPerSecond: number }> = {};
-  
+
   try {
     // Benchmark: Insert events
     const insertStart = performance.now();
+    const now = new Date().toISOString();
     const testEvents = Array.from({ length: 100 }, (_, i) => ({
       id: `test-event-${i}`,
       matchId: 'test-match',
-      tsServer: Date.now(),
       periodNumber: 1,
       clockMs: i * 1000,
       kind: 'test',
       teamId: 'test-team',
       playerId: 'test-player',
       sentiment: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
+      createdAt: now,
+      updatedAt: now
     }));
-    
+
     // Note: This is a test, so we won't actually insert
     const insertDuration = performance.now() - insertStart;
     results['bulk_insert'] = {

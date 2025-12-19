@@ -19,12 +19,10 @@ interface OutboxEventPayload {
   matchId?: string;
   teamId?: string;
   playerId?: string;
-  period?: number;
-  minute?: number;
-  second?: number;
-  data?: { notes?: string };
+  periodNumber?: number;
+  clockMs?: number;
   notes?: string;
-  created?: number;
+  createdAt?: string;
   createdByUserId?: string;
   id?: string;
 }
@@ -75,12 +73,12 @@ export class RealTimeService {
       console.log('🔗 Real-time connection established');
       this.isConnected = true;
       this.notifyConnectionChange(true);
-      
+
       // Rejoin current match if we have one
       if (this.currentMatchId) {
         this.joinMatch(this.currentMatchId);
       }
-      
+
       // Sync any queued events
       this.syncOutboxEvents();
     });
@@ -172,11 +170,10 @@ export class RealTimeService {
         matchId: event.matchId,
         teamId: event.teamId || null,
         playerId: event.playerId || null,
-        minute: Math.floor((event.clockMs || 0) / 60000), // Convert ms to minutes
-        second: Math.floor(((event.clockMs || 0) % 60000) / 1000), // Convert remainder to seconds
-        period: event.periodNumber,
-        data: event.notes ? { notes: event.notes } : {},
-        created: createdTimestamp,
+        clockMs: event.clockMs || 0,
+        periodNumber: event.periodNumber,
+        notes: event.notes || '',
+        createdAt: event.createdAt || new Date().toISOString(),
         createdByUserId: (await import('../utils/guest')).isGuest() ? (await import('../utils/guest')).getGuestId() : 'authenticated-user'
       });
 
@@ -194,7 +191,7 @@ export class RealTimeService {
    */
   joinMatch(matchId: string): void {
     this.currentMatchId = matchId;
-    
+
     if (this.isConnected && this.socket) {
       this.socket.emit('join-match', matchId);
       console.log(`🏟️ Joined match room: ${matchId}`);
@@ -209,7 +206,7 @@ export class RealTimeService {
       this.socket.emit('leave-match', this.currentMatchId);
       console.log(`🚪 Left match room: ${this.currentMatchId}`);
     }
-    
+
     this.currentMatchId = null;
   }
 
@@ -273,17 +270,17 @@ export class RealTimeService {
             matchId: payload.matchId,
             teamId: payload.teamId,
             playerId: payload.playerId,
-            periodNumber: payload.period || 1,
-            clockMs: ((payload.minute || 0) * 60000) + ((payload.second || 0) * 1000),
+            periodNumber: payload.periodNumber || 1,
+            clockMs: payload.clockMs || 0,
             sentiment: 0, // Default sentiment
-            notes: payload.data?.notes || payload.notes || '',
-            createdAt: new Date(payload.created || Date.now()).toISOString(),
+            notes: payload.notes || '',
+            createdAt: payload.createdAt || new Date().toISOString(),
             createdByUserId: payload.createdByUserId || 'system',
             isDeleted: false
           };
 
           const success = await this.tryRealTimePublish(matchEvent);
-          
+
           if (success) {
             try {
               const { db: dbInstance } = await import('../db/indexedDB');
@@ -327,7 +324,7 @@ export class RealTimeService {
         const payload = e.data as OutboxEventPayload | undefined;
         return payload?.id === eventId;
       });
-      
+
       if (outboxEvent && outboxEvent.id !== undefined) {
         await db.markEventSynced(outboxEvent.id);
       }
@@ -341,7 +338,7 @@ export class RealTimeService {
    */
   onEvent(callback: (event: MatchEvent) => void): () => void {
     this.eventCallbacks.push(callback);
-    
+
     // Return unsubscribe function
     return () => {
       const index = this.eventCallbacks.indexOf(callback);
@@ -356,7 +353,7 @@ export class RealTimeService {
    */
   onConnectionChange(callback: (connected: boolean) => void): () => void {
     this.connectionCallbacks.push(callback);
-    
+
     // Return unsubscribe function
     return () => {
       const index = this.connectionCallbacks.indexOf(callback);
@@ -414,7 +411,7 @@ export class RealTimeService {
       this.socket.disconnect();
       this.socket = null;
     }
-    
+
     this.isConnected = false;
     this.currentMatchId = null;
     this.eventCallbacks = [];
@@ -429,7 +426,7 @@ export const realTimeService = new RealTimeService({
     if (import.meta.env.VITE_API_URL) {
       return import.meta.env.VITE_API_URL.replace('/api/v1', '');
     }
-    
+
     const hostname = window.location.hostname;
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return 'http://localhost:3001';

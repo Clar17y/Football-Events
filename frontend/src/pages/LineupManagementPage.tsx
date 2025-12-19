@@ -47,8 +47,8 @@ const LineupManagementPage: React.FC<LineupManagementPageProps> = ({ onNavigate 
   // Filter to user's teams only (not opponents), sorted by createdAt
   const teams = useMemo(() => {
     return allTeams
-      .filter(team => !(team as any).is_opponent)
-      .sort((a, b) => ((a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0)));
+      .filter(team => !team.isOpponent)
+      .sort((a, b) => (new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()));
   }, [allTeams]);
 
   // Selected team state
@@ -58,7 +58,7 @@ const LineupManagementPage: React.FC<LineupManagementPageProps> = ({ onNavigate 
       const params = new URLSearchParams(window.location.search);
       const urlTeamId = params.get('teamId');
       if (urlTeamId) return urlTeamId;
-    } catch {}
+    } catch { }
     return localStorage.getItem(SELECTED_TEAM_STORAGE_KEY);
   });
 
@@ -89,12 +89,12 @@ const LineupManagementPage: React.FC<LineupManagementPageProps> = ({ onNavigate 
   // Transform players to PlayerWithPosition format (active only)
   const players: PlayerWithPosition[] = useMemo(() => {
     return rawPlayers
-      .filter((p: any) => p.is_active !== false) // Default to active if not specified
+      .filter((p: any) => p.isActive !== false) // Default to active if not specified
       .map((player: any) => ({
         id: player.id,
-        name: player.full_name || player.name,
-        squadNumber: player.squad_number || player.squadNumber,
-        preferredPosition: player.preferred_pos || player.preferredPosition
+        name: player.name,
+        squadNumber: player.squadNumber,
+        preferredPosition: player.preferredPosition
       }));
   }, [rawPlayers]);
 
@@ -304,8 +304,8 @@ const LineupManagementPage: React.FC<LineupManagementPageProps> = ({ onNavigate 
   const groupForPos = (code?: string): 'GK' | 'DEF' | 'MID' | 'FWD' => {
     const c = (code || '').toUpperCase();
     if (c === 'GK') return 'GK';
-    if (['CB','LCB','RCB','SW','LB','RB','LWB','RWB','WB','FB'].includes(c)) return 'DEF';
-    if (['CDM','LDM','RDM','DM','CM','LCM','RCM','CAM','LAM','RAM','LM','RM','WM','AM'].includes(c)) return 'MID';
+    if (['CB', 'LCB', 'RCB', 'SW', 'LB', 'RB', 'LWB', 'RWB', 'WB', 'FB'].includes(c)) return 'DEF';
+    if (['CDM', 'LDM', 'RDM', 'DM', 'CM', 'LCM', 'RCM', 'CAM', 'LAM', 'RAM', 'LM', 'RM', 'WM', 'AM'].includes(c)) return 'MID';
     return 'FWD';
   };
 
@@ -323,18 +323,18 @@ const LineupManagementPage: React.FC<LineupManagementPageProps> = ({ onNavigate 
     return ['2-2'];
   };
 
-  const slotsForFormation = (formation: string): Array<{ x: number; y: number; group: 'GK'|'DEF'|'MID'|'FWD' }[]> => {
+  const slotsForFormation = (formation: string): Array<{ x: number; y: number; group: 'GK' | 'DEF' | 'MID' | 'FWD' }[]> => {
     // Returns an array of lines (each line: array of slots with group)
     const parts = formation.split('-').map(n => Math.max(0, parseInt(n.trim() || '0', 10) || 0));
     const lines: number[] = parts.length === 1 ? [parts[0]] : parts;
     // Prepend GK line implicitly
-    const lineDefs: { x: number; group: 'GK'|'DEF'|'MID'|'FWD' }[] = [];
+    const lineDefs: { x: number; group: 'GK' | 'DEF' | 'MID' | 'FWD' }[] = [];
     // GK line
     lineDefs.push({ x: 8, group: 'GK' });
     // Map subsequent lines from back to front
-    const lineGroups: ('DEF'|'MID'|'MID'|'FWD')[] = ['DEF','MID','MID','FWD'];
+    const lineGroups: ('DEF' | 'MID' | 'MID' | 'FWD')[] = ['DEF', 'MID', 'MID', 'FWD'];
     const lineXs = [24, 50, 66, 88];
-    const result: Array<{ x: number; y: number; group: 'GK'|'DEF'|'MID'|'FWD' }[]> = [];
+    const result: Array<{ x: number; y: number; group: 'GK' | 'DEF' | 'MID' | 'FWD' }[]> = [];
     // GK line single slot
     result.push([{ x: 8, y: 50, group: 'GK' }]);
     // Build outfield lines
@@ -342,7 +342,7 @@ const LineupManagementPage: React.FC<LineupManagementPageProps> = ({ onNavigate 
       const count = lines[i];
       const group = lineGroups[Math.min(i, lineGroups.length - 1)];
       const x = lineXs[Math.min(i, lineXs.length - 1)];
-      const slots: { x: number; y: number; group: 'GK'|'DEF'|'MID'|'FWD' }[] = [];
+      const slots: { x: number; y: number; group: 'GK' | 'DEF' | 'MID' | 'FWD' }[] = [];
       if (count <= 0) { result.push([]); continue; }
       // Distribute y positions between 24 and 76 evenly
       const minY = 24, maxY = 76;

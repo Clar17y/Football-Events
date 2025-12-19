@@ -17,7 +17,7 @@ import { nullToUndefined, toBool, nowIso } from './common';
 export function dbToSeason(s: DbSeason): Season {
   return {
     id: s.id,
-    seasonId: s.seasonId ?? s.id,
+    seasonId: s.seasonId,
     label: s.label,
     startDate: nullToUndefined(s.startDate),
     endDate: nullToUndefined(s.endDate),
@@ -129,7 +129,7 @@ export interface ServerSeasonResponse {
  */
 export function serverSeasonToDb(s: ServerSeasonResponse): DbSeason {
   const now = nowIso();
-  const seasonId = s.id ?? s.seasonId!;
+  const seasonId = (s.id ?? s.seasonId)!;
   return {
     id: seasonId,
     seasonId: seasonId,

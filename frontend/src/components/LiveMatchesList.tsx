@@ -75,9 +75,9 @@ const LiveMatchesList: React.FC<LiveMatchesListProps> = ({
     const homeTeamName = match.homeTeam?.name || 'Home Team';
     const awayTeamName = match.awayTeam?.name || 'Away Team';
     let ourTeamName: string; let opponentTeamName: string;
-    if (match.homeTeam && !match.homeTeam.is_opponent) {
+    if (match.homeTeam && !match.homeTeam.isOpponent) {
       ourTeamName = homeTeamName; opponentTeamName = awayTeamName;
-    } else if (match.awayTeam && !match.awayTeam.is_opponent) {
+    } else if (match.awayTeam && !match.awayTeam.isOpponent) {
       ourTeamName = awayTeamName; opponentTeamName = homeTeamName;
     } else {
       ourTeamName = isHome ? homeTeamName : awayTeamName;

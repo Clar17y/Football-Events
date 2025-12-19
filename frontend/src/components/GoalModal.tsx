@@ -7,12 +7,7 @@ import { mic, micOff } from 'ionicons/icons';
 import { useMatchContext } from '../contexts/MatchContext';
 import { db } from '../db/indexedDB';
 import { useSpeechToText } from '../utils/useSpeechToText';
-import type { Player, Team } from '../types/index';
-
-// Temporary interface for components that expect players array
-interface TeamWithPlayers extends Team {
-  players: Player[];
-}
+import type { Player, Team, TeamWithPlayers } from '@shared/types';
 import './GoalModal.css';
 type Step =
   | 'team'
@@ -45,15 +40,15 @@ const GoalModal: React.FC<Props> = ({
   const { clock } = useMatchContext();
   const elapsedMs =
     clock.running
-      ? clock.offset_ms + Date.now() - (clock.start_ts ?? 0)
-      : clock.offset_ms;
+      ? clock.offsetMs + Date.now() - (clock.startTs ?? 0)
+      : clock.offsetMs;
 
   /* modal state */
-  const [step, setStep]       = useState<Step>('team');
-  const [team, setTeam]       = useState<TeamWithPlayers | null>(null);
-  const [scorer, setScorer]   = useState<Player | null | 'none'>(null);
-  const [assist, setAssist]   = useState<Player | null | 'none'>(null);
-  const [notes, setNotes]     = useState('');
+  const [step, setStep] = useState<Step>('team');
+  const [team, setTeam] = useState<TeamWithPlayers | null>(null);
+  const [scorer, setScorer] = useState<Player | null | 'none'>(null);
+  const [assist, setAssist] = useState<Player | null | 'none'>(null);
+  const [notes, setNotes] = useState('');
   const { recognising, startDictation } = useSpeechToText(
     (text) => setNotes(n => n + ' ' + text)
   );
@@ -77,7 +72,7 @@ const GoalModal: React.FC<Props> = ({
   ) => {
     try {
       const kind = ownGoalFlag ? 'own_goal' : 'goal';
-      
+
       // Use addEventToTable to store in events table (not outbox)
       const result = await db.addEventToTable({
         kind: kind as 'goal' | 'own_goal',
@@ -88,6 +83,9 @@ const GoalModal: React.FC<Props> = ({
         playerId: scorerId || undefined,
         sentiment: ownGoalFlag ? -2 : 2, // Default sentiment
         notes: assistId ? `${notes} (Assist: ${assistId})` : notes,
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'local-user',
+        isDeleted: false
       });
       if (!result.success) {
         throw new Error(result.error || 'Failed to save goal');
@@ -115,8 +113,8 @@ const GoalModal: React.FC<Props> = ({
   const finish = () => {
     const assistId = assist ? (assist as Player).id : null;
     const scorerId = scorer ? (scorer as Player).id : null;
-    if (ownGoalFlag) { 
-        team!.id = team!.id === ourTeam.id ? oppTeam.id : ourTeam.id; // switch teams for own goal
+    if (ownGoalFlag) {
+      team!.id = team!.id === ourTeam.id ? oppTeam.id : ourTeam.id; // switch teams for own goal
     }
     saveGoal(team!, scorerId, assistId, ownGoalFlag);
   };
@@ -131,26 +129,26 @@ const GoalModal: React.FC<Props> = ({
   const crumbBar = (
     <>
       <Crumb label={CrumbGoal} go={() => setStep('team')} />
-      {scorer && <Crumb label={scorer === 'none'? 'Own Goal' : scorer.full_name} go={() => setStep('scorer')} />}
+      {scorer && <Crumb label={scorer === 'none' ? 'Own Goal' : scorer.name} go={() => setStep('scorer')} />}
       {assist && assist !== 'none' && (
-        <Crumb label={(assist as Player).full_name} go={() => setStep('assist')} />
+        <Crumb label={(assist as Player).name} go={() => setStep('assist')} />
       )}
     </>
   );
 
   /* ——— render lists ——— */
   /* GoalType list for empty-roster team ---------------------- */
-    const renderGoalType = () => (
-        <IonList>
-        <IonItem button onClick={() => { /* normal goal */ setScorer(null); setAssist(null); setStep('notes'); }}>
-            <IonLabel>Goal</IonLabel>
-        </IonItem>
-        <IonItem button onClick={() => { /* own goal */ setStep('oppScorer'); ownGoalFlag = true; }}>
-            <IonLabel color="danger">Own Goal</IonLabel>
-        </IonItem>
-        </IonList>
-    );
-  
+  const renderGoalType = () => (
+    <IonList>
+      <IonItem button onClick={() => { /* normal goal */ setScorer(null); setAssist(null); setStep('notes'); }}>
+        <IonLabel>Goal</IonLabel>
+      </IonItem>
+      <IonItem button onClick={() => { /* own goal */ setStep('oppScorer'); ownGoalFlag = true; }}>
+        <IonLabel color="danger">Own Goal</IonLabel>
+      </IonItem>
+    </IonList>
+  );
+
   const renderTeam = () => (
     <IonList>
       {[ourTeam, oppTeam].map(t => (
@@ -163,16 +161,16 @@ const GoalModal: React.FC<Props> = ({
   const renderScorer = () => {
     if (!team) return renderTeam();
     return (
-        <IonList>
-        {team!.players.map(p => (
-            <IonItem key={p.id} button onClick={() => { setScorer(p); setStep('assist'); }}>
-            <IonLabel>{p.full_name}</IonLabel>
-            </IonItem>
+      <IonList>
+        {team!.players.map((p: Player) => (
+          <IonItem key={p.id} button onClick={() => { setScorer(p); setStep('assist'); }}>
+            <IonLabel>{p.name}</IonLabel>
+          </IonItem>
         ))}
-        <IonItem button onClick={() => {setStep('oppScorer'); ownGoalFlag = true; }}>
-            <IonLabel color="danger">Own Goal</IonLabel>
+        <IonItem button onClick={() => { setStep('oppScorer'); ownGoalFlag = true; }}>
+          <IonLabel color="danger">Own Goal</IonLabel>
         </IonItem>
-        </IonList>
+      </IonList>
     );
   };
   const renderOppScorer = () => {
@@ -185,9 +183,9 @@ const GoalModal: React.FC<Props> = ({
             <IonLabel>Unknown Player</IonLabel>
           </IonItem>
         )}
-        {opp.players.map(p => (
+        {opp.players.map((p: Player) => (
           <IonItem key={p.id} button onClick={() => { setScorer(p); setStep('oppAssist'); }}>
-            <IonLabel>{p.full_name}</IonLabel>
+            <IonLabel>{p.name}</IonLabel>
           </IonItem>
         ))}
       </IonList>
@@ -195,17 +193,17 @@ const GoalModal: React.FC<Props> = ({
   };
   const renderAssist = () => {
     if (!team) return renderTeam();
-        return (
-        <IonList>
+    return (
+      <IonList>
         <IonItem button onClick={() => { setAssist('none'); setStep('notes'); }}>
-            <IonLabel>No Assister</IonLabel>
+          <IonLabel>No Assister</IonLabel>
         </IonItem>
-        {team!.players.map(p => (
-            <IonItem key={p.id} button onClick={() => { setAssist(p); setStep('notes'); }}>
-            <IonLabel>{p.full_name}</IonLabel>
-            </IonItem>
+        {team!.players.map((p: Player) => (
+          <IonItem key={p.id} button onClick={() => { setAssist(p); setStep('notes'); }}>
+            <IonLabel>{p.name}</IonLabel>
+          </IonItem>
         ))}
-        </IonList>
+      </IonList>
     );
   };
   const renderOppAssist = renderAssist;
@@ -230,17 +228,17 @@ const GoalModal: React.FC<Props> = ({
 
   /* ——— main render ——— */
   const body = {
-    team:      renderTeam(),
-    goalType:  renderGoalType(),
-    scorer:    renderScorer(),
-    assist:    renderAssist(),
+    team: renderTeam(),
+    goalType: renderGoalType(),
+    scorer: renderScorer(),
+    assist: renderAssist(),
     oppScorer: renderOppScorer(),
     oppAssist: renderOppAssist(),
-    notes:     renderNotes()
+    notes: renderNotes()
   }[step];
 
   const safeBody =
-  (!team && step !== 'team') ? renderTeam() : body;
+    (!team && step !== 'team') ? renderTeam() : body;
 
   return (
     <IonModal isOpen={isOpen} onDidDismiss={onDidDismiss} animated canDismiss={true}>

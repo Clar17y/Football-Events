@@ -1,8 +1,8 @@
 import type { Match, Team } from '@shared/types';
 
 export const isHomeMatch = (match: Match, primaryTeamId?: string): boolean => {
-  if (match.homeTeam && !match.homeTeam.is_opponent) return true;
-  if (match.awayTeam && !match.awayTeam.is_opponent) return false;
+  if (match.homeTeam && !match.homeTeam.isOpponent) return true;
+  if (match.awayTeam && !match.awayTeam.isOpponent) return false;
   if (primaryTeamId) return match.homeTeamId === primaryTeamId;
   return true;
 };
@@ -12,10 +12,10 @@ export const getMatchColors = (match: Match, primaryTeamId?: string) => {
   let ourTeam: Team | undefined;
   let opponentTeam: Team | undefined;
 
-  if (match.homeTeam && !match.homeTeam.is_opponent) {
+  if (match.homeTeam && !match.homeTeam.isOpponent) {
     ourTeam = match.homeTeam;
     opponentTeam = match.awayTeam;
-  } else if (match.awayTeam && !match.awayTeam.is_opponent) {
+  } else if (match.awayTeam && !match.awayTeam.isOpponent) {
     ourTeam = match.awayTeam;
     opponentTeam = match.homeTeam;
   } else {
@@ -23,7 +23,7 @@ export const getMatchColors = (match: Match, primaryTeamId?: string) => {
     opponentTeam = isHome ? match.awayTeam : match.homeTeam;
   }
 
-  const opponentUsingDefaults = opponentTeam?.is_opponent && (
+  const opponentUsingDefaults = opponentTeam?.isOpponent && (
     !opponentTeam.homeKitPrimary ||
     !opponentTeam.awayKitPrimary ||
     opponentTeam.homeKitPrimary === '#2563eb' ||

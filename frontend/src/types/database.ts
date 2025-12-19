@@ -15,9 +15,9 @@ export interface OutboxEvent {
   /** Auto-generated ID */
   id?: number;
   /** Table name being synced */
-  table_name: string;
+  tableName: string;
   /** Record ID being synced */
-  record_id: string;
+  recordId: string;
   /** Operation type */
   operation: 'INSERT' | 'UPDATE' | 'DELETE';
   /** Record data (for INSERT/UPDATE) */
@@ -27,17 +27,17 @@ export interface OutboxEvent {
   /** Whether the event has been synced to server */
   synced: boolean;
   /** When the event was created locally */
-  created_at: Timestamp;
+  createdAt: Timestamp;
   /** Number of sync attempts */
-  retry_count?: number;
+  retryCount?: number;
   /** Last sync attempt timestamp */
-  last_sync_attempt?: Timestamp;
+  lastSyncAttempt?: Timestamp;
   /** Error message if sync failed */
-  sync_error?: string;
+  syncError?: string;
   /** When sync failed (if applicable) */
-  failed_at?: Timestamp;
+  failedAt?: Timestamp;
   /** User who created this outbox entry */
-  created_by_user_id: string;
+  createdByUserId: string;
 }
 
 /**
@@ -59,11 +59,11 @@ export interface DatabaseSchema {
   /** Lineup table */
   lineup: StoredLineup;
   /** Player teams table */
-  player_teams: StoredPlayerTeam;
+  playerTeams: StoredPlayerTeam;
   /** Settings table */
   settings: StoredSetting;
   /** Sync metadata */
-  sync_metadata: SyncMetadata;
+  syncMetadata: SyncMetadata;
 }
 
 /**
@@ -71,33 +71,24 @@ export interface DatabaseSchema {
  */
 export interface StoredMatch {
   id: ID;
-  match_id: ID; // Primary key (UUID)
-  season_id: ID;
-  home_team_id: ID;
-  away_team_id: ID;
-  kickoff_ts: Timestamp; // Updated field name
+  matchId: ID; // Primary key (UUID)
+  seasonId: ID;
+  homeTeamId: ID;
+  awayTeamId: ID;
+  kickoffTime: Timestamp;
   competition?: string;
   venue?: string;
-  duration_mins: number;
-  period_format: string;
-  home_score: number;
-  away_score: number;
+  durationMinutes: number;
+  periodFormat: string;
+  homeScore: number;
+  awayScore: number;
   notes?: string;
-  // Legacy fields for compatibility
-  date?: Timestamp;
-  status?: string; // MatchStatus as string
-  settings?: string; // JSON string of MatchSettings
-  current_period?: number;
-  clock_state?: string; // JSON string of MatchClock
-  result?: string; // JSON string of MatchResult
-  metadata?: string; // JSON string of MatchMetadata
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdByUserId: string;
+  deletedAt?: Timestamp;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 /**
@@ -105,24 +96,19 @@ export interface StoredMatch {
  */
 export interface StoredTeam {
   id: ID;
-  team_id: ID; // Primary key (UUID)
+  teamId: ID; // Primary key (UUID)
   name: string;
-  home_kit_primary?: string;
-  home_kit_secondary?: string;
-  away_kit_primary?: string;
-  away_kit_secondary?: string;
-  logo_url?: string;
-  // Legacy fields for compatibility
-  color_primary?: string;
-  color_secondary?: string;
-  formation?: string;
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  homeKitPrimary?: string;
+  homeKitSecondary?: string;
+  awayKitPrimary?: string;
+  awayKitSecondary?: string;
+  logoUrl?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdByUserId: string;
+  deletedAt?: Timestamp;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 /**
@@ -130,24 +116,18 @@ export interface StoredTeam {
  */
 export interface StoredPlayer {
   id: ID; // Primary key (UUID)
-  full_name: string;
-  squad_number?: number;
-  preferred_pos?: string;
-  dob?: string; // ISO date string
+  name: string;
+  squadNumber?: number;
+  preferredPosition?: string;
+  dateOfBirth?: string; // ISO date string
   notes?: string;
-  current_team?: ID;
-  // Legacy fields for compatibility
-  team_id?: ID;
-  jersey_number?: number;
-  position?: string;
-  is_active?: boolean;
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  currentTeam?: ID;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdByUserId: string;
+  deletedAt?: Timestamp;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 /**
@@ -155,19 +135,18 @@ export interface StoredPlayer {
  */
 export interface StoredSeason {
   id: ID; // For compatibility
-  season_id: ID; // Primary key (UUID)
+  seasonId: ID; // Primary key (UUID)
   label: string;
-  start_date?: string;
-  end_date?: string;
-  is_current: boolean;
+  startDate?: string;
+  endDate?: string;
+  isCurrent: boolean;
   description?: string;
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdByUserId: string;
+  deletedAt?: Timestamp;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 /**
@@ -175,44 +154,41 @@ export interface StoredSeason {
  */
 export interface StoredEvent {
   id: ID; // Primary key (UUID)
-  match_id: ID;
-  season_id: ID;
-  ts_server: Timestamp;
-  period_number: number;
-  clock_ms: number;
+  matchId: ID;
+  seasonId: ID;
+  periodNumber: number;
+  clockMs: number;
   kind: string; // EventKind as string
-  team_id: ID;
-  player_id: ID;
+  teamId: ID;
+  playerId: ID;
   notes?: string;
   sentiment: number;
-  linked_events?: ID[];
-  auto_linked_at?: Timestamp;
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  linkedEvents?: ID[];
+  autoLinkedAt?: Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdByUserId: string;
+  deletedAt?: Timestamp;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 /**
  * Stored lineup data
  */
 export interface StoredLineup {
-  id: string; // Composite key: `${match_id}-${player_id}-${start_min}`
-  match_id: ID;
-  player_id: ID;
-  start_min: number;
-  end_min?: number;
+  id: string; // Composite key: `${matchId}-${playerId}-${startMinute}`
+  matchId: ID;
+  playerId: ID;
+  startMinute: number;
+  endMinute?: number;
   position: string;
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdByUserId: string;
+  deletedAt?: Timestamp;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 /**
@@ -220,20 +196,19 @@ export interface StoredLineup {
  */
 export interface StoredPlayerTeam {
   id: ID; // Primary key (UUID)
-  player_id: ID;
-  team_id: ID;
-  start_date: string; // ISO date string
-  end_date?: string; // ISO date string
-  jersey_number?: number;
+  playerId: ID;
+  teamId: ID;
+  startDate: string; // ISO date string
+  endDate?: string; // ISO date string
+  jerseyNumber?: number;
   position?: string;
-  is_active: boolean;
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  createdByUserId: string;
+  deletedAt?: Timestamp;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 /**
@@ -242,8 +217,8 @@ export interface StoredPlayerTeam {
 export interface StoredSetting {
   key: string;
   value: string; // JSON string
-  created_at: Timestamp;
-  updated_at: Timestamp;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 /**
@@ -251,10 +226,10 @@ export interface StoredSetting {
  */
 export interface SyncMetadata {
   id?: number;
-  table_name: string;
-  record_id: ID;
-  last_synced: Timestamp;
-  sync_version: number;
+  tableName: string;
+  recordId: ID;
+  lastSynced: Timestamp;
+  syncVersion: number;
   checksum?: string;
 }
 
@@ -277,9 +252,9 @@ export interface QueryOptions {
   /** Filters to apply */
   filters?: QueryFilter[];
   /** Field to sort by */
-  sort_by?: string;
+  sortBy?: string;
   /** Sort direction */
-  sort_direction?: 'asc' | 'desc';
+  sortDirection?: 'asc' | 'desc';
   /** Maximum number of results */
   limit?: number;
   /** Number of results to skip */
@@ -297,7 +272,7 @@ export interface DatabaseResult<T> {
   /** Error message (if failed) */
   error?: string;
   /** Number of affected records */
-  affected_count?: number;
+  affectedCount?: number;
 }
 
 /**
@@ -321,7 +296,7 @@ export interface BulkOperationResult {
 /**
  * Sync status enumeration
  */
-export type SyncStatus = 
+export type SyncStatus =
   | 'idle'
   | 'syncing'
   | 'success'
@@ -335,17 +310,17 @@ export interface SyncResult {
   /** Sync status */
   status: SyncStatus;
   /** Number of records synced */
-  synced_count: number;
+  syncedCount: number;
   /** Number of conflicts encountered */
-  conflict_count: number;
+  conflictCount: number;
   /** Number of errors encountered */
-  error_count: number;
+  errorCount: number;
   /** Detailed error messages */
   errors: string[];
   /** Sync duration in milliseconds */
   duration: number;
   /** Timestamp when sync completed */
-  completed_at: Timestamp;
+  completedAt: Timestamp;
 }
 
 /**
@@ -381,9 +356,9 @@ export interface DatabaseConfig {
     /** Sync interval in milliseconds */
     interval: number;
     /** Maximum retry attempts */
-    max_retries: number;
+    maxRetries: number;
     /** Retry delay in milliseconds */
-    retry_delay: number;
+    retryDelay: number;
   };
 }
 
@@ -394,8 +369,8 @@ export interface ExportData {
   /** Export metadata */
   metadata: {
     version: string;
-    exported_at: Timestamp;
-    app_version: string;
+    exportedAt: Timestamp;
+    appVersion: string;
   };
   /** Exported matches */
   matches: StoredMatch[];
@@ -410,7 +385,7 @@ export interface ExportData {
   /** Exported lineup */
   lineup: StoredLineup[];
   /** Exported player teams */
-  player_teams: StoredPlayerTeam[];
+  playerTeams: StoredPlayerTeam[];
   /** Exported outbox events */
   outbox: OutboxEvent[];
   /** Exported settings */
@@ -425,11 +400,11 @@ export interface ImportResult {
   success: boolean;
   /** Import summary */
   summary: {
-    matches_imported: number;
-    teams_imported: number;
-    players_imported: number;
-    events_imported: number;
-    settings_imported: number;
+    matchesImported: number;
+    teamsImported: number;
+    playersImported: number;
+    eventsImported: number;
+    settingsImported: number;
   };
   /** Import errors */
   errors: string[];

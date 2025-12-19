@@ -208,7 +208,7 @@ const CreateSeasonModal: React.FC<CreateSeasonModalProps> = ({
             label={label}
             value={formData[field]}
             onChange={(newValue) => handleInputChange(field, newValue)}
-            minDate={field === 'endDate' ? formData.startDate : undefined}
+            minDate={field === 'endDate' ? (formData.startDate ?? undefined) : undefined}
             enableAccessibleFieldDOMStructure={false}
             slots={{
               textField: TextField,

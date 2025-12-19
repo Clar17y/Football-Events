@@ -11,12 +11,12 @@ import {
   IonRippleEffect
 } from '@ionic/react';
 import { createPopper, type Instance as PopperInstance } from '@popperjs/core';
-import type { IconType } from 'ionicons/icons';
+// IconType is just a string in ionicons
 import './ContextMenu.css';
 
 export interface ContextMenuItem {
   text: string;
-  icon: IconType;
+  icon: string;
   action: string;
   color: 'primary' | 'medium' | 'danger';
 }
@@ -132,15 +132,17 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
   };
 
   const menuStyle = {
-    '--theme-color': themeColor || 'var(--ion-color-primary)',
     ...getInitialPosition(),
   } as React.CSSProperties;
+  
+  // Apply theme color as CSS variable via inline style
+  const themeColorStyle = { '--theme-color': themeColor || 'var(--ion-color-primary)' } as React.CSSProperties;
 
   const menuContent = (
     <div
       ref={menuRef}
       className={`context-menu ${className}`}
-      style={menuStyle}
+      style={{ ...menuStyle, ...themeColorStyle }}
     >
       <div className="context-menu-header">
         <span className="context-menu-title">{title}</span>

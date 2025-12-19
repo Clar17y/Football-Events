@@ -31,7 +31,7 @@ export interface PlayersListParams {
   teamId?: string; // backward-compatible single team filter
   teamIds?: string[]; // new multi-team filter
   noTeam?: boolean; // filter players without active team
-  position?: string;
+  preferredPosition?: string;
 }
 
 export interface PlayersListResponse extends PaginatedResponse<Player> { }
@@ -51,7 +51,7 @@ export const playersApi = {
    * Local-first: always reads from IndexedDB
    */
   async getPlayers(params: PlayersListParams = {}): Promise<PlayersListResponse> {
-    const { page = 1, limit = 25, search, teamId, teamIds, noTeam, position } = params;
+    const { page = 1, limit = 25, search, teamId, teamIds, noTeam, preferredPosition } = params;
 
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
@@ -88,14 +88,14 @@ export const playersApi = {
     // Filter by search text
     if (search && search.trim()) {
       const term = search.trim().toLowerCase();
-      rows = rows.filter((p: any) => (p.fullName || '').toLowerCase().includes(term));
+      rows = rows.filter((p: any) => (p.name || '').toLowerCase().includes(term));
     }
     // Filter by position
-    if (position) {
-      rows = rows.filter((p: any) => (p.preferredPos || '') === position);
+    if (preferredPosition) {
+      rows = rows.filter((p: any) => (p.preferredPosition || '') === preferredPosition);
     }
     // Sort by name
-    rows.sort((a: any, b: any) => (a.fullName || '').localeCompare(b.fullName || ''));
+    rows.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
     // Paginate
     const total = rows.length;
     const start = (page - 1) * limit;

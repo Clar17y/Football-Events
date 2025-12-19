@@ -21,9 +21,10 @@ export async function autoLinkEvents(newEvent: EnhancedEvent): Promise<void> {
     }
 
     // Define time window for linking (15 seconds before and after)
+    const clockMs = newEvent.clockMs ?? 0;
     const timeWindow = {
-      start: newEvent.clockMs - LINKING_CONFIG.TIME_WINDOW_MS,
-      end: newEvent.clockMs + LINKING_CONFIG.TIME_WINDOW_MS
+      start: clockMs - LINKING_CONFIG.TIME_WINDOW_MS,
+      end: clockMs + LINKING_CONFIG.TIME_WINDOW_MS
     };
 
     // Find candidate events within the time window
@@ -77,7 +78,7 @@ async function findCandidateEvents(
  * Create bidirectional links between two events
  */
 async function linkEventsBidirectionally(eventId1: ID, eventId2: ID): Promise<void> {
-  const now = Date.now();
+  const now = new Date().toISOString();
   
   try {
     // Use transaction to ensure both updates succeed or fail together
@@ -90,7 +91,7 @@ async function linkEventsBidirectionally(eventId1: ID, eventId2: ID): Promise<vo
           linkedEvents: updatedLinkedEvents1,
           autoLinkedAt: now,
           updatedAt: now
-        });
+        } as any);
       }
       
       // Update second event
@@ -101,7 +102,7 @@ async function linkEventsBidirectionally(eventId1: ID, eventId2: ID): Promise<vo
           linkedEvents: updatedLinkedEvents2,
           autoLinkedAt: now,
           updatedAt: now
-        });
+        } as any);
       }
     });
 
@@ -134,7 +135,7 @@ function addToLinkedEvents(currentLinks: ID[], newEventId: ID): ID[] {
  * Remove a link between two events
  */
 export async function unlinkEvents(eventId1: ID, eventId2: ID): Promise<void> {
-  const now = Date.now();
+  const now = new Date().toISOString();
   
   try {
     await db.transaction('rw', db.events, async () => {
@@ -145,7 +146,7 @@ export async function unlinkEvents(eventId1: ID, eventId2: ID): Promise<void> {
         await db.events.update(eventId1, {
           linkedEvents: updatedLinks1.length > 0 ? updatedLinks1 : undefined,
           updatedAt: now
-        });
+        } as any);
       }
       
       // Remove eventId1 from eventId2's links
@@ -155,7 +156,7 @@ export async function unlinkEvents(eventId1: ID, eventId2: ID): Promise<void> {
         await db.events.update(eventId2, {
           linkedEvents: updatedLinks2.length > 0 ? updatedLinks2 : undefined,
           updatedAt: now
-        });
+        } as any);
       }
     });
 
@@ -181,7 +182,7 @@ export async function getLinkedEvents(eventId: ID): Promise<EnhancedEvent[]> {
       .anyOf(event.linkedEvents)
       .toArray();
 
-    return linkedEvents.sort((a, b) => a.clockMs - b.clockMs);
+    return linkedEvents.sort((a, b) => (a.clockMs ?? 0) - (b.clockMs ?? 0));
   } catch (error) {
     console.error(`Error getting linked events for ${eventId}:`, error);
     return [];
@@ -199,7 +200,7 @@ export async function getEventsWithLinks(matchId: ID): Promise<(EnhancedEvent & 
       .toArray();
     
     // Sort by clockMs
-    events.sort((a, b) => a.clockMs - b.clockMs);
+    events.sort((a, b) => (a.clockMs ?? 0) - (b.clockMs ?? 0));
 
     // Populate linked event details
     const eventsWithLinks = await Promise.all(
@@ -231,24 +232,25 @@ export async function retroactivelyLinkMatchEvents(matchId: ID): Promise<number>
       .toArray();
     
     // Sort by clockMs
-    events.sort((a, b) => a.clockMs - b.clockMs);
+    events.sort((a, b) => (a.clockMs ?? 0) - (b.clockMs ?? 0));
 
     let linksCreated = 0;
 
     for (const event of events) {
-      const relatedKinds = EVENT_RELATIONSHIPS[event.kind];
+      const relatedKinds = EVENT_RELATIONSHIPS[event.kind as keyof typeof EVENT_RELATIONSHIPS];
       if (!relatedKinds || relatedKinds.length === 0) continue;
 
       // Find events within linking window
+      const clockMs = event.clockMs ?? 0;
       const timeWindow = {
-        start: event.clockMs - LINKING_CONFIG.TIME_WINDOW_MS,
-        end: event.clockMs + LINKING_CONFIG.TIME_WINDOW_MS
+        start: clockMs - LINKING_CONFIG.TIME_WINDOW_MS,
+        end: clockMs + LINKING_CONFIG.TIME_WINDOW_MS
       };
 
       const candidates = events.filter(candidate => 
         candidate.id !== event.id &&
-        candidate.clockMs >= timeWindow.start &&
-        candidate.clockMs <= timeWindow.end &&
+        (candidate.clockMs ?? 0) >= timeWindow.start &&
+        (candidate.clockMs ?? 0) <= timeWindow.end &&
         (relatedKinds as readonly string[]).includes(candidate.kind) &&
         (!event.linkedEvents || !event.linkedEvents.includes(candidate.id))
       );

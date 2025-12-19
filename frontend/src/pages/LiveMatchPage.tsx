@@ -115,12 +115,12 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         matchId,
         periodNumber: p.periodNumber,
         periodType: p.periodType as any,
-        startedAt: new Date(p.startedAt),
-        endedAt: p.endedAt ? new Date(p.endedAt) : undefined,
+        startedAt: new Date(p.startedAt).toISOString(),
+        endedAt: p.endedAt ? new Date(p.endedAt).toISOString() : undefined,
         durationSeconds: p.durationSeconds,
-        createdAt: new Date(p.createdAt),
-        created_by_user_id: p.createdByUserId,
-        is_deleted: p.isDeleted
+        createdAt: new Date(p.createdAt).toISOString(),
+        createdByUserId: p.createdByUserId,
+        isDeleted: p.isDeleted
       }));
       setPeriods(ps);
 
@@ -173,7 +173,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             const combined: Record<string, Match> = {} as any;
             [...up, ...recent].forEach((m: any) => { combined[m.id] = m; });
             setLocalMatches(Object.values(combined));
-          } catch {}
+          } catch { }
           if (selectedId) {
             const m = await getLocalMatch(selectedId);
             if (cancelled) return;
@@ -277,12 +277,12 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       matchId: selectedId,
       periodNumber: p.periodNumber,
       periodType: p.periodType as any,
-      startedAt: p.startedAt ? new Date(p.startedAt) : undefined,
-      endedAt: p.endedAt ? new Date(p.endedAt) : undefined,
+      startedAt: p.startedAt ? new Date(p.startedAt).toISOString() : undefined,
+      endedAt: p.endedAt ? new Date(p.endedAt).toISOString() : undefined,
       durationSeconds: p.durationSeconds,
-      createdAt: p.createdAt ? new Date(p.createdAt) : new Date(),
-      created_by_user_id: p.createdByUserId || 'system',
-      is_deleted: p.isDeleted || false,
+      createdAt: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString(),
+      createdByUserId: p.createdByUserId || 'system',
+      isDeleted: p.isDeleted || false,
     }));
     setPeriods(ps);
   }, [localPeriodRecords, selectedId, viewerToken]);
@@ -349,11 +349,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           const { db } = await import('../db/indexedDB');
           const now = Date.now();
 
-          const localState = await db.match_state.get(selectedId).catch(() => undefined);
+          const localState = await db.matchState.get(selectedId).catch(() => undefined);
           const canWriteState = !localState || localState.synced !== false;
 
-          const localPeriods = await db.match_periods
-            .where('match_id')
+          const localPeriods = await db.matchPeriods
+            .where('matchId')
             .equals(selectedId)
             .toArray()
             .catch(() => [] as any[]);
@@ -398,7 +398,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             });
 
           if (periodsToUpsert.length > 0) {
-            await db.match_periods.bulkPut(periodsToUpsert);
+            await db.matchPeriods.bulkPut(periodsToUpsert);
           }
 
           if (canWriteState) {
@@ -412,7 +412,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                     ? 'COMPLETED'
                     : 'NOT_STARTED';
 
-            await db.match_state.put({
+            await db.matchState.put({
               matchId: selectedId,
               status: localStatus,
               currentPeriodId: open?.id,
@@ -432,7 +432,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           // Cache server events for this match into IndexedDB for offline join/reload.
           try {
             const localEvents = await db.events
-              .where('match_id')
+              .where('matchId')
               .equals(selectedId)
               .toArray()
               .catch(() => [] as any[]);
@@ -458,7 +458,6 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                 return {
                   id: ev.id,
                   matchId: selectedId,
-                  tsServer: createdAt,
                   periodNumber: ev.periodNumber ?? 1,
                   clockMs: ev.clockMs ?? 0,
                   kind: ev.kind,
@@ -512,7 +511,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           const check = await viewerApi.checkToken(selectedId, { name: viewerParam!, value: viewerToken! });
           if (!check.ok && (check.status === 401 || check.status === 403)) {
             setViewerExpired(true);
-            try { (window as any).__toastApi?.current?.showError?.('Viewer link expired. Please ask the coach for a new link.'); } catch {}
+            try { (window as any).__toastApi?.current?.showError?.('Viewer link expired. Please ask the coach for a new link.'); } catch { }
             return; // do not retry
           }
           // Exponential backoff retry
@@ -538,10 +537,10 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                 totalElapsedSeconds: s.totalElapsedSeconds || 0,
                 matchStartedAt: undefined,
                 matchEndedAt: undefined,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                created_by_user_id: '',
-                is_deleted: false,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                createdByUserId: '',
+                isDeleted: false,
               } as any);
               // Build initial feed
               const feedEvents: FeedItem[] = (data.events || []).map((ev: any) => ({
@@ -574,18 +573,18 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               if (s.status === 'LIVE') startTicking(); else stopTicking();
               prevStatusRef.current = s.status || null;
             }
-          } catch {}
+          } catch { }
         });
         es.addEventListener('event_created', (ev: MessageEvent) => {
           try {
             const d = JSON.parse(ev.data);
             const e = d.event;
             setEventFeed(prev => sortFeed([{ id: e.id, kind: 'event', label: labelForEvent(e.kind), createdAt: new Date(e.createdAt || Date.now()), periodNumber: e.periodNumber || undefined, periodType: e.periodType || inferPeriodType(new Date(e.createdAt || Date.now())), clockMs: e.clockMs || 0, teamId: e.teamId || undefined, playerId: e.playerId || undefined, sentiment: e.sentiment || 0, event: e }, ...prev]));
-          } catch {}
+          } catch { }
         });
         // formation_changed SSE is no longer used; we persist a formation_change event and handle via event_created
         es.addEventListener('event_deleted', (ev: MessageEvent) => {
-          try { const d = JSON.parse(ev.data); setEventFeed(prev => prev.filter(i => i.id !== d.id)); } catch {}
+          try { const d = JSON.parse(ev.data); setEventFeed(prev => prev.filter(i => i.id !== d.id)); } catch { }
         });
         es.addEventListener('period_started', (ev: MessageEvent) => {
           try {
@@ -607,7 +606,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             setTimerMs(expectedStartMs);
             startTicking();
             setEventFeed(prev => sortFeed([{ id: `ps-${d.period.id}`, kind: 'system', label: periodStartLabel(d.period), createdAt: new Date(), periodNumber: d.period.periodNumber }, ...prev]));
-          } catch {}
+          } catch { }
         });
         es.addEventListener('period_ended', (ev: MessageEvent) => {
           try {
@@ -633,11 +632,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             }
             stopTicking();
             setEventFeed(prev => sortFeed([{ id: `pe-${d.period.id}`, kind: 'system', label: periodEndLabel(d.period), createdAt: new Date(), periodNumber: d.period.periodNumber }, ...prev]));
-          } catch {}
+          } catch { }
         });
         es.addEventListener('state_changed', (ev: MessageEvent) => {
-          try { 
-            const d = JSON.parse(ev.data); 
+          try {
+            const d = JSON.parse(ev.data);
             setMatchState(prev => prev ? ({ ...prev, ...d }) as any : prev as any);
             if (typeof d.totalElapsedSeconds === 'number') {
               // Recompute base from totalElapsedSeconds and current ended periods
@@ -653,9 +652,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               if (d.status === 'COMPLETED') setEventFeed(prevFeed => sortFeed([{ id: `sys-${Date.now()}-ft`, kind: 'system', label: 'Full Time', createdAt: new Date(), periodNumber: d.currentPeriod }, ...prevFeed]));
             }
             prevStatusRef.current = d.status;
-          } catch {}
+          } catch { }
         });
-      } catch {}
+      } catch { }
     };
     const load = async () => {
       if (!selectedId || !viewerToken || !viewerParam) return;
@@ -668,11 +667,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         setMatchState({
           id: 'viewer', matchId: summary.matchId, status: summary.status,
           currentPeriod: summary.currentPeriod || undefined, currentPeriodType: summary.currentPeriodType || undefined,
-          createdAt: new Date(), is_deleted: false,
+          createdAt: new Date().toISOString(), isDeleted: false,
         } as any);
         setViewerTeams({ homeId: summary.homeTeam?.id, awayId: summary.awayTeam?.id, homeName: summary.homeTeam?.name, awayName: summary.awayTeam?.name });
         setViewerSummary({ competition: summary.competition, venue: summary.venue, periodFormat: (summary as any).periodFormat, durationMinutes: (summary as any).durationMinutes });
-      } catch {}
+      } catch { }
       openSSE();
     };
     load();
@@ -782,18 +781,18 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       try {
         const u = new URL(shareUrl, window.location.origin);
         shareUrl = u.href;
-      } catch {}
+      } catch { }
       try {
         await navigator.clipboard.writeText(shareUrl);
-        try { (window as any).__toastApi?.current?.showSuccess?.('Share link copied to clipboard'); } catch {}
+        try { (window as any).__toastApi?.current?.showSuccess?.('Share link copied to clipboard'); } catch { }
       } catch {
         // Fallback prompt
         const ok = window.prompt('Copy this share link:', shareUrl);
-        if (ok !== null) { try { (window as any).__toastApi?.current?.showSuccess?.('Share link ready'); } catch {} }
+        if (ok !== null) { try { (window as any).__toastApi?.current?.showSuccess?.('Share link ready'); } catch { } }
       }
       if (res.code) setActiveShareCode(res.code);
     } catch (e: any) {
-      try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to create share link'); } catch {}
+      try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to create share link'); } catch { }
     }
   };
 
@@ -802,9 +801,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       if (!selectedId) return;
       await matchesApi.revokeViewerToken(selectedId, activeShareCode || undefined);
       setActiveShareCode(null);
-      try { (window as any).__toastApi?.current?.showSuccess?.('Viewer link revoked'); } catch {}
+      try { (window as any).__toastApi?.current?.showSuccess?.('Viewer link revoked'); } catch { }
     } catch (e: any) {
-      try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to revoke link'); } catch {}
+      try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to revoke link'); } catch { }
     }
   };
 
@@ -835,7 +834,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     }
     // Scheduled, no periods yet
     if (!open && (!latest || !latest.startedAt)) {
-      return (matchState?.status === 'SCHEDULED' || matchState?.status === 'NOT_STARTED') ? 'Pre‑Kickoff' : 'Break';
+      return matchState?.status === 'SCHEDULED' ? 'Pre‑Kickoff' : 'Break';
     }
 
     const type = (open?.periodType || latest?.periodType) as ('REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT' | undefined);
@@ -925,13 +924,16 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           timerMs: expectedStartMs,
         });
 
-        const p = {
+        const p: MatchPeriod = {
           id: period.id,
           matchId: selectedId,
           periodNumber: nextNum,
-          periodType: 'REGULAR' as const,
-          startedAt: now,
-        } as MatchPeriod;
+          periodType: 'REGULAR',
+          startedAt: now.toISOString(),
+          createdAt: now.toISOString(),
+          createdByUserId: 'local',
+          isDeleted: false,
+        };
         setPeriods(prev => [...prev, p]);
         setMatchState(prev => prev ? ({ ...prev, status: 'LIVE', currentPeriod: nextNum } as any) : prev);
         setTimerMs(expectedStartMs);
@@ -952,13 +954,16 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           timerMs: 0,
         });
 
-        const p1 = {
+        const p1: MatchPeriod = {
           id: period.id,
           matchId: selectedId,
           periodNumber: 1,
-          periodType: 'REGULAR' as const,
-          startedAt: now,
-        } as MatchPeriod;
+          periodType: 'REGULAR',
+          startedAt: now.toISOString(),
+          createdAt: now.toISOString(),
+          createdByUserId: 'local',
+          isDeleted: false,
+        };
         setPeriods([p1]);
         setMatchState({
           id: 'local-state',
@@ -1079,13 +1084,16 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         startedAt: now.getTime(),
       });
 
-      const p = {
+      const p: MatchPeriod = {
         id: period.id,
         matchId: selectedId,
         periodNumber: nextNum,
         periodType: type,
-        startedAt: now,
-      } as MatchPeriod;
+        startedAt: now.toISOString(),
+        createdAt: now.toISOString(),
+        createdByUserId: 'local',
+        isDeleted: false,
+      };
 
       setPeriods(prev => [...prev, p]);
       setMatchState(prev => prev ? ({ ...prev, status: 'LIVE', currentPeriod: nextNum } as any) : prev);
@@ -1120,13 +1128,16 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         startedAt: now.getTime(),
       });
 
-      const p = {
+      const p: MatchPeriod = {
         id: period.id,
         matchId: selectedId,
         periodNumber: 1,
-        periodType: 'PENALTY_SHOOTOUT' as const,
-        startedAt: now,
-      } as MatchPeriod;
+        periodType: 'PENALTY_SHOOTOUT',
+        startedAt: now.toISOString(),
+        createdAt: now.toISOString(),
+        createdByUserId: 'local',
+        isDeleted: false,
+      };
 
       setPeriods(prev => [...prev, p]);
       pushSystem('Penalty Shootout', undefined);
@@ -1145,7 +1156,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         periods.map(async p => {
           if (!p.endedAt && p.id) {
             await matchPeriodsDataLayer.endPeriod(p.id, endedAt.getTime());
-            return { ...p, endedAt };
+            return { ...p, endedAt: endedAt.toISOString() };
           }
           return p;
         })
@@ -1196,6 +1207,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     label: string;
     createdAt: Date;
     periodNumber?: number;
+    periodType?: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT';
     clockMs?: number;
     teamId?: string;
     playerId?: string | null;
@@ -1270,7 +1282,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           notes: payload.notes,
         });
         if (!result.success) throw new Error(result.error || 'Failed to add event');
-        try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
+        try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch { }
         created = { id: result.data, ...payload, createdAt: new Date() };
       } else {
         created = await eventsApi.create(payload);
@@ -1325,7 +1337,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const transformCreated = (ev: any): MatchEvent => ({
     id: ev.id,
     matchId: ev.matchId,
-    createdAt: new Date(ev.createdAt || Date.now()),
+    createdAt: new Date(ev.createdAt || Date.now()).toISOString(),
     kind: ev.kind,
     periodNumber: ev.periodNumber ?? undefined,
     clockMs: ev.clockMs ?? undefined,
@@ -1333,8 +1345,8 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     playerId: ev.playerId ?? undefined,
     notes: ev.notes,
     sentiment: typeof ev.sentiment === 'number' ? ev.sentiment : 0,
-    created_by_user_id: ev.createdByUserId || 'system',
-    is_deleted: !!ev.isDeleted,
+    createdByUserId: ev.createdByUserId || 'system',
+    isDeleted: !!ev.isDeleted,
   });
   const sortFeed = (list: FeedItem[]) => list.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const minuteLabel = (ev: MatchEvent) => {
@@ -1358,7 +1370,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     }
     return { home, away };
   };
-  const labelForEvent = (k: string) => k.replace('_',' ').replace(/\b\w/g, c => c.toUpperCase());
+  const labelForEvent = (k: string) => k.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
   const pf = () => (currentMatch?.periodFormat || viewerSummary?.periodFormat || '').toLowerCase();
   const periodStartLabel = (p: any) => {
     const fmt = pf();
@@ -1407,19 +1419,22 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                 ) : (
                   <IonChip style={{ height: 20 }} color="tertiary"><IonLabel style={{ fontSize: 12 }}>—</IonLabel></IonChip>
                 )}
-                <IonIcon icon={{
-                  goal: footballOutline,
-                  own_goal: footballOutline,
-                  assist: swapHorizontalOutline,
-                  key_pass: navigateOutline,
-                  save: shieldCheckmarkOutline,
-                  interception: handLeftOutline,
-                  tackle: bodyOutline,
-                  foul: alertCircleOutline,
-                  penalty: flagOutline,
-                  free_kick: flashOutline,
-                  ball_out: exitOutline,
-                }[(item.event?.kind as any)] || optionsOutline} />
+                <IonIcon icon={(() => {
+                  const iconMap: Record<string, string> = {
+                    goal: footballOutline,
+                    own_goal: footballOutline,
+                    assist: swapHorizontalOutline,
+                    key_pass: navigateOutline,
+                    save: shieldCheckmarkOutline,
+                    interception: handLeftOutline,
+                    tackle: bodyOutline,
+                    foul: alertCircleOutline,
+                    penalty: flagOutline,
+                    free_kick: flashOutline,
+                    ball_out: exitOutline,
+                  };
+                  return iconMap[item.event?.kind || ''] || optionsOutline;
+                })()} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1 }}>
                     {item.kind === 'event' && item.event ? labelForEvent(item.event.kind) : item.label}
@@ -1466,11 +1481,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           playerId: e.playerId || undefined,
           notes: e.notes,
           sentiment: typeof e.sentiment === 'number' ? e.sentiment : 0,
-          updatedAt: e.updatedAt ? new Date(e.updatedAt) : undefined,
-          created_by_user_id: e.createdByUserId,
-          deleted_at: e.deletedAt ? new Date(e.deletedAt) : undefined,
-          deleted_by_user_id: e.deletedByUserId,
-          is_deleted: !!e.isDeleted,
+          updatedAt: e.updatedAt ? new Date(e.updatedAt).toISOString() : undefined,
+          createdByUserId: e.createdByUserId,
+          deletedAt: e.deletedAt ? new Date(e.deletedAt).toISOString() : undefined,
+          deletedByUserId: e.deletedByUserId,
+          isDeleted: !!e.isDeleted,
         } as any;
 
         return {
@@ -1496,18 +1511,18 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       });
 
       setEventFeed(sortFeed([...feed, ...systemFromPeriods]));
-        // Preload roster names (works in guest via teamsApi fallback)
-        const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
-        const promises: Promise<any>[] = [];
-        if (hId) promises.push(teamsApi.getTeamPlayers(hId));
-        if (aId) promises.push(teamsApi.getTeamPlayers(aId));
-        const results = await Promise.all(promises);
-        const map: Record<string, string> = {};
-        results.forEach(res => (res?.data || []).forEach((p: any) => { map[p.id] = p.name; }));
-        setPlayerNameMap(map);
-      } catch (e) {
-        console.warn('Failed to load events', e);
-      }
+      // Preload roster names (works in guest via teamsApi fallback)
+      const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
+      const promises: Promise<any>[] = [];
+      if (hId) promises.push(teamsApi.getTeamPlayers(hId));
+      if (aId) promises.push(teamsApi.getTeamPlayers(aId));
+      const results = await Promise.all(promises);
+      const map: Record<string, string> = {};
+      results.forEach(res => (res?.data || []).forEach((p: any) => { map[p.id] = p.name; }));
+      setPlayerNameMap(map);
+    } catch (e) {
+      console.warn('Failed to load events', e);
+    }
   }, [currentMatch, localEventRecords, periods, selectedId, viewerToken]);
 
   // UseEffect to load events when dependencies change
@@ -1518,7 +1533,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   // Prefetch current formation for selected match to make Team Changes modal instant
   useEffect(() => {
     if (selectedId && isAuthenticated) {
-      formationsApi.prefetch(selectedId).catch(() => {});
+      formationsApi.prefetch(selectedId).catch(() => { });
     }
   }, [selectedId, isAuthenticated]);
 
@@ -1536,7 +1551,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         if (hId) map[hId] = !!homeDL;
         if (aId) map[aId] = !!awayDL;
         setHasDefaultLineup(map);
-      } catch {}
+      } catch { }
     })();
   }, [currentMatch?.homeTeamId, currentMatch?.awayTeamId]);
 
@@ -1639,60 +1654,60 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
 
           {/* Controls area (enabled only for authenticated users and not in viewer mode, hidden when completed) */}
           {!viewerToken && matchState?.status !== 'COMPLETED' && (
-          <IonRow>
-            <IonCol size="12">
-              <IonCard>
-                <IonCardContent>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-                      {/* Primary context-aware action */}
-                      {(() => {
-                        const regCount = regPeriodsCount(currentMatch);
-                        const extraEnded = periods.filter(p => p.periodType === 'EXTRA_TIME' && !!p.endedAt).length;
-                        const inPaused = matchState?.status === 'PAUSED';
-                        const inScheduled = matchState?.status === 'SCHEDULED' || !matchState;
-                        if (inScheduled) {
-                          return <IonButton disabled={!selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
-                        }
-                        if (inPaused) {
-                          if (!currentOpenPeriod) {
-                            if (endedRegularCount < regCount) {
-                              return <IonButton disabled={!selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
-                            }
-                            if (extraEnded < 2) {
-                              return <IonButton disabled={!selectedId} onClick={() => handleStartNextPeriod(true)}>Extra Time</IonButton>;
-                            }
-                            return <IonButton disabled={!selectedId} onClick={handleStartPenaltyShootout}>Penalty Shootout</IonButton>;
+            <IonRow>
+              <IonCol size="12">
+                <IonCard>
+                  <IonCardContent>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                        {/* Primary context-aware action */}
+                        {(() => {
+                          const regCount = regPeriodsCount(currentMatch);
+                          const extraEnded = periods.filter(p => p.periodType === 'EXTRA_TIME' && !!p.endedAt).length;
+                          const inPaused = matchState?.status === 'PAUSED';
+                          const inScheduled = matchState?.status === 'SCHEDULED' || !matchState;
+                          if (inScheduled) {
+                            return <IonButton disabled={!selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
                           }
-                        }
-                        if (matchState?.status === 'LIVE') {
-                          return <IonButton disabled={!selectedId || !currentOpenPeriod} onClick={handleEndPeriod}>End Period</IonButton>;
-                        }
-                        return null;
-                      })()}
+                          if (inPaused) {
+                            if (!currentOpenPeriod) {
+                              if (endedRegularCount < regCount) {
+                                return <IonButton disabled={!selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
+                              }
+                              if (extraEnded < 2) {
+                                return <IonButton disabled={!selectedId} onClick={() => handleStartNextPeriod(true)}>Extra Time</IonButton>;
+                              }
+                              return <IonButton disabled={!selectedId} onClick={handleStartPenaltyShootout}>Penalty Shootout</IonButton>;
+                            }
+                          }
+                          if (matchState?.status === 'LIVE') {
+                            return <IonButton disabled={!selectedId || !currentOpenPeriod} onClick={handleEndPeriod}>End Period</IonButton>;
+                          }
+                          return null;
+                        })()}
 
-                      {/* Toggle Pause/Resume (only show one) */}
-                      {matchState?.status === 'LIVE' && (
-                        <IonButton onClick={handlePause} disabled={!selectedId}>Pause</IonButton>
-                      )}
-                      {matchState?.status === 'PAUSED' && currentOpenPeriod && (
-                        <IonButton onClick={handleResume} disabled={!selectedId}>Resume</IonButton>
-                      )}
+                        {/* Toggle Pause/Resume (only show one) */}
+                        {matchState?.status === 'LIVE' && (
+                          <IonButton onClick={handlePause} disabled={!selectedId}>Pause</IonButton>
+                        )}
+                        {matchState?.status === 'PAUSED' && currentOpenPeriod && (
+                          <IonButton onClick={handleResume} disabled={!selectedId}>Resume</IonButton>
+                        )}
 
-                      {/* End Period only visible when paused and a period is open */}
-                      {matchState?.status === 'PAUSED' && currentOpenPeriod && (
-                        <IonButton onClick={handleEndPeriod} disabled={!selectedId}>End Period</IonButton>
-                      )}
+                        {/* End Period only visible when paused and a period is open */}
+                        {matchState?.status === 'PAUSED' && currentOpenPeriod && (
+                          <IonButton onClick={handleEndPeriod} disabled={!selectedId}>End Period</IonButton>
+                        )}
 
-                      <IonButton disabled={matchState?.status === 'SCHEDULED'} color="success" onClick={handleComplete}>Complete</IonButton>
+                        <IonButton disabled={matchState?.status === 'SCHEDULED'} color="success" onClick={handleComplete}>Complete</IonButton>
+                      </div>
+                      {/* Guest mode can control offline match; viewer mode handled via viewerToken guard */}
                     </div>
-                    {/* Guest mode can control offline match; viewer mode handled via viewerToken guard */}
-                </div>
-              </IonCardContent>
-            </IonCard>
-          </IonCol>
-        </IonRow>
-        )}
+                  </IonCardContent>
+                </IonCard>
+              </IonCol>
+            </IonRow>
+          )}
         </IonGrid>
         {/* Events Quick Add (hidden when completed) */}
         {currentMatch && !viewerToken && matchState?.status !== 'COMPLETED' && (
@@ -1709,31 +1724,37 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
 
             {/* Attacking group (forwards color) */}
             <div className="event-grid event-section">
-              {(['goal','assist','key_pass'] as QuickEventKind[]).map(k => (
-                <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--rose" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
-                  <IonIcon slot="start" icon={{
-                    goal: footballOutline,
-                    own_goal: footballOutline,
-                    assist: swapHorizontalOutline || arrowForwardOutline,
-                    key_pass: navigateOutline || arrowForwardOutline,
-                  }[k as any] || footballOutline} />
-                  {k.replace('_',' ')}
-                </IonButton>
-              ))}
+              {(['goal', 'assist', 'key_pass'] as QuickEventKind[]).map(k => {
+                const iconMap: Record<string, string> = {
+                  goal: footballOutline,
+                  own_goal: footballOutline,
+                  assist: swapHorizontalOutline || arrowForwardOutline,
+                  key_pass: navigateOutline || arrowForwardOutline,
+                };
+                return (
+                  <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--rose" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
+                    <IonIcon slot="start" icon={iconMap[k] || footballOutline} />
+                    {k.replace('_', ' ')}
+                  </IonButton>
+                );
+              })}
             </div>
 
             {/* Defender group (defender color) */}
             <div className="event-grid event-section">
-              {(['interception','tackle','foul'] as QuickEventKind[]).map(k => (
-                <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--indigo" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
-                  <IonIcon slot="start" icon={{
-                    interception: handLeftOutline || shieldOutline,
-                    tackle: bodyOutline,
-                    foul: alertCircleOutline,
-                  }[k as any] || shieldOutline} />
-                  {k.replace('_',' ')}
-                </IonButton>
-              ))}
+              {(['interception', 'tackle', 'foul'] as QuickEventKind[]).map(k => {
+                const iconMap: Record<string, string> = {
+                  interception: handLeftOutline || shieldOutline,
+                  tackle: bodyOutline,
+                  foul: alertCircleOutline,
+                };
+                return (
+                  <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--indigo" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
+                    <IonIcon slot="start" icon={iconMap[k] || shieldOutline} />
+                    {k.replace('_', ' ')}
+                  </IonButton>
+                );
+              })}
             </div>
 
             {/* Goalkeeper group (goalkeeper color) */}
@@ -1741,24 +1762,27 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               {(['save'] as QuickEventKind[]).map(k => (
                 <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--emerald" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
                   <IonIcon slot="start" icon={shieldCheckmarkOutline} />
-                  {k.replace('_',' ')}
+                  {k.replace('_', ' ')}
                 </IonButton>
               ))}
             </div>
 
             {/* Other group (midfielder/amber) */}
             <div className="event-grid event-section">
-              {(['penalty','free_kick','ball_out','own_goal'] as QuickEventKind[]).map(k => (
-                <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--amber" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
-                  <IonIcon slot="start" icon={{
-                    penalty: flagOutline,
-                    free_kick: flashOutline,
-                    ball_out: exitOutline,
-                    own_goal: footballOutline,
-                  }[k as any] || optionsOutline} />
-                  {k.replace('_',' ')}
-                </IonButton>
-              ))}
+              {(['penalty', 'free_kick', 'ball_out', 'own_goal'] as QuickEventKind[]).map(k => {
+                const iconMap: Record<string, string> = {
+                  penalty: flagOutline,
+                  free_kick: flashOutline,
+                  ball_out: exitOutline,
+                  own_goal: footballOutline,
+                };
+                return (
+                  <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--amber" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
+                    <IonIcon slot="start" icon={iconMap[k] || optionsOutline} />
+                    {k.replace('_', ' ')}
+                  </IonButton>
+                );
+              })}
             </div>
 
             {!canAddEvents && (
@@ -1829,7 +1853,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
 
             {/* Sentiment selector */}
             <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', gap: 6 }}>
-              {[-3,-2,-1,0,1,2,3].map(v => (
+              {[-3, -2, -1, 0, 1, 2, 3].map(v => (
                 <IonButton key={v} size="small" fill={sentiment === v ? 'solid' : 'outline'} onClick={() => setSentiment(v)}>
                   {v}
                 </IonButton>
@@ -1851,7 +1875,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         {/* Sentiment/Undo Snackbar */}
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 12, display: snackbarOpen ? 'flex' : 'none', justifyContent: 'center' }}>
           <div style={{ background: 'var(--ion-color-step-50, rgba(0,0,0,.7))', color: '#fff', borderRadius: 9999, padding: '8px 12px', display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 12 }}>Event added{lastEventKind ? `: ${lastEventKind.replace('_',' ')}` : ''}</span>
+            <span style={{ fontSize: 12 }}>Event added{lastEventKind ? `: ${lastEventKind.replace('_', ' ')}` : ''}</span>
             <IonButton size="small" disabled={lastEventSentiment <= -3} onClick={() => handleSetSentiment(-1)}>-</IonButton>
             <IonButton size="small" fill="solid" disabled>{lastEventSentiment}</IonButton>
             <IonButton size="small" disabled={lastEventSentiment >= 3} onClick={() => handleSetSentiment(+1)}>+</IonButton>
@@ -1887,9 +1911,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             <IonCardContent>
               <div style={{ fontWeight: 700, marginBottom: 8 }}>Live Timeline</div>
               {selectedId ? (
-                <LiveTimeline 
-                  feed={eventFeed as any} 
-                  currentMatch={currentMatch as any} 
+                <LiveTimeline
+                  feed={eventFeed as any}
+                  currentMatch={currentMatch as any}
                   playerNameMap={playerNameMap}
                   showDelete={!!(isAuthenticated && !viewerToken)}
                   onDelete={(item) => {
@@ -1900,9 +1924,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                           await eventsApi.delete(item.id);
                         }
                         setEventFeed(prev => prev.filter(i => i.id !== item.id));
-                        try { (window as any).__toastApi?.current?.showSuccess?.('Event deleted'); } catch {}
+                        try { (window as any).__toastApi?.current?.showSuccess?.('Event deleted'); } catch { }
                       } catch (e: any) {
-                        try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to delete event'); } catch {}
+                        try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to delete event'); } catch { }
                       }
                     })();
                   }}

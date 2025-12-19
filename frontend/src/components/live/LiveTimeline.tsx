@@ -125,19 +125,22 @@ const LiveTimeline: React.FC<LiveTimelineProps> = ({ feed, currentMatch, playerN
               ) : (
                 <IonChip style={{ height: 20 }} color="tertiary"><IonLabel style={{ fontSize: 12 }}>—</IonLabel></IonChip>
               )}
-              <IonIcon icon={{
-                goal: footballOutline,
-                own_goal: footballOutline,
-                assist: swapHorizontalOutline,
-                key_pass: navigateOutline,
-                save: shieldCheckmarkOutline,
-                interception: handLeftOutline,
-                tackle: bodyOutline,
-                foul: alertCircleOutline,
-                penalty: flagOutline,
-                free_kick: flashOutline,
-                ball_out: exitOutline,
-              }[(item.event?.kind as any)] || optionsOutline} />
+              <IonIcon icon={(() => {
+                const iconMap: Record<string, string> = {
+                  goal: footballOutline,
+                  own_goal: footballOutline,
+                  assist: swapHorizontalOutline,
+                  key_pass: navigateOutline,
+                  save: shieldCheckmarkOutline,
+                  interception: handLeftOutline,
+                  tackle: bodyOutline,
+                  foul: alertCircleOutline,
+                  penalty: flagOutline,
+                  free_kick: flashOutline,
+                  ball_out: exitOutline,
+                };
+                return iconMap[item.event?.kind || ''] || optionsOutline;
+              })()} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1 }}>
                   {item.label}

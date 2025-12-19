@@ -18,10 +18,10 @@ export function dbToTeam(t: DbTeam): Team {
   return {
     id: t.id,
     name: t.name,
-    homeKitPrimary: nullToUndefined(t.homeKitPrimary ?? t.colorPrimary),
-    homeKitSecondary: nullToUndefined(t.homeKitSecondary ?? t.colorSecondary),
-    awayKitPrimary: nullToUndefined(t.awayKitPrimary ?? t.awayColorPrimary),
-    awayKitSecondary: nullToUndefined(t.awayKitSecondary ?? t.awayColorSecondary),
+    homeKitPrimary: nullToUndefined(t.homeKitPrimary),
+    homeKitSecondary: nullToUndefined(t.homeKitSecondary),
+    awayKitPrimary: nullToUndefined(t.awayKitPrimary),
+    awayKitSecondary: nullToUndefined(t.awayKitSecondary),
     logoUrl: nullToUndefined(t.logoUrl),
     isOpponent: toBool(t.isOpponent),
     createdAt: t.createdAt,
@@ -65,11 +65,6 @@ export function teamWriteToDb(data: TeamWriteInput): Partial<DbTeam> {
     awayKitSecondary: data.awayKitSecondary,
     logoUrl: data.logoUrl,
     isOpponent: data.isOpponent ?? false,
-    // Legacy aliases for backward compatibility
-    colorPrimary: data.homeKitPrimary,
-    colorSecondary: data.homeKitSecondary,
-    awayColorPrimary: data.awayKitPrimary,
-    awayColorSecondary: data.awayKitSecondary,
   };
 }
 
@@ -96,10 +91,10 @@ export interface ServerTeamPayload {
 export function dbTeamToServerPayload(t: DbTeam): ServerTeamPayload {
   return {
     name: t.name,
-    homeKitPrimary: nullToUndefined(t.homeKitPrimary ?? t.colorPrimary),
-    homeKitSecondary: nullToUndefined(t.homeKitSecondary ?? t.colorSecondary),
-    awayKitPrimary: nullToUndefined(t.awayKitPrimary ?? t.awayColorPrimary),
-    awayKitSecondary: nullToUndefined(t.awayKitSecondary ?? t.awayColorSecondary),
+    homeKitPrimary: nullToUndefined(t.homeKitPrimary),
+    homeKitSecondary: nullToUndefined(t.homeKitSecondary),
+    awayKitPrimary: nullToUndefined(t.awayKitPrimary),
+    awayKitSecondary: nullToUndefined(t.awayKitSecondary),
     logoUrl: nullToUndefined(t.logoUrl),
     isOpponent: toBool(t.isOpponent),
   };
@@ -152,11 +147,5 @@ export function serverTeamToDb(t: ServerTeamResponse): DbTeam {
     isDeleted: t.isDeleted ?? false,
     synced: true,
     syncedAt: now,
-    // Legacy aliases for backward compatibility
-    teamId: t.id,
-    colorPrimary: t.homeKitPrimary,
-    colorSecondary: t.homeKitSecondary,
-    awayColorPrimary: t.awayKitPrimary,
-    awayColorSecondary: t.awayKitSecondary,
   };
 }

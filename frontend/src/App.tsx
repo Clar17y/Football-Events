@@ -201,7 +201,7 @@ const AppRoutes: React.FC = () => {
       case 'teams':
         return <TeamsPage onNavigate={handleNavigation} />;
       case 'players':
-        return <PlayersPage onNavigate={handleNavigation} initialTeamFilter={teamFilter} />;
+        return <PlayersPage onNavigate={handleNavigation} initialTeamFilter={teamFilter ?? undefined} />;
       case 'matches':
         return <MatchesPage onNavigate={handleNavigation} />;
       case 'awards':

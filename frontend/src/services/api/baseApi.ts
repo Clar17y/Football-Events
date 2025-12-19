@@ -11,6 +11,25 @@ export interface ApiError {
   code?: string;
 }
 
+export class ApiRequestError extends Error {
+  status: number;
+  code?: string;
+  response?: any;
+
+  constructor(message: string, status: number, code?: string, response?: any) {
+    super(message);
+    // Ensure enumerable properties for JSON.stringify and spreading
+    this.status = status;
+    this.code = code;
+    this.message = message;
+
+    Object.defineProperty(this, 'message', { enumerable: true, writable: true });
+    Object.defineProperty(this, 'status', { enumerable: true, writable: true });
+    Object.defineProperty(this, 'code', { enumerable: true, writable: true });
+    Object.defineProperty(this, 'response', { enumerable: true, writable: true });
+  }
+}
+
 export class ApiClient {
   private baseURL: string;
   private token: string | null = null;
@@ -21,10 +40,10 @@ export class ApiClient {
     if (import.meta.env.VITE_API_URL) {
       return import.meta.env.VITE_API_URL;
     }
-    
+
     // Auto-detect based on current hostname
     const hostname = window.location.hostname;
-    
+
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       // PC development
       return 'http://localhost:3001/api/v1';
@@ -108,7 +127,12 @@ export class ApiClient {
 
     let data: any;
     try {
-      data = isJson ? await response.json() : await response.text();
+      if (response.bodyUsed) {
+        // Body already read, return a generic error or handle accordingly
+        throw new Error('Response body already consumed');
+      }
+      const respForParsing = response.clone();
+      data = isJson ? await respForParsing.json() : await respForParsing.text();
     } catch (error) {
       throw new Error(`Failed to parse response: ${error}`);
     }
@@ -121,7 +145,7 @@ export class ApiClient {
         // eslint-disable-next-line no-console
         console.debug('[api] Response parsed', { status: response.status, ok: response.ok, url: response.url, data: preview });
       }
-    } catch {}
+    } catch { }
 
     if (!response.ok) {
       const apiError: ApiError = {
@@ -143,10 +167,10 @@ export class ApiClient {
             const toast = (window as any).__toastApi?.current;
             toast?.showError?.('Your session expired. Please sign in again.');
           }
-        } catch {}
+        } catch { }
       }
 
-      throw apiError;
+      throw new ApiRequestError(apiError.message, apiError.status, apiError.code, data);
     }
 
     // Backend APIs return { success: true, data: T } format
@@ -205,8 +229,8 @@ export class ApiClient {
             const data = await refreshResp.json();
             if (data?.access_token) {
               this.setToken(data.access_token);
-              try { if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token); } catch {}
-              try { window.dispatchEvent(new CustomEvent('auth:refreshed')); } catch {}
+              try { if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token); } catch { }
+              try { window.dispatchEvent(new CustomEvent('auth:refreshed')); } catch { }
             }
           }
         } catch {
@@ -218,14 +242,6 @@ export class ApiClient {
     const attemptRefreshAndRetry = async (originalResponse: Response): Promise<ApiResponse<T>> => {
       try {
         // Try to parse error to check if token expired
-        let errorBody: any = null;
-        try {
-          const ct = originalResponse.headers.get('content-type');
-          errorBody = ct && ct.includes('application/json') ? await originalResponse.clone().json() : await originalResponse.clone().text();
-        } catch {
-          // ignore parse errors
-        }
-
         const hasRefresh = (() => {
           try {
             return !!localStorage.getItem('refresh_token');
@@ -237,7 +253,7 @@ export class ApiClient {
         if (!hasRefresh) {
           // No refresh token available, clear and return original error silently for guests
           this.setToken(null);
-          try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
+          try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch { }
           return await this.handleResponse<T>(originalResponse);
         }
 
@@ -252,8 +268,8 @@ export class ApiClient {
         if (!refreshResp.ok) {
           // Refresh failed
           this.setToken(null);
-          try { localStorage.removeItem('refresh_token'); } catch {}
-          try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
+          try { localStorage.removeItem('refresh_token'); } catch { }
+          try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch { }
           // Return original error
           return await this.handleResponse<T>(originalResponse);
         }
@@ -261,8 +277,8 @@ export class ApiClient {
         const refreshData = await refreshResp.json();
         if (refreshData?.access_token) {
           this.setToken(refreshData.access_token);
-          try { if (refreshData.refresh_token) localStorage.setItem('refresh_token', refreshData.refresh_token); } catch {}
-          try { window.dispatchEvent(new CustomEvent('auth:refreshed')); } catch {}
+          try { if (refreshData.refresh_token) localStorage.setItem('refresh_token', refreshData.refresh_token); } catch { }
+          try { window.dispatchEvent(new CustomEvent('auth:refreshed')); } catch { }
 
           // Retry original request with new token
           const retryResp = await fetch(url, buildConfig(options));
@@ -271,18 +287,18 @@ export class ApiClient {
 
         // If no access token in response, treat as failure
         this.setToken(null);
-        try { localStorage.removeItem('refresh_token'); } catch {}
+        try { localStorage.removeItem('refresh_token'); } catch { }
         try {
           window.dispatchEvent(new CustomEvent('auth:unauthorized'));
           const toast = (window as any).__toastApi?.current;
           toast?.showError?.('Your session expired. Please sign in again.');
-        } catch {}
+        } catch { }
         return await this.handleResponse<T>(originalResponse);
       } catch (err) {
         // Any error during refresh -> clear and propagate
         this.setToken(null);
-        try { localStorage.removeItem('refresh_token'); } catch {}
-        try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
+        try { localStorage.removeItem('refresh_token'); } catch { }
+        try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch { }
         // Fallback to original error handling
         return await this.handleResponse<T>(originalResponse);
       }
@@ -301,7 +317,7 @@ export class ApiClient {
           // eslint-disable-next-line no-console
           console.debug('[api] Request', { id, method: options.method || 'GET', url, body: bodyPreview });
         }
-      } catch {}
+      } catch { }
 
       const response = await fetch(url, buildConfig(options));
       try {
@@ -310,7 +326,7 @@ export class ApiClient {
           // eslint-disable-next-line no-console
           console.debug('[api] Fetch completed', { url, status: response.status, ok: response.ok });
         }
-      } catch {}
+      } catch { }
       if (response.status === 401) {
         // Try refresh logic and retry once
         const result = await attemptRefreshAndRetry(response);
@@ -374,7 +390,7 @@ export class ApiClient {
     } = {}
   ): Promise<PaginatedResponse<T>> {
     const searchParams = new URLSearchParams();
-    
+
     // Add pagination params
     if (params.page !== undefined) {
       searchParams.append('page', params.page.toString());
@@ -394,7 +410,7 @@ export class ApiClient {
     });
 
     const response = await this.get<PaginatedResponse<T>>(endpoint, searchParams);
-    
+
     // Backend returns paginated data directly in the data field
     return response.data as PaginatedResponse<T>;
   }

@@ -101,7 +101,7 @@ export const matchesApi = {
           id: createdMatch.id,
           matchId: createdMatch.id,
           seasonId: createdMatch.seasonId,
-          kickoffTs: kickoffTs,
+          kickoffTime: createdMatch.kickoffTime,
           competition: createdMatch.competition,
           homeTeamId: createdMatch.homeTeamId,
           awayTeamId: createdMatch.awayTeamId,
@@ -245,7 +245,7 @@ export const matchesApi = {
         );
       });
     }
-    rows.sort((a: any, b: any) => new Date(a.kickoffTs).getTime() - new Date(b.kickoffTs).getTime());
+    rows.sort((a: any, b: any) => new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime());
     const total = rows.length;
     const start = (page - 1) * limit;
     const paged = rows.slice(start, start + limit);
@@ -282,9 +282,9 @@ export const matchesApi = {
     const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
     let rows = await db.matches.toArray();
     const now = Date.now();
-    rows = rows.filter((m: any) => !m.isDeleted && new Date(m.kickoffTs).getTime() >= now);
+    rows = rows.filter((m: any) => !m.isDeleted && new Date(m.kickoffTime).getTime() >= now);
     if (teamId) rows = rows.filter((m: any) => m.homeTeamId === teamId || m.awayTeamId === teamId);
-    rows.sort((a: any, b: any) => new Date(a.kickoffTs).getTime() - new Date(b.kickoffTs).getTime());
+    rows.sort((a: any, b: any) => new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime());
     return rows.slice(0, limit).map((m: any) => {
       const baseMatch = dbToMatch(m as DbMatch);
       return {
@@ -305,9 +305,9 @@ export const matchesApi = {
     const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
     let rows = await db.matches.toArray();
     const now = Date.now();
-    rows = rows.filter((m: any) => !m.isDeleted && new Date(m.kickoffTs).getTime() < now);
+    rows = rows.filter((m: any) => !m.isDeleted && new Date(m.kickoffTime).getTime() < now);
     if (teamId) rows = rows.filter((m: any) => m.homeTeamId === teamId || m.awayTeamId === teamId);
-    rows.sort((a: any, b: any) => new Date(b.kickoffTs).getTime() - new Date(a.kickoffTs).getTime());
+    rows.sort((a: any, b: any) => new Date(b.kickoffTime).getTime() - new Date(a.kickoffTime).getTime());
     return rows.slice(0, limit).map((m: any) => {
       const baseMatch = dbToMatch(m as DbMatch);
       return {

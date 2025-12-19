@@ -101,14 +101,13 @@ export class GrassrootsDB extends Dexie {
       players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
       seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
       lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
-      player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
+      playerTeams: `id, ${SCHEMA_INDEXES.playerTeams.join(', ')}`,
       outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
-      sync_metadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
       settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
     });
 
-    // Version 5: Add indexes for created_by_user_id and is_deleted on teams/matches
-    // This enables guest-mode counts and filtering by creator without full scans
+    // Version 5: Add indexes for createdByUserId and isDeleted on teams/matches
     this.version(5).stores({
       events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
       matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
@@ -116,13 +115,13 @@ export class GrassrootsDB extends Dexie {
       players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
       seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
       lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
-      player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
+      playerTeams: `id, ${SCHEMA_INDEXES.playerTeams.join(', ')}`,
       outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
-      sync_metadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
       settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
     });
 
-    // Version 6: Add created_by_user_id / is_deleted indexes for seasons (missed previously)
+    // Version 6: Add createdByUserId / isDeleted indexes for seasons
     this.version(6).stores({
       events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
       matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
@@ -130,13 +129,13 @@ export class GrassrootsDB extends Dexie {
       players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
       seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
       lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
-      player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
+      playerTeams: `id, ${SCHEMA_INDEXES.playerTeams.join(', ')}`,
       outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
-      sync_metadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
       settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
     });
 
-    // Version 7: Add composite event indexes used in utils ([match_id+player_id], [match_id+team_id])
+    // Version 7: Add composite event indexes
     this.version(7).stores({
       events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
       matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
@@ -144,10 +143,14 @@ export class GrassrootsDB extends Dexie {
       players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
       seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
       lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
-      player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
+      playerTeams: `id, ${SCHEMA_INDEXES.playerTeams.join(', ')}`,
       outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
-      sync_metadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
-      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
+      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`,
+      matchNotes: `matchNoteId, ${SCHEMA_INDEXES.matchNotes.join(', ')}`,
+      matchPeriods: `id, ${SCHEMA_INDEXES.matchPeriods.join(', ')}`,
+      matchState: `matchId, ${SCHEMA_INDEXES.matchState.join(', ')}`,
+      defaultLineups: `id, ${SCHEMA_INDEXES.defaultLineups.join(', ')}`
     });
 
     // Version 8: Add created_by_user_id index on outbox for import detection
@@ -409,7 +412,6 @@ export class GrassrootsDB extends Dexie {
         id: eventId,
         // Schema-required properties (camelCase)
         matchId: eventData.matchId,
-        tsServer: nowIso,
         periodNumber: eventData.periodNumber,
         clockMs: eventData.clockMs,
         kind: eventData.kind as any, // EventKind
@@ -506,7 +508,9 @@ export class GrassrootsDB extends Dexie {
     sentiment?: number;
     notes?: string;
     data?: any;
+    createdAt?: string;
     createdByUserId?: string;
+    isDeleted?: boolean;
   }): Promise<DatabaseResult<string>> {
     try {
       // Validate required fields (teamId is optional for formation_change events)
@@ -551,7 +555,6 @@ export class GrassrootsDB extends Dexie {
       const event: DbEvent = {
         id: eventId,
         matchId: payload.matchId,
-        tsServer: nowIso,
         periodNumber: payload.periodNumber ?? payload.period ?? 1,
         clockMs: clockMs,
         kind: payload.kind as any,
@@ -559,10 +562,10 @@ export class GrassrootsDB extends Dexie {
         playerId: payload.playerId ?? '',
         sentiment: payload.sentiment ?? 0,
         notes: payload.notes || (payload.data?.notes as string) || '',
-        createdAt: nowIso,
+        createdAt: payload.createdAt || nowIso,
         updatedAt: nowIso,
         createdByUserId: payload.createdByUserId || (isGuest() ? getGuestId() : 'authenticated-user'),
-        isDeleted: false,
+        isDeleted: payload.isDeleted ?? false,
         synced: false, // Mark as unsynced
       };
 
@@ -597,11 +600,11 @@ export class GrassrootsDB extends Dexie {
         };
       }
 
-      // Check for some basic required fields (support both camelCase and snake_case for backwards compatibility)
-      if (!payload.kind && !payload.matchId && !payload.match_id && !payload.teamId && !payload.team_id) {
+      // Check for basic required fields
+      if (!payload.kind || !payload.matchId || !payload.teamId) {
         return {
           success: false,
-          error: 'Invalid payload: missing required fields (kind, matchId, or teamId)',
+          error: 'Invalid payload: missing required fields (kind, matchId, and teamId)',
           affected_count: 0
         };
       }
@@ -609,7 +612,7 @@ export class GrassrootsDB extends Dexie {
       // Enforce guest quota for non-scoring events
       try {
         const kind = payload.kind;
-        const matchId = payload.matchId || payload.match_id;
+        const matchId = payload.matchId;
         const quota = await canAddEvent(String(matchId || ''), String(kind || ''));
         if (!quota.ok) {
           return {
@@ -628,7 +631,7 @@ export class GrassrootsDB extends Dexie {
         synced: 0, // Use 0 instead of false for IndexedDB compatibility
         createdAt: Date.now(),
         retryCount: 0,
-        createdByUserId: payload.createdByUserId || payload.created_by_user_id || (isGuest() ? getGuestId() : 'authenticated-user')
+        createdByUserId: payload.createdByUserId || (isGuest() ? getGuestId() : 'authenticated-user')
       };
 
       const id = await this.outbox.add(outboxEvent);

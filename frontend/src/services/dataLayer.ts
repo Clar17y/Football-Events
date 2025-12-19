@@ -95,12 +95,11 @@ export const teamsDataLayer = {
         const id = generateId();
         const team: DbTeam = {
             id,
-            teamId: id,
             name: data.name,
-            colorPrimary: data.homeKitPrimary,
-            colorSecondary: data.homeKitSecondary,
-            awayColorPrimary: data.awayKitPrimary,
-            awayColorSecondary: data.awayKitSecondary,
+            homeKitPrimary: data.homeKitPrimary,
+            homeKitSecondary: data.homeKitSecondary,
+            awayKitPrimary: data.awayKitPrimary,
+            awayKitSecondary: data.awayKitSecondary,
             logoUrl: data.logoUrl,
             isOpponent: data.isOpponent ?? false,
             ...createCommonFields(),
@@ -122,10 +121,10 @@ export const teamsDataLayer = {
     }>): Promise<void> {
         const updateData: any = updateFields();
         if (data.name !== undefined) updateData.name = data.name;
-        if (data.homeKitPrimary !== undefined) updateData.colorPrimary = data.homeKitPrimary;
-        if (data.homeKitSecondary !== undefined) updateData.colorSecondary = data.homeKitSecondary;
-        if (data.awayKitPrimary !== undefined) updateData.awayColorPrimary = data.awayKitPrimary;
-        if (data.awayKitSecondary !== undefined) updateData.awayColorSecondary = data.awayKitSecondary;
+        if (data.homeKitPrimary !== undefined) updateData.homeKitPrimary = data.homeKitPrimary;
+        if (data.homeKitSecondary !== undefined) updateData.homeKitSecondary = data.homeKitSecondary;
+        if (data.awayKitPrimary !== undefined) updateData.awayKitPrimary = data.awayKitPrimary;
+        if (data.awayKitSecondary !== undefined) updateData.awayKitSecondary = data.awayKitSecondary;
         if (data.logoUrl !== undefined) updateData.logoUrl = data.logoUrl;
         if (data.isOpponent !== undefined) updateData.isOpponent = data.isOpponent;
 
@@ -172,10 +171,10 @@ export const playersDataLayer = {
         const id = generateId();
         const player: DbPlayer = {
             id,
-            fullName: data.name,
+            name: data.name,
             squadNumber: data.squadNumber,
-            preferredPos: data.preferredPosition,
-            dob: data.dateOfBirth,
+            preferredPosition: data.preferredPosition,
+            dateOfBirth: data.dateOfBirth,
             notes: data.notes,
             currentTeam: data.teamId,
             ...createCommonFields(),
@@ -195,10 +194,10 @@ export const playersDataLayer = {
         teamId: string;
     }>): Promise<void> {
         const updateData: any = updateFields();
-        if (data.name !== undefined) updateData.fullName = data.name;
+        if (data.name !== undefined) updateData.name = data.name;
         if (data.squadNumber !== undefined) updateData.squadNumber = data.squadNumber;
-        if (data.preferredPosition !== undefined) updateData.preferredPos = data.preferredPosition;
-        if (data.dateOfBirth !== undefined) updateData.dob = data.dateOfBirth;
+        if (data.preferredPosition !== undefined) updateData.preferredPosition = data.preferredPosition;
+        if (data.dateOfBirth !== undefined) updateData.dateOfBirth = data.dateOfBirth;
         if (data.notes !== undefined) updateData.notes = data.notes;
         if (data.teamId !== undefined) updateData.currentTeam = data.teamId;
 
@@ -225,7 +224,7 @@ export const playersDataLayer = {
         if (options?.teamId) {
             query = query.filter(p => p.currentTeam === options.teamId);
         }
-        return query.sortBy('fullName');
+        return query.sortBy('name');
     },
 };
 
@@ -391,7 +390,7 @@ export const matchesDataLayer = {
         if (options?.seasonId) {
             query = query.filter(m => m.seasonId === options.seasonId);
         }
-        return query.sortBy('kickoffTs');
+        return query.sortBy('kickoffTime');
     },
 };
 
@@ -423,7 +422,7 @@ export const eventsDataLayer = {
             playerId: data.playerId ?? '',
             notes: data.notes,
             sentiment: data.sentiment ?? 0,
-            tsServer: now,
+            syncedAt: now,
             ...createCommonFields(),
         } as DbEvent;
 
@@ -481,18 +480,18 @@ export const lineupsDataLayer = {
     async create(data: {
         matchId: string;
         playerId: string;
-        startMin: number;
-        endMin?: number;
+        startMinute: number;
+        endMinute?: number;
         position: string;
     }): Promise<DbLineup> {
-        const id = `${data.matchId}-${data.playerId}-${data.startMin}`;
+        const id = `${data.matchId}-${data.playerId}-${data.startMinute}`;
 
         const lineup: DbLineup = {
             id,
             matchId: data.matchId,
             playerId: data.playerId,
-            startMinute: data.startMin,
-            endMinute: data.endMin,
+            startMinute: data.startMinute,
+            endMinute: data.endMinute,
             position: data.position,
             ...createCommonFields(),
         } as DbLineup;
@@ -503,13 +502,13 @@ export const lineupsDataLayer = {
     },
 
     async update(id: string, data: Partial<{
-        startMin: number;
-        endMin: number;
+        startMinute: number;
+        endMinute: number;
         position: string;
     }>): Promise<void> {
         const updateData: any = updateFields();
-        if (data.startMin !== undefined) updateData.startMin = data.startMin;
-        if (data.endMin !== undefined) updateData.endMin = data.endMin;
+        if (data.startMinute !== undefined) updateData.startMinute = data.startMinute;
+        if (data.endMinute !== undefined) updateData.endMinute = data.endMinute;
         if (data.position !== undefined) updateData.position = data.position;
 
         await db.lineup.update(id, updateData);

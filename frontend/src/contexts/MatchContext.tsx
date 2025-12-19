@@ -23,35 +23,35 @@ const defaultContextValue: MatchContextType = {
   // State
   clock: {
     running: false,
-    start_ts: null,
-    offset_ms: 0,
-    current_period: 1,
-    period_starts: {}
+    startTs: null,
+    offsetMs: 0,
+    currentPeriod: 1,
+    periodStarts: {}
   },
-  current_match: null,
+  currentMatch: null,
   events: [],
   settings: {
-    period_duration: 45,
-    total_periods: 2,
-    half_time_duration: 15,
-    allow_extra_time: false,
-    extra_time_duration: 15,
-    allow_penalty_shootout: false,
-    max_substitutions: 5,
-    track_injury_time: true
+    periodDuration: 45,
+    totalPeriods: 2,
+    halfTimeDuration: 15,
+    allowExtraTime: false,
+    extraTimeDuration: 15,
+    allowPenaltyShootout: false,
+    maxSubstitutions: 5,
+    trackInjuryTime: true
   },
-  
+
   // Actions (will be overridden by provider)
-  startClock: () => {},
-  pauseClock: () => {},
-  resetClock: () => {},
-  startPeriod: () => {},
-  endPeriod: () => {},
+  startClock: () => { },
+  pauseClock: () => { },
+  resetClock: () => { },
+  startPeriod: () => { },
+  endPeriod: () => { },
   addEvent: async () => { return {} as MatchEvent; },
-  updateEvent: async () => {},
-  deleteEvent: async () => {},
-  loadMatch: async () => {},
-  saveMatch: async () => {}
+  updateEvent: async () => { },
+  deleteEvent: async () => { },
+  loadMatch: async () => { },
+  saveMatch: async () => { }
 };
 
 /**
@@ -80,7 +80,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [settings, setSettings] = useState(defaultContextValue.settings);
   const [isConnected, setIsConnected] = useState(false);
-  
+
   // Database context for non-blocking database access
   const { isReady: isDatabaseReady } = useDatabase();
   const { showError } = useToast();
@@ -90,7 +90,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Subscribe to live events from other clients
     const unsubscribeEvents = realTimeService.onEvent((event: MatchEvent) => {
       console.log('Real-time: Received live event from another client:', event);
-      
+
       // Update local state immediately
       setEvents(prev => {
         // Check if event already exists (avoid duplicates)
@@ -98,7 +98,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (exists) {
           return prev;
         }
-        
+
         // Add new event and sort by timestamp
         return [...prev, event].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       });
@@ -136,15 +136,15 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const startClock = useCallback(() => {
     setClock(prevClock => {
       if (prevClock.running) return prevClock;
-      
+
       const now = Date.now();
       return {
         ...prevClock,
         running: true,
-        start_ts: now,
-        period_starts: {
-          ...prevClock.period_starts,
-          [prevClock.current_period]: now
+        startTs: now,
+        periodStarts: {
+          ...prevClock.periodStarts,
+          [prevClock.currentPeriod]: now
         }
       };
     });
@@ -152,16 +152,16 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const pauseClock = useCallback(() => {
     setClock(prevClock => {
-      if (!prevClock.running || !prevClock.start_ts) return prevClock;
-      
+      if (!prevClock.running || !prevClock.startTs) return prevClock;
+
       const now = Date.now();
-      const elapsed = now - prevClock.start_ts;
-      
+      const elapsed = now - prevClock.startTs;
+
       return {
         ...prevClock,
         running: false,
-        start_ts: null,
-        offset_ms: prevClock.offset_ms + elapsed
+        startTs: null,
+        offsetMs: prevClock.offsetMs + elapsed
       };
     });
   }, []);
@@ -173,10 +173,10 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const startPeriod = useCallback((period: number) => {
     setClock(prevClock => ({
       ...prevClock,
-      current_period: period,
-      offset_ms: 0,
-      period_starts: {
-        ...prevClock.period_starts,
+      currentPeriod: period,
+      offsetMs: 0,
+      periodStarts: {
+        ...prevClock.periodStarts,
         [period]: Date.now()
       }
     }));
@@ -186,7 +186,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setClock(prevClock => ({
       ...prevClock,
       running: false,
-      start_ts: null
+      startTs: null
     }));
   }, []);
 
@@ -212,7 +212,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // Create complete event with ID and timestamp
       const event: MatchEvent = {
         id: crypto.randomUUID(),
-        createdAt: new Date(),
+        createdAt: new Date().toISOString(),
         kind: eventData.kind,
         matchId: eventData.matchId,
         periodNumber: eventData.periodNumber,
@@ -222,17 +222,17 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         sentiment: eventData.sentiment || 0,
         notes: eventData.notes,
         // Auth fields
-        created_by_user_id: eventData.created_by_user_id,
-        is_deleted: false
+        createdByUserId: eventData.createdByUserId,
+        isDeleted: false
       };
 
       // REAL-TIME FIRST APPROACH: Try real-time first, fallback to outbox
       const result = await realTimeService.publishEvent(event);
-      
+
       if (result.success) {
         // Update local state immediately for instant UI feedback
         setEvents(prev => [...prev, event].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
-        
+
         if (result.method === 'realtime') {
           console.log('Event sent real-time:', event.id);
         } else {
@@ -252,7 +252,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const updateEvent = useCallback(async (id: string, updates: Partial<MatchEvent>) => {
     try {
       // Update local state
-      setEvents(prev => prev.map(event => 
+      setEvents(prev => prev.map(event =>
         event.id === id ? { ...event, ...updates } : event
       ));
 
@@ -308,7 +308,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               id: event.id,
               kind: event.kind,
               matchId: event.matchId,
-              createdAt: new Date(event.createdAt),
+              createdAt: new Date(event.createdAt).toISOString(),
               periodNumber: event.periodNumber || 1,
               clockMs: event.clockMs || 0,
               teamId: event.teamId,
@@ -316,10 +316,10 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               sentiment: event.sentiment || 0,
               notes: event.notes || '',
               // Auth fields required by shared types
-              created_by_user_id: event.createdByUserId || 'system',
-              is_deleted: event.isDeleted || false,
+              createdByUserId: event.createdByUserId || 'system',
+              isDeleted: event.isDeleted || false,
             }));
-            
+
             setEvents(matchEvents.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
           }
         } catch (dbError) {
@@ -346,7 +346,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ...currentMatch,
         clock,
         settings,
-        status: clock.running ? 'in_progress' : 'not_started'
+        status: clock.running ? 'IN_PROGRESS' : 'NOT_STARTED'
       };
 
       setCurrentMatch(updatedMatch);
@@ -361,10 +361,10 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const contextValue: MatchContextType = {
     // State
     clock,
-    current_match: currentMatch,
+    currentMatch,
     events,
     settings,
-    
+
     // Actions
     startClock,
     pauseClock,

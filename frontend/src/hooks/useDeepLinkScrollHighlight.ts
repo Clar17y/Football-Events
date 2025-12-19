@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react';
-import type { HTMLIonContentElement } from '@ionic/core/components';
+// HTMLIonContentElement is available via @ionic/react types
+type HTMLIonContentElement = HTMLElement & {
+  getScrollElement?: () => Promise<HTMLElement>;
+};
 
 interface Options {
   param: string; // query param name, e.g., 'matchId'

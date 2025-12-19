@@ -91,7 +91,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
   const teams: Record<string, Team> = React.useMemo(() => {
     const map: Record<string, Team> = {};
     teamsArray.forEach((t: any) => {
-      map[t.id] = { id: t.id, name: t.name, createdAt: new Date(t.created_at), created_by_user_id: t.created_by_user_id, is_deleted: t.is_deleted } as Team;
+      map[t.id] = { id: t.id, name: t.name, createdAt: t.createdAt, createdByUserId: t.createdByUserId, isDeleted: t.isDeleted } as Team;
     });
     return map;
   }, [teamsArray]);

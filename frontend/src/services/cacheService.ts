@@ -60,18 +60,18 @@ async function fetchAllPages<T = any>(
       limit: String(limit),
       ...extraParams,
     });
-    
+
     console.log(`[CacheService] Fetching ${entityName} page ${page} from server...`);
     const response = await apiClient.get(`${endpoint}?${queryParams.toString()}`);
     const data = response.data as any;
     const records = data.data || data;
-    
+
     console.log(`[CacheService] Extracted ${Array.isArray(records) ? records.length : 'non-array'} ${entityName} from response`);
-    
+
     if (Array.isArray(records)) {
       allRecords.push(...records);
     }
-    
+
     hasMore = data.hasMore ?? (Array.isArray(records) && records.length === limit);
     page++;
   }
@@ -144,7 +144,7 @@ export async function refreshCache(): Promise<CacheStats> {
 
 
 /**
- * Refresh reference data (teams, players, seasons, player_teams, default_lineups) from the server.
+ * Refresh reference data (teams, players, seasons, playerTeams, defaultLineups) from the server.
  * Replaces synced records while preserving unsynced local changes.
  * 
  * Requirements: 3.3 - Retain teams, players, and seasons indefinitely for offline access
@@ -154,16 +154,16 @@ export async function refreshCache(): Promise<CacheStats> {
 export async function refreshReferenceData(): Promise<void> {
   // Refresh teams
   await refreshTeams();
-  
+
   // Refresh players
   await refreshPlayers();
-  
+
   // Refresh seasons
   await refreshSeasons();
-  
+
   // Refresh player-team relationships
   await refreshPlayerTeams();
-  
+
   // Refresh default lineups (depends on teams being loaded first)
   await refreshDefaultLineups();
 }
@@ -303,10 +303,10 @@ async function refreshSeasons(): Promise<void> {
 async function refreshPlayerTeams(): Promise<void> {
   try {
     // Fetch all player-team relationships directly from server (paginated, get all pages)
-    const serverPlayerTeams = await fetchAllPages('/player-teams', {}, 'player-teams');
+    const serverPlayerTeams = await fetchAllPages('/player-teams', {}, 'playerTeams');
 
     // Get local unsynced player-teams to preserve
-    const localPlayerTeams = await db.player_teams.toArray();
+    const localPlayerTeams = await db.playerTeams.toArray();
     const unsyncedPlayerTeams = localPlayerTeams.filter((pt: any) => pt.synced === false);
     const unsyncedIds = new Set(unsyncedPlayerTeams.map((pt: any) => pt.id));
 
@@ -316,7 +316,7 @@ async function refreshPlayerTeams(): Promise<void> {
     // Delete synced local player-teams that are not in server response
     for (const localPT of localPlayerTeams) {
       if ((localPT as any).synced && !serverPlayerTeamMap.has(localPT.id) && !unsyncedIds.has(localPT.id)) {
-        await db.player_teams.delete(localPT.id);
+        await db.playerTeams.delete(localPT.id);
       }
     }
 
@@ -328,12 +328,12 @@ async function refreshPlayerTeams(): Promise<void> {
       }
 
       // Use centralized transform: Server API → IndexedDB
-      await db.player_teams.put(serverPlayerTeamToDb(serverPT) as any);
+      await db.playerTeams.put(serverPlayerTeamToDb(serverPT) as any);
     }
 
-    console.log(`[CacheService] Refreshed ${serverPlayerTeams.length} player-teams, preserved ${unsyncedPlayerTeams.length} unsynced`);
+    console.log(`[CacheService] Refreshed ${serverPlayerTeams.length} playerTeams, preserved ${unsyncedPlayerTeams.length} unsynced`);
   } catch (err) {
-    console.error('[CacheService] Failed to refresh player-teams:', err);
+    console.error('[CacheService] Failed to refresh playerTeams:', err);
     throw err;
   }
 }
@@ -349,37 +349,37 @@ async function refreshDefaultLineups(): Promise<void> {
     const teamsResponse = await apiClient.get('/default-lineups');
     const teamsData = teamsResponse.data as any;
     const teamsWithDefaults = teamsData.data || teamsData;
-    
+
     console.log(`[CacheService] Found ${Array.isArray(teamsWithDefaults) ? teamsWithDefaults.length : 0} teams with default lineup info`);
-    
+
     // Filter to teams that have default lineups
-    const teamsWithLineups = Array.isArray(teamsWithDefaults) 
+    const teamsWithLineups = Array.isArray(teamsWithDefaults)
       ? teamsWithDefaults.filter((t: any) => t.hasDefaultLineup)
       : [];
-    
+
     console.log(`[CacheService] ${teamsWithLineups.length} teams have default lineups`);
-    
+
     // Get local unsynced default lineups to preserve
-    const localDefaultLineups = await db.default_lineups.toArray();
+    const localDefaultLineups = await db.defaultLineups.toArray();
     const unsyncedDefaultLineups = localDefaultLineups.filter((dl: any) => dl.synced === false);
     const unsyncedTeamIds = new Set(unsyncedDefaultLineups.map((dl: any) => dl.teamId));
-    
+
     // Fetch default lineup for each team that has one
     const serverDefaultLineups: any[] = [];
     for (const teamInfo of teamsWithLineups) {
       const teamId = teamInfo.teamId;
-      
+
       // Skip if we have an unsynced local version for this team
       if (unsyncedTeamIds.has(teamId)) {
         console.log(`[CacheService] Skipping default lineup for team ${teamId} - has unsynced local version`);
         continue;
       }
-      
+
       try {
         const lineupResponse = await apiClient.get(`/default-lineups/${teamId}`);
         const lineupData = lineupResponse.data as any;
         const defaultLineup = lineupData.data || lineupData;
-        
+
         if (defaultLineup && defaultLineup.id) {
           serverDefaultLineups.push(defaultLineup);
         }
@@ -387,27 +387,27 @@ async function refreshDefaultLineups(): Promise<void> {
         console.warn(`[CacheService] Failed to fetch default lineup for team ${teamId}:`, err);
       }
     }
-    
+
     console.log(`[CacheService] Fetched ${serverDefaultLineups.length} default lineups from server`);
-    
+
     // Build a map of server default lineups by team_id
     const serverLineupByTeamId = new Map(serverDefaultLineups.map(dl => [dl.teamId, dl]));
-    
+
     // Delete synced local default lineups for teams that no longer have one on server
     for (const localDL of localDefaultLineups) {
       const teamId = (localDL as any).teamId;
       if ((localDL as any).synced && !serverLineupByTeamId.has(teamId) && !unsyncedTeamIds.has(teamId)) {
-        await db.default_lineups.delete(localDL.id);
+        await db.defaultLineups.delete(localDL.id);
         console.log(`[CacheService] Deleted local default lineup for team ${teamId} - no longer on server`);
       }
     }
-    
+
     // Upsert server default lineups
     for (const serverDL of serverDefaultLineups) {
       // Use centralized transform: Server API → IndexedDB
-      await db.default_lineups.put(serverDefaultLineupToDb(serverDL) as any);
+      await db.defaultLineups.put(serverDefaultLineupToDb(serverDL) as any);
     }
-    
+
     console.log(`[CacheService] Refreshed ${serverDefaultLineups.length} default lineups, preserved ${unsyncedDefaultLineups.length} unsynced`);
   } catch (err) {
     console.error('[CacheService] Failed to refresh default lineups:', err);
@@ -417,13 +417,24 @@ async function refreshDefaultLineups(): Promise<void> {
 
 
 /**
+ * Parse an ISO date string or timestamp to milliseconds.
+ * Returns 0 if the value is invalid.
+ */
+function toTimestamp(value: string | number | undefined): number {
+  if (value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  const parsed = Date.parse(value);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
  * Clean up old synced temporal data (events, periods, state, lineups).
  * Deletes synced records that haven't been accessed in 30 days while preserving unsynced records.
  * 
- * Uses synced_at (last access/sync time) instead of created_at so that:
+ * Uses syncedAt (last access/sync time) instead of createdAt so that:
  * - Recently viewed historical matches keep their cached data
  * - Data you haven't accessed in 30 days gets cleaned up
- * - When you open an old match, fresh data is fetched and cached with new synced_at
+ * - When you open an old match, fresh data is fetched and cached with new syncedAt
  * 
  * NOTE: Matches are NOT cleaned up - they are retained indefinitely for full history access.
  * Only the heavy temporal data (events, periods, state, lineups) is cleaned up to keep IndexedDB lean.
@@ -441,11 +452,11 @@ export async function cleanupOldTemporalData(): Promise<number> {
   // Clean up old synced events (not accessed in 30 days)
   try {
     const allEvents = await db.events.toArray();
-    const eventsToDelete = allEvents.filter(e => 
-      e.synced === true && 
-      (e.syncedAt ?? e.createdAt) < cutoffTime
+    const eventsToDelete = allEvents.filter(e =>
+      e.synced === true &&
+      toTimestamp(e.syncedAt ?? e.createdAt) < cutoffTime
     );
-    
+
     if (eventsToDelete.length > 0) {
       const ids = eventsToDelete.map(e => e.id);
       await db.events.bulkDelete(ids);
@@ -458,15 +469,15 @@ export async function cleanupOldTemporalData(): Promise<number> {
 
   // Clean up old synced match periods (not accessed in 30 days)
   try {
-    const allPeriods = await db.match_periods.toArray();
-    const periodsToDelete = allPeriods.filter(p => 
-      p.synced === true && 
-      (p.syncedAt ?? p.createdAt) < cutoffTime
+    const allPeriods = await db.matchPeriods.toArray();
+    const periodsToDelete = allPeriods.filter(p =>
+      p.synced === true &&
+      toTimestamp(p.syncedAt ?? p.createdAt) < cutoffTime
     );
-    
+
     if (periodsToDelete.length > 0) {
       const ids = periodsToDelete.map(p => p.id);
-      await db.match_periods.bulkDelete(ids);
+      await db.matchPeriods.bulkDelete(ids);
       totalDeleted += ids.length;
       console.log(`[CacheService] Deleted ${ids.length} old synced match periods (not accessed in 30 days)`);
     }
@@ -476,15 +487,15 @@ export async function cleanupOldTemporalData(): Promise<number> {
 
   // Clean up old synced match state (not accessed in 30 days)
   try {
-    const allStates = await db.match_state.toArray();
-    const statesToDelete = allStates.filter(s => 
-      s.synced === true && 
-      (s.syncedAt ?? s.createdAt) < cutoffTime
+    const allStates = await db.matchState.toArray();
+    const statesToDelete = allStates.filter(s =>
+      s.synced === true &&
+      toTimestamp(s.syncedAt ?? s.createdAt) < cutoffTime
     );
-    
+
     if (statesToDelete.length > 0) {
       const ids = statesToDelete.map(s => s.matchId);
-      await db.match_state.bulkDelete(ids);
+      await db.matchState.bulkDelete(ids);
       totalDeleted += ids.length;
       console.log(`[CacheService] Deleted ${ids.length} old synced match states (not accessed in 30 days)`);
     }
@@ -495,11 +506,11 @@ export async function cleanupOldTemporalData(): Promise<number> {
   // Clean up old synced lineups (not accessed in 30 days)
   try {
     const allLineups = await db.lineup.toArray();
-    const lineupsToDelete = allLineups.filter(l => 
-      l.synced === true && 
-      (l.syncedAt ?? l.createdAt) < cutoffTime
+    const lineupsToDelete = allLineups.filter(l =>
+      l.synced === true &&
+      toTimestamp(l.syncedAt ?? l.createdAt) < cutoffTime
     );
-    
+
     if (lineupsToDelete.length > 0) {
       const ids = lineupsToDelete.map(l => l.id);
       await db.lineup.bulkDelete(ids);
@@ -626,7 +637,7 @@ async function loadRemainingMatchesInBackground(
   }
 
   console.log(`[CacheService] Background loading complete: ${totalCached} additional matches cached from ${page - startPage} pages`);
-  
+
   // Dispatch event to notify UI that more data is available
   try {
     window.dispatchEvent(new CustomEvent('cache:matches:updated', { detail: { totalCached } }));
@@ -651,7 +662,7 @@ export function setupCacheRefreshTriggers(): void {
           // First sync any pending local changes
           const { syncService } = await import('./syncService');
           await syncService.flushOnce();
-          
+
           // Then refresh cache
           await refreshCache();
         } catch (err) {

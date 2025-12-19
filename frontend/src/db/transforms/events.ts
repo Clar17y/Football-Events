@@ -155,6 +155,5 @@ export function serverEventToDb(e: ServerEventResponse): DbEvent {
     isDeleted: e.isDeleted ?? false,
     synced: true,
     syncedAt: now,
-    tsServer: e.createdAt ?? now,
   };
 }

@@ -77,7 +77,7 @@ export const teamsApi = {
    */
   async getTeams(params: TeamsListParams = {}): Promise<TeamsListResponse> {
     const { page = 1, limit = 25, search, includeOpponents } = params;
-    
+
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
     let teams = await db.teams.toArray();
@@ -211,24 +211,24 @@ export const teamsApi = {
   async getTeamPlayers(id: string): Promise<TeamPlayersResponse> {
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
-    
+
     // Get player-team relationships for this team
-    const playerTeamRelations = await db.player_teams
+    const playerTeamRelations = await db.playerTeams
       .where('teamId')
       .equals(id)
       .filter((pt: any) => !pt.isDeleted)
       .toArray();
-    
+
     // Get the player IDs from the relationships
     const playerIds = playerTeamRelations.map((pt: any) => pt.playerId);
-    
+
     // Fetch the actual player records
     const players = await db.players
       .where('id')
       .anyOf(playerIds)
       .filter((p: any) => !p.isDeleted)
       .toArray();
-    
+
     // Use centralized transform, then map to response format
     const transformedPlayers = dbToPlayers(players as EnhancedPlayer[]);
     return {
@@ -252,7 +252,7 @@ export const teamsApi = {
     const { db } = await import('../../db/indexedDB');
 
     // Get active player-team relationships for this team
-    const playerTeamRelations = await db.player_teams
+    const playerTeamRelations = await db.playerTeams
       .where('teamId')
       .equals(id)
       .filter((pt: any) => !pt.isDeleted && pt.isActive !== false)

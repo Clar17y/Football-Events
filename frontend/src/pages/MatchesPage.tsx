@@ -89,7 +89,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
   const primaryTeamId = useMemo(() => {
     // Prefer the first non-opponent team available in the cache
     for (const [, team] of teamsCache) {
-      if (!team.is_opponent) return team.id;
+      if (!team.isOpponent) return team.id;
     }
     return undefined;
   }, [teamsCache]);

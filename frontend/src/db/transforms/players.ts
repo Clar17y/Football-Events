@@ -17,10 +17,10 @@ import { nullToUndefined, toBool, nowIso } from './common';
 export function dbToPlayer(p: DbPlayer): Player {
   return {
     id: p.id,
-    name: p.name ?? p.fullName ?? '',
+    name: p.name || '',
     squadNumber: nullToUndefined(p.squadNumber),
-    preferredPosition: nullToUndefined(p.preferredPosition ?? p.preferredPos),
-    dateOfBirth: nullToUndefined(p.dateOfBirth ?? p.dob),
+    preferredPosition: nullToUndefined(p.preferredPosition),
+    dateOfBirth: nullToUndefined(p.dateOfBirth),
     notes: nullToUndefined(p.notes),
     currentTeam: nullToUndefined(p.currentTeam),
     createdAt: p.createdAt,
@@ -62,10 +62,6 @@ export function playerWriteToDb(data: PlayerWriteInput): Partial<DbPlayer> {
     dateOfBirth: data.dateOfBirth,
     notes: data.notes,
     currentTeam: data.teamId,
-    // Legacy aliases for backward compatibility
-    fullName: data.name,
-    preferredPos: data.preferredPosition,
-    dob: data.dateOfBirth,
   };
 }
 
@@ -91,16 +87,16 @@ export interface ServerPlayerPayload {
 export function dbPlayerToServerPayload(p: DbPlayer): ServerPlayerPayload {
   // Convert ISO timestamp to YYYY-MM-DD format for server
   let dateOfBirth: string | undefined;
-  const dob = p.dateOfBirth ?? p.dob;
+  const dob = p.dateOfBirth;
   if (dob) {
     // Handle both ISO format (2005-12-16T00:00:00.000Z) and date-only (2005-12-16)
     dateOfBirth = dob.split('T')[0];
   }
-  
+
   return {
-    name: p.name ?? p.fullName ?? '',
+    name: p.name || '',
     squadNumber: nullToUndefined(p.squadNumber),
-    preferredPosition: nullToUndefined(p.preferredPosition ?? p.preferredPos),
+    preferredPosition: nullToUndefined(p.preferredPosition),
     dateOfBirth,
     notes: nullToUndefined(p.notes),
   };
@@ -151,9 +147,5 @@ export function serverPlayerToDb(p: ServerPlayerResponse): DbPlayer {
     isDeleted: p.isDeleted ?? false,
     synced: true,
     syncedAt: now,
-    // Legacy aliases for backward compatibility
-    fullName: p.name,
-    preferredPos: p.preferredPosition,
-    dob: p.dateOfBirth,
   };
 }

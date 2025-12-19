@@ -101,32 +101,32 @@ export const MIGRATIONS: Migration[] = [
  */
 async function migrateEventsToEnhanced(db: GrassrootsDB): Promise<void> {
   console.log('Migrating events to enhanced format...');
-  
+
   const events = await db.events.toArray();
-  const now = Date.now();
-  
+  const nowIso = new Date().toISOString();
+
   for (const event of events) {
     const enhancedEvent: Partial<EnhancedEvent> = {
-      // Ensure all required fields exist
-      tsServer: event.tsServer || event.createdAt || now,
+      // Ensure all required fields exist (convert numbers to ISO strings)
+      syncedAt: event.syncedAt || event.createdAt || nowIso,
       periodNumber: event.periodNumber || 1,
       sentiment: event.sentiment || 0,
-      
+
       // Add new fields
       linkedEvents: undefined, // Will be populated by retroactive linking
       autoLinkedAt: undefined,
-      updatedAt: event.updatedAt || event.createdAt || now,
-      
+      updatedAt: typeof event.updatedAt === 'number' ? new Date(event.updatedAt).toISOString() : (event.updatedAt || event.createdAt || nowIso),
+
       // Authentication and soft delete fields
-      createdByUserId: 'migration-system',
+      createdByUserId: event.createdByUserId || 'migration-system',
       deletedAt: undefined,
       deletedByUserId: undefined,
-      isDeleted: false
+      isDeleted: !!event.isDeleted
     };
-    
+
     await db.events.update(event.id, enhancedEvent);
   }
-  
+
   console.log(`Migrated ${events.length} events to enhanced format`);
 }
 
@@ -135,18 +135,18 @@ async function migrateEventsToEnhanced(db: GrassrootsDB): Promise<void> {
  */
 async function migrateMatchesToEnhanced(db: GrassrootsDB): Promise<void> {
   console.log('Migrating matches to enhanced format...');
-  
+
   const matches = await db.matches.toArray();
   const now = Date.now();
-  
+
   for (const match of matches) {
     // Parse existing JSON fields if they exist
     let settings: any = {};
     let clockState: any = {};
-    
+
     // Cast to any to access old format properties
     const oldMatch = match as any;
-    
+
     try {
       if (typeof oldMatch.settings === 'string') {
         settings = JSON.parse(oldMatch.settings);
@@ -157,31 +157,33 @@ async function migrateMatchesToEnhanced(db: GrassrootsDB): Promise<void> {
     } catch (error) {
       console.warn('Error parsing match JSON fields:', error);
     }
-    
+
     const enhancedMatch: Partial<EnhancedMatch> = {
       // Map old fields to new structure (camelCase)
       matchId: oldMatch.id,
       seasonId: oldMatch.seasonId || oldMatch.season_id || 'default-season',
-      kickoffTs: oldMatch.date || now,
+      kickoffTime: typeof oldMatch.date === 'number' ? new Date(oldMatch.date).toISOString() : (oldMatch.date || new Date(now).toISOString()),
       homeTeamId: oldMatch.homeTeamId || oldMatch.home_team_id,
       awayTeamId: oldMatch.awayTeamId || oldMatch.away_team_id,
-      durationMins: settings.durationMins || settings.duration_mins || 50,
+      durationMinutes: settings.durationMins || settings.duration_mins || 50,
       periodFormat: settings.periodFormat || settings.period_format || 'quarter',
       homeScore: 0, // Will be calculated from events
       awayScore: 0, // Will be calculated from events
-      updatedAt: oldMatch.updatedAt || oldMatch.updated_at || oldMatch.createdAt || oldMatch.created_at || now,
-      
+      updatedAt: typeof (oldMatch.updatedAt || oldMatch.updated_at || oldMatch.createdAt || oldMatch.created_at || now) === 'number'
+        ? new Date(oldMatch.updatedAt || oldMatch.updated_at || oldMatch.createdAt || oldMatch.created_at || now).toISOString()
+        : (oldMatch.updatedAt || oldMatch.updated_at || oldMatch.createdAt || oldMatch.created_at || new Date(now).toISOString()),
+
       // Authentication and soft delete fields
       createdByUserId: 'migration-system',
       deletedAt: undefined,
       deletedByUserId: undefined,
       isDeleted: false
     };
-    
+
     // Update with new structure
     await db.matches.update(oldMatch.id, enhancedMatch);
   }
-  
+
   console.log(`Migrated ${matches.length} matches to enhanced format`);
 }
 
@@ -190,29 +192,35 @@ async function migrateMatchesToEnhanced(db: GrassrootsDB): Promise<void> {
  */
 async function migrateTeamsToEnhanced(db: GrassrootsDB): Promise<void> {
   console.log('Migrating teams to enhanced format...');
-  
+
   const teams = await db.teams.toArray();
   const now = Date.now();
-  
+
   for (const team of teams) {
     // Cast to any to access old format properties
     const oldTeam = team as any;
-    
+
     const enhancedTeam: Partial<EnhancedTeam> = {
-      teamId: oldTeam.id,
+      id: oldTeam.id,
       name: oldTeam.name,
-      updatedAt: oldTeam.updatedAt || oldTeam.updated_at || oldTeam.createdAt || oldTeam.created_at || now,
-      
+      homeKitPrimary: oldTeam.homeKitPrimary,
+      homeKitSecondary: oldTeam.homeKitSecondary,
+      awayKitPrimary: oldTeam.awayKitPrimary,
+      awayKitSecondary: oldTeam.awayKitSecondary,
+      updatedAt: typeof (oldTeam.updatedAt || oldTeam.updated_at || oldTeam.createdAt || oldTeam.created_at || now) === 'number'
+        ? new Date(oldTeam.updatedAt || oldTeam.updated_at || oldTeam.createdAt || oldTeam.created_at || now).toISOString()
+        : (oldTeam.updatedAt || oldTeam.updated_at || oldTeam.createdAt || oldTeam.created_at || new Date(now).toISOString()),
+
       // Authentication and soft delete fields
-      createdByUserId: 'migration-system',
+      createdByUserId: oldTeam.createdByUserId || 'migration-system',
       deletedAt: undefined,
       deletedByUserId: undefined,
-      isDeleted: false
+      isDeleted: !!oldTeam.isDeleted
     };
-    
+
     await db.teams.update(oldTeam.id, enhancedTeam);
   }
-  
+
   console.log(`Migrated ${teams.length} teams to enhanced format`);
 }
 
@@ -221,31 +229,35 @@ async function migrateTeamsToEnhanced(db: GrassrootsDB): Promise<void> {
  */
 async function migratePlayersToEnhanced(db: GrassrootsDB): Promise<void> {
   console.log('Migrating players to enhanced format...');
-  
+
   const players = await db.players.toArray();
   const now = Date.now();
-  
+
   for (const player of players) {
     // Cast to any to access old format properties
     const oldPlayer = player as any;
-    
+
     const enhancedPlayer: Partial<EnhancedPlayer> = {
       id: oldPlayer.id,
-      fullName: oldPlayer.fullName || oldPlayer.full_name,
-      squadNumber: oldPlayer.squadNumber || oldPlayer.jersey_number,
-      currentTeam: oldPlayer.currentTeam || oldPlayer.team_id,
-      updatedAt: oldPlayer.updatedAt || oldPlayer.updated_at || oldPlayer.createdAt || oldPlayer.created_at || now,
-      
+      name: oldPlayer.name,
+      squadNumber: oldPlayer.squadNumber,
+      preferredPosition: oldPlayer.preferredPosition,
+      dateOfBirth: oldPlayer.dateOfBirth,
+      currentTeam: oldPlayer.currentTeam,
+      updatedAt: typeof (oldPlayer.updatedAt || oldPlayer.updated_at || oldPlayer.createdAt || oldPlayer.created_at || now) === 'number'
+        ? new Date(oldPlayer.updatedAt || oldPlayer.updated_at || oldPlayer.createdAt || oldPlayer.created_at || now).toISOString()
+        : (oldPlayer.updatedAt || oldPlayer.updated_at || oldPlayer.createdAt || oldPlayer.created_at || new Date(now).toISOString()),
+
       // Authentication and soft delete fields
-      createdByUserId: 'migration-system',
+      createdByUserId: oldPlayer.createdByUserId || 'migration-system',
       deletedAt: undefined,
       deletedByUserId: undefined,
-      isDeleted: false
+      isDeleted: !!oldPlayer.isDeleted
     };
-    
+
     await db.players.update(oldPlayer.id, enhancedPlayer);
   }
-  
+
   console.log(`Migrated ${players.length} players to enhanced format`);
 }
 
@@ -254,11 +266,12 @@ async function migratePlayersToEnhanced(db: GrassrootsDB): Promise<void> {
  */
 async function createDefaultSeason(db: GrassrootsDB): Promise<void> {
   console.log('Creating default season...');
-  
+
   try {
     const existingSeasons = await db.seasons.count();
     if (existingSeasons === 0) {
       const currentYear = new Date().getFullYear();
+      const nowIso = new Date().toISOString();
       const defaultSeason = {
         id: 'default-season', // For compatibility
         seasonId: 'default-season',
@@ -267,8 +280,8 @@ async function createDefaultSeason(db: GrassrootsDB): Promise<void> {
         endDate: undefined,
         isCurrent: true,
         description: undefined,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: nowIso,
+        updatedAt: nowIso,
         // Authentication and soft delete fields
         createdByUserId: 'migration-system',
         deletedAt: undefined,
@@ -276,9 +289,9 @@ async function createDefaultSeason(db: GrassrootsDB): Promise<void> {
         isDeleted: false,
         synced: false
       };
-      
+
       // Use put instead of add to handle potential duplicates
-      await db.seasons.put(defaultSeason);
+      await db.seasons.put(defaultSeason as any);
       console.log('Created default season');
     } else {
       console.log('Seasons already exist, skipping default creation');
@@ -298,10 +311,10 @@ async function createDefaultSeason(db: GrassrootsDB): Promise<void> {
  */
 async function retroactivelyLinkExistingEvents(db: GrassrootsDB): Promise<void> {
   console.log('Retroactively linking existing events...');
-  
+
   const matches = await db.matches.toArray();
   let totalLinksCreated = 0;
-  
+
   for (const match of matches) {
     try {
       const linksCreated = await retroactivelyLinkMatchEvents(match.id);
@@ -310,7 +323,7 @@ async function retroactivelyLinkExistingEvents(db: GrassrootsDB): Promise<void> 
       console.warn(`Error linking events for match ${match.id}:`, error);
     }
   }
-  
+
   console.log(`Retroactively created ${totalLinksCreated} event links across ${matches.length} matches`);
 }
 
@@ -319,26 +332,26 @@ async function retroactivelyLinkExistingEvents(db: GrassrootsDB): Promise<void> 
  */
 export async function runMigrations(db: GrassrootsDB): Promise<void> {
   console.log('Checking for pending migrations...');
-  
+
   try {
     // Get current database version
     const currentVersion = await getCurrentDatabaseVersion(db);
     console.log(`Current database version: ${currentVersion}`);
-    
+
     // Find pending migrations
     const pendingMigrations = MIGRATIONS.filter(m => m.version > currentVersion);
-    
+
     if (pendingMigrations.length === 0) {
       console.log('No pending migrations');
       return;
     }
-    
+
     console.log(`Running ${pendingMigrations.length} pending migrations...`);
-    
+
     // Run migrations in order
     for (const migration of pendingMigrations) {
       console.log(`Running migration ${migration.version}: ${migration.description}`);
-      
+
       try {
         await migration.up(db);
         await setDatabaseVersion(db, migration.version);
@@ -349,7 +362,7 @@ export async function runMigrations(db: GrassrootsDB): Promise<void> {
         throw new Error(`Migration ${migration.version} failed: ${errorMessage}`);
       }
     }
-    
+
     console.log('All migrations completed successfully');
   } catch (error) {
     console.error('Error running migrations:', error);
@@ -375,14 +388,13 @@ async function getCurrentDatabaseVersion(db: GrassrootsDB): Promise<number> {
  */
 async function setDatabaseVersion(db: GrassrootsDB, version: number): Promise<void> {
   try {
-    const now = Date.now();
-    // Note: StoredSetting type still uses snake_case (created_at, updated_at)
-    // This will be updated when frontend/src/types/database.ts is migrated
+    const nowIso = new Date().toISOString();
+    // Use camelCase field names to match DbSetting type
     await db.settings.put({
       key: 'database_version',
       value: version.toString(),
-      created_at: now,
-      updated_at: now
+      createdAt: nowIso,
+      updatedAt: nowIso
     });
   } catch (error) {
     // Handle constraint errors gracefully in test environment
@@ -399,20 +411,20 @@ async function setDatabaseVersion(db: GrassrootsDB, version: number): Promise<vo
  */
 export async function rollbackToVersion(db: GrassrootsDB, targetVersion: number): Promise<void> {
   console.log(`Rolling back to version ${targetVersion}...`);
-  
+
   try {
     const currentVersion = await getCurrentDatabaseVersion(db);
-    
+
     if (targetVersion >= currentVersion) {
       console.log('Target version is not lower than current version');
       return;
     }
-    
+
     // Find migrations to rollback (in reverse order)
     const migrationsToRollback = MIGRATIONS
       .filter(m => m.version > targetVersion && m.version <= currentVersion)
       .sort((a, b) => b.version - a.version); // Reverse order
-    
+
     // Run rollbacks
     for (const migration of migrationsToRollback) {
       if (migration.down) {
@@ -422,7 +434,7 @@ export async function rollbackToVersion(db: GrassrootsDB, targetVersion: number)
         console.warn(`Migration ${migration.version} has no rollback function`);
       }
     }
-    
+
     // Update version
     await setDatabaseVersion(db, targetVersion);
     console.log(`Rollback to version ${targetVersion} completed`);
@@ -446,7 +458,7 @@ export async function getMigrationStatus(db: GrassrootsDB): Promise<{
   const latestVersion = CURRENT_VERSION;
   const appliedMigrations = MIGRATIONS.filter(m => m.version <= currentVersion);
   const pendingMigrationsList = MIGRATIONS.filter(m => m.version > currentVersion);
-  
+
   return {
     currentVersion,
     latestVersion,
@@ -466,7 +478,7 @@ export async function validateDatabaseIntegrity(db: GrassrootsDB): Promise<{
 }> {
   const errors: string[] = [];
   const warnings: string[] = [];
-  
+
   try {
     // Check if all required tables exist
     const requiredTables = ['events', 'matches', 'teams', 'players', 'seasons'];
@@ -477,13 +489,13 @@ export async function validateDatabaseIntegrity(db: GrassrootsDB): Promise<{
         errors.push(`Required table '${tableName}' is missing or inaccessible`);
       }
     }
-    
+
     // Check for orphaned records
     const events = await db.events.toArray();
     const matchIds = new Set((await db.matches.toArray()).map(m => m.id));
     const teamIds = new Set((await db.teams.toArray()).map(t => t.id));
     const playerIds = new Set((await db.players.toArray()).map(p => p.id));
-    
+
     for (const event of events) {
       if (!matchIds.has(event.matchId)) {
         warnings.push(`Event ${event.id} references non-existent match ${event.matchId}`);
@@ -495,7 +507,7 @@ export async function validateDatabaseIntegrity(db: GrassrootsDB): Promise<{
         warnings.push(`Event ${event.id} references non-existent player ${event.playerId}`);
       }
     }
-    
+
     // Check event linking integrity
     for (const event of events) {
       if (event.linkedEvents) {
@@ -509,9 +521,9 @@ export async function validateDatabaseIntegrity(db: GrassrootsDB): Promise<{
         }
       }
     }
-    
+
     console.log(`Database integrity check: ${errors.length} errors, ${warnings.length} warnings`);
-    
+
     return {
       isValid: errors.length === 0,
       errors,

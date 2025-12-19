@@ -12,12 +12,7 @@ import { useRetry } from '../hooks/useRetry';
 import { useToast } from '../contexts/ToastContext';
 import { useLoading, InlineLoading } from './ui/LoadingSpinner';
 import { InlineError } from './ui/ErrorMessage';
-import type { Player, Team } from '../types/index';
-
-// Temporary interface for components that expect players array
-interface TeamWithPlayers extends Team {
-  players: Player[];
-}
+import type { Player, Team, TeamWithPlayers } from '@shared/types';
 import type { EventKind } from '../types/events';
 import { SENTIMENT_OPTIONS } from '../types/index';
 
@@ -30,7 +25,7 @@ interface EventModalProps {
   seasonId: string;
   period: number;
   defaultPlayerId?: string;
-  onEventSaved?: (event: { kind: string; team: string; player: string; ts: number}) => void;
+  onEventSaved?: (event: { kind: string; team: string; player: string; ts: number }) => void;
 }
 
 const EventModal: React.FC<EventModalProps> = ({
@@ -38,17 +33,17 @@ const EventModal: React.FC<EventModalProps> = ({
 }) => {
   const { clock } = useMatchContext();
   const elapsedMs = clock.running
-    ? clock.offset_ms + Date.now() - (clock.start_ts ?? 0)
-    : clock.offset_ms;
+    ? clock.offsetMs + Date.now() - (clock.startTs ?? 0)
+    : clock.offsetMs;
 
   const [playerId, setPlayerId] = useState<string>(defaultPlayerId || '');
   const [sentiment, setSentiment] = useState<number>(0);
   const [notes, setNotes] = useState('');
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
-  
+
   const { recognising, startDictation } = useSpeechToText(
     (text) => setNotes(n => n + ' ' + text));
-  
+
   // Error handling and loading
   const { handleError } = useErrorHandler({ context: 'EventModal' });
   const { loading, withLoading } = useLoading();
@@ -61,15 +56,15 @@ const EventModal: React.FC<EventModalProps> = ({
   // Validation function
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
-    
+
     if (!playerId) {
       errors.playerId = 'Please select a player';
     }
-    
+
     if (notes && notes.length > 500) {
       errors.notes = 'Notes are too long (maximum 500 characters)';
     }
-    
+
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -77,12 +72,12 @@ const EventModal: React.FC<EventModalProps> = ({
   const saveEvent = async () => {
     // Clear previous validation errors
     setValidationErrors({});
-    
+
     // Validate form
     if (!validateForm()) {
       return;
     }
-    
+
     const saveOperation = async () => {
       const event = {
         kind: eventKind,
@@ -100,6 +95,9 @@ const EventModal: React.FC<EventModalProps> = ({
         playerId: playerId,
         sentiment,
         notes,
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'local-user', // Should ideally come from auth
+        isDeleted: false
       };
 
       const result = await db.addEnhancedEvent(eventData);
@@ -120,7 +118,7 @@ const EventModal: React.FC<EventModalProps> = ({
         showSuccess('Event saved successfully');
         if (onEventSaved) onEventSaved(event);
         onDidDismiss();
-        
+
         // Reset form
         setPlayerId('');
         setSentiment(0);
@@ -147,14 +145,14 @@ const EventModal: React.FC<EventModalProps> = ({
           <IonItem>
             <IonLabel position="stacked">Player</IonLabel>
             <IonSelect
-                interface="popover"
-                value={playerId}
-                placeholder="Select player"
-                onIonChange={e => setPlayerId(e.detail.value)}
-                >
-                {team.players.map(p => (
-                    <IonSelectOption key={p.id} value={p.id}>{p.full_name}</IonSelectOption>
-                ))}
+              interface="popover"
+              value={playerId}
+              placeholder="Select player"
+              onIonChange={e => setPlayerId(e.detail.value)}
+            >
+              {team.players.map((p: Player) => (
+                <IonSelectOption key={p.id} value={p.id}>{p.name}</IonSelectOption>
+              ))}
             </IonSelect>
           </IonItem>
           {validationErrors.playerId && (
@@ -163,11 +161,11 @@ const EventModal: React.FC<EventModalProps> = ({
           <IonItem>
             <IonLabel position="stacked">Sentiment</IonLabel>
             <IonSelect
-                interface="popover"
-                value={sentiment}
-                placeholder="Select sentiment"
-                onIonChange={e => setSentiment(Number(e.detail.value))}
-                >
+              interface="popover"
+              value={sentiment}
+              placeholder="Select sentiment"
+              onIonChange={e => setSentiment(Number(e.detail.value))}
+            >
               {SENTIMENT_OPTIONS.map(s => (
                 <IonSelectOption key={s.value} value={s.value}>{s.label}</IonSelectOption>
               ))}
@@ -181,17 +179,17 @@ const EventModal: React.FC<EventModalProps> = ({
               rows={3}
             />
             <IonButton slot="end" fill="clear" onClick={startDictation}>
-            <IonIcon slot="icon-only" icon={recognising ? micOff : mic} />
+              <IonIcon slot="icon-only" icon={recognising ? micOff : mic} />
             </IonButton>
           </IonItem>
           {validationErrors.notes && (
             <InlineError message={validationErrors.notes} />
           )}
         </IonList>
-        <IonButton 
-          expand="block" 
-          color="success" 
-          onClick={saveEvent} 
+        <IonButton
+          expand="block"
+          color="success"
+          onClick={saveEvent}
           disabled={loading || !playerId}
         >
           {loading ? (

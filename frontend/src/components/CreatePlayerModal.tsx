@@ -193,7 +193,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleInputChange = (field: keyof FormData, value: string | Dayjs | null) => {
+  const handleInputChange = (field: keyof FormData, value: string | string[] | Dayjs | null) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     
     // Clear error when user starts typing

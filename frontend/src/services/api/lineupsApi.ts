@@ -130,8 +130,8 @@ export const lineupsApi = {
     const localLineup = await lineupsDataLayer.create({
       matchId: lineup.matchId,
       playerId: lineup.playerId,
-      startMin: startMin,
-      endMin: lineup.endMinute,
+      startMinute: startMin,
+      endMinute: lineup.endMinute,
       position: lineup.position,
     });
 
@@ -147,8 +147,8 @@ export const lineupsApi = {
     const { lineupsDataLayer } = await import('../dataLayer');
 
     await lineupsDataLayer.update(id, {
-      startMin: data.startMinute,
-      endMin: data.endMinute,
+      startMinute: data.startMinute,
+      endMinute: data.endMinute,
       position: data.position,
     });
 

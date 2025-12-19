@@ -107,8 +107,6 @@ export interface DbMatch extends Match, SyncableRecord {
  * Note: Uses ISO strings for dates (aligned with shared types)
  */
 export interface DbEvent extends Event, SyncableRecord {
-  /** Server timestamp when event was created (ISO string) */
-  tsServer: IsoDateTimeString;
   /** Array of linked event IDs (auto-generated) */
   linkedEvents?: string[];
   /** Timestamp when auto-linking was performed (ISO string) */
@@ -406,7 +404,7 @@ export const SCHEMA_INDEXES = {
     '[playerId+sentiment]',             // Player performance tracking
     '[teamId+periodNumber]',            // Team period analysis
     'linkedEvents',                     // Multi-entry index for linked events
-    'tsServer',                         // Sync ordering
+    'createdAt',                        // Sync ordering / Creation time
     'updatedAt',                        // Change tracking
     'synced',                           // Sync status
     '[synced+createdByUserId]'          // Unsynced guest data
