@@ -12,15 +12,15 @@ import { db } from '../db/indexedDB';
 import { getGuestId, isGuest } from '../utils/guest';
 import { getCurrentUserId } from '../utils/network';
 import type {
-    EnhancedTeam,
-    EnhancedPlayer,
-    EnhancedSeason,
-    EnhancedMatch,
-    EnhancedEvent,
-    EnhancedLineup,
-    LocalMatchPeriod,
-    LocalMatchState,
-    LocalDefaultLineup
+    DbTeam,
+    DbPlayer,
+    DbSeason,
+    DbMatch,
+    DbEvent,
+    DbLineup,
+    DbMatchPeriod,
+    DbMatchState,
+    DbDefaultLineup
 } from '../db/schema';
 
 /**
@@ -42,9 +42,10 @@ function generateId(): string {
 
 /**
  * Create common fields for new records
+ * Uses ISO strings for timestamps (aligned with shared types)
  */
 function createCommonFields() {
-    const now = Date.now();
+    const now = new Date().toISOString();
     return {
         createdAt: now,
         updatedAt: now,
@@ -56,10 +57,11 @@ function createCommonFields() {
 
 /**
  * Create update fields for existing records
+ * Uses ISO strings for timestamps (aligned with shared types)
  */
 function updateFields() {
     return {
-        updatedAt: Date.now(),
+        updatedAt: new Date().toISOString(),
         synced: false,
     };
 }
@@ -89,9 +91,9 @@ export const teamsDataLayer = {
         awayKitSecondary?: string;
         logoUrl?: string;
         isOpponent?: boolean;
-    }): Promise<EnhancedTeam> {
+    }): Promise<DbTeam> {
         const id = generateId();
-        const team: EnhancedTeam = {
+        const team: DbTeam = {
             id,
             teamId: id,
             name: data.name,
@@ -102,7 +104,7 @@ export const teamsDataLayer = {
             logoUrl: data.logoUrl,
             isOpponent: data.isOpponent ?? false,
             ...createCommonFields(),
-        } as EnhancedTeam;
+        } as DbTeam;
 
         await db.teams.add(team);
         triggerSync();
@@ -134,18 +136,18 @@ export const teamsDataLayer = {
     async delete(id: string): Promise<void> {
         await db.teams.update(id, {
             isDeleted: true,
-            deletedAt: Date.now(),
+            deletedAt: new Date().toISOString(),
             deletedByUserId: getUserId(),
             ...updateFields(),
         });
         triggerSync();
     },
 
-    async getById(id: string): Promise<EnhancedTeam | undefined> {
+    async getById(id: string): Promise<DbTeam | undefined> {
         return db.teams.get(id);
     },
 
-    async getAll(options?: { includeOpponents?: boolean }): Promise<EnhancedTeam[]> {
+    async getAll(options?: { includeOpponents?: boolean }): Promise<DbTeam[]> {
         let query = db.teams.filter(t => !t.isDeleted);
         if (!options?.includeOpponents) {
             query = query.filter(t => !(t as any).isOpponent);
@@ -166,9 +168,9 @@ export const playersDataLayer = {
         dateOfBirth?: string;
         notes?: string;
         teamId?: string;
-    }): Promise<EnhancedPlayer> {
+    }): Promise<DbPlayer> {
         const id = generateId();
-        const player: EnhancedPlayer = {
+        const player: DbPlayer = {
             id,
             fullName: data.name,
             squadNumber: data.squadNumber,
@@ -177,7 +179,7 @@ export const playersDataLayer = {
             notes: data.notes,
             currentTeam: data.teamId,
             ...createCommonFields(),
-        } as EnhancedPlayer;
+        } as DbPlayer;
 
         await db.players.add(player);
         triggerSync();
@@ -207,18 +209,18 @@ export const playersDataLayer = {
     async delete(id: string): Promise<void> {
         await db.players.update(id, {
             isDeleted: true,
-            deletedAt: Date.now(),
+            deletedAt: new Date().toISOString(),
             deletedByUserId: getUserId(),
             ...updateFields(),
         });
         triggerSync();
     },
 
-    async getById(id: string): Promise<EnhancedPlayer | undefined> {
+    async getById(id: string): Promise<DbPlayer | undefined> {
         return db.players.get(id);
     },
 
-    async getAll(options?: { teamId?: string }): Promise<EnhancedPlayer[]> {
+    async getAll(options?: { teamId?: string }): Promise<DbPlayer[]> {
         let query = db.players.filter(p => !p.isDeleted);
         if (options?.teamId) {
             query = query.filter(p => p.currentTeam === options.teamId);
@@ -238,9 +240,9 @@ export const seasonsDataLayer = {
         endDate?: string;
         isCurrent?: boolean;
         description?: string;
-    }): Promise<EnhancedSeason> {
+    }): Promise<DbSeason> {
         const id = generateId();
-        const season: EnhancedSeason = {
+        const season: DbSeason = {
             id,
             seasonId: id,
             label: data.label,
@@ -249,7 +251,7 @@ export const seasonsDataLayer = {
             isCurrent: data.isCurrent ?? false,
             description: data.description,
             ...createCommonFields(),
-        } as EnhancedSeason;
+        } as DbSeason;
 
         await db.seasons.add(season);
         triggerSync();
@@ -277,18 +279,18 @@ export const seasonsDataLayer = {
     async delete(id: string): Promise<void> {
         await db.seasons.update(id, {
             isDeleted: true,
-            deletedAt: Date.now(),
+            deletedAt: new Date().toISOString(),
             deletedByUserId: getUserId(),
             ...updateFields(),
         });
         triggerSync();
     },
 
-    async getById(id: string): Promise<EnhancedSeason | undefined> {
+    async getById(id: string): Promise<DbSeason | undefined> {
         return db.seasons.get(id);
     },
 
-    async getAll(): Promise<EnhancedSeason[]> {
+    async getAll(): Promise<DbSeason[]> {
         return db.seasons.filter(s => !s.isDeleted).sortBy('label');
     },
 };
@@ -308,28 +310,28 @@ export const matchesDataLayer = {
         durationMinutes?: number;
         periodFormat?: 'half' | 'quarter';
         notes?: string;
-    }): Promise<EnhancedMatch> {
+    }): Promise<DbMatch> {
         const id = generateId();
-        const kickoffTs = typeof data.kickoffTime === 'string'
-            ? new Date(data.kickoffTime).getTime()
-            : data.kickoffTime;
+        const kickoffTimeIso = typeof data.kickoffTime === 'string'
+            ? data.kickoffTime
+            : new Date(data.kickoffTime).toISOString();
 
-        const match: EnhancedMatch = {
+        const match: DbMatch = {
             id,
             matchId: id,
             seasonId: data.seasonId,
-            kickoffTs: kickoffTs,
+            kickoffTime: kickoffTimeIso,
             homeTeamId: data.homeTeamId,
             awayTeamId: data.awayTeamId,
             competition: data.competition,
             venue: data.venue,
-            durationMins: data.durationMinutes ?? 60,
+            durationMinutes: data.durationMinutes ?? 60,
             periodFormat: data.periodFormat ?? 'quarter',
             homeScore: 0,
             awayScore: 0,
             notes: data.notes,
             ...createCommonFields(),
-        } as EnhancedMatch;
+        } as DbMatch;
 
         await db.matches.add(match);
         triggerSync();
@@ -352,15 +354,15 @@ export const matchesDataLayer = {
         const updateData: any = updateFields();
         if (data.seasonId !== undefined) updateData.seasonId = data.seasonId;
         if (data.kickoffTime !== undefined) {
-            updateData.kickoffTs = typeof data.kickoffTime === 'string'
-                ? new Date(data.kickoffTime).getTime()
-                : data.kickoffTime;
+            updateData.kickoffTime = typeof data.kickoffTime === 'string'
+                ? data.kickoffTime
+                : new Date(data.kickoffTime).toISOString();
         }
         if (data.homeTeamId !== undefined) updateData.homeTeamId = data.homeTeamId;
         if (data.awayTeamId !== undefined) updateData.awayTeamId = data.awayTeamId;
         if (data.competition !== undefined) updateData.competition = data.competition;
         if (data.venue !== undefined) updateData.venue = data.venue;
-        if (data.durationMinutes !== undefined) updateData.durationMins = data.durationMinutes;
+        if (data.durationMinutes !== undefined) updateData.durationMinutes = data.durationMinutes;
         if (data.periodFormat !== undefined) updateData.periodFormat = data.periodFormat;
         if (data.homeScore !== undefined) updateData.homeScore = data.homeScore;
         if (data.awayScore !== undefined) updateData.awayScore = data.awayScore;
@@ -373,18 +375,18 @@ export const matchesDataLayer = {
     async delete(id: string): Promise<void> {
         await db.matches.update(id, {
             isDeleted: true,
-            deletedAt: Date.now(),
+            deletedAt: new Date().toISOString(),
             deletedByUserId: getUserId(),
             ...updateFields(),
         });
         triggerSync();
     },
 
-    async getById(id: string): Promise<EnhancedMatch | undefined> {
+    async getById(id: string): Promise<DbMatch | undefined> {
         return db.matches.get(id);
     },
 
-    async getAll(options?: { seasonId?: string }): Promise<EnhancedMatch[]> {
+    async getAll(options?: { seasonId?: string }): Promise<DbMatch[]> {
         let query = db.matches.filter(m => !m.isDeleted);
         if (options?.seasonId) {
             query = query.filter(m => m.seasonId === options.seasonId);
@@ -407,11 +409,11 @@ export const eventsDataLayer = {
         playerId?: string;
         notes?: string;
         sentiment?: number;
-    }): Promise<EnhancedEvent> {
+    }): Promise<DbEvent> {
         const id = generateId();
-        const now = Date.now();
+        const now = new Date().toISOString();
 
-        const event: EnhancedEvent = {
+        const event: DbEvent = {
             id,
             matchId: data.matchId,
             kind: data.kind as any,
@@ -423,7 +425,7 @@ export const eventsDataLayer = {
             sentiment: data.sentiment ?? 0,
             tsServer: now,
             ...createCommonFields(),
-        } as EnhancedEvent;
+        } as DbEvent;
 
         await db.events.add(event);
         triggerSync();
@@ -455,14 +457,14 @@ export const eventsDataLayer = {
     async delete(id: string): Promise<void> {
         await db.events.update(id, {
             isDeleted: true,
-            deletedAt: Date.now(),
+            deletedAt: new Date().toISOString(),
             deletedByUserId: getUserId(),
             ...updateFields(),
         });
         triggerSync();
     },
 
-    async getByMatch(matchId: string): Promise<EnhancedEvent[]> {
+    async getByMatch(matchId: string): Promise<DbEvent[]> {
         return db.events
             .where('matchId')
             .equals(matchId)
@@ -482,18 +484,18 @@ export const lineupsDataLayer = {
         startMin: number;
         endMin?: number;
         position: string;
-    }): Promise<EnhancedLineup> {
+    }): Promise<DbLineup> {
         const id = `${data.matchId}-${data.playerId}-${data.startMin}`;
 
-        const lineup: EnhancedLineup = {
+        const lineup: DbLineup = {
             id,
             matchId: data.matchId,
             playerId: data.playerId,
-            startMin: data.startMin,
-            endMin: data.endMin,
+            startMinute: data.startMin,
+            endMinute: data.endMin,
             position: data.position,
             ...createCommonFields(),
-        } as EnhancedLineup;
+        } as DbLineup;
 
         await db.lineup.put(lineup); // Use put to allow updates
         triggerSync();
@@ -517,19 +519,19 @@ export const lineupsDataLayer = {
     async delete(id: string): Promise<void> {
         await db.lineup.update(id, {
             isDeleted: true,
-            deletedAt: Date.now(),
+            deletedAt: new Date().toISOString(),
             deletedByUserId: getUserId(),
             ...updateFields(),
         });
         triggerSync();
     },
 
-    async getByMatch(matchId: string): Promise<EnhancedLineup[]> {
+    async getByMatch(matchId: string): Promise<DbLineup[]> {
         return db.lineup
             .where('matchId')
             .equals(matchId)
             .filter(l => !l.isDeleted)
-            .sortBy('startMin');
+            .sortBy('startMinute');
     },
 };
 
@@ -543,11 +545,11 @@ export const matchStateDataLayer = {
         currentPeriodId?: string;
         timerMs?: number;
     }): Promise<void> {
-        const existing = await db.match_state.get(matchId);
+        const existing = await db.matchState.get(matchId);
         const now = Date.now();
 
         if (existing) {
-            await db.match_state.update(matchId, {
+            await db.matchState.update(matchId, {
                 status: data.status,
                 currentPeriodId: data.currentPeriodId,
                 timerMs: data.timerMs ?? existing.timerMs,
@@ -555,20 +557,20 @@ export const matchStateDataLayer = {
                 ...updateFields(),
             });
         } else {
-            await db.match_state.add({
+            await db.matchState.add({
                 matchId: matchId,
                 status: data.status,
                 currentPeriodId: data.currentPeriodId,
                 timerMs: data.timerMs ?? 0,
                 lastUpdatedAt: now,
                 ...createCommonFields(),
-            } as LocalMatchState);
+            } as DbMatchState);
         }
         triggerSync();
     },
 
-    async get(matchId: string): Promise<LocalMatchState | undefined> {
-        return db.match_state.get(matchId);
+    async get(matchId: string): Promise<DbMatchState | undefined> {
+        return db.matchState.get(matchId);
     },
 };
 
@@ -582,31 +584,31 @@ export const matchPeriodsDataLayer = {
         periodNumber: number;
         periodType?: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT';
         startedAt?: number;
-    }): Promise<LocalMatchPeriod> {
+    }): Promise<DbMatchPeriod> {
         const id = generateId();
         const now = Date.now();
 
-        const period: LocalMatchPeriod = {
+        const period: DbMatchPeriod = {
             id,
             matchId: data.matchId,
             periodNumber: data.periodNumber,
             periodType: data.periodType ?? 'REGULAR',
             startedAt: data.startedAt ?? now,
             ...createCommonFields(),
-        } as LocalMatchPeriod;
+        } as DbMatchPeriod;
 
-        await db.match_periods.add(period);
+        await db.matchPeriods.add(period);
         triggerSync();
         return period;
     },
 
     async endPeriod(id: string, endedAt?: number): Promise<void> {
-        const period = await db.match_periods.get(id);
+        const period = await db.matchPeriods.get(id);
         if (period) {
             const endTime = endedAt ?? Date.now();
             const durationSeconds = Math.floor((endTime - period.startedAt) / 1000);
 
-            await db.match_periods.update(id, {
+            await db.matchPeriods.update(id, {
                 endedAt: endTime,
                 durationSeconds: durationSeconds,
                 ...updateFields(),
@@ -615,8 +617,8 @@ export const matchPeriodsDataLayer = {
         }
     },
 
-    async getByMatch(matchId: string): Promise<LocalMatchPeriod[]> {
-        return db.match_periods
+    async getByMatch(matchId: string): Promise<DbMatchPeriod[]> {
+        return db.matchPeriods
             .where('matchId')
             .equals(matchId)
             .filter(p => !p.isDeleted)
@@ -632,39 +634,39 @@ export const defaultLineupsDataLayer = {
     async save(data: {
         teamId: string;
         formation: Array<{ playerId: string; position: string; pitchX: number; pitchY: number }>;
-    }): Promise<LocalDefaultLineup> {
-        const existing = await db.default_lineups
+    }): Promise<DbDefaultLineup> {
+        const existing = await db.defaultLineups
             .where('teamId')
             .equals(data.teamId)
             .filter(dl => !dl.isDeleted)
             .first();
 
-        const now = Date.now();
+        const now = new Date().toISOString();
 
         if (existing) {
-            await db.default_lineups.update(existing.id, {
+            await db.defaultLineups.update(existing.id, {
                 formation: data.formation,
                 ...updateFields(),
             });
             triggerSync();
-            return { ...existing, formation: data.formation, updatedAt: now } as LocalDefaultLineup;
+            return { ...existing, formation: data.formation, updatedAt: now } as DbDefaultLineup;
         } else {
             const id = generateId();
-            const defaultLineup: LocalDefaultLineup = {
+            const defaultLineup: DbDefaultLineup = {
                 id,
                 teamId: data.teamId,
                 formation: data.formation,
                 ...createCommonFields(),
-            } as LocalDefaultLineup;
+            } as DbDefaultLineup;
 
-            await db.default_lineups.add(defaultLineup);
+            await db.defaultLineups.add(defaultLineup);
             triggerSync();
             return defaultLineup;
         }
     },
 
-    async getByTeam(teamId: string): Promise<LocalDefaultLineup | undefined> {
-        return db.default_lineups
+    async getByTeam(teamId: string): Promise<DbDefaultLineup | undefined> {
+        return db.defaultLineups
             .where('teamId')
             .equals(teamId)
             .filter(dl => !dl.isDeleted)
@@ -672,15 +674,15 @@ export const defaultLineupsDataLayer = {
     },
 
     async delete(teamId: string): Promise<void> {
-        const existing = await db.default_lineups
+        const existing = await db.defaultLineups
             .where('teamId')
             .equals(teamId)
             .first();
 
         if (existing) {
-            await db.default_lineups.update(existing.id, {
+            await db.defaultLineups.update(existing.id, {
                 isDeleted: true,
-                deletedAt: Date.now(),
+                deletedAt: new Date().toISOString(),
                 deletedByUserId: getUserId(),
                 ...updateFields(),
             });

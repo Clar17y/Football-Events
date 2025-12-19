@@ -8,7 +8,26 @@
 import { io, Socket } from 'socket.io-client';
 // Database import removed - will use dynamic import to avoid blocking
 import type { MatchEvent } from '../types/events';
-import type { EnhancedOutboxEvent } from '../db/schema';
+import type { DbOutboxEvent } from '../db/schema';
+import type { EventKind } from '../types/events';
+
+/**
+ * Payload structure for outbox events
+ */
+interface OutboxEventPayload {
+  kind?: EventKind;
+  matchId?: string;
+  teamId?: string;
+  playerId?: string;
+  period?: number;
+  minute?: number;
+  second?: number;
+  data?: { notes?: string };
+  notes?: string;
+  created?: number;
+  createdByUserId?: string;
+  id?: string;
+}
 
 export interface RealTimeConfig {
   serverUrl: string;
@@ -146,6 +165,8 @@ export class RealTimeService {
   private async addToOutbox(event: MatchEvent): Promise<void> {
     try {
       const { db } = await import('../db/indexedDB');
+      // createdAt is an ISO string, convert to timestamp
+      const createdTimestamp = event.createdAt ? new Date(event.createdAt).getTime() : Date.now();
       const result = await db.addEvent({
         kind: event.kind,
         matchId: event.matchId,
@@ -155,7 +176,7 @@ export class RealTimeService {
         second: Math.floor(((event.clockMs || 0) % 60000) / 1000), // Convert remainder to seconds
         period: event.periodNumber,
         data: event.notes ? { notes: event.notes } : {},
-        created: event.createdAt.getTime(),
+        created: createdTimestamp,
         createdByUserId: (await import('../utils/guest')).isGuest() ? (await import('../utils/guest')).getGuestId() : 'authenticated-user'
       });
 
@@ -221,25 +242,26 @@ export class RealTimeService {
             console.warn('Invalid outbox event structure:', outboxEvent);
             try {
               const { db: dbInstance } = await import('../db/indexedDB');
-              await dbInstance.markEventSyncFailed(outboxEvent?.id ?? 0, 'Invalid event structure');
+              await dbInstance.markEventSyncFailed((outboxEvent as DbOutboxEvent)?.id ?? 0, 'Invalid event structure');
             } catch (e) { /* ignore db errors during cleanup */ }
             continue;
           }
 
-          // Handle different outbox event structures
-          let payload;
-          if (outboxEvent.data) {
-            payload = outboxEvent.data;
+          // Handle different outbox event structures - cast to proper type
+          const typedOutboxEvent = outboxEvent as DbOutboxEvent;
+          let payload: OutboxEventPayload;
+          if (typedOutboxEvent.data) {
+            payload = typedOutboxEvent.data as OutboxEventPayload;
           } else {
             // Direct event structure (fallback)
-            payload = outboxEvent;
+            payload = typedOutboxEvent as unknown as OutboxEventPayload;
           }
 
           if (!payload.kind || !payload.matchId) {
             console.warn('Missing required fields in outbox event:', payload);
             try {
               const { db: dbInstance } = await import('../db/indexedDB');
-              await dbInstance.markEventSyncFailed(outboxEvent.id ?? 0, 'Missing required fields');
+              await dbInstance.markEventSyncFailed(typedOutboxEvent.id ?? 0, 'Missing required fields');
             } catch (e) { /* ignore db errors during cleanup */ }
             continue;
           }
@@ -255,9 +277,9 @@ export class RealTimeService {
             clockMs: ((payload.minute || 0) * 60000) + ((payload.second || 0) * 1000),
             sentiment: 0, // Default sentiment
             notes: payload.data?.notes || payload.notes || '',
-            createdAt: new Date(payload.created || Date.now()),
-            created_by_user_id: payload.createdByUserId || 'system',
-            is_deleted: false
+            createdAt: new Date(payload.created || Date.now()).toISOString(),
+            createdByUserId: payload.createdByUserId || 'system',
+            isDeleted: false
           };
 
           const success = await this.tryRealTimePublish(matchEvent);
@@ -265,22 +287,23 @@ export class RealTimeService {
           if (success) {
             try {
               const { db: dbInstance } = await import('../db/indexedDB');
-              await dbInstance.markEventSynced(outboxEvent.id ?? 0);
+              await dbInstance.markEventSynced(typedOutboxEvent.id ?? 0);
             } catch (e) { /* ignore db errors */ }
             console.log(`✅ Synced event: ${matchEvent.id}`);
           } else {
             try {
               const { db: dbInstance } = await import('../db/indexedDB');
-              await dbInstance.markEventSyncFailed(outboxEvent.id ?? 0, 'Real-time sync failed');
+              await dbInstance.markEventSyncFailed(typedOutboxEvent.id ?? 0, 'Real-time sync failed');
             } catch (e) { /* ignore db errors */ }
             console.log(`❌ Failed to sync event: ${matchEvent.id}`);
           }
         } catch (error) {
+          const eventId = (outboxEvent as DbOutboxEvent)?.id ?? 0;
           try {
             const { db: dbInstance } = await import('../db/indexedDB');
-            await dbInstance.markEventSyncFailed(outboxEvent.id ?? 0, error instanceof Error ? error.message : 'Unknown error');
+            await dbInstance.markEventSyncFailed(eventId, error instanceof Error ? error.message : 'Unknown error');
           } catch (e) { /* ignore db errors */ }
-          console.error(`❌ Error syncing event ${outboxEvent.id}:`, error);
+          console.error(`❌ Error syncing event ${eventId}:`, error);
         }
       }
 
@@ -300,7 +323,10 @@ export class RealTimeService {
       const { db } = await import('../db/indexedDB');
       // Find the outbox event by payload ID
       const outboxEvents = await db.outbox.where('synced').equals(0).toArray();
-      const outboxEvent = outboxEvents.find(e => e.data?.id === eventId);
+      const outboxEvent = outboxEvents.find(e => {
+        const payload = e.data as OutboxEventPayload | undefined;
+        return payload?.id === eventId;
+      });
       
       if (outboxEvent && outboxEvent.id !== undefined) {
         await db.markEventSynced(outboxEvent.id);
