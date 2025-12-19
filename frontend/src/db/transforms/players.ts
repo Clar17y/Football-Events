@@ -1,36 +1,41 @@
 /**
  * Player transforms: IndexedDB ↔ Frontend
+ * 
+ * With shared types using camelCase and ISO strings, transforms are simplified.
+ * DbPlayer extends Player, so dbToPlayer is essentially pass-through.
  */
 
-import type { EnhancedPlayer } from '../schema';
+import type { DbPlayer } from '../schema';
 import type { Player } from '@shared/types';
-import { toDate, nullToUndefined, toBool } from './common';
+import { nullToUndefined, toBool, nowIso } from './common';
 
 /**
  * Transform IndexedDB player record to frontend Player type
+ * Since DbPlayer extends Player, this is essentially a pass-through
+ * that strips sync metadata and handles legacy field aliases.
  */
-export function dbToPlayer(p: EnhancedPlayer): Player {
+export function dbToPlayer(p: DbPlayer): Player {
   return {
     id: p.id,
-    name: p.fullName,
+    name: p.name ?? p.fullName ?? '',
     squadNumber: nullToUndefined(p.squadNumber),
-    preferredPosition: nullToUndefined(p.preferredPos),
-    dateOfBirth: p.dob ? new Date(p.dob) : undefined,
+    preferredPosition: nullToUndefined(p.preferredPosition ?? p.preferredPos),
+    dateOfBirth: nullToUndefined(p.dateOfBirth ?? p.dob),
     notes: nullToUndefined(p.notes),
     currentTeam: nullToUndefined(p.currentTeam),
-    createdAt: toDate(p.createdAt) ?? new Date(),
-    updatedAt: toDate(p.updatedAt),
-    created_by_user_id: p.createdByUserId,
-    deleted_at: toDate(p.deletedAt),
-    deleted_by_user_id: nullToUndefined(p.deletedByUserId),
-    is_deleted: toBool(p.isDeleted),
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+    createdByUserId: p.createdByUserId,
+    deletedAt: p.deletedAt,
+    deletedByUserId: nullToUndefined(p.deletedByUserId),
+    isDeleted: toBool(p.isDeleted),
   };
 }
 
 /**
  * Transform multiple IndexedDB player records
  */
-export function dbToPlayers(players: EnhancedPlayer[]): Player[] {
+export function dbToPlayers(players: DbPlayer[]): Player[] {
   return players.map(dbToPlayer);
 }
 
@@ -49,14 +54,18 @@ export interface PlayerWriteInput {
 /**
  * Transform frontend write input to IndexedDB format
  */
-export function playerWriteToDb(data: PlayerWriteInput): Partial<EnhancedPlayer> {
+export function playerWriteToDb(data: PlayerWriteInput): Partial<DbPlayer> {
   return {
-    fullName: data.name,
+    name: data.name,
     squadNumber: data.squadNumber,
-    preferredPos: data.preferredPosition,
-    dob: data.dateOfBirth,
+    preferredPosition: data.preferredPosition,
+    dateOfBirth: data.dateOfBirth,
     notes: data.notes,
     currentTeam: data.teamId,
+    // Legacy aliases for backward compatibility
+    fullName: data.name,
+    preferredPos: data.preferredPosition,
+    dob: data.dateOfBirth,
   };
 }
 
@@ -79,18 +88,19 @@ export interface ServerPlayerPayload {
  * Transform IndexedDB player to Server API payload for sync
  * Note: dateOfBirth must be YYYY-MM-DD format for the server
  */
-export function dbPlayerToServerPayload(p: EnhancedPlayer): ServerPlayerPayload {
+export function dbPlayerToServerPayload(p: DbPlayer): ServerPlayerPayload {
   // Convert ISO timestamp to YYYY-MM-DD format for server
   let dateOfBirth: string | undefined;
-  if (p.dob) {
+  const dob = p.dateOfBirth ?? p.dob;
+  if (dob) {
     // Handle both ISO format (2005-12-16T00:00:00.000Z) and date-only (2005-12-16)
-    dateOfBirth = p.dob.split('T')[0];
+    dateOfBirth = dob.split('T')[0];
   }
   
   return {
-    name: p.fullName,
+    name: p.name ?? p.fullName ?? '',
     squadNumber: nullToUndefined(p.squadNumber),
-    preferredPosition: nullToUndefined(p.preferredPos),
+    preferredPosition: nullToUndefined(p.preferredPosition ?? p.preferredPos),
     dateOfBirth,
     notes: nullToUndefined(p.notes),
   };
@@ -101,7 +111,7 @@ export function dbPlayerToServerPayload(p: EnhancedPlayer): ServerPlayerPayload 
 // ============================================================================
 
 /**
- * Server API player response (camelCase)
+ * Server API player response (camelCase - server now returns camelCase)
  */
 export interface ServerPlayerResponse {
   id: string;
@@ -113,28 +123,37 @@ export interface ServerPlayerResponse {
   currentTeam?: string;
   createdAt?: string;
   updatedAt?: string;
-  created_by_user_id?: string;
-  is_deleted?: boolean;
+  createdByUserId?: string;
+  deletedAt?: string;
+  deletedByUserId?: string;
+  isDeleted?: boolean;
 }
 
 /**
  * Transform Server API player to IndexedDB format for caching
+ * Server now returns camelCase, so this is mostly pass-through
  */
-export function serverPlayerToDb(p: ServerPlayerResponse): EnhancedPlayer {
-  const now = Date.now();
+export function serverPlayerToDb(p: ServerPlayerResponse): DbPlayer {
+  const now = nowIso();
   return {
     id: p.id,
-    fullName: p.name,
+    name: p.name,
     squadNumber: p.squadNumber,
-    preferredPos: p.preferredPosition,
-    dob: p.dateOfBirth ? new Date(p.dateOfBirth).toISOString() : undefined,
+    preferredPosition: p.preferredPosition,
+    dateOfBirth: p.dateOfBirth,
     notes: p.notes,
     currentTeam: p.currentTeam,
-    createdAt: p.createdAt ? new Date(p.createdAt).getTime() : now,
-    updatedAt: p.updatedAt ? new Date(p.updatedAt).getTime() : now,
-    createdByUserId: p.created_by_user_id || 'server',
-    isDeleted: p.is_deleted ?? false,
+    createdAt: p.createdAt ?? now,
+    updatedAt: p.updatedAt ?? now,
+    createdByUserId: p.createdByUserId ?? 'server',
+    deletedAt: p.deletedAt,
+    deletedByUserId: p.deletedByUserId,
+    isDeleted: p.isDeleted ?? false,
     synced: true,
     syncedAt: now,
-  } as EnhancedPlayer;
+    // Legacy aliases for backward compatibility
+    fullName: p.name,
+    preferredPos: p.preferredPosition,
+    dob: p.dateOfBirth,
+  };
 }

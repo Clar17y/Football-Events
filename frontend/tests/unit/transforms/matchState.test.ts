@@ -6,18 +6,18 @@ import {
   matchStateWriteToDb,
   matchPeriodWriteToDb,
 } from '../../../src/db/transforms/matchState';
-import type { LocalMatchState, LocalMatchPeriod } from '../../../src/db/schema';
+import type { DbMatchState, DbMatchPeriod } from '../../../src/db/schema';
 
 describe('matchState transforms', () => {
   describe('dbToMatchState', () => {
-    const mockDbState: LocalMatchState = {
+    const mockDbState: DbMatchState = {
       matchId: 'match-123',
       status: 'LIVE',
       currentPeriodId: 'period-1',
       timerMs: 1800000, // 30 minutes
       lastUpdatedAt: 1700000001000,
-      createdAt: 1700000000000,
-      updatedAt: 1700000001000,
+      createdAt: '2023-11-14T22:13:20.000Z',
+      updatedAt: '2023-11-14T22:13:21.000Z',
       createdByUserId: 'user-456',
       isDeleted: false,
       synced: true,
@@ -30,10 +30,10 @@ describe('matchState transforms', () => {
       expect(result.matchId).toBe('match-123');
       expect(result.status).toBe('LIVE');
       expect(result.totalElapsedSeconds).toBe(1800);
-      expect(result.createdAt).toEqual(new Date(1700000000000));
-      expect(result.updatedAt).toEqual(new Date(1700000001000));
-      expect(result.created_by_user_id).toBe('user-456');
-      expect(result.is_deleted).toBe(false);
+      expect(result.createdAt).toBe('2023-11-14T22:13:20.000Z');
+      expect(result.updatedAt).toBe('2023-11-14T22:13:21.000Z');
+      expect(result.createdByUserId).toBe('user-456');
+      expect(result.isDeleted).toBe(false);
     });
 
     it('maps NOT_STARTED to SCHEDULED', () => {
@@ -83,23 +83,23 @@ describe('matchState transforms', () => {
     });
 
     it('handles soft delete fields', () => {
-      const deletedState: LocalMatchState = {
+      const deletedState: DbMatchState = {
         ...mockDbState,
         isDeleted: true,
-        deletedAt: 1700000002000,
+        deletedAt: '2023-11-14T22:13:22.000Z',
         deletedByUserId: 'user-admin',
       };
 
       const result = dbToMatchState(deletedState);
 
-      expect(result.is_deleted).toBe(true);
-      expect(result.deleted_at).toEqual(new Date(1700000002000));
-      expect(result.deleted_by_user_id).toBe('user-admin');
+      expect(result.isDeleted).toBe(true);
+      expect(result.deletedAt).toBe('2023-11-14T22:13:22.000Z');
+      expect(result.deletedByUserId).toBe('user-admin');
     });
   });
 
   describe('dbToMatchPeriod', () => {
-    const mockDbPeriod: LocalMatchPeriod = {
+    const mockDbPeriod: DbMatchPeriod = {
       id: 'period-123',
       matchId: 'match-456',
       periodNumber: 1,
@@ -107,8 +107,8 @@ describe('matchState transforms', () => {
       startedAt: 1700000000000,
       endedAt: 1700000900000,
       durationSeconds: 900,
-      createdAt: 1699999999000,
-      updatedAt: 1700000900000,
+      createdAt: '2023-11-14T22:13:19.000Z',
+      updatedAt: '2023-11-14T22:28:20.000Z',
       createdByUserId: 'user-789',
       isDeleted: false,
       synced: true,
@@ -121,17 +121,18 @@ describe('matchState transforms', () => {
       expect(result.matchId).toBe('match-456');
       expect(result.periodNumber).toBe(1);
       expect(result.periodType).toBe('REGULAR');
-      expect(result.startedAt).toEqual(new Date(1700000000000));
-      expect(result.endedAt).toEqual(new Date(1700000900000));
+      // startedAt and endedAt are converted to ISO strings
+      expect(result.startedAt).toBe(new Date(1700000000000).toISOString());
+      expect(result.endedAt).toBe(new Date(1700000900000).toISOString());
       expect(result.durationSeconds).toBe(900);
-      expect(result.createdAt).toEqual(new Date(1699999999000));
-      expect(result.updatedAt).toEqual(new Date(1700000900000));
-      expect(result.created_by_user_id).toBe('user-789');
-      expect(result.is_deleted).toBe(false);
+      expect(result.createdAt).toBe('2023-11-14T22:13:19.000Z');
+      expect(result.updatedAt).toBe('2023-11-14T22:28:20.000Z');
+      expect(result.createdByUserId).toBe('user-789');
+      expect(result.isDeleted).toBe(false);
     });
 
     it('handles active period (no endedAt)', () => {
-      const activePeriod: LocalMatchPeriod = {
+      const activePeriod: DbMatchPeriod = {
         ...mockDbPeriod,
         endedAt: undefined,
         durationSeconds: undefined,
@@ -153,24 +154,24 @@ describe('matchState transforms', () => {
     });
 
     it('handles soft delete fields', () => {
-      const deletedPeriod: LocalMatchPeriod = {
+      const deletedPeriod: DbMatchPeriod = {
         ...mockDbPeriod,
         isDeleted: true,
-        deletedAt: 1700000002000,
+        deletedAt: '2023-11-14T22:13:22.000Z',
         deletedByUserId: 'user-admin',
       };
 
       const result = dbToMatchPeriod(deletedPeriod);
 
-      expect(result.is_deleted).toBe(true);
-      expect(result.deleted_at).toEqual(new Date(1700000002000));
-      expect(result.deleted_by_user_id).toBe('user-admin');
+      expect(result.isDeleted).toBe(true);
+      expect(result.deletedAt).toBe('2023-11-14T22:13:22.000Z');
+      expect(result.deletedByUserId).toBe('user-admin');
     });
   });
 
   describe('dbToMatchPeriods', () => {
     it('transforms array of periods', () => {
-      const periods: LocalMatchPeriod[] = [
+      const periods: DbMatchPeriod[] = [
         {
           id: 'period-1',
           matchId: 'match-1',
@@ -178,8 +179,8 @@ describe('matchState transforms', () => {
           periodType: 'REGULAR',
           startedAt: 1700000000000,
           endedAt: 1700000900000,
-          createdAt: 1700000000000,
-          updatedAt: 1700000900000,
+          createdAt: '2023-11-14T22:13:20.000Z',
+          updatedAt: '2023-11-14T22:28:20.000Z',
           createdByUserId: 'user-1',
           isDeleted: false,
           synced: false,
@@ -190,8 +191,8 @@ describe('matchState transforms', () => {
           periodNumber: 2,
           periodType: 'REGULAR',
           startedAt: 1700001000000,
-          createdAt: 1700001000000,
-          updatedAt: 1700001000000,
+          createdAt: '2023-11-14T22:30:00.000Z',
+          updatedAt: '2023-11-14T22:30:00.000Z',
           createdByUserId: 'user-1',
           isDeleted: false,
           synced: false,

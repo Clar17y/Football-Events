@@ -1,24 +1,10 @@
 /**
  * Common transform utilities for IndexedDB ↔ Frontend type conversions
+ * 
+ * With shared types now using ISO strings and camelCase everywhere,
+ * most transforms are pass-through. These utilities handle edge cases
+ * like null/undefined normalization.
  */
-
-/**
- * Convert timestamp (number/string/Date) to Date object
- */
-export function toDate(ts: number | string | Date | undefined | null): Date | undefined {
-  if (ts === undefined || ts === null) return undefined;
-  if (ts instanceof Date) return ts;
-  return new Date(ts);
-}
-
-/**
- * Convert Date/string/number to timestamp for storage
- */
-export function toTimestamp(date: Date | string | number | undefined | null): number | undefined {
-  if (date === undefined || date === null) return undefined;
-  if (typeof date === 'number') return date;
-  return new Date(date).getTime();
-}
 
 /**
  * Convert null to undefined (IndexedDB stores null, frontend prefers undefined)
@@ -32,4 +18,23 @@ export function nullToUndefined<T>(value: T | null | undefined): T | undefined {
  */
 export function toBool(value: unknown): boolean {
   return !!value;
+}
+
+/**
+ * Ensure a value is an ISO date-time string
+ * Handles Date objects, timestamps, and existing ISO strings
+ */
+export function toIsoString(value: Date | string | number | undefined | null): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'string') return value; // Already ISO string
+  if (typeof value === 'number') return new Date(value).toISOString();
+  if (value instanceof Date) return value.toISOString();
+  return undefined;
+}
+
+/**
+ * Get current ISO timestamp
+ */
+export function nowIso(): string {
+  return new Date().toISOString();
 }

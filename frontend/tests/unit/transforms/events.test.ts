@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { dbToEvent, dbToEvents, eventWriteToDb } from '../../../src/db/transforms/events';
-import type { EnhancedEvent } from '../../../src/db/schema';
+import type { DbEvent } from '../../../src/db/schema';
 
 describe('events transforms', () => {
-  const mockDbEvent: EnhancedEvent = {
+  const mockDbEvent: DbEvent = {
     id: 'event-123',
     matchId: 'match-456',
-    tsServer: 1700000000000,
+    tsServer: '2023-11-14T22:13:20.000Z',
     periodNumber: 2,
     clockMs: 1234567,
     kind: 'goal',
@@ -14,8 +14,8 @@ describe('events transforms', () => {
     playerId: 'player-789',
     notes: 'Great goal',
     sentiment: 1,
-    createdAt: 1700000000000,
-    updatedAt: 1700000001000,
+    createdAt: '2023-11-14T22:13:20.000Z',
+    updatedAt: '2023-11-14T22:13:21.000Z',
     createdByUserId: 'user-123',
     isDeleted: false,
     synced: true,
@@ -34,25 +34,25 @@ describe('events transforms', () => {
       expect(result.playerId).toBe('player-789');
       expect(result.notes).toBe('Great goal');
       expect(result.sentiment).toBe(1);
-      expect(result.createdAt).toEqual(new Date(1700000000000));
-      expect(result.updatedAt).toEqual(new Date(1700000001000));
-      expect(result.created_by_user_id).toBe('user-123');
-      expect(result.is_deleted).toBe(false);
+      expect(result.createdAt).toBe('2023-11-14T22:13:20.000Z');
+      expect(result.updatedAt).toBe('2023-11-14T22:13:21.000Z');
+      expect(result.createdByUserId).toBe('user-123');
+      expect(result.isDeleted).toBe(false);
     });
 
     it('handles null/undefined optional fields', () => {
-      const minimalEvent: EnhancedEvent = {
+      const minimalEvent: DbEvent = {
         id: 'event-minimal',
         matchId: 'match-1',
-        tsServer: 1700000000000,
+        tsServer: '2023-11-14T22:13:20.000Z',
         periodNumber: 1,
         clockMs: 0,
         kind: 'ball_out',
-        teamId: '',
-        playerId: '',
+        teamId: undefined,
+        playerId: undefined,
         sentiment: 0,
-        createdAt: 1700000000000,
-        updatedAt: 1700000000000,
+        createdAt: '2023-11-14T22:13:20.000Z',
+        updatedAt: '2023-11-14T22:13:20.000Z',
         createdByUserId: 'user-1',
         isDeleted: false,
         synced: false,
@@ -60,28 +60,28 @@ describe('events transforms', () => {
 
       const result = dbToEvent(minimalEvent);
 
-      expect(result.teamId).toBeUndefined(); // empty string becomes undefined
-      expect(result.playerId).toBeUndefined(); // empty string becomes undefined
+      expect(result.teamId).toBeUndefined();
+      expect(result.playerId).toBeUndefined();
       expect(result.notes).toBeUndefined();
     });
 
     it('handles soft delete fields', () => {
-      const deletedEvent: EnhancedEvent = {
+      const deletedEvent: DbEvent = {
         ...mockDbEvent,
         isDeleted: true,
-        deletedAt: 1700000002000,
+        deletedAt: '2023-11-14T22:13:22.000Z',
         deletedByUserId: 'user-admin',
       };
 
       const result = dbToEvent(deletedEvent);
 
-      expect(result.is_deleted).toBe(true);
-      expect(result.deleted_at).toEqual(new Date(1700000002000));
-      expect(result.deleted_by_user_id).toBe('user-admin');
+      expect(result.isDeleted).toBe(true);
+      expect(result.deletedAt).toBe('2023-11-14T22:13:22.000Z');
+      expect(result.deletedByUserId).toBe('user-admin');
     });
 
     it('handles different event kinds', () => {
-      const kinds = ['goal', 'own_goal', 'assist', 'yellow_card', 'red_card', 'save', 'foul'] as const;
+      const kinds = ['goal', 'own_goal', 'assist', 'save', 'foul'] as const;
 
       for (const kind of kinds) {
         const event = { ...mockDbEvent, kind };
@@ -168,16 +168,16 @@ describe('events transforms', () => {
       };
 
       const dbFormat = eventWriteToDb(original);
-      const stored: EnhancedEvent = {
+      const stored: DbEvent = {
         id: 'event-roundtrip',
-        tsServer: Date.now(),
+        tsServer: new Date().toISOString(),
         ...dbFormat,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'user-1',
         isDeleted: false,
         synced: false,
-      } as EnhancedEvent;
+      } as DbEvent;
 
       const readBack = dbToEvent(stored);
 

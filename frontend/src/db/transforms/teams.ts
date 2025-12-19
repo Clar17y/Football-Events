@@ -1,37 +1,42 @@
 /**
  * Team transforms: IndexedDB ↔ Frontend
+ * 
+ * With shared types using camelCase and ISO strings, transforms are simplified.
+ * DbTeam extends Team, so dbToTeam is essentially pass-through.
  */
 
-import type { EnhancedTeam } from '../schema';
+import type { DbTeam } from '../schema';
 import type { Team } from '@shared/types';
-import { toDate, nullToUndefined, toBool } from './common';
+import { nullToUndefined, toBool, nowIso } from './common';
 
 /**
  * Transform IndexedDB team record to frontend Team type
+ * Since DbTeam extends Team, this is essentially a pass-through
+ * that strips sync metadata and handles legacy field aliases.
  */
-export function dbToTeam(t: EnhancedTeam): Team {
+export function dbToTeam(t: DbTeam): Team {
   return {
     id: t.id,
     name: t.name,
-    homeKitPrimary: nullToUndefined(t.colorPrimary),
-    homeKitSecondary: nullToUndefined(t.colorSecondary),
-    awayKitPrimary: nullToUndefined(t.awayColorPrimary),
-    awayKitSecondary: nullToUndefined(t.awayColorSecondary),
+    homeKitPrimary: nullToUndefined(t.homeKitPrimary ?? t.colorPrimary),
+    homeKitSecondary: nullToUndefined(t.homeKitSecondary ?? t.colorSecondary),
+    awayKitPrimary: nullToUndefined(t.awayKitPrimary ?? t.awayColorPrimary),
+    awayKitSecondary: nullToUndefined(t.awayKitSecondary ?? t.awayColorSecondary),
     logoUrl: nullToUndefined(t.logoUrl),
-    is_opponent: toBool(t.isOpponent),
-    createdAt: toDate(t.createdAt) ?? new Date(),
-    updatedAt: toDate(t.updatedAt),
-    created_by_user_id: t.createdByUserId,
-    deleted_at: toDate(t.deletedAt),
-    deleted_by_user_id: nullToUndefined(t.deletedByUserId),
-    is_deleted: toBool(t.isDeleted),
+    isOpponent: toBool(t.isOpponent),
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+    createdByUserId: t.createdByUserId,
+    deletedAt: t.deletedAt,
+    deletedByUserId: nullToUndefined(t.deletedByUserId),
+    isDeleted: toBool(t.isDeleted),
   };
 }
 
 /**
  * Transform multiple IndexedDB team records
  */
-export function dbToTeams(teams: EnhancedTeam[]): Team[] {
+export function dbToTeams(teams: DbTeam[]): Team[] {
   return teams.map(dbToTeam);
 }
 
@@ -51,15 +56,20 @@ export interface TeamWriteInput {
 /**
  * Transform frontend write input to IndexedDB format
  */
-export function teamWriteToDb(data: TeamWriteInput): Partial<EnhancedTeam> {
+export function teamWriteToDb(data: TeamWriteInput): Partial<DbTeam> {
   return {
     name: data.name,
+    homeKitPrimary: data.homeKitPrimary,
+    homeKitSecondary: data.homeKitSecondary,
+    awayKitPrimary: data.awayKitPrimary,
+    awayKitSecondary: data.awayKitSecondary,
+    logoUrl: data.logoUrl,
+    isOpponent: data.isOpponent ?? false,
+    // Legacy aliases for backward compatibility
     colorPrimary: data.homeKitPrimary,
     colorSecondary: data.homeKitSecondary,
     awayColorPrimary: data.awayKitPrimary,
     awayColorSecondary: data.awayKitSecondary,
-    logoUrl: data.logoUrl,
-    isOpponent: data.isOpponent ?? false,
   };
 }
 
@@ -83,13 +93,13 @@ export interface ServerTeamPayload {
 /**
  * Transform IndexedDB team to Server API payload for sync
  */
-export function dbTeamToServerPayload(t: EnhancedTeam): ServerTeamPayload {
+export function dbTeamToServerPayload(t: DbTeam): ServerTeamPayload {
   return {
     name: t.name,
-    homeKitPrimary: nullToUndefined(t.colorPrimary),
-    homeKitSecondary: nullToUndefined(t.colorSecondary),
-    awayKitPrimary: nullToUndefined(t.awayColorPrimary),
-    awayKitSecondary: nullToUndefined(t.awayColorSecondary),
+    homeKitPrimary: nullToUndefined(t.homeKitPrimary ?? t.colorPrimary),
+    homeKitSecondary: nullToUndefined(t.homeKitSecondary ?? t.colorSecondary),
+    awayKitPrimary: nullToUndefined(t.awayKitPrimary ?? t.awayColorPrimary),
+    awayKitSecondary: nullToUndefined(t.awayKitSecondary ?? t.awayColorSecondary),
     logoUrl: nullToUndefined(t.logoUrl),
     isOpponent: toBool(t.isOpponent),
   };
@@ -100,7 +110,7 @@ export function dbTeamToServerPayload(t: EnhancedTeam): ServerTeamPayload {
 // ============================================================================
 
 /**
- * Server API team response (camelCase)
+ * Server API team response (camelCase - server now returns camelCase)
  */
 export interface ServerTeamResponse {
   id: string;
@@ -110,33 +120,43 @@ export interface ServerTeamResponse {
   awayKitPrimary?: string;
   awayKitSecondary?: string;
   logoUrl?: string;
-  is_opponent?: boolean;
+  isOpponent?: boolean;
   createdAt?: string;
   updatedAt?: string;
-  created_by_user_id?: string;
-  is_deleted?: boolean;
+  createdByUserId?: string;
+  deletedAt?: string;
+  deletedByUserId?: string;
+  isDeleted?: boolean;
 }
 
 /**
  * Transform Server API team to IndexedDB format for caching
+ * Server now returns camelCase, so this is mostly pass-through
  */
-export function serverTeamToDb(t: ServerTeamResponse): EnhancedTeam {
-  const now = Date.now();
+export function serverTeamToDb(t: ServerTeamResponse): DbTeam {
+  const now = nowIso();
   return {
     id: t.id,
-    teamId: t.id,
     name: t.name,
+    homeKitPrimary: t.homeKitPrimary,
+    homeKitSecondary: t.homeKitSecondary,
+    awayKitPrimary: t.awayKitPrimary,
+    awayKitSecondary: t.awayKitSecondary,
+    logoUrl: t.logoUrl,
+    isOpponent: t.isOpponent ?? false,
+    createdAt: t.createdAt ?? now,
+    updatedAt: t.updatedAt ?? now,
+    createdByUserId: t.createdByUserId ?? 'server',
+    deletedAt: t.deletedAt,
+    deletedByUserId: t.deletedByUserId,
+    isDeleted: t.isDeleted ?? false,
+    synced: true,
+    syncedAt: now,
+    // Legacy aliases for backward compatibility
+    teamId: t.id,
     colorPrimary: t.homeKitPrimary,
     colorSecondary: t.homeKitSecondary,
     awayColorPrimary: t.awayKitPrimary,
     awayColorSecondary: t.awayKitSecondary,
-    logoUrl: t.logoUrl,
-    isOpponent: t.is_opponent ?? false,
-    createdAt: t.createdAt ? new Date(t.createdAt).getTime() : now,
-    updatedAt: t.updatedAt ? new Date(t.updatedAt).getTime() : now,
-    createdByUserId: t.created_by_user_id || 'server',
-    isDeleted: t.is_deleted ?? false,
-    synced: true,
-    syncedAt: now,
-  } as EnhancedTeam;
+  };
 }

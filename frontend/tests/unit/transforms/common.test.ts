@@ -1,62 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { toDate, toTimestamp, nullToUndefined, toBool } from '../../../src/db/transforms/common';
+import { nullToUndefined, toBool, toIsoString, nowIso } from '../../../src/db/transforms/common';
 
 describe('common transform utilities', () => {
-  describe('toDate', () => {
-    it('returns undefined for undefined input', () => {
-      expect(toDate(undefined)).toBeUndefined();
-    });
-
-    it('returns undefined for null input', () => {
-      expect(toDate(null)).toBeUndefined();
-    });
-
-    it('returns same Date object if already a Date', () => {
-      const date = new Date('2024-01-15T10:30:00Z');
-      expect(toDate(date)).toBe(date);
-    });
-
-    it('converts timestamp number to Date', () => {
-      const timestamp = 1705315800000; // 2024-01-15T10:30:00Z
-      const result = toDate(timestamp);
-      expect(result).toBeInstanceOf(Date);
-      expect(result?.getTime()).toBe(timestamp);
-    });
-
-    it('converts ISO string to Date', () => {
-      const isoString = '2024-01-15T10:30:00Z';
-      const result = toDate(isoString);
-      expect(result).toBeInstanceOf(Date);
-      expect(result?.getTime()).toBe(new Date(isoString).getTime());
-    });
-  });
-
-  describe('toTimestamp', () => {
-    it('returns undefined for undefined input', () => {
-      expect(toTimestamp(undefined)).toBeUndefined();
-    });
-
-    it('returns undefined for null input', () => {
-      expect(toTimestamp(null)).toBeUndefined();
-    });
-
-    it('returns same number if already a timestamp', () => {
-      const timestamp = 1705315800000;
-      expect(toTimestamp(timestamp)).toBe(timestamp);
-    });
-
-    it('converts Date to timestamp', () => {
-      const date = new Date('2024-01-15T10:30:00Z');
-      expect(toTimestamp(date)).toBe(date.getTime());
-    });
-
-    it('converts ISO string to timestamp', () => {
-      const isoString = '2024-01-15T10:30:00Z';
-      const expected = new Date(isoString).getTime();
-      expect(toTimestamp(isoString)).toBe(expected);
-    });
-  });
-
   describe('nullToUndefined', () => {
     it('converts null to undefined', () => {
       expect(nullToUndefined(null)).toBeUndefined();
@@ -95,6 +40,53 @@ describe('common transform utilities', () => {
       expect(toBool('hello')).toBe(true);
       expect(toBool({})).toBe(true);
       expect(toBool([])).toBe(true);
+    });
+  });
+
+  describe('toIsoString', () => {
+    it('returns undefined for undefined input', () => {
+      expect(toIsoString(undefined)).toBeUndefined();
+    });
+
+    it('returns undefined for null input', () => {
+      expect(toIsoString(null)).toBeUndefined();
+    });
+
+    it('returns same string if already an ISO string', () => {
+      const isoString = '2024-01-15T10:30:00.000Z';
+      expect(toIsoString(isoString)).toBe(isoString);
+    });
+
+    it('converts timestamp number to ISO string', () => {
+      const timestamp = 1705315800000; // 2024-01-15T10:30:00Z
+      const result = toIsoString(timestamp);
+      expect(typeof result).toBe('string');
+      expect(result).toBe(new Date(timestamp).toISOString());
+    });
+
+    it('converts Date to ISO string', () => {
+      const date = new Date('2024-01-15T10:30:00Z');
+      const result = toIsoString(date);
+      expect(typeof result).toBe('string');
+      expect(result).toBe(date.toISOString());
+    });
+  });
+
+  describe('nowIso', () => {
+    it('returns a valid ISO string', () => {
+      const result = nowIso();
+      expect(typeof result).toBe('string');
+      // Should be parseable as a date
+      expect(new Date(result).toISOString()).toBe(result);
+    });
+
+    it('returns current time (within 1 second)', () => {
+      const before = Date.now();
+      const result = nowIso();
+      const after = Date.now();
+      const resultTime = new Date(result).getTime();
+      expect(resultTime).toBeGreaterThanOrEqual(before);
+      expect(resultTime).toBeLessThanOrEqual(after);
     });
   });
 });

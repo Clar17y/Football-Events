@@ -1,24 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import { dbToMatch, dbToMatches, matchWriteToDb } from '../../../src/db/transforms/matches';
-import type { EnhancedMatch } from '../../../src/db/schema';
+import type { DbMatch } from '../../../src/db/schema';
 
 describe('matches transforms', () => {
-  const mockDbMatch: EnhancedMatch = {
+  const mockDbMatch: DbMatch = {
     id: 'match-123',
     matchId: 'match-123',
     seasonId: 'season-456',
-    kickoffTs: 1700000000000,
+    kickoffTime: '2023-11-14T22:13:20.000Z',
     competition: 'League Cup',
     homeTeamId: 'team-home',
     awayTeamId: 'team-away',
     venue: 'Main Stadium',
-    durationMins: 60,
+    durationMinutes: 60,
     periodFormat: 'quarter',
     homeScore: 2,
     awayScore: 1,
     notes: 'Great game',
-    createdAt: 1699900000000,
-    updatedAt: 1700000001000,
+    createdAt: '2023-11-13T18:26:40.000Z',
+    updatedAt: '2023-11-14T22:13:21.000Z',
     createdByUserId: 'user-789',
     isDeleted: false,
     synced: true,
@@ -30,7 +30,7 @@ describe('matches transforms', () => {
 
       expect(result.id).toBe('match-123');
       expect(result.seasonId).toBe('season-456');
-      expect(result.kickoffTime).toEqual(new Date(1700000000000));
+      expect(result.kickoffTime).toBe('2023-11-14T22:13:20.000Z');
       expect(result.competition).toBe('League Cup');
       expect(result.homeTeamId).toBe('team-home');
       expect(result.awayTeamId).toBe('team-away');
@@ -40,24 +40,24 @@ describe('matches transforms', () => {
       expect(result.homeScore).toBe(2);
       expect(result.awayScore).toBe(1);
       expect(result.notes).toBe('Great game');
-      expect(result.createdAt).toEqual(new Date(1699900000000));
-      expect(result.updatedAt).toEqual(new Date(1700000001000));
-      expect(result.created_by_user_id).toBe('user-789');
-      expect(result.is_deleted).toBe(false);
+      expect(result.createdAt).toBe('2023-11-13T18:26:40.000Z');
+      expect(result.updatedAt).toBe('2023-11-14T22:13:21.000Z');
+      expect(result.createdByUserId).toBe('user-789');
+      expect(result.isDeleted).toBe(false);
     });
 
     it('handles null/undefined optional fields', () => {
-      const minimalMatch: EnhancedMatch = {
+      const minimalMatch: DbMatch = {
         id: 'match-minimal',
         matchId: 'match-minimal',
         seasonId: 'season-1',
-        kickoffTs: 1700000000000,
+        kickoffTime: '2023-11-14T22:13:20.000Z',
         homeTeamId: 'team-1',
         awayTeamId: 'team-2',
-        durationMins: 60,
+        durationMinutes: 60,
         periodFormat: 'half',
-        createdAt: 1700000000000,
-        updatedAt: 1700000000000,
+        createdAt: '2023-11-14T22:13:20.000Z',
+        updatedAt: '2023-11-14T22:13:20.000Z',
         createdByUserId: 'user-1',
         isDeleted: false,
         synced: false,
@@ -76,25 +76,25 @@ describe('matches transforms', () => {
 
     it('defaults scores to 0 when null/undefined', () => {
       const matchNoScores = { ...mockDbMatch, homeScore: undefined, awayScore: null };
-      const result = dbToMatch(matchNoScores as unknown as EnhancedMatch);
+      const result = dbToMatch(matchNoScores as unknown as DbMatch);
 
       expect(result.homeScore).toBe(0);
       expect(result.awayScore).toBe(0);
     });
 
     it('handles soft delete fields', () => {
-      const deletedMatch: EnhancedMatch = {
+      const deletedMatch: DbMatch = {
         ...mockDbMatch,
         isDeleted: true,
-        deletedAt: 1700000002000,
+        deletedAt: '2023-11-14T22:13:22.000Z',
         deletedByUserId: 'user-admin',
       };
 
       const result = dbToMatch(deletedMatch);
 
-      expect(result.is_deleted).toBe(true);
-      expect(result.deleted_at).toEqual(new Date(1700000002000));
-      expect(result.deleted_by_user_id).toBe('user-admin');
+      expect(result.isDeleted).toBe(true);
+      expect(result.deletedAt).toBe('2023-11-14T22:13:22.000Z');
+      expect(result.deletedByUserId).toBe('user-admin');
     });
   });
 
@@ -102,7 +102,7 @@ describe('matches transforms', () => {
     it('transforms array of matches', () => {
       const matches = [
         mockDbMatch,
-        { ...mockDbMatch, id: 'match-456', competition: 'Friendly' },
+        { ...mockDbMatch, id: 'match-456', matchId: 'match-456', competition: 'Friendly' },
       ];
       const result = dbToMatches(matches);
 
@@ -118,10 +118,10 @@ describe('matches transforms', () => {
   });
 
   describe('matchWriteToDb', () => {
-    it('transforms write input to db format with timestamp number', () => {
+    it('transforms write input to db format with ISO string', () => {
       const input = {
         seasonId: 'season-123',
-        kickoffTime: 1700000000000,
+        kickoffTime: '2023-11-14T22:13:20.000Z',
         homeTeamId: 'team-home',
         awayTeamId: 'team-away',
         competition: 'Cup Final',
@@ -136,41 +136,29 @@ describe('matches transforms', () => {
       const result = matchWriteToDb(input);
 
       expect(result.seasonId).toBe('season-123');
-      expect(result.kickoffTs).toBe(1700000000000);
+      expect(result.kickoffTime).toBe('2023-11-14T22:13:20.000Z');
       expect(result.homeTeamId).toBe('team-home');
       expect(result.awayTeamId).toBe('team-away');
       expect(result.competition).toBe('Cup Final');
       expect(result.venue).toBe('Stadium');
-      expect(result.durationMins).toBe(90);
+      expect(result.durationMinutes).toBe(90);
       expect(result.periodFormat).toBe('half');
       expect(result.homeScore).toBe(3);
       expect(result.awayScore).toBe(2);
       expect(result.notes).toBe('Final match');
     });
 
-    it('transforms write input with ISO string kickoffTime', () => {
-      const input = {
-        seasonId: 'season-123',
-        kickoffTime: '2024-01-15T14:00:00Z',
-        homeTeamId: 'team-home',
-        awayTeamId: 'team-away',
-      };
-
-      const result = matchWriteToDb(input);
-      expect(result.kickoffTs).toBe(new Date('2024-01-15T14:00:00Z').getTime());
-    });
-
     it('handles minimal input with defaults', () => {
       const input = {
         seasonId: 'season-1',
-        kickoffTime: 1700000000000,
+        kickoffTime: '2023-11-14T22:13:20.000Z',
         homeTeamId: 'team-1',
         awayTeamId: 'team-2',
       };
 
       const result = matchWriteToDb(input);
 
-      expect(result.durationMins).toBe(60);
+      expect(result.durationMinutes).toBe(60);
       expect(result.periodFormat).toBe('quarter');
       expect(result.homeScore).toBe(0);
       expect(result.awayScore).toBe(0);
@@ -184,7 +172,7 @@ describe('matches transforms', () => {
     it('write then read preserves data', () => {
       const original = {
         seasonId: 'season-roundtrip',
-        kickoffTime: 1700000000000,
+        kickoffTime: '2023-11-14T22:13:20.000Z',
         homeTeamId: 'team-home',
         awayTeamId: 'team-away',
         competition: 'Test League',
@@ -197,21 +185,21 @@ describe('matches transforms', () => {
       };
 
       const dbFormat = matchWriteToDb(original);
-      const stored: EnhancedMatch = {
+      const stored: DbMatch = {
         id: 'match-roundtrip',
         matchId: 'match-roundtrip',
         ...dbFormat,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'user-1',
         isDeleted: false,
         synced: false,
-      } as EnhancedMatch;
+      } as DbMatch;
 
       const readBack = dbToMatch(stored);
 
       expect(readBack.seasonId).toBe(original.seasonId);
-      expect(readBack.kickoffTime.getTime()).toBe(original.kickoffTime);
+      expect(readBack.kickoffTime).toBe(original.kickoffTime);
       expect(readBack.homeTeamId).toBe(original.homeTeamId);
       expect(readBack.awayTeamId).toBe(original.awayTeamId);
       expect(readBack.competition).toBe(original.competition);

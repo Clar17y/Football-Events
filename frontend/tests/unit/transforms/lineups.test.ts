@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { dbToLineup, dbToLineups, lineupWriteToDb, generateLineupId } from '../../../src/db/transforms/lineups';
-import type { EnhancedLineup } from '../../../src/db/schema';
+import type { DbLineup } from '../../../src/db/schema';
 
 describe('lineups transforms', () => {
-  const mockDbLineup: EnhancedLineup = {
+  const mockDbLineup: DbLineup = {
     id: 'match-123-player-456-0',
     matchId: 'match-123',
     playerId: 'player-456',
-    startMin: 0,
-    endMin: 45,
+    startMinute: 0,
+    endMinute: 45,
     position: 'MF',
-    createdAt: 1700000000000,
-    updatedAt: 1700000001000,
+    createdAt: '2023-11-14T22:13:20.000Z',
+    updatedAt: '2023-11-14T22:13:21.000Z',
     createdByUserId: 'user-789',
     isDeleted: false,
     synced: true,
@@ -27,21 +27,21 @@ describe('lineups transforms', () => {
       expect(result.startMinute).toBe(0);
       expect(result.endMinute).toBe(45);
       expect(result.position).toBe('MF');
-      expect(result.createdAt).toEqual(new Date(1700000000000));
-      expect(result.updatedAt).toEqual(new Date(1700000001000));
-      expect(result.created_by_user_id).toBe('user-789');
-      expect(result.is_deleted).toBe(false);
+      expect(result.createdAt).toBe('2023-11-14T22:13:20.000Z');
+      expect(result.updatedAt).toBe('2023-11-14T22:13:21.000Z');
+      expect(result.createdByUserId).toBe('user-789');
+      expect(result.isDeleted).toBe(false);
     });
 
     it('handles null/undefined optional fields', () => {
-      const activeLineup: EnhancedLineup = {
+      const activeLineup: DbLineup = {
         id: 'lineup-active',
         matchId: 'match-1',
         playerId: 'player-1',
-        startMin: 0,
+        startMinute: 0,
         position: 'GK',
-        createdAt: 1700000000000,
-        updatedAt: 1700000000000,
+        createdAt: '2023-11-14T22:13:20.000Z',
+        updatedAt: '2023-11-14T22:13:20.000Z',
         createdByUserId: 'user-1',
         isDeleted: false,
         synced: false,
@@ -53,18 +53,18 @@ describe('lineups transforms', () => {
     });
 
     it('handles soft delete fields', () => {
-      const deletedLineup: EnhancedLineup = {
+      const deletedLineup: DbLineup = {
         ...mockDbLineup,
         isDeleted: true,
-        deletedAt: 1700000002000,
+        deletedAt: '2023-11-14T22:13:22.000Z',
         deletedByUserId: 'user-admin',
       };
 
       const result = dbToLineup(deletedLineup);
 
-      expect(result.is_deleted).toBe(true);
-      expect(result.deleted_at).toEqual(new Date(1700000002000));
-      expect(result.deleted_by_user_id).toBe('user-admin');
+      expect(result.isDeleted).toBe(true);
+      expect(result.deletedAt).toBe('2023-11-14T22:13:22.000Z');
+      expect(result.deletedByUserId).toBe('user-admin');
     });
   });
 
@@ -92,8 +92,8 @@ describe('lineups transforms', () => {
       const input = {
         matchId: 'match-123',
         playerId: 'player-456',
-        startMin: 0,
-        endMin: 60,
+        startMinute: 0,
+        endMinute: 60,
         position: 'DF',
       };
 
@@ -101,22 +101,22 @@ describe('lineups transforms', () => {
 
       expect(result.matchId).toBe('match-123');
       expect(result.playerId).toBe('player-456');
-      expect(result.startMin).toBe(0);
-      expect(result.endMin).toBe(60);
+      expect(result.startMinute).toBe(0);
+      expect(result.endMinute).toBe(60);
       expect(result.position).toBe('DF');
     });
 
-    it('handles active player (no endMin)', () => {
+    it('handles active player (no endMinute)', () => {
       const input = {
         matchId: 'match-123',
         playerId: 'player-456',
-        startMin: 0,
+        startMinute: 0,
         position: 'MF',
       };
 
       const result = lineupWriteToDb(input);
 
-      expect(result.endMin).toBeUndefined();
+      expect(result.endMinute).toBeUndefined();
     });
   });
 
@@ -147,28 +147,28 @@ describe('lineups transforms', () => {
       const original = {
         matchId: 'match-roundtrip',
         playerId: 'player-roundtrip',
-        startMin: 0,
-        endMin: 90,
+        startMinute: 0,
+        endMinute: 90,
         position: 'MF',
       };
 
       const dbFormat = lineupWriteToDb(original);
-      const stored: EnhancedLineup = {
-        id: generateLineupId(original.matchId, original.playerId, original.startMin),
+      const stored: DbLineup = {
+        id: generateLineupId(original.matchId, original.playerId, original.startMinute),
         ...dbFormat,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'user-1',
         isDeleted: false,
         synced: false,
-      } as EnhancedLineup;
+      } as DbLineup;
 
       const readBack = dbToLineup(stored);
 
       expect(readBack.matchId).toBe(original.matchId);
       expect(readBack.playerId).toBe(original.playerId);
-      expect(readBack.startMinute).toBe(original.startMin);
-      expect(readBack.endMinute).toBe(original.endMin);
+      expect(readBack.startMinute).toBe(original.startMinute);
+      expect(readBack.endMinute).toBe(original.endMinute);
       expect(readBack.position).toBe(original.position);
     });
 
@@ -177,8 +177,8 @@ describe('lineups transforms', () => {
       const firstHalf = {
         matchId: 'match-sub',
         playerId: 'player-starter',
-        startMin: 0,
-        endMin: 60,
+        startMinute: 0,
+        endMinute: 60,
         position: 'FW',
       };
 
@@ -186,19 +186,19 @@ describe('lineups transforms', () => {
       const substitute = {
         matchId: 'match-sub',
         playerId: 'player-sub',
-        startMin: 60,
+        startMinute: 60,
         position: 'FW',
       };
 
       const dbFirstHalf = lineupWriteToDb(firstHalf);
       const dbSubstitute = lineupWriteToDb(substitute);
 
-      expect(dbFirstHalf.endMin).toBe(60);
-      expect(dbSubstitute.startMin).toBe(60);
-      expect(dbSubstitute.endMin).toBeUndefined();
+      expect(dbFirstHalf.endMinute).toBe(60);
+      expect(dbSubstitute.startMinute).toBe(60);
+      expect(dbSubstitute.endMinute).toBeUndefined();
 
-      const firstHalfId = generateLineupId(firstHalf.matchId, firstHalf.playerId, firstHalf.startMin);
-      const subId = generateLineupId(substitute.matchId, substitute.playerId, substitute.startMin);
+      const firstHalfId = generateLineupId(firstHalf.matchId, firstHalf.playerId, firstHalf.startMinute);
+      const subId = generateLineupId(substitute.matchId, substitute.playerId, substitute.startMinute);
 
       expect(firstHalfId).toBe('match-sub-player-starter-0');
       expect(subId).toBe('match-sub-player-sub-60');

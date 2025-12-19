@@ -1,37 +1,41 @@
 /**
  * Season transforms: IndexedDB ↔ Frontend
+ * 
+ * With shared types using camelCase and ISO strings, transforms are simplified.
+ * DbSeason extends Season, so dbToSeason is essentially pass-through.
  */
 
-import type { EnhancedSeason } from '../schema';
+import type { DbSeason } from '../schema';
 import type { Season } from '@shared/types';
-import { toDate, nullToUndefined, toBool } from './common';
+import { nullToUndefined, toBool, nowIso } from './common';
 
 /**
  * Transform IndexedDB season record to frontend Season type
+ * Since DbSeason extends Season, this is essentially a pass-through
+ * that strips sync metadata.
  */
-export function dbToSeason(s: EnhancedSeason): Season {
-  const id = s.seasonId || s.id;
+export function dbToSeason(s: DbSeason): Season {
   return {
-    id: id!,
-    seasonId: id!,
+    id: s.id,
+    seasonId: s.seasonId ?? s.id,
     label: s.label,
     startDate: nullToUndefined(s.startDate),
     endDate: nullToUndefined(s.endDate),
     isCurrent: toBool(s.isCurrent),
     description: nullToUndefined(s.description),
-    createdAt: toDate(s.createdAt) ?? new Date(),
-    updatedAt: toDate(s.updatedAt),
-    created_by_user_id: s.createdByUserId,
-    deleted_at: toDate(s.deletedAt),
-    deleted_by_user_id: nullToUndefined(s.deletedByUserId),
-    is_deleted: toBool(s.isDeleted),
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
+    createdByUserId: s.createdByUserId,
+    deletedAt: s.deletedAt,
+    deletedByUserId: nullToUndefined(s.deletedByUserId),
+    isDeleted: toBool(s.isDeleted),
   };
 }
 
 /**
  * Transform multiple IndexedDB season records
  */
-export function dbToSeasons(seasons: EnhancedSeason[]): Season[] {
+export function dbToSeasons(seasons: DbSeason[]): Season[] {
   return seasons.map(dbToSeason);
 }
 
@@ -49,7 +53,7 @@ export interface SeasonWriteInput {
 /**
  * Transform frontend write input to IndexedDB format
  */
-export function seasonWriteToDb(data: SeasonWriteInput): Partial<EnhancedSeason> {
+export function seasonWriteToDb(data: SeasonWriteInput): Partial<DbSeason> {
   return {
     label: data.label,
     startDate: data.startDate,
@@ -78,7 +82,7 @@ export interface ServerSeasonPayload {
  * Transform IndexedDB season to Server API payload for sync
  * Note: dates must be YYYY-MM-DD format for the server
  */
-export function dbSeasonToServerPayload(s: EnhancedSeason): ServerSeasonPayload {
+export function dbSeasonToServerPayload(s: DbSeason): ServerSeasonPayload {
   // Ensure dates are YYYY-MM-DD format (handle both ISO timestamps and date-only strings)
   const formatDate = (date: string | undefined, fallback: string): string => {
     if (!date) return fallback;
@@ -101,7 +105,7 @@ export function dbSeasonToServerPayload(s: EnhancedSeason): ServerSeasonPayload 
 // ============================================================================
 
 /**
- * Server API season response (camelCase)
+ * Server API season response (camelCase - server now returns camelCase)
  */
 export interface ServerSeasonResponse {
   id?: string;
@@ -113,16 +117,19 @@ export interface ServerSeasonResponse {
   description?: string;
   createdAt?: string;
   updatedAt?: string;
-  created_by_user_id?: string;
-  is_deleted?: boolean;
+  createdByUserId?: string;
+  deletedAt?: string;
+  deletedByUserId?: string;
+  isDeleted?: boolean;
 }
 
 /**
  * Transform Server API season to IndexedDB format for caching
+ * Server now returns camelCase, so this is mostly pass-through
  */
-export function serverSeasonToDb(s: ServerSeasonResponse): EnhancedSeason {
-  const now = Date.now();
-  const seasonId = s.id || s.seasonId!;
+export function serverSeasonToDb(s: ServerSeasonResponse): DbSeason {
+  const now = nowIso();
+  const seasonId = s.id ?? s.seasonId!;
   return {
     id: seasonId,
     seasonId: seasonId,
@@ -131,11 +138,13 @@ export function serverSeasonToDb(s: ServerSeasonResponse): EnhancedSeason {
     endDate: s.endDate,
     isCurrent: s.isCurrent ?? false,
     description: s.description,
-    createdAt: s.createdAt ? new Date(s.createdAt).getTime() : now,
-    updatedAt: s.updatedAt ? new Date(s.updatedAt).getTime() : now,
-    createdByUserId: s.created_by_user_id || 'server',
-    isDeleted: s.is_deleted ?? false,
+    createdAt: s.createdAt ?? now,
+    updatedAt: s.updatedAt ?? now,
+    createdByUserId: s.createdByUserId ?? 'server',
+    deletedAt: s.deletedAt,
+    deletedByUserId: s.deletedByUserId,
+    isDeleted: s.isDeleted ?? false,
     synced: true,
     syncedAt: now,
-  } as EnhancedSeason;
+  };
 }

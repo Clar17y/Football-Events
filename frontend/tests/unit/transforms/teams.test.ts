@@ -1,20 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import { dbToTeam, dbToTeams, teamWriteToDb } from '../../../src/db/transforms/teams';
-import type { EnhancedTeam } from '../../../src/db/schema';
+import type { DbTeam } from '../../../src/db/schema';
 
 describe('teams transforms', () => {
-  const mockDbTeam: EnhancedTeam = {
+  const mockDbTeam: DbTeam = {
     id: 'team-123',
     teamId: 'team-123',
     name: 'Test FC',
+    homeKitPrimary: '#ff0000',
+    homeKitSecondary: '#ffffff',
+    awayKitPrimary: '#0000ff',
+    awayKitSecondary: '#ffff00',
     colorPrimary: '#ff0000',
     colorSecondary: '#ffffff',
     awayColorPrimary: '#0000ff',
     awayColorSecondary: '#ffff00',
     logoUrl: 'https://example.com/logo.png',
     isOpponent: false,
-    createdAt: 1700000000000,
-    updatedAt: 1700000001000,
+    createdAt: '2023-11-14T22:13:20.000Z',
+    updatedAt: '2023-11-14T22:13:21.000Z',
     createdByUserId: 'user-456',
     isDeleted: false,
     synced: true,
@@ -31,23 +35,24 @@ describe('teams transforms', () => {
       expect(result.awayKitPrimary).toBe('#0000ff');
       expect(result.awayKitSecondary).toBe('#ffff00');
       expect(result.logoUrl).toBe('https://example.com/logo.png');
-      expect(result.is_opponent).toBe(false);
-      expect(result.createdAt).toEqual(new Date(1700000000000));
-      expect(result.updatedAt).toEqual(new Date(1700000001000));
-      expect(result.created_by_user_id).toBe('user-456');
-      expect(result.is_deleted).toBe(false);
+      expect(result.isOpponent).toBe(false);
+      expect(result.createdAt).toBe('2023-11-14T22:13:20.000Z');
+      expect(result.updatedAt).toBe('2023-11-14T22:13:21.000Z');
+      expect(result.createdByUserId).toBe('user-456');
+      expect(result.isDeleted).toBe(false);
     });
 
     it('handles null/undefined optional fields', () => {
-      const minimalTeam: EnhancedTeam = {
+      const minimalTeam: DbTeam = {
         id: 'team-minimal',
         teamId: 'team-minimal',
         name: 'Minimal FC',
-        createdAt: 1700000000000,
-        updatedAt: 1700000000000,
+        createdAt: '2023-11-14T22:13:20.000Z',
+        updatedAt: '2023-11-14T22:13:20.000Z',
         createdByUserId: 'user-1',
         isDeleted: false,
         synced: false,
+        isOpponent: false,
       };
 
       const result = dbToTeam(minimalTeam);
@@ -57,36 +62,36 @@ describe('teams transforms', () => {
       expect(result.awayKitPrimary).toBeUndefined();
       expect(result.awayKitSecondary).toBeUndefined();
       expect(result.logoUrl).toBeUndefined();
-      expect(result.is_opponent).toBe(false);
+      expect(result.isOpponent).toBe(false);
     });
 
     it('converts isOpponent to boolean', () => {
       const opponentTeam = { ...mockDbTeam, isOpponent: true };
-      expect(dbToTeam(opponentTeam).is_opponent).toBe(true);
+      expect(dbToTeam(opponentTeam).isOpponent).toBe(true);
 
-      const nonOpponentTeam = { ...mockDbTeam, isOpponent: undefined };
-      expect(dbToTeam(nonOpponentTeam).is_opponent).toBe(false);
+      const nonOpponentTeam = { ...mockDbTeam, isOpponent: undefined as unknown as boolean };
+      expect(dbToTeam(nonOpponentTeam).isOpponent).toBe(false);
     });
 
     it('handles soft delete fields', () => {
-      const deletedTeam: EnhancedTeam = {
+      const deletedTeam: DbTeam = {
         ...mockDbTeam,
         isDeleted: true,
-        deletedAt: 1700000002000,
+        deletedAt: '2023-11-14T22:13:22.000Z',
         deletedByUserId: 'user-admin',
       };
 
       const result = dbToTeam(deletedTeam);
 
-      expect(result.is_deleted).toBe(true);
-      expect(result.deleted_at).toEqual(new Date(1700000002000));
-      expect(result.deleted_by_user_id).toBe('user-admin');
+      expect(result.isDeleted).toBe(true);
+      expect(result.deletedAt).toBe('2023-11-14T22:13:22.000Z');
+      expect(result.deletedByUserId).toBe('user-admin');
     });
   });
 
   describe('dbToTeams', () => {
     it('transforms array of teams', () => {
-      const teams = [mockDbTeam, { ...mockDbTeam, id: 'team-456', name: 'Another FC' }];
+      const teams = [mockDbTeam, { ...mockDbTeam, id: 'team-456', teamId: 'team-456', name: 'Another FC' }];
       const result = dbToTeams(teams);
 
       expect(result).toHaveLength(2);
@@ -115,12 +120,17 @@ describe('teams transforms', () => {
       const result = teamWriteToDb(input);
 
       expect(result.name).toBe('New Team');
+      expect(result.homeKitPrimary).toBe('#ff0000');
+      expect(result.homeKitSecondary).toBe('#ffffff');
+      expect(result.awayKitPrimary).toBe('#0000ff');
+      expect(result.awayKitSecondary).toBe('#ffff00');
+      expect(result.logoUrl).toBe('https://example.com/logo.png');
+      expect(result.isOpponent).toBe(true);
+      // Legacy aliases
       expect(result.colorPrimary).toBe('#ff0000');
       expect(result.colorSecondary).toBe('#ffffff');
       expect(result.awayColorPrimary).toBe('#0000ff');
       expect(result.awayColorSecondary).toBe('#ffff00');
-      expect(result.logoUrl).toBe('https://example.com/logo.png');
-      expect(result.isOpponent).toBe(true);
     });
 
     it('handles minimal input', () => {
@@ -128,7 +138,7 @@ describe('teams transforms', () => {
       const result = teamWriteToDb(input);
 
       expect(result.name).toBe('Minimal Team');
-      expect(result.colorPrimary).toBeUndefined();
+      expect(result.homeKitPrimary).toBeUndefined();
       expect(result.isOpponent).toBe(false);
     });
 
@@ -148,23 +158,23 @@ describe('teams transforms', () => {
       };
 
       const dbFormat = teamWriteToDb(original);
-      const stored: EnhancedTeam = {
+      const stored: DbTeam = {
         id: 'team-roundtrip',
         teamId: 'team-roundtrip',
         ...dbFormat,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'user-1',
         isDeleted: false,
         synced: false,
-      } as EnhancedTeam;
+      } as DbTeam;
 
       const readBack = dbToTeam(stored);
 
       expect(readBack.name).toBe(original.name);
       expect(readBack.homeKitPrimary).toBe(original.homeKitPrimary);
       expect(readBack.homeKitSecondary).toBe(original.homeKitSecondary);
-      expect(readBack.is_opponent).toBe(original.isOpponent);
+      expect(readBack.isOpponent).toBe(original.isOpponent);
     });
   });
 });

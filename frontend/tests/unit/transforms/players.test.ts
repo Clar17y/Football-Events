@@ -1,18 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { dbToPlayer, dbToPlayers, playerWriteToDb } from '../../../src/db/transforms/players';
-import type { EnhancedPlayer } from '../../../src/db/schema';
+import type { DbPlayer } from '../../../src/db/schema';
 
 describe('players transforms', () => {
-  const mockDbPlayer: EnhancedPlayer = {
+  const mockDbPlayer: DbPlayer = {
     id: 'player-123',
+    name: 'John Smith',
     fullName: 'John Smith',
     squadNumber: 10,
+    preferredPosition: 'MF',
     preferredPos: 'MF',
+    dateOfBirth: '2010-05-15',
     dob: '2010-05-15',
     notes: 'Great midfielder',
     currentTeam: 'team-456',
-    createdAt: 1700000000000,
-    updatedAt: 1700000001000,
+    createdAt: '2023-11-14T22:13:20.000Z',
+    updatedAt: '2023-11-14T22:13:21.000Z',
     createdByUserId: 'user-789',
     isDeleted: false,
     synced: true,
@@ -26,21 +29,22 @@ describe('players transforms', () => {
       expect(result.name).toBe('John Smith');
       expect(result.squadNumber).toBe(10);
       expect(result.preferredPosition).toBe('MF');
-      expect(result.dateOfBirth).toEqual(new Date('2010-05-15'));
+      expect(result.dateOfBirth).toBe('2010-05-15');
       expect(result.notes).toBe('Great midfielder');
       expect(result.currentTeam).toBe('team-456');
-      expect(result.createdAt).toEqual(new Date(1700000000000));
-      expect(result.updatedAt).toEqual(new Date(1700000001000));
-      expect(result.created_by_user_id).toBe('user-789');
-      expect(result.is_deleted).toBe(false);
+      expect(result.createdAt).toBe('2023-11-14T22:13:20.000Z');
+      expect(result.updatedAt).toBe('2023-11-14T22:13:21.000Z');
+      expect(result.createdByUserId).toBe('user-789');
+      expect(result.isDeleted).toBe(false);
     });
 
     it('handles null/undefined optional fields', () => {
-      const minimalPlayer: EnhancedPlayer = {
+      const minimalPlayer: DbPlayer = {
         id: 'player-minimal',
+        name: 'Jane Doe',
         fullName: 'Jane Doe',
-        createdAt: 1700000000000,
-        updatedAt: 1700000000000,
+        createdAt: '2023-11-14T22:13:20.000Z',
+        updatedAt: '2023-11-14T22:13:20.000Z',
         createdByUserId: 'user-1',
         isDeleted: false,
         synced: false,
@@ -57,18 +61,18 @@ describe('players transforms', () => {
     });
 
     it('handles soft delete fields', () => {
-      const deletedPlayer: EnhancedPlayer = {
+      const deletedPlayer: DbPlayer = {
         ...mockDbPlayer,
         isDeleted: true,
-        deletedAt: 1700000002000,
+        deletedAt: '2023-11-14T22:13:22.000Z',
         deletedByUserId: 'user-admin',
       };
 
       const result = dbToPlayer(deletedPlayer);
 
-      expect(result.is_deleted).toBe(true);
-      expect(result.deleted_at).toEqual(new Date(1700000002000));
-      expect(result.deleted_by_user_id).toBe('user-admin');
+      expect(result.isDeleted).toBe(true);
+      expect(result.deletedAt).toBe('2023-11-14T22:13:22.000Z');
+      expect(result.deletedByUserId).toBe('user-admin');
     });
   });
 
@@ -76,7 +80,7 @@ describe('players transforms', () => {
     it('transforms array of players', () => {
       const players = [
         mockDbPlayer,
-        { ...mockDbPlayer, id: 'player-456', fullName: 'Bob Jones' },
+        { ...mockDbPlayer, id: 'player-456', name: 'Bob Jones', fullName: 'Bob Jones' },
       ];
       const result = dbToPlayers(players);
 
@@ -104,9 +108,12 @@ describe('players transforms', () => {
 
       const result = playerWriteToDb(input);
 
+      expect(result.name).toBe('New Player');
       expect(result.fullName).toBe('New Player');
       expect(result.squadNumber).toBe(7);
+      expect(result.preferredPosition).toBe('FW');
       expect(result.preferredPos).toBe('FW');
+      expect(result.dateOfBirth).toBe('2012-03-20');
       expect(result.dob).toBe('2012-03-20');
       expect(result.notes).toBe('Promising striker');
       expect(result.currentTeam).toBe('team-123');
@@ -116,10 +123,11 @@ describe('players transforms', () => {
       const input = { name: 'Minimal Player' };
       const result = playerWriteToDb(input);
 
+      expect(result.name).toBe('Minimal Player');
       expect(result.fullName).toBe('Minimal Player');
       expect(result.squadNumber).toBeUndefined();
-      expect(result.preferredPos).toBeUndefined();
-      expect(result.dob).toBeUndefined();
+      expect(result.preferredPosition).toBeUndefined();
+      expect(result.dateOfBirth).toBeUndefined();
       expect(result.currentTeam).toBeUndefined();
     });
   });
@@ -135,22 +143,22 @@ describe('players transforms', () => {
       };
 
       const dbFormat = playerWriteToDb(original);
-      const stored: EnhancedPlayer = {
+      const stored: DbPlayer = {
         id: 'player-roundtrip',
         ...dbFormat,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'user-1',
         isDeleted: false,
         synced: false,
-      } as EnhancedPlayer;
+      } as DbPlayer;
 
       const readBack = dbToPlayer(stored);
 
       expect(readBack.name).toBe(original.name);
       expect(readBack.squadNumber).toBe(original.squadNumber);
       expect(readBack.preferredPosition).toBe(original.preferredPosition);
-      expect(readBack.dateOfBirth).toEqual(new Date(original.dateOfBirth));
+      expect(readBack.dateOfBirth).toBe(original.dateOfBirth);
       expect(readBack.currentTeam).toBe(original.teamId);
     });
   });
