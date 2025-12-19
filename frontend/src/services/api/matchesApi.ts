@@ -13,7 +13,7 @@ import { db } from '../../db/indexedDB';
 import { dbToMatch, dbToMatches, dbToMatchState, dbToMatchPeriod } from '../../db/transforms';
 import type { Match, MatchUpdateRequest } from '@shared/types';
 import type { MatchState, MatchPeriod } from '@shared/types';
-import type { EnhancedMatch, LocalMatchState, LocalMatchPeriod } from '../../db/schema';
+import type { DbMatch, DbMatchState, DbMatchPeriod } from '../../db/schema';
 
 /**
  * Show offline toast notification
@@ -73,7 +73,7 @@ export const matchesApi = {
     ]);
 
     // Use centralized transform and add team data
-    const baseMatch = dbToMatch(match as EnhancedMatch);
+    const baseMatch = dbToMatch(match as DbMatch);
     return {
       ...baseMatch,
       homeTeam: homeTeam ? { id: homeTeam.id, name: homeTeam.name, isOpponent: !!(homeTeam as any).isOpponent } as any : undefined,
@@ -95,7 +95,7 @@ export const matchesApi = {
         const kickoffTs = createdMatch.kickoffTime ? new Date(createdMatch.kickoffTime as any).getTime() : now;
         const createdAtTs = (createdMatch as any).createdAt ? new Date((createdMatch as any).createdAt).getTime() : now;
         const updatedAtTs = (createdMatch as any).updatedAt ? new Date((createdMatch as any).updatedAt).getTime() : createdAtTs;
-        const userId = (createdMatch as any).createdByUserId || createdMatch.created_by_user_id || getCurrentUserId();
+        const userId = (createdMatch as any).createdByUserId || getCurrentUserId();
 
         await db.matches.put({
           id: createdMatch.id,
@@ -114,7 +114,7 @@ export const matchesApi = {
           createdAt: createdAtTs,
           updatedAt: updatedAtTs,
           createdByUserId: userId,
-          isDeleted: (createdMatch as any).isDeleted ?? createdMatch.is_deleted ?? false,
+          isDeleted: (createdMatch as any).isDeleted ?? false,
           synced: true,
           syncedAt: now,
         } as any);
@@ -193,7 +193,7 @@ export const matchesApi = {
       .equals(seasonId)
       .filter((m: any) => !m.isDeleted)
       .toArray();
-    return dbToMatches(matches as EnhancedMatch[]);
+    return dbToMatches(matches as DbMatch[]);
   },
 
   /**
@@ -205,7 +205,7 @@ export const matchesApi = {
     const matches = await db.matches
       .filter((m: any) => !m.isDeleted && (m.homeTeamId === teamId || m.awayTeamId === teamId))
       .toArray();
-    return dbToMatches(matches as EnhancedMatch[]);
+    return dbToMatches(matches as DbMatch[]);
   },
 
   /**
@@ -224,7 +224,7 @@ export const matchesApi = {
     };
   }> {
     const { page = 1, limit = 25, search, seasonId, teamId, competition } = params;
-    
+
     // Local-first: always read from IndexedDB
     const teams = await db.teams.toArray();
     const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
@@ -252,7 +252,7 @@ export const matchesApi = {
     const data: Match[] = paged.map((m: any) => {
       const home = teamMap.get(m.homeTeamId);
       const away = teamMap.get(m.awayTeamId);
-      const baseMatch = dbToMatch(m as EnhancedMatch);
+      const baseMatch = dbToMatch(m as DbMatch);
       return {
         ...baseMatch,
         homeTeam: home ? { id: home.id, name: home.name, isOpponent: !!home.isOpponent, createdAt: new Date(home.createdAt), createdByUserId: home.createdByUserId, isDeleted: !!home.isDeleted } as any : undefined,
@@ -286,7 +286,7 @@ export const matchesApi = {
     if (teamId) rows = rows.filter((m: any) => m.homeTeamId === teamId || m.awayTeamId === teamId);
     rows.sort((a: any, b: any) => new Date(a.kickoffTs).getTime() - new Date(b.kickoffTs).getTime());
     return rows.slice(0, limit).map((m: any) => {
-      const baseMatch = dbToMatch(m as EnhancedMatch);
+      const baseMatch = dbToMatch(m as DbMatch);
       return {
         ...baseMatch,
         homeTeam: teamMap.get(m.homeTeamId) ? { id: m.homeTeamId, name: teamMap.get(m.homeTeamId).name, isOpponent: !!teamMap.get(m.homeTeamId).isOpponent } as any : undefined,
@@ -309,7 +309,7 @@ export const matchesApi = {
     if (teamId) rows = rows.filter((m: any) => m.homeTeamId === teamId || m.awayTeamId === teamId);
     rows.sort((a: any, b: any) => new Date(b.kickoffTs).getTime() - new Date(a.kickoffTs).getTime());
     return rows.slice(0, limit).map((m: any) => {
-      const baseMatch = dbToMatch(m as EnhancedMatch);
+      const baseMatch = dbToMatch(m as DbMatch);
       return {
         ...baseMatch,
         homeTeam: teamMap.get(m.homeTeamId) ? { id: m.homeTeamId, name: teamMap.get(m.homeTeamId).name, isOpponent: !!teamMap.get(m.homeTeamId).isOpponent } as any : undefined,
@@ -382,54 +382,54 @@ export const matchesApi = {
     const periodId = `period-${now}-${Math.random().toString(36).slice(2, 11)}`;
 
     // Check if match_state already exists
-    const existingState = await db.match_state.get(id);
+    const existingState = await db.matchState.get(id);
 
     if (existingState) {
       // Update existing state to LIVE
-      await db.match_state.update(id, {
+      await db.matchState.update(id, {
         status: 'LIVE',
         currentPeriodId: periodId,
         timerMs: 0,
         lastUpdatedAt: now,
-        updatedAt: now,
+        updatedAt: new Date(now).toISOString(),
         synced: false,
       });
     } else {
       // Create new match_state
-      const localState: LocalMatchState = {
+      const localState: DbMatchState = {
         matchId: id,
         status: 'LIVE',
         currentPeriodId: periodId,
         timerMs: 0,
         lastUpdatedAt: now,
-        createdAt: now,
-        updatedAt: now,
+        createdAt: new Date(now).toISOString(),
+        updatedAt: new Date(now).toISOString(),
         createdByUserId: userId,
         isDeleted: false,
         synced: false,
       };
-      await db.match_state.add(localState);
+      await db.matchState.add(localState);
     }
 
     // Create first match_period record
-    const localPeriod: LocalMatchPeriod = {
+    const localPeriod: DbMatchPeriod = {
       id: periodId,
       matchId: id,
       periodNumber: 1,
       periodType: 'REGULAR',
       startedAt: now,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
       createdByUserId: userId,
       isDeleted: false,
       synced: false,
     };
-    await db.match_periods.add(localPeriod);
+    await db.matchPeriods.add(localPeriod);
 
     showOfflineToast('Match started locally - will sync when online');
 
     // Return the updated state
-    const updatedState = await db.match_state.get(id);
+    const updatedState = await db.matchState.get(id);
     if (!updatedState) {
       throw new Error(`Failed to retrieve match state for ${id}`);
     }
@@ -458,22 +458,22 @@ export const matchesApi = {
 
     // Offline fallback: update local match_state to PAUSED
     const now = Date.now();
-    const existingState = await db.match_state.get(id);
+    const existingState = await db.matchState.get(id);
 
     if (!existingState) {
       throw new Error(`Match state not found for match ${id}`);
     }
 
-    await db.match_state.update(id, {
+    await db.matchState.update(id, {
       status: 'PAUSED',
       lastUpdatedAt: now,
-      updatedAt: now,
+      updatedAt: new Date(now).toISOString(),
       synced: false,
     });
 
     showOfflineToast('Match paused locally - will sync when online');
 
-    const updatedState = await db.match_state.get(id);
+    const updatedState = await db.matchState.get(id);
     if (!updatedState) {
       throw new Error(`Failed to retrieve match state for ${id}`);
     }
@@ -502,22 +502,22 @@ export const matchesApi = {
 
     // Offline fallback: update local match_state to LIVE
     const now = Date.now();
-    const existingState = await db.match_state.get(id);
+    const existingState = await db.matchState.get(id);
 
     if (!existingState) {
       throw new Error(`Match state not found for match ${id}`);
     }
 
-    await db.match_state.update(id, {
+    await db.matchState.update(id, {
       status: 'LIVE',
       lastUpdatedAt: now,
-      updatedAt: now,
+      updatedAt: new Date(now).toISOString(),
       synced: false,
     });
 
     showOfflineToast('Match resumed locally - will sync when online');
 
-    const updatedState = await db.match_state.get(id);
+    const updatedState = await db.matchState.get(id);
     if (!updatedState) {
       throw new Error(`Failed to retrieve match state for ${id}`);
     }
@@ -550,14 +550,14 @@ export const matchesApi = {
 
     // Offline fallback: update local match_state to COMPLETED
     const now = Date.now();
-    const existingState = await db.match_state.get(id);
+    const existingState = await db.matchState.get(id);
 
     if (!existingState) {
       throw new Error(`Match state not found for match ${id}`);
     }
 
     // End any open periods (periods without endedAt)
-    const openPeriods = await db.match_periods
+    const openPeriods = await db.matchPeriods
       .where('matchId')
       .equals(id)
       .filter(p => !p.endedAt && !p.isDeleted)
@@ -567,20 +567,20 @@ export const matchesApi = {
       const durationSeconds = period.startedAt
         ? Math.floor((now - period.startedAt) / 1000)
         : 0;
-      await db.match_periods.update(period.id, {
+      await db.matchPeriods.update(period.id, {
         endedAt: now,
         durationSeconds: durationSeconds,
-        updatedAt: now,
+        updatedAt: new Date(now).toISOString(),
         synced: false,
       });
     }
 
     // Update match_state to COMPLETED
-    await db.match_state.update(id, {
+    await db.matchState.update(id, {
       status: 'COMPLETED',
       currentPeriodId: undefined,
       lastUpdatedAt: now,
-      updatedAt: now,
+      updatedAt: new Date(now).toISOString(),
       synced: false,
     });
 
@@ -590,7 +590,7 @@ export const matchesApi = {
         await db.matches.update(id, {
           homeScore: finalScore.home,
           awayScore: finalScore.away,
-          updatedAt: now,
+          updatedAt: new Date(now).toISOString(),
           synced: false,
         } as any);
       } catch {
@@ -600,7 +600,7 @@ export const matchesApi = {
 
     showOfflineToast('Match completed locally - will sync when online');
 
-    const updatedState = await db.match_state.get(id);
+    const updatedState = await db.matchState.get(id);
     if (!updatedState) {
       throw new Error(`Failed to retrieve match state for ${id}`);
     }
@@ -622,23 +622,23 @@ export const matchesApi = {
    */
   async getMatchStates(page = 1, limit = 500, matchIds?: string[]): Promise<{ data: Array<MatchState & { matchId: string }>; pagination?: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean } }> {
     // Local-first: always read from IndexedDB
-    let states = await db.match_state.toArray();
-    
+    let states = await db.matchState.toArray();
+
     // Filter by matchIds if provided
     if (matchIds && matchIds.length) {
       const matchIdSet = new Set(matchIds);
       states = states.filter((s: any) => matchIdSet.has(s.matchId));
     }
-    
+
     // Filter out deleted
     states = states.filter((s: any) => !s.isDeleted);
-    
+
     const total = states.length;
     const start = (page - 1) * limit;
     const paged = states.slice(start, start + limit);
-    
+
     const data = paged.map((s: any) => dbToMatchState(s));
-    
+
     return {
       data: data as any,
       pagination: {
@@ -678,7 +678,7 @@ export const matchesApi = {
     const periodId = `period-${now}-${Math.random().toString(36).slice(2, 11)}`;
 
     // Get the next period number
-    const existingPeriods = await db.match_periods
+    const existingPeriods = await db.matchPeriods
       .where('matchId')
       .equals(id)
       .filter(p => !p.isDeleted)
@@ -691,28 +691,28 @@ export const matchesApi = {
         periodType === 'penalty_shootout' ? 'PENALTY_SHOOTOUT' :
           'REGULAR';
 
-    const localPeriod: LocalMatchPeriod = {
+    const localPeriod: DbMatchPeriod = {
       id: periodId,
       matchId: id,
       periodNumber: nextPeriodNumber,
       periodType: mappedPeriodType,
       startedAt: now,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
       createdByUserId: userId,
       isDeleted: false,
       synced: false,
     };
-    await db.match_periods.add(localPeriod);
+    await db.matchPeriods.add(localPeriod);
 
     // Update match_state with current period
-    const existingState = await db.match_state.get(id);
+    const existingState = await db.matchState.get(id);
     if (existingState) {
-      await db.match_state.update(id, {
+      await db.matchState.update(id, {
         currentPeriodId: periodId,
         status: 'LIVE',
         lastUpdatedAt: now,
-        updatedAt: now,
+        updatedAt: new Date(now).toISOString(),
         synced: false,
       });
     }
@@ -744,7 +744,7 @@ export const matchesApi = {
 
     // Offline fallback: update local match_periods with endedAt
     const now = Date.now();
-    const existingPeriod = await db.match_periods.get(periodId);
+    const existingPeriod = await db.matchPeriods.get(periodId);
 
     if (!existingPeriod) {
       throw new Error(`Period ${periodId} not found`);
@@ -754,27 +754,27 @@ export const matchesApi = {
     const durationSeconds = payload?.actualDurationSeconds ??
       (existingPeriod.startedAt ? Math.floor((now - existingPeriod.startedAt) / 1000) : 0);
 
-    await db.match_periods.update(periodId, {
+    await db.matchPeriods.update(periodId, {
       endedAt: now,
       durationSeconds: durationSeconds,
-      updatedAt: now,
+      updatedAt: new Date(now).toISOString(),
       synced: false,
     });
 
     // Update match_state to clear current period
-    const existingState = await db.match_state.get(id);
+    const existingState = await db.matchState.get(id);
     if (existingState && existingState.currentPeriodId === periodId) {
-      await db.match_state.update(id, {
+      await db.matchState.update(id, {
         currentPeriodId: undefined,
         lastUpdatedAt: now,
-        updatedAt: now,
+        updatedAt: new Date(now).toISOString(),
         synced: false,
       });
     }
 
     showOfflineToast('Period ended locally - will sync when online');
 
-    const updatedPeriod = await db.match_periods.get(periodId);
+    const updatedPeriod = await db.matchPeriods.get(periodId);
     if (!updatedPeriod) {
       throw new Error(`Failed to retrieve period ${periodId}`);
     }

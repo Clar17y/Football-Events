@@ -58,18 +58,18 @@ export const playersApi = {
     let rows = await db.players.toArray();
     // Filter non-deleted
     rows = rows.filter((p: any) => p && !p.isDeleted);
-    
-    // Filter by team assignment using player_teams junction table
+
+    // Filter by team assignment using playerTeams junction table
     if (teamIds && teamIds.length > 0) {
       // Get player IDs that belong to any of the specified teams
-      const playerTeamRelations = await db.player_teams
+      const playerTeamRelations = await db.playerTeams
         .filter((pt: any) => !pt.isDeleted && pt.isActive !== false && teamIds.includes(pt.teamId))
         .toArray();
       const playerIdsInTeams = new Set(playerTeamRelations.map((pt: any) => pt.playerId));
       rows = rows.filter((p: any) => playerIdsInTeams.has(p.id));
     } else if (teamId) {
       // Get player IDs that belong to the specified team
-      const playerTeamRelations = await db.player_teams
+      const playerTeamRelations = await db.playerTeams
         .where('teamId')
         .equals(teamId)
         .filter((pt: any) => !pt.isDeleted && pt.isActive !== false)
@@ -78,13 +78,13 @@ export const playersApi = {
       rows = rows.filter((p: any) => playerIdsInTeam.has(p.id));
     } else if (noTeam) {
       // Get all player IDs that have any active team relationship
-      const allPlayerTeamRelations = await db.player_teams
+      const allPlayerTeamRelations = await db.playerTeams
         .filter((pt: any) => !pt.isDeleted && pt.isActive !== false)
         .toArray();
       const playerIdsWithTeams = new Set(allPlayerTeamRelations.map((pt: any) => pt.playerId));
       rows = rows.filter((p: any) => !playerIdsWithTeams.has(p.id));
     }
-    
+
     // Filter by search text
     if (search && search.trim()) {
       const term = search.trim().toLowerCase();
@@ -234,14 +234,14 @@ export const playersApi = {
     const startDate = new Date();
 
     // Get existing player-team relationships (cast to any to access stored fields)
-    const existingRelations = await db.player_teams
-      .filter((pt: any) => pt.playerId === id && !pt.isDeleted && !pt.is_deleted)
+    const existingRelations = await db.playerTeams
+      .filter((pt: any) => pt.playerId === id && !pt.isDeleted)
       .toArray();
 
     // Deactivate relationships for teams no longer in the list
     for (const relation of existingRelations) {
       if (!teamIds.includes(relation.teamId)) {
-        await db.player_teams.update(relation.id, {
+        await db.playerTeams.update(relation.id, {
           endDate: startDate,
           updatedAt: new Date(),
         } as any);
@@ -254,7 +254,7 @@ export const playersApi = {
       if (existing) {
         // Reactivate if it was deactivated (has endDate)
         if ((existing as any).endDate) {
-          await db.player_teams.update(existing.id, {
+          await db.playerTeams.update(existing.id, {
             endDate: undefined,
             updatedAt: new Date(),
           } as any);
@@ -262,15 +262,16 @@ export const playersApi = {
       } else {
         // Create new relationship
         const ptId = crypto?.randomUUID ? crypto.randomUUID() : `pt-${now}-${Math.random().toString(36).slice(2)}`;
-        await db.player_teams.put({
+        await db.playerTeams.put({
           id: ptId,
           playerId: id,
           teamId: teamId,
           startDate: startDate,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          created_by_user_id: userId,
-          is_deleted: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          createdByUserId: userId,
+          isDeleted: false,
+          synced: false,
         } as any);
       }
     }
@@ -310,24 +311,24 @@ export const playersApi = {
   async getPlayersByTeam(teamId: string): Promise<Player[]> {
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
-    
+
     // Get active player-team relationships for this team
-    const playerTeamRelations = await db.player_teams
+    const playerTeamRelations = await db.playerTeams
       .where('teamId')
       .equals(teamId)
       .filter((pt: any) => !pt.isDeleted && pt.isActive !== false)
       .toArray();
-    
+
     // Get the player IDs from the relationships
     const playerIds = playerTeamRelations.map((pt: any) => pt.playerId);
-    
+
     // Fetch the actual player records
     const players = await db.players
       .where('id')
       .anyOf(playerIds)
       .filter((p: any) => !p.isDeleted)
       .toArray();
-    
+
     return dbToPlayers(players as EnhancedPlayer[]);
   },
 
@@ -338,14 +339,14 @@ export const playersApi = {
   async getPlayerStats(playerId: string, seasonId?: string): Promise<any> {
     // Local-first: compute stats from local data
     const { db } = await import('../../db/indexedDB');
-    
+
     // Get events for this player
     let events = await db.events
       .where('playerId')
       .equals(playerId)
       .filter((e: any) => !e.isDeleted)
       .toArray();
-    
+
     // Filter by season if provided
     if (seasonId) {
       const matchesInSeason = await db.matches
@@ -356,21 +357,21 @@ export const playersApi = {
       const matchIds = new Set(matchesInSeason.map(m => m.id));
       events = events.filter((e: any) => matchIds.has(e.matchId));
     }
-    
+
     // Get lineup entries for this player
     let lineups = await db.lineup
       .where('playerId')
       .equals(playerId)
       .filter((l: any) => !l.isDeleted)
       .toArray();
-    
+
     // Count stats
     const goals = events.filter((e: any) => e.kind === 'goal').length;
     const assists = events.filter((e: any) => e.kind === 'assist').length;
     const yellowCards = events.filter((e: any) => e.kind === 'yellow_card').length;
     const redCards = events.filter((e: any) => e.kind === 'red_card').length;
     const appearances = new Set(lineups.map((l: any) => l.matchId)).size;
-    
+
     // Calculate minutes played from lineups
     let minutesPlayed = 0;
     for (const lineup of lineups) {
@@ -378,7 +379,7 @@ export const playersApi = {
       const end = (lineup as any).endMin || 90; // Default to 90 if not ended
       minutesPlayed += (end - start);
     }
-    
+
     return {
       matches: appearances,
       goals,

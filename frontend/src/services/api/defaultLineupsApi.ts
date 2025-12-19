@@ -87,7 +87,7 @@ export const defaultLineupsApi = {
   async getDefaultLineup(teamId: string): Promise<DefaultLineupData | null> {
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
-    const rec = await db.default_lineups.where('teamId').equals(teamId).filter(r => !r.isDeleted).first();
+    const rec = await db.defaultLineups.where('teamId').equals(teamId).filter(r => !r.isDeleted).first();
     if (!rec) return null;
     return {
       id: rec.id,
@@ -128,7 +128,7 @@ export const defaultLineupsApi = {
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
     const teams = await db.teams.filter((t: any) => !t.isDeleted).toArray();
-    const defaultLineups = await db.default_lineups.filter(dl => !dl.isDeleted).toArray();
+    const defaultLineups = await db.defaultLineups.filter(dl => !dl.isDeleted).toArray();
     const lineupTeamIds = new Set(defaultLineups.map(dl => dl.teamId));
     const results = teams.map(t => ({
       teamId: t.id,

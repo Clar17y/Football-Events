@@ -11,7 +11,7 @@ import type { Lineup, LineupCreateRequest, LineupUpdateRequest } from '@shared/t
 import { isOnline, shouldUseOfflineFallback, getCurrentUserId } from '../../utils/network';
 import { db } from '../../db/indexedDB';
 import { dbToLineup, generateLineupId } from '../../db/transforms';
-import type { EnhancedLineup } from '../../db/schema';
+import type { DbLineup } from '../../db/schema';
 
 export interface LineupBatchRequest {
   create?: LineupCreateRequest[];
@@ -224,15 +224,15 @@ export const lineupsApi = {
           const startMin = createReq.startMinute ?? 0;
           const lineupId = generateLineupId(createReq.matchId, createReq.playerId, startMin);
 
-          const localLineup: EnhancedLineup = {
+          const localLineup: DbLineup = {
             id: lineupId,
             matchId: createReq.matchId,
             playerId: createReq.playerId,
-            startMin: startMin,
-            endMin: createReq.endMinute,
+            startMinute: startMin,
+            endMinute: createReq.endMinute,
             position: createReq.position,
-            createdAt: now,
-            updatedAt: now,
+            createdAt: new Date(now).toISOString(),
+            updatedAt: new Date(now).toISOString(),
             createdByUserId: userId,
             isDeleted: false,
             synced: false,
@@ -257,13 +257,13 @@ export const lineupsApi = {
             continue;
           }
 
-          const updates: Partial<EnhancedLineup> = {
-            updatedAt: now,
+          const updates: Partial<DbLineup> = {
+            updatedAt: new Date(now).toISOString(),
             synced: false,
           };
 
-          if (updateOp.data.startMinute !== undefined) updates.startMin = updateOp.data.startMinute;
-          if (updateOp.data.endMinute !== undefined) updates.endMin = updateOp.data.endMinute;
+          if (updateOp.data.startMinute !== undefined) updates.startMinute = updateOp.data.startMinute;
+          if (updateOp.data.endMinute !== undefined) updates.endMinute = updateOp.data.endMinute;
           if (updateOp.data.position !== undefined) updates.position = updateOp.data.position;
 
           await db.lineup.update(updateOp.id, updates);
@@ -293,9 +293,9 @@ export const lineupsApi = {
 
           await db.lineup.update(deleteId, {
             isDeleted: true,
-            deletedAt: now,
+            deletedAt: new Date(now).toISOString(),
             deletedByUserId: userId,
-            updatedAt: now,
+            updatedAt: new Date(now).toISOString(),
             synced: false,
           });
 
@@ -357,11 +357,11 @@ export const lineupsApi = {
     const userId = getCurrentUserId();
     const currentTime = substitution.currentTime;
 
-    // Find the player going off - they should have an active lineup entry (no endMin)
+    // Find the player going off - they should have an active lineup entry (no endMinute)
     const playerOffLineups = await db.lineup
       .where('matchId')
       .equals(matchId)
-      .filter(l => l.playerId === substitution.playerOffId && !l.endMin && !l.isDeleted)
+      .filter(l => l.playerId === substitution.playerOffId && !l.endMinute && !l.isDeleted)
       .toArray();
 
     if (playerOffLineups.length === 0) {
@@ -369,12 +369,12 @@ export const lineupsApi = {
     }
 
     // Get the most recent lineup entry for the player going off
-    const playerOffLineup = playerOffLineups.sort((a, b) => b.startMin - a.startMin)[0];
+    const playerOffLineup = playerOffLineups.sort((a, b) => b.startMinute - a.startMinute)[0];
 
-    // Update player off - set endMin to current time
+    // Update player off - set endMinute to current time
     await db.lineup.update(playerOffLineup.id, {
-      endMin: currentTime,
-      updatedAt: now,
+      endMinute: currentTime,
+      updatedAt: new Date(now).toISOString(),
       synced: false,
     });
 
@@ -385,15 +385,15 @@ export const lineupsApi = {
 
     // Create lineup entry for player coming on
     const playerOnId = generateLineupId(matchId, substitution.playerOnId, currentTime);
-    const playerOnLineup: EnhancedLineup = {
+    const playerOnLineup: DbLineup = {
       id: playerOnId,
       matchId: matchId,
       playerId: substitution.playerOnId,
-      startMin: currentTime,
-      endMin: undefined,
+      startMinute: currentTime,
+      endMinute: undefined,
       position: substitution.position,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
       createdByUserId: userId,
       isDeleted: false,
       synced: false,
