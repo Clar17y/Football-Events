@@ -219,11 +219,11 @@ describe('Match Schema Alignment Tests', () => {
       expect(transformedMatch.notes).toBe('Important derby match');
       expect(transformedMatch.createdAt).toBe(createdMatch.created_at);
       expect(transformedMatch.updatedAt).toBeUndefined();
-      // Authorization and soft delete fields
-      expect(transformedMatch.created_by_user_id).toBe(testUserId);
-      expect(transformedMatch.deleted_at).toBeUndefined();
-      expect(transformedMatch.deleted_by_user_id).toBeUndefined();
-      expect(transformedMatch.is_deleted).toBe(false);
+      // Authorization and soft delete fields (camelCase)
+      expect(transformedMatch.createdByUserId).toBe(testUserId);
+      expect(transformedMatch.deletedAt).toBeUndefined();
+      expect(transformedMatch.deletedByUserId).toBeUndefined();
+      expect(transformedMatch.isDeleted).toBe(false);
     });
 
     it('should handle minimal match data correctly', async () => {

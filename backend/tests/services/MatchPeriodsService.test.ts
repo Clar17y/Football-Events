@@ -85,10 +85,10 @@ describe('MatchPeriodsService', () => {
       durationSeconds: period.duration_seconds,
       createdAt: period.created_at,
       updatedAt: period.updated_at,
-      created_by_user_id: period.created_by_user_id,
-      deleted_at: period.deleted_at,
-      deleted_by_user_id: period.deleted_by_user_id,
-      is_deleted: period.is_deleted,
+      createdByUserId: period.created_by_user_id,
+      deletedAt: period.deleted_at,
+      deletedByUserId: period.deleted_by_user_id,
+      isDeleted: period.is_deleted,
     }));
 
     vi.mocked(safeTransformMatchPeriod).mockImplementation((period: any) => 

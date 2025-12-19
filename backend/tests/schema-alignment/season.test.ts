@@ -95,13 +95,13 @@ describe('Season Schema Alignment Tests', () => {
         endDate: '2025-05-31',
         isCurrent: true,
         description: 'Premier League season 2024-25',
-        createdAt: createdSeason.created_at,
+        createdAt: createdSeason.created_at.toISOString(),
         updatedAt: undefined, // transformSeason returns undefined for null database values
-        // Authorization and soft delete fields
-        created_by_user_id: testUserId,
-        deleted_at: undefined,
-        deleted_by_user_id: undefined,
-        is_deleted: false
+        // Authorization and soft delete fields (camelCase)
+        createdByUserId: testUserId,
+        deletedAt: undefined,
+        deletedByUserId: undefined,
+        isDeleted: false
       });
     });
 

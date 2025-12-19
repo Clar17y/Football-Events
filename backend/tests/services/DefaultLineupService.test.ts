@@ -238,12 +238,12 @@ describe('DefaultLineupService', () => {
         id: mockLineup.id,
         teamId: mockLineup.team_id,
         formation: mockLineup.formation_data,
-        createdAt: mockLineup.created_at,
+        createdAt: mockLineup.created_at.toISOString(),
         updatedAt: undefined,
-        created_by_user_id: mockLineup.created_by_user_id,
-        deleted_at: undefined,
-        deleted_by_user_id: undefined,
-        is_deleted: mockLineup.is_deleted
+        createdByUserId: mockLineup.created_by_user_id,
+        deletedAt: undefined,
+        deletedByUserId: undefined,
+        isDeleted: mockLineup.is_deleted
       });
     });
 

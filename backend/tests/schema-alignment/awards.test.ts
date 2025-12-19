@@ -20,10 +20,10 @@ import {
 } from '@shared/types';
 import { SchemaTestUserHelper } from './test-user-helper';
 
-// Helper function for timestamp validation
-const expectValidTimestamp = (timestamp: Date | undefined) => {
-  expect(timestamp).toBeInstanceOf(Date);
-  expect(timestamp!.getTime()).toBeGreaterThan(0);
+// Helper function for timestamp validation (ISO string format)
+const expectValidTimestamp = (timestamp: string | undefined) => {
+  expect(typeof timestamp).toBe('string');
+  expect(new Date(timestamp!).getTime()).toBeGreaterThan(0);
 };
 
 describe('Awards Entity Schema Alignment', () => {
@@ -150,13 +150,13 @@ describe('Awards Entity Schema Alignment', () => {
           playerId: testPlayerId,
           category: 'Player of the Season',
           notes: 'Outstanding performance throughout the season',
-          createdAt: expect.any(Date),
+          createdAt: expect.any(String),
           updatedAt: undefined,
-          // Authorization and soft delete fields
-          created_by_user_id: testUserId,
-          deleted_at: undefined,
-          deleted_by_user_id: undefined,
-          is_deleted: false
+          // Authorization and soft delete fields (camelCase)
+          createdByUserId: testUserId,
+          deletedAt: undefined,
+          deletedByUserId: undefined,
+          isDeleted: false
         });
 
         expectValidTimestamp(frontendAward.createdAt);
@@ -283,13 +283,13 @@ describe('Awards Entity Schema Alignment', () => {
           playerId: testPlayerId,
           category: 'Man of the Match',
           notes: 'Scored the winning goal',
-          createdAt: expect.any(Date),
+          createdAt: expect.any(String),
           updatedAt: undefined,
-          // Authorization and soft delete fields
-          created_by_user_id: testUserId,
-          deleted_at: undefined,
-          deleted_by_user_id: undefined,
-          is_deleted: false
+          // Authorization and soft delete fields (camelCase)
+          createdByUserId: testUserId,
+          deletedAt: undefined,
+          deletedByUserId: undefined,
+          isDeleted: false
         });
 
         expectValidTimestamp(frontendMatchAward.createdAt);
