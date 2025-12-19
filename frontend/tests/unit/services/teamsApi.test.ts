@@ -57,9 +57,10 @@ describe('Teams API Service', () => {
               awayKitPrimary: '#0000FF',
               awayKitSecondary: '#FFFFFF',
               logoUrl: 'https://example.com/logo.png',
-              createdAt: new Date(),
-              created_by_user_id: 'user-1',
-              is_deleted: false
+              createdAt: new Date().toISOString(),
+              createdByUserId: 'user-1',
+              isDeleted: false,
+              isOpponent: false
             }
           ],
           total: 1,
@@ -129,9 +130,10 @@ describe('Teams API Service', () => {
         awayKitPrimary: '#0000FF',
         awayKitSecondary: '#FFFFFF',
         logoUrl: 'https://example.com/logo.png',
-        createdAt: new Date(),
-        created_by_user_id: 'user-1',
-        is_deleted: false
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'user-1',
+        isDeleted: false,
+        isOpponent: false
       };
 
       mockApiClient.get.mockResolvedValue({ data: mockTeam });
@@ -160,9 +162,10 @@ describe('Teams API Service', () => {
       const mockCreatedTeam: Team = {
         id: 'team-new',
         ...teamData,
-        createdAt: new Date(),
-        created_by_user_id: 'user-1',
-        is_deleted: false
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'user-1',
+        isDeleted: false,
+        isOpponent: false
       };
 
       mockApiClient.post.mockResolvedValue({ data: mockCreatedTeam });
@@ -193,9 +196,10 @@ describe('Teams API Service', () => {
       const mockCreatedTeam: Team = {
         id: 'team-minimal',
         name: 'Minimal Team',
-        createdAt: new Date(),
-        created_by_user_id: 'user-1',
-        is_deleted: false
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'user-1',
+        isDeleted: false,
+        isOpponent: false
       };
 
       mockApiClient.post.mockResolvedValue({ data: mockCreatedTeam });
@@ -224,10 +228,11 @@ describe('Teams API Service', () => {
         homeKitSecondary: '#FFFFFF',
         awayKitPrimary: '#0000FF',
         awayKitSecondary: '#FFFFFF',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        created_by_user_id: 'user-1',
-        is_deleted: false
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdByUserId: 'user-1',
+        isDeleted: false,
+        isOpponent: false
       };
 
       mockApiClient.put.mockResolvedValue({ data: mockUpdatedTeam });
@@ -339,9 +344,10 @@ describe('Teams API Service', () => {
         team: {
           id: 'team-1',
           name: 'Test Team',
-          createdAt: new Date(),
-          created_by_user_id: 'user-1',
-          is_deleted: false
+          createdAt: new Date().toISOString(),
+          createdByUserId: 'user-1',
+          isDeleted: false,
+          isOpponent: false
         },
         players: [
           {
@@ -370,9 +376,10 @@ describe('Teams API Service', () => {
         team: {
           id: 'team-1',
           name: 'Test Team',
-          createdAt: new Date(),
-          created_by_user_id: 'user-1',
-          is_deleted: false
+          createdAt: new Date().toISOString(),
+          createdByUserId: 'user-1',
+          isDeleted: false,
+          isOpponent: false
         },
         players: [],
         season: {

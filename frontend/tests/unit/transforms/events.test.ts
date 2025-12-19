@@ -6,7 +6,6 @@ describe('events transforms', () => {
   const mockDbEvent: DbEvent = {
     id: 'event-123',
     matchId: 'match-456',
-    tsServer: '2023-11-14T22:13:20.000Z',
     periodNumber: 2,
     clockMs: 1234567,
     kind: 'goal',
@@ -44,7 +43,6 @@ describe('events transforms', () => {
       const minimalEvent: DbEvent = {
         id: 'event-minimal',
         matchId: 'match-1',
-        tsServer: '2023-11-14T22:13:20.000Z',
         periodNumber: 1,
         clockMs: 0,
         kind: 'ball_out',
@@ -170,7 +168,6 @@ describe('events transforms', () => {
       const dbFormat = eventWriteToDb(original);
       const stored: DbEvent = {
         id: 'event-roundtrip',
-        tsServer: new Date().toISOString(),
         ...dbFormat,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

@@ -67,19 +67,17 @@ describe('Database CRUD Round-Trip Property Tests', () => {
           // Verify all fields are preserved
           expect(retrieved).toBeDefined();
           expect(retrieved!.id).toBe(team.id);
-          expect(retrieved!.teamId).toBe(team.teamId);
           expect(retrieved!.name).toBe(team.name);
-          expect(retrieved!.colorPrimary).toBe(team.colorPrimary);
-          expect(retrieved!.colorSecondary).toBe(team.colorSecondary);
-          expect(retrieved!.awayColorPrimary).toBe(team.awayColorPrimary);
-          expect(retrieved!.awayColorSecondary).toBe(team.awayColorSecondary);
+          expect(retrieved!.homeKitPrimary).toBe(team.homeKitPrimary);
+          expect(retrieved!.homeKitSecondary).toBe(team.homeKitSecondary);
+          expect(retrieved!.awayKitPrimary).toBe(team.awayKitPrimary);
+          expect(retrieved!.awayKitSecondary).toBe(team.awayKitSecondary);
           expect(retrieved!.logoUrl).toBe(team.logoUrl);
           expect(retrieved!.isOpponent).toBe(team.isOpponent);
           expect(retrieved!.createdAt).toBe(team.createdAt);
           expect(retrieved!.updatedAt).toBe(team.updatedAt);
           expect(retrieved!.createdByUserId).toBe(team.createdByUserId);
           expect(retrieved!.isDeleted).toBe(team.isDeleted);
-          expect(retrieved!.synced).toBe(team.synced);
           expect(retrieved!.syncedAt).toBe(team.syncedAt);
 
           return true;
@@ -103,17 +101,16 @@ describe('Database CRUD Round-Trip Property Tests', () => {
           // Verify all fields are preserved
           expect(retrieved).toBeDefined();
           expect(retrieved!.id).toBe(player.id);
-          expect(retrieved!.fullName).toBe(player.fullName);
+          expect(retrieved!.name).toBe(player.name);
           expect(retrieved!.squadNumber).toBe(player.squadNumber);
-          expect(retrieved!.preferredPos).toBe(player.preferredPos);
-          expect(retrieved!.dob).toBe(player.dob);
+          expect(retrieved!.preferredPosition).toBe(player.preferredPosition);
+          expect(retrieved!.dateOfBirth).toBe(player.dateOfBirth);
           expect(retrieved!.notes).toBe(player.notes);
           expect(retrieved!.currentTeam).toBe(player.currentTeam);
           expect(retrieved!.createdAt).toBe(player.createdAt);
           expect(retrieved!.updatedAt).toBe(player.updatedAt);
           expect(retrieved!.createdByUserId).toBe(player.createdByUserId);
           expect(retrieved!.isDeleted).toBe(player.isDeleted);
-          expect(retrieved!.synced).toBe(player.synced);
           expect(retrieved!.syncedAt).toBe(player.syncedAt);
 
           return true;
@@ -131,13 +128,12 @@ describe('Database CRUD Round-Trip Property Tests', () => {
           // Create the season record
           await db.seasons.add(season as EnhancedSeason);
 
-          // Read it back - seasons use seasonId as primary key
-          const retrieved = await db.seasons.get(season.seasonId);
+          // Read it back - seasons use id as primary key
+          const retrieved = await db.seasons.get(season.id);
 
           // Verify all fields are preserved
           expect(retrieved).toBeDefined();
           expect(retrieved!.id).toBe(season.id);
-          expect(retrieved!.seasonId).toBe(season.seasonId);
           expect(retrieved!.label).toBe(season.label);
           expect(retrieved!.startDate).toBe(season.startDate);
           expect(retrieved!.endDate).toBe(season.endDate);
@@ -147,7 +143,6 @@ describe('Database CRUD Round-Trip Property Tests', () => {
           expect(retrieved!.updatedAt).toBe(season.updatedAt);
           expect(retrieved!.createdByUserId).toBe(season.createdByUserId);
           expect(retrieved!.isDeleted).toBe(season.isDeleted);
-          expect(retrieved!.synced).toBe(season.synced);
           expect(retrieved!.syncedAt).toBe(season.syncedAt);
 
           return true;
@@ -171,14 +166,13 @@ describe('Database CRUD Round-Trip Property Tests', () => {
           // Verify all fields are preserved
           expect(retrieved).toBeDefined();
           expect(retrieved!.id).toBe(match.id);
-          expect(retrieved!.matchId).toBe(match.matchId);
           expect(retrieved!.seasonId).toBe(match.seasonId);
           expect(retrieved!.homeTeamId).toBe(match.homeTeamId);
           expect(retrieved!.awayTeamId).toBe(match.awayTeamId);
-          expect(retrieved!.kickoffTs).toBe(match.kickoffTs);
+          expect(retrieved!.kickoffTime).toBe(match.kickoffTime);
           expect(retrieved!.competition).toBe(match.competition);
           expect(retrieved!.venue).toBe(match.venue);
-          expect(retrieved!.durationMins).toBe(match.durationMins);
+          expect(retrieved!.durationMinutes).toBe(match.durationMinutes);
           expect(retrieved!.periodFormat).toBe(match.periodFormat);
           expect(retrieved!.homeScore).toBe(match.homeScore);
           expect(retrieved!.awayScore).toBe(match.awayScore);
@@ -187,7 +181,6 @@ describe('Database CRUD Round-Trip Property Tests', () => {
           expect(retrieved!.updatedAt).toBe(match.updatedAt);
           expect(retrieved!.createdByUserId).toBe(match.createdByUserId);
           expect(retrieved!.isDeleted).toBe(match.isDeleted);
-          expect(retrieved!.synced).toBe(match.synced);
           expect(retrieved!.syncedAt).toBe(match.syncedAt);
 
           return true;
@@ -219,7 +212,7 @@ describe('Database CRUD Round-Trip Property Tests', () => {
 
             // Verify other fields are preserved
             expect(retrieved!.id).toBe(team.id);
-            expect(retrieved!.colorPrimary).toBe(team.colorPrimary);
+            expect(retrieved!.homeKitPrimary).toBe(team.homeKitPrimary);
             expect(retrieved!.isOpponent).toBe(team.isOpponent);
 
             return true;

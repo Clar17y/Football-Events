@@ -16,10 +16,10 @@ const mockTeam1: Team = {
   homeKitSecondary: '#ffffff',
   awayKitPrimary: '#0000ff',
   awayKitSecondary: '#ffffff',
-  createdAt: new Date('2024-01-01T00:00:00Z'),
-  created_by_user_id: 'user1',
-  is_deleted: false,
-  is_opponent: false
+  createdAt: '2024-01-01T00:00:00Z',
+  createdByUserId: 'user1',
+  isDeleted: false,
+  isOpponent: false
 };
 
 const mockTeam2: Team = {
@@ -29,10 +29,10 @@ const mockTeam2: Team = {
   homeKitSecondary: '#000000',
   awayKitPrimary: '#ffff00',
   awayKitSecondary: '#000000',
-  createdAt: new Date('2024-01-01T00:00:00Z'),
-  created_by_user_id: 'user1',
-  is_deleted: false,
-  is_opponent: true
+  createdAt: '2024-01-01T00:00:00Z',
+  createdByUserId: 'user1',
+  isDeleted: false,
+  isOpponent: true
 };
 
 const createMockMatch = (
@@ -41,25 +41,25 @@ const createMockMatch = (
 ): Match => ({
   id,
   seasonId: 'season1',
-  kickoffTime: date.toDate(),
+  kickoffTime: date.toISOString(),
   homeTeamId: mockTeam1.id,
   awayTeamId: mockTeam2.id,
   competition: 'Test League',
   venue: 'Test Stadium',
   durationMinutes: 90,
   periodFormat: 'half',
-  ourScore: 0,
-  opponentScore: 0,
+  homeScore: 0,
+  awayScore: 0,
   notes: 'Test match',
-  createdAt: new Date('2024-01-01T00:00:00Z'),
-  created_by_user_id: 'user1',
-  is_deleted: false
+  createdAt: '2024-01-01T00:00:00Z',
+  createdByUserId: 'user1',
+  isDeleted: false
 });
 
 describe('MatchesCalendar', () => {
   const mockOnDateClick = vi.fn();
   const mockOnMatchClick = vi.fn();
-  
+
   const referenceDate = dayjs('2024-01-15T10:00:00Z');
   const mockMatches: Match[] = [
     createMockMatch('match1', referenceDate.add(1, 'day').hour(15)),
@@ -138,7 +138,7 @@ describe('MatchesCalendar', () => {
     // Click on a date without matches (day 17)
     const dateCell = screen.getByText('17').closest('.calendar-cell');
     expect(dateCell).toBeInTheDocument();
-    
+
     fireEvent.click(dateCell!);
     expect(mockOnDateClick).toHaveBeenCalledTimes(1);
   });
@@ -192,7 +192,7 @@ describe('MatchesCalendar', () => {
 
   it('should show selected date', () => {
     const selectedDate = referenceDate.add(2, 'day').toDate();
-    
+
     render(
       <MatchesCalendar
         matches={mockMatches}
@@ -223,15 +223,15 @@ describe('MatchesCalendar', () => {
     // The actual aria-label format is: "Home/Away game: Team vs Team at time. Click to view details."
     const matchIndicators = screen.getAllByRole('button', { name: /Click to view details/i });
     expect(matchIndicators.length).toBe(2); // We have 2 mock matches
-    
+
     // Check that the match indicators contain the correct match IDs in their child elements
-    const matchIndicator1 = matchIndicators.find(button => 
+    const matchIndicator1 = matchIndicators.find(button =>
       button.querySelector('[data-match-id="match1"]')
     );
-    const matchIndicator2 = matchIndicators.find(button => 
+    const matchIndicator2 = matchIndicators.find(button =>
       button.querySelector('[data-match-id="match2"]')
     );
-    
+
     expect(matchIndicator1).toBeTruthy();
     expect(matchIndicator2).toBeTruthy();
   });
@@ -251,7 +251,7 @@ describe('MatchesCalendar', () => {
     // The actual aria-label format is: "Home/Away game: Team vs Team at time. Click to view details."
     const matchIndicators = screen.getAllByRole('button', { name: /Click to view details/i });
     fireEvent.click(matchIndicators[0]);
-    
+
     expect(mockOnMatchClick).toHaveBeenCalledWith('match1');
     expect(mockOnDateClick).not.toHaveBeenCalled(); // Should not trigger date click
   });

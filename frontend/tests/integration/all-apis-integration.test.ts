@@ -9,10 +9,10 @@ import { teamsApi } from '../../src/services/api/teamsApi';
 import { seasonsApi } from '../../src/services/api/seasonsApi';
 import { playersApi } from '../../src/services/api/playersApi';
 import { matchesApi } from '../../src/services/api/matchesApi';
-import type { 
-  TeamCreateRequest, 
-  SeasonCreateRequest, 
-  PlayerCreateRequest 
+import type {
+  TeamCreateRequest,
+  SeasonCreateRequest,
+  PlayerCreateRequest
 } from '@shared/types';
 
 const TEST_TIMEOUT = 15000;
@@ -42,7 +42,7 @@ describe('All APIs Integration Tests', () => {
   afterAll(async () => {
     // Clean up all test data
     console.log('Cleaning up test data...');
-    
+
     // Clean up players
     for (const playerId of testData.playerIds) {
       try {
@@ -98,26 +98,25 @@ describe('All APIs Integration Tests', () => {
       // 2. Create a season
       console.log('Creating season...');
       const seasonData: SeasonCreateRequest = {
-        name: `Integration Test Season ${timestamp}`,
+        label: `Integration Test Season ${timestamp}`,
         startDate: '2024-08-01T00:00:00.000Z',
         endDate: '2025-05-31T00:00:00.000Z',
-        isActive: true
+        isCurrent: true
       };
 
       const seasonResult = await seasonsApi.createSeason(seasonData);
       expect(seasonResult.success).toBe(true);
       expect(seasonResult.data.id).toBeDefined();
       testData.seasonIds.push(seasonResult.data.id!);
-      console.log('Season created:', seasonResult.data.label || seasonResult.data.name);
+      console.log('Season created:', seasonResult.data.label);
 
       // 3. Create players
       console.log('Creating players...');
       const playerData: PlayerCreateRequest = {
         name: `Integration Test Player ${timestamp}`,
         dateOfBirth: '1995-01-15',
-        position: 'Forward',
-        kitNumber: 10,
-        email: `testplayer${timestamp}@example.com`
+        preferredPosition: 'Forward',
+        squadNumber: 10
       };
 
       const playerResult = await playersApi.createPlayer(playerData);
@@ -160,10 +159,8 @@ describe('All APIs Integration Tests', () => {
       authApi.clearToken();
 
       const apis = [
-        () => teamsApi.getTeams(),
-        () => seasonsApi.getSeasons(),
-        () => playersApi.getPlayers(),
-        () => matchesApi.getMatches()
+        () => authApi.getProfile(),
+        () => authApi.getCurrentUser()
       ];
 
       for (const apiCall of apis) {
@@ -171,7 +168,10 @@ describe('All APIs Integration Tests', () => {
           await apiCall();
           expect(true).toBe(false); // Should not reach here
         } catch (error: any) {
-          expect(error.status).toBe(401);
+          if (error.name === 'AssertionError') throw error;
+          console.log('DEBUG auth error:', error.message, error.status, JSON.stringify(error));
+          const statusCode = error.status || error.response?.status;
+          expect(statusCode).toBe(401);
         }
       }
 

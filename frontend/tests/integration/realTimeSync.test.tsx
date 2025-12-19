@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
-import { MatchProvider, useMatch } from '../../src/contexts/MatchContext';
+import { MatchProvider, useMatchContext as useMatch } from '../../src/contexts/MatchContext';
 import { ToastProvider } from '../../src/contexts/ToastContext';
 import { db } from '../../src/db/indexedDB';
 import { realTimeService } from '../../src/services/realTimeService';
@@ -21,21 +21,22 @@ vi.mock('socket.io-client', () => ({
 
 // Test component to access MatchContext
 const TestComponent = ({ onEventAdded }: { onEventAdded?: (event: MatchEvent) => void }) => {
-  const { addEvent, events, current_match } = useMatch();
+  const { addEvent, events, currentMatch } = useMatch();
 
   const handleAddEvent = async () => {
-    if (!current_match) return;
-    
+    if (!currentMatch) return;
+
     const eventData = {
       kind: 'goal' as const,
-      match_id: current_match.id,
-      season_id: current_match.season_id,
-      team_id: 'test-team-1',
-      player_id: 'test-player-1',
-      period_number: 1,
-      clock_ms: 300000,
+      matchId: currentMatch.id,
+      teamId: 'test-team-1',
+      playerId: 'test-player-1',
+      periodNumber: 1,
+      clockMs: 300000,
       sentiment: 3,
-      notes: 'Integration test goal'
+      notes: 'Integration test goal',
+      createdByUserId: 'test-user',
+      isDeleted: false
     };
 
     const event = await addEvent(eventData);
@@ -45,7 +46,7 @@ const TestComponent = ({ onEventAdded }: { onEventAdded?: (event: MatchEvent) =>
   return (
     <div>
       <div data-testid="event-count">{events.length}</div>
-      <div data-testid="match-id">{current_match?.id || 'no-match'}</div>
+      <div data-testid="match-id">{currentMatch?.id || 'no-match'}</div>
       <button data-testid="add-event" onClick={handleAddEvent}>
         Add Event
       </button>
@@ -64,44 +65,68 @@ const TestWrapper = ({ children }: { children: React.ReactNode }) => (
 describe('Real-Time Sync Integration', () => {
   const mockMatch: Match = {
     id: 'test-match-1',
-    season_id: 'test-season-1',
-    home_team_id: 'test-team-1',
-    away_team_id: 'test-team-2',
-    date: new Date().toISOString(),
-    status: 'not_started',
+    seasonId: 'test-season-1',
+    homeTeamId: 'test-team-1',
+    awayTeamId: 'test-team-2',
+    kickoffTime: new Date().toISOString(),
+    status: 'NOT_STARTED',
+    homeScore: 0,
+    awayScore: 0,
+    durationMinutes: 90,
+    periodFormat: '2x45',
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false,
+    homeTeam: {
+      id: 'test-team-1',
+      name: 'Home Team',
+      createdAt: new Date().toISOString(),
+      createdByUserId: 'user1',
+      isDeleted: false,
+      isOpponent: false
+    },
+    awayTeam: {
+      id: 'test-team-2',
+      name: 'Away Team',
+      createdAt: new Date().toISOString(),
+      createdByUserId: 'user1',
+      isDeleted: false,
+      isOpponent: true
+    },
+    currentPeriod: 1,
     clock: {
       running: false,
-      start_ts: null,
-      offset_ms: 0,
-      current_period: 1,
-      period_starts: {}
+      startTs: null,
+      offsetMs: 0,
+      currentPeriod: 1,
+      periodStarts: {}
     },
     settings: {
-      period_duration: 45,
-      total_periods: 2,
-      half_time_duration: 15,
-      allow_extra_time: false,
-      extra_time_duration: 15,
-      allow_penalty_shootout: false,
-      max_substitutions: 5,
-      track_injury_time: true
+      periodDuration: 45,
+      totalPeriods: 2,
+      halfTimeDuration: 15,
+      allowExtraTime: false,
+      extraTimeDuration: 15,
+      allowPenaltyShootout: false,
+      maxSubstitutions: 5,
+      trackInjuryTime: true
     }
   };
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    
+
     // Reset database
     await db.initialize();
-    await db.clearAllData();
-    
+    await db.resetDatabase();
+
     // Reset real-time service state
     realTimeService.disconnect();
   });
 
   afterEach(async () => {
     if (db.isOpen()) {
-      await db.clearAllData();
+      await db.resetDatabase();
       db.close();
     }
     realTimeService.disconnect();
@@ -112,7 +137,7 @@ describe('Real-Time Sync Integration', () => {
       // Mock connected state
       (realTimeService as any).isConnected = true;
       (realTimeService as any).socket = mockSocket;
-      
+
       // Mock successful real-time publish
       mockSocket.emit.mockImplementation((event, data, callback) => {
         if (event === 'match_event' && callback) {
@@ -146,7 +171,7 @@ describe('Real-Time Sync Integration', () => {
         'match_event',
         expect.objectContaining({
           kind: 'goal',
-          match_id: 'test-match-1'
+          matchId: 'test-match-1'
         }),
         expect.any(Function)
       );
@@ -165,19 +190,20 @@ describe('Real-Time Sync Integration', () => {
 
       // Simulate receiving a live event
       const liveEventHandler = mockSocket.on.mock.calls.find(call => call[0] === 'live_event')?.[1];
-      
+
       const liveEvent: MatchEvent = {
         id: 'live-event-1',
         kind: 'goal',
-        match_id: 'test-match-1',
-        season_id: 'test-season-1',
-        team_id: 'test-team-1',
-        player_id: 'test-player-1',
-        period_number: 1,
-        clock_ms: 300000,
+        matchId: 'test-match-1',
+        teamId: 'test-team-1',
+        playerId: 'test-player-1',
+        periodNumber: 1,
+        clockMs: 300000,
         sentiment: 3,
         notes: 'Live goal',
-        created: Date.now()
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'server',
+        isDeleted: false
       };
 
       if (liveEventHandler) {
@@ -224,7 +250,7 @@ describe('Real-Time Sync Integration', () => {
       // Verify event was added to outbox
       const unsyncedResult = await db.getUnsyncedEvents();
       expect(unsyncedResult.data).toHaveLength(1);
-      expect(unsyncedResult.data![0].synced).toBe(false);
+      expect(unsyncedResult.data![0].synced).toBe(0);
 
       // Verify real-time was not attempted
       expect(mockSocket.emit).not.toHaveBeenCalled();
@@ -236,16 +262,16 @@ describe('Real-Time Sync Integration', () => {
       (realTimeService as any).socket = null;
 
       // Add event to outbox
-      await db.addEvent({
+      // Add event to outbox
+      await db.addEventToTable({
         kind: 'goal',
-        match_id: 'test-match-1',
-        team_id: 'test-team-1',
-        player_id: 'test-player-1',
-        minute: 5,
-        second: 0,
-        period: 1,
-        data: { notes: 'Offline goal' },
-        created: Date.now()
+        matchId: 'test-match-1',
+        teamId: 'test-team-1',
+        playerId: 'test-player-1',
+        clockMs: 300000,
+        periodNumber: 1,
+        notes: 'Offline goal',
+        createdByUserId: 'test-user'
       });
 
       // Verify event is in outbox
@@ -280,7 +306,7 @@ describe('Real-Time Sync Integration', () => {
         'match_event',
         expect.objectContaining({
           kind: 'goal',
-          match_id: 'test-match-1'
+          matchId: 'test-match-1'
         }),
         expect.any(Function)
       );
@@ -292,7 +318,7 @@ describe('Real-Time Sync Integration', () => {
       // Mock connected state but failing real-time
       (realTimeService as any).isConnected = true;
       (realTimeService as any).socket = mockSocket;
-      
+
       // Mock failed real-time publish
       mockSocket.emit.mockImplementation((event, data, callback) => {
         if (event === 'match_event' && callback) {
@@ -320,7 +346,7 @@ describe('Real-Time Sync Integration', () => {
         'match_event',
         expect.objectContaining({
           kind: 'goal',
-          match_id: 'test-match-1'
+          matchId: 'test-match-1'
         }),
         expect.any(Function)
       );
@@ -388,22 +414,22 @@ describe('Real-Time Sync Integration', () => {
   describe('Error Handling and Recovery', () => {
     it('should handle sync failures with retry logic', async () => {
       // Add event to outbox
-      const addResult = await db.addEvent({
+      // Add event to outbox
+      const addResult = await db.addEventToTable({
         kind: 'goal',
-        match_id: 'test-match-1',
-        team_id: 'test-team-1',
-        player_id: 'test-player-1',
-        minute: 5,
-        second: 0,
-        period: 1,
-        data: { notes: 'Test goal' },
-        created: Date.now()
+        matchId: 'test-match-1',
+        teamId: 'test-team-1',
+        playerId: 'test-player-1',
+        clockMs: 300000,
+        periodNumber: 1,
+        notes: 'Test goal',
+        createdByUserId: 'test-user'
       });
 
       // Mock connected state with failing sync
       (realTimeService as any).isConnected = true;
       (realTimeService as any).socket = mockSocket;
-      
+
       let attemptCount = 0;
       mockSocket.emit.mockImplementation((event, data, callback) => {
         if (event === 'match_event' && callback) {
@@ -415,7 +441,7 @@ describe('Real-Time Sync Integration', () => {
 
       // Trigger sync multiple times
       const connectHandler = mockSocket.on.mock.calls.find(call => call[0] === 'connect')?.[1];
-      
+
       // First sync attempt (should fail)
       if (connectHandler) {
         connectHandler();
@@ -445,13 +471,14 @@ describe('Real-Time Sync Integration', () => {
     it('should handle malformed outbox events', async () => {
       // Manually add malformed event to outbox
       await db.outbox.add({
-        table_name: 'events',
-        record_id: 'malformed-event',
+        tableName: 'events',
+        recordId: 'malformed-event',
         operation: 'INSERT',
         data: null as any, // Malformed data
-        synced: false,
-        created_at: Date.now(),
-        retry_count: 0
+        synced: 0,
+        createdAt: Date.now(),
+        retryCount: 0,
+        createdByUserId: 'test-user'
       });
 
       // Mock connected state

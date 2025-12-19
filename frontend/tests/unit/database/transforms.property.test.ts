@@ -1,12 +1,14 @@
 /**
  * Property-based tests for Transform Round-Trip Consistency
  *
- * **Feature: indexeddb-camelcase-migration, Property 3: Transform Round-Trip Consistency**
+ * **Feature: shared-types-unification, Property 3: Transform Round-Trip Consistency**
  * **Validates: Requirements 3.1, 3.2, 7.2**
  *
  * Tests that:
  * - Transforming from server response to database format and back preserves semantic data
  * - Transform functions handle all valid inputs correctly
+ * 
+ * NOTE: All field names use camelCase and timestamps use ISO strings.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -20,6 +22,8 @@ import {
   lineupArbitrary,
   matchPeriodArbitrary,
   matchStateArbitrary,
+  isoDateArbitrary,
+  optionalIsoDateArbitrary,
 } from '../../utils/arbitraries';
 import {
   dbToTeam,
@@ -36,14 +40,14 @@ import {
   serverMatchToDb,
 } from '../../../src/db/transforms';
 import type {
-  EnhancedTeam,
-  EnhancedPlayer,
-  EnhancedSeason,
-  EnhancedMatch,
-  EnhancedEvent,
-  EnhancedLineup,
-  LocalMatchPeriod,
-  LocalMatchState,
+  DbTeam,
+  DbPlayer,
+  DbSeason,
+  DbMatch,
+  DbEvent,
+  DbLineup,
+  DbMatchPeriod,
+  DbMatchState,
 } from '../../../src/db/schema';
 import type {
   ServerTeamResponse,
@@ -54,7 +58,7 @@ import type {
 
 describe('Transform Round-Trip Property Tests', () => {
   /**
-   * **Feature: indexeddb-camelcase-migration, Property 3: Transform Round-Trip Consistency**
+   * **Feature: shared-types-unification, Property 3: Transform Round-Trip Consistency**
    * **Validates: Requirements 3.1, 3.2, 7.2**
    *
    * *For any* valid entity data, transforming from database format to frontend type
@@ -64,21 +68,25 @@ describe('Transform Round-Trip Property Tests', () => {
     it('should preserve team data through dbToTeam transform', () => {
       fc.assert(
         fc.property(teamArbitrary, (dbTeam) => {
-          const team = dbToTeam(dbTeam as EnhancedTeam);
+          const team = dbToTeam(dbTeam as DbTeam);
 
           // Core fields should be preserved
           expect(team.id).toBe(dbTeam.id);
           expect(team.name).toBe(dbTeam.name);
 
           // Color fields should map correctly
-          expect(team.homeKitPrimary).toBe(dbTeam.colorPrimary ?? undefined);
-          expect(team.homeKitSecondary).toBe(dbTeam.colorSecondary ?? undefined);
-          expect(team.awayKitPrimary).toBe(dbTeam.awayColorPrimary ?? undefined);
-          expect(team.awayKitSecondary).toBe(dbTeam.awayColorSecondary ?? undefined);
+          expect(team.homeKitPrimary).toBe(dbTeam.homeKitPrimary ?? undefined);
+          expect(team.homeKitSecondary).toBe(dbTeam.homeKitSecondary ?? undefined);
+          expect(team.awayKitPrimary).toBe(dbTeam.awayKitPrimary ?? undefined);
+          expect(team.awayKitSecondary).toBe(dbTeam.awayKitSecondary ?? undefined);
 
-          // Boolean fields should be coerced correctly
-          expect(team.is_opponent).toBe(!!dbTeam.isOpponent);
-          expect(team.is_deleted).toBe(!!dbTeam.isDeleted);
+          // Boolean fields should be coerced correctly (camelCase output)
+          expect(team.isOpponent).toBe(!!dbTeam.isOpponent);
+          expect(team.isDeleted).toBe(!!dbTeam.isDeleted);
+
+          // Timestamps should be ISO strings
+          expect(typeof team.createdAt).toBe('string');
+          expect(typeof team.updatedAt).toBe('string');
 
           return true;
         }),
@@ -89,20 +97,24 @@ describe('Transform Round-Trip Property Tests', () => {
     it('should preserve player data through dbToPlayer transform', () => {
       fc.assert(
         fc.property(playerArbitrary, (dbPlayer) => {
-          const player = dbToPlayer(dbPlayer as EnhancedPlayer);
+          const player = dbToPlayer(dbPlayer as DbPlayer);
 
           // Core fields should be preserved
           expect(player.id).toBe(dbPlayer.id);
-          expect(player.name).toBe(dbPlayer.fullName);
+          expect(player.name).toBe(dbPlayer.name || '');
 
           // Optional fields should map correctly
           expect(player.squadNumber).toBe(dbPlayer.squadNumber ?? undefined);
-          expect(player.preferredPosition).toBe(dbPlayer.preferredPos ?? undefined);
+          expect(player.preferredPosition).toBe(dbPlayer.preferredPosition ?? undefined);
           expect(player.notes).toBe(dbPlayer.notes ?? undefined);
           expect(player.currentTeam).toBe(dbPlayer.currentTeam ?? undefined);
 
-          // Boolean fields should be coerced correctly
-          expect(player.is_deleted).toBe(!!dbPlayer.isDeleted);
+          // Boolean fields should be coerced correctly (camelCase output)
+          expect(player.isDeleted).toBe(!!dbPlayer.isDeleted);
+
+          // Timestamps should be ISO strings
+          expect(typeof player.createdAt).toBe('string');
+          expect(typeof player.updatedAt).toBe('string');
 
           return true;
         }),
@@ -113,10 +125,10 @@ describe('Transform Round-Trip Property Tests', () => {
     it('should preserve season data through dbToSeason transform', () => {
       fc.assert(
         fc.property(seasonArbitrary, (dbSeason) => {
-          const season = dbToSeason(dbSeason as EnhancedSeason);
+          const season = dbToSeason(dbSeason as DbSeason);
 
           // Core fields should be preserved
-          expect(season.id).toBe(dbSeason.seasonId || dbSeason.id);
+          expect(season.id).toBe(dbSeason.id);
           expect(season.label).toBe(dbSeason.label);
 
           // Optional fields should map correctly
@@ -124,9 +136,13 @@ describe('Transform Round-Trip Property Tests', () => {
           expect(season.endDate).toBe(dbSeason.endDate ?? undefined);
           expect(season.description).toBe(dbSeason.description ?? undefined);
 
-          // Boolean fields should be coerced correctly
+          // Boolean fields should be coerced correctly (camelCase output)
           expect(season.isCurrent).toBe(!!dbSeason.isCurrent);
-          expect(season.is_deleted).toBe(!!dbSeason.isDeleted);
+          expect(season.isDeleted).toBe(!!dbSeason.isDeleted);
+
+          // Timestamps should be ISO strings
+          expect(typeof season.createdAt).toBe('string');
+          expect(typeof season.updatedAt).toBe('string');
 
           return true;
         }),
@@ -137,7 +153,7 @@ describe('Transform Round-Trip Property Tests', () => {
     it('should preserve match data through dbToMatch transform', () => {
       fc.assert(
         fc.property(matchArbitrary, (dbMatch) => {
-          const match = dbToMatch(dbMatch as EnhancedMatch);
+          const match = dbToMatch(dbMatch as DbMatch);
 
           // Core fields should be preserved
           expect(match.id).toBe(dbMatch.id);
@@ -146,7 +162,7 @@ describe('Transform Round-Trip Property Tests', () => {
           expect(match.awayTeamId).toBe(dbMatch.awayTeamId);
 
           // Numeric fields should be preserved
-          expect(match.durationMinutes).toBe(dbMatch.durationMins);
+          expect(match.durationMinutes).toBe(dbMatch.durationMinutes);
           expect(match.homeScore).toBe(dbMatch.homeScore ?? 0);
           expect(match.awayScore).toBe(dbMatch.awayScore ?? 0);
 
@@ -158,8 +174,13 @@ describe('Transform Round-Trip Property Tests', () => {
           // Period format should be preserved
           expect(match.periodFormat).toBe(dbMatch.periodFormat);
 
-          // Boolean fields should be coerced correctly
-          expect(match.is_deleted).toBe(!!dbMatch.isDeleted);
+          // Boolean fields should be coerced correctly (camelCase output)
+          expect(match.isDeleted).toBe(!!dbMatch.isDeleted);
+
+          // Timestamps should be ISO strings
+          expect(typeof match.createdAt).toBe('string');
+          expect(typeof match.updatedAt).toBe('string');
+          expect(typeof match.kickoffTime).toBe('string');
 
           return true;
         }),
@@ -170,7 +191,7 @@ describe('Transform Round-Trip Property Tests', () => {
     it('should preserve event data through dbToEvent transform', () => {
       fc.assert(
         fc.property(eventArbitrary, (dbEvent) => {
-          const event = dbToEvent(dbEvent as EnhancedEvent);
+          const event = dbToEvent(dbEvent as DbEvent);
 
           // Core fields should be preserved
           expect(event.id).toBe(dbEvent.id);
@@ -187,8 +208,12 @@ describe('Transform Round-Trip Property Tests', () => {
           expect(event.playerId).toBe(dbEvent.playerId || undefined);
           expect(event.notes).toBe(dbEvent.notes ?? undefined);
 
-          // Boolean fields should be coerced correctly
-          expect(event.is_deleted).toBe(!!dbEvent.isDeleted);
+          // Boolean fields should be coerced correctly (camelCase output)
+          expect(event.isDeleted).toBe(!!dbEvent.isDeleted);
+
+          // Timestamps should be ISO strings
+          expect(typeof event.createdAt).toBe('string');
+          expect(typeof event.updatedAt).toBe('string');
 
           return true;
         }),
@@ -199,7 +224,7 @@ describe('Transform Round-Trip Property Tests', () => {
     it('should preserve lineup data through dbToLineup transform', () => {
       fc.assert(
         fc.property(lineupArbitrary, (dbLineup) => {
-          const lineup = dbToLineup(dbLineup as EnhancedLineup);
+          const lineup = dbToLineup(dbLineup as DbLineup);
 
           // Core fields should be preserved
           expect(lineup.id).toBe(dbLineup.id);
@@ -207,12 +232,16 @@ describe('Transform Round-Trip Property Tests', () => {
           expect(lineup.playerId).toBe(dbLineup.playerId);
           expect(lineup.position).toBe(dbLineup.position);
 
-          // Numeric fields should be preserved
-          expect(lineup.startMinute).toBe(dbLineup.startMin);
-          expect(lineup.endMinute).toBe(dbLineup.endMin ?? undefined);
+          // Numeric fields should be preserved (using new field names)
+          expect(lineup.startMinute).toBe(dbLineup.startMinute);
+          expect(lineup.endMinute).toBe(dbLineup.endMinute ?? undefined);
 
-          // Boolean fields should be coerced correctly
-          expect(lineup.is_deleted).toBe(!!dbLineup.isDeleted);
+          // Boolean fields should be coerced correctly (camelCase output)
+          expect(lineup.isDeleted).toBe(!!dbLineup.isDeleted);
+
+          // Timestamps should be ISO strings
+          expect(typeof lineup.createdAt).toBe('string');
+          expect(typeof lineup.updatedAt).toBe('string');
 
           return true;
         }),
@@ -223,7 +252,7 @@ describe('Transform Round-Trip Property Tests', () => {
     it('should preserve match period data through dbToMatchPeriod transform', () => {
       fc.assert(
         fc.property(matchPeriodArbitrary, (dbPeriod) => {
-          const period = dbToMatchPeriod(dbPeriod as LocalMatchPeriod);
+          const period = dbToMatchPeriod(dbPeriod as DbMatchPeriod);
 
           // Core fields should be preserved
           expect(period.id).toBe(dbPeriod.id);
@@ -234,8 +263,12 @@ describe('Transform Round-Trip Property Tests', () => {
           // Optional fields should map correctly
           expect(period.durationSeconds).toBe(dbPeriod.durationSeconds ?? undefined);
 
-          // Boolean fields should be coerced correctly
-          expect(period.is_deleted).toBe(!!dbPeriod.isDeleted);
+          // Boolean fields should be coerced correctly (camelCase output)
+          expect(period.isDeleted).toBe(!!dbPeriod.isDeleted);
+
+          // Timestamps should be ISO strings
+          expect(typeof period.createdAt).toBe('string');
+          expect(typeof period.updatedAt).toBe('string');
 
           return true;
         }),
@@ -246,7 +279,7 @@ describe('Transform Round-Trip Property Tests', () => {
     it('should preserve match state data through dbToMatchState transform', () => {
       fc.assert(
         fc.property(matchStateArbitrary, (dbState) => {
-          const state = dbToMatchState(dbState as LocalMatchState);
+          const state = dbToMatchState(dbState as DbMatchState);
 
           // Core fields should be preserved
           expect(state.matchId).toBe(dbState.matchId);
@@ -258,8 +291,8 @@ describe('Transform Round-Trip Property Tests', () => {
           // Timer should be converted to seconds
           expect(state.totalElapsedSeconds).toBe(Math.floor(dbState.timerMs / 1000));
 
-          // Boolean fields should be coerced correctly
-          expect(state.is_deleted).toBe(!!dbState.isDeleted);
+          // Boolean fields should be coerced correctly (camelCase output)
+          expect(state.isDeleted).toBe(!!dbState.isDeleted);
 
           return true;
         }),
@@ -271,14 +304,9 @@ describe('Transform Round-Trip Property Tests', () => {
   /**
    * Server-to-DB transform tests
    * These verify that server responses are correctly transformed to IndexedDB format
+   * Server now returns camelCase + ISO strings
    */
   describe('Server-to-DB Transform Consistency', () => {
-    // Helper to create optional ISO date string arbitrary
-    const optionalIsoDateArbitrary = fc.oneof(
-      fc.constant(undefined),
-      fc.integer({ min: 946684800000, max: 1893456000000 }).map(ts => new Date(ts).toISOString())
-    );
-
     it('should correctly transform server team response to DB format', () => {
       const serverTeamArbitrary = fc.record({
         id: fc.uuid(),
@@ -288,11 +316,11 @@ describe('Transform Round-Trip Property Tests', () => {
         awayKitPrimary: fc.option(fc.string(), { nil: undefined }),
         awayKitSecondary: fc.option(fc.string(), { nil: undefined }),
         logoUrl: fc.option(fc.string(), { nil: undefined }),
-        is_opponent: fc.option(fc.boolean(), { nil: undefined }),
+        isOpponent: fc.option(fc.boolean(), { nil: undefined }),
         createdAt: optionalIsoDateArbitrary,
         updatedAt: optionalIsoDateArbitrary,
-        created_by_user_id: fc.option(fc.string(), { nil: undefined }),
-        is_deleted: fc.option(fc.boolean(), { nil: undefined }),
+        createdByUserId: fc.option(fc.string(), { nil: undefined }),
+        isDeleted: fc.option(fc.boolean(), { nil: undefined }),
       });
 
       fc.assert(
@@ -301,24 +329,26 @@ describe('Transform Round-Trip Property Tests', () => {
 
           // ID fields should be set correctly
           expect(dbTeam.id).toBe(serverTeam.id);
-          expect(dbTeam.teamId).toBe(serverTeam.id);
 
           // Name should be preserved
           expect(dbTeam.name).toBe(serverTeam.name);
 
           // Color fields should map correctly
-          expect(dbTeam.colorPrimary).toBe(serverTeam.homeKitPrimary);
-          expect(dbTeam.colorSecondary).toBe(serverTeam.homeKitSecondary);
-          expect(dbTeam.awayColorPrimary).toBe(serverTeam.awayKitPrimary);
-          expect(dbTeam.awayColorSecondary).toBe(serverTeam.awayKitSecondary);
+          expect(dbTeam.homeKitPrimary).toBe(serverTeam.homeKitPrimary);
+          expect(dbTeam.homeKitSecondary).toBe(serverTeam.homeKitSecondary);
+          expect(dbTeam.awayKitPrimary).toBe(serverTeam.awayKitPrimary);
+          expect(dbTeam.awayKitSecondary).toBe(serverTeam.awayKitSecondary);
 
           // Boolean fields should default correctly
-          expect(dbTeam.isOpponent).toBe(serverTeam.is_opponent ?? false);
-          expect(dbTeam.isDeleted).toBe(serverTeam.is_deleted ?? false);
+          expect(dbTeam.isOpponent).toBe(serverTeam.isOpponent ?? false);
+          expect(dbTeam.isDeleted).toBe(serverTeam.isDeleted ?? false);
 
-          // Sync fields should be set
-          expect(dbTeam.synced).toBe(true);
-          expect(typeof dbTeam.syncedAt).toBe('number');
+          // Sync fields should be set (ISO strings)
+          expect(typeof dbTeam.syncedAt).toBe('string');
+
+          // Timestamps should be ISO strings
+          expect(typeof dbTeam.createdAt).toBe('string');
+          expect(typeof dbTeam.updatedAt).toBe('string');
 
           return true;
         }),
@@ -337,8 +367,8 @@ describe('Transform Round-Trip Property Tests', () => {
         currentTeam: fc.option(fc.uuid(), { nil: undefined }),
         createdAt: optionalIsoDateArbitrary,
         updatedAt: optionalIsoDateArbitrary,
-        created_by_user_id: fc.option(fc.string(), { nil: undefined }),
-        is_deleted: fc.option(fc.boolean(), { nil: undefined }),
+        createdByUserId: fc.option(fc.string(), { nil: undefined }),
+        isDeleted: fc.option(fc.boolean(), { nil: undefined }),
       });
 
       fc.assert(
@@ -348,21 +378,24 @@ describe('Transform Round-Trip Property Tests', () => {
           // ID should be preserved
           expect(dbPlayer.id).toBe(serverPlayer.id);
 
-          // Name should map to fullName
-          expect(dbPlayer.fullName).toBe(serverPlayer.name);
+          // Name should be preserved
+          expect(dbPlayer.name).toBe(serverPlayer.name);
 
           // Optional fields should map correctly
           expect(dbPlayer.squadNumber).toBe(serverPlayer.squadNumber);
-          expect(dbPlayer.preferredPos).toBe(serverPlayer.preferredPosition);
+          expect(dbPlayer.preferredPosition).toBe(serverPlayer.preferredPosition);
           expect(dbPlayer.notes).toBe(serverPlayer.notes);
           expect(dbPlayer.currentTeam).toBe(serverPlayer.currentTeam);
 
           // Boolean fields should default correctly
-          expect(dbPlayer.isDeleted).toBe(serverPlayer.is_deleted ?? false);
+          expect(dbPlayer.isDeleted).toBe(serverPlayer.isDeleted ?? false);
 
-          // Sync fields should be set
-          expect(dbPlayer.synced).toBe(true);
-          expect(typeof dbPlayer.syncedAt).toBe('number');
+          // Sync fields should be set (ISO strings)
+          expect(typeof dbPlayer.syncedAt).toBe('string');
+
+          // Timestamps should be ISO strings
+          expect(typeof dbPlayer.createdAt).toBe('string');
+          expect(typeof dbPlayer.updatedAt).toBe('string');
 
           return true;
         }),
@@ -381,9 +414,9 @@ describe('Transform Round-Trip Property Tests', () => {
         description: fc.option(fc.string(), { nil: undefined }),
         createdAt: optionalIsoDateArbitrary,
         updatedAt: optionalIsoDateArbitrary,
-        created_by_user_id: fc.option(fc.string(), { nil: undefined }),
-        is_deleted: fc.option(fc.boolean(), { nil: undefined }),
-      }).filter(s => s.id !== undefined || s.seasonId !== undefined); // At least one ID must be present
+        createdByUserId: fc.option(fc.string(), { nil: undefined }),
+        isDeleted: fc.option(fc.boolean(), { nil: undefined }),
+      }).filter(s => s.id !== undefined || s.seasonId !== undefined);
 
       fc.assert(
         fc.property(serverSeasonArbitrary, (serverSeason) => {
@@ -393,7 +426,6 @@ describe('Transform Round-Trip Property Tests', () => {
 
           // ID fields should be set correctly
           expect(dbSeason.id).toBe(expectedId);
-          expect(dbSeason.seasonId).toBe(expectedId);
 
           // Label should be preserved
           expect(dbSeason.label).toBe(serverSeason.label);
@@ -405,11 +437,14 @@ describe('Transform Round-Trip Property Tests', () => {
 
           // Boolean fields should default correctly
           expect(dbSeason.isCurrent).toBe(serverSeason.isCurrent ?? false);
-          expect(dbSeason.isDeleted).toBe(serverSeason.is_deleted ?? false);
+          expect(dbSeason.isDeleted).toBe(serverSeason.isDeleted ?? false);
 
-          // Sync fields should be set
-          expect(dbSeason.synced).toBe(true);
-          expect(typeof dbSeason.syncedAt).toBe('number');
+          // Sync fields should be set (ISO strings)
+          expect(typeof dbSeason.syncedAt).toBe('string');
+
+          // Timestamps should be ISO strings
+          expect(typeof dbSeason.createdAt).toBe('string');
+          expect(typeof dbSeason.updatedAt).toBe('string');
 
           return true;
         }),
@@ -418,14 +453,10 @@ describe('Transform Round-Trip Property Tests', () => {
     });
 
     it('should correctly transform server match response to DB format', () => {
-      const isoDateArbitrary = fc.integer({ min: 946684800000, max: 1893456000000 }).map(ts => new Date(ts).toISOString());
       const serverMatchArbitrary = fc.record({
         id: fc.uuid(),
         seasonId: fc.uuid(),
-        kickoffTime: fc.oneof(
-          isoDateArbitrary,
-          fc.integer({ min: 0, max: Date.now() * 2 })
-        ),
+        kickoffTime: isoDateArbitrary,
         homeTeamId: fc.uuid(),
         awayTeamId: fc.uuid(),
         competition: fc.option(fc.string(), { nil: undefined }),
@@ -437,8 +468,8 @@ describe('Transform Round-Trip Property Tests', () => {
         notes: fc.option(fc.string(), { nil: undefined }),
         createdAt: optionalIsoDateArbitrary,
         updatedAt: optionalIsoDateArbitrary,
-        created_by_user_id: fc.option(fc.string(), { nil: undefined }),
-        is_deleted: fc.option(fc.boolean(), { nil: undefined }),
+        createdByUserId: fc.option(fc.string(), { nil: undefined }),
+        isDeleted: fc.option(fc.boolean(), { nil: undefined }),
       });
 
       fc.assert(
@@ -447,7 +478,6 @@ describe('Transform Round-Trip Property Tests', () => {
 
           // ID fields should be set correctly
           expect(dbMatch.id).toBe(serverMatch.id);
-          expect(dbMatch.matchId).toBe(serverMatch.id);
 
           // Foreign keys should be preserved
           expect(dbMatch.seasonId).toBe(serverMatch.seasonId);
@@ -458,17 +488,21 @@ describe('Transform Round-Trip Property Tests', () => {
           expect(dbMatch.competition).toBe(serverMatch.competition);
           expect(dbMatch.venue).toBe(serverMatch.venue);
           expect(dbMatch.notes).toBe(serverMatch.notes);
-          expect(dbMatch.durationMins).toBe(serverMatch.durationMinutes || 60);
+          expect(dbMatch.durationMinutes).toBe(serverMatch.durationMinutes || 60);
           expect(dbMatch.periodFormat).toBe(serverMatch.periodFormat || 'quarter');
           expect(dbMatch.homeScore).toBe(serverMatch.homeScore || 0);
           expect(dbMatch.awayScore).toBe(serverMatch.awayScore || 0);
 
           // Boolean fields should default correctly
-          expect(dbMatch.isDeleted).toBe(serverMatch.is_deleted ?? false);
+          expect(dbMatch.isDeleted).toBe(serverMatch.isDeleted ?? false);
 
-          // Sync fields should be set
-          expect(dbMatch.synced).toBe(true);
-          expect(typeof dbMatch.syncedAt).toBe('number');
+          // Sync fields should be set (ISO strings)
+          expect(typeof dbMatch.syncedAt).toBe('string');
+
+          // Timestamps should be ISO strings
+          expect(typeof dbMatch.createdAt).toBe('string');
+          expect(typeof dbMatch.updatedAt).toBe('string');
+          expect(typeof dbMatch.kickoffTime).toBe('string');
 
           return true;
         }),

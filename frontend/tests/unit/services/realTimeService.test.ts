@@ -76,9 +76,9 @@ describe('RealTimeService', () => {
       clockMs: 300000,
       sentiment: 3,
       notes: 'Test goal',
-      createdAt: new Date(),
-      created_by_user_id: 'user-1',
-      is_deleted: false
+      createdAt: new Date().toISOString(),
+      createdByUserId: 'user-1',
+      isDeleted: false
     } as MatchEvent;
   });
 

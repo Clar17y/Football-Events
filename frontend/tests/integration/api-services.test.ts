@@ -3,7 +3,7 @@
  * Tests against real backend using MCP server
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { authApi } from '../../src/services/api/authApi';
 import { apiClient } from '../../src/services/api/baseApi';
 
@@ -184,7 +184,7 @@ describe('Frontend API Services Integration Tests', () => {
         expect(response.success).toBe(true);
         expect(response.data.access_token).toBeDefined();
         expect(response.data.refresh_token).toBeDefined();
-        
+
         // New tokens should be different from original
         expect(response.data.access_token).not.toBe(authApi.getAccessToken());
         expect(response.data.refresh_token).not.toBe(refreshToken);
@@ -194,7 +194,7 @@ describe('Frontend API Services Integration Tests', () => {
         // Clear tokens to simulate invalid refresh token
         apiClient.setToken(null);
         localStorage.removeItem('refresh_token');
-        
+
         // Ensure we're starting with a clean state
         expect(authApi.isAuthenticated()).toBe(false);
 

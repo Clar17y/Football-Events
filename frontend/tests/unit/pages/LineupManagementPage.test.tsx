@@ -34,8 +34,8 @@ vi.mock('@ionic/react', async () => {
     IonItem: ({ children }: any) => <div data-testid="ion-item">{children}</div>,
     IonLabel: ({ children }: any) => <div data-testid="ion-label">{children}</div>,
     IonSelect: ({ children, onSelectionChange, value }: any) => (
-      <select 
-        data-testid="ion-select" 
+      <select
+        data-testid="ion-select"
         value={value}
         onChange={(e) => onSelectionChange?.({ detail: { value: e.target.value } })}
       >
@@ -47,7 +47,7 @@ vi.mock('@ionic/react', async () => {
     ),
     IonSpinner: () => <div data-testid="ion-spinner">Loading...</div>,
     IonText: ({ children }: any) => <div data-testid="ion-text">{children}</div>,
-    IonToast: ({ isOpen, message }: any) => 
+    IonToast: ({ isOpen, message }: any) =>
       isOpen ? <div data-testid="ion-toast">{message}</div> : null,
     IonIcon: ({ icon }: any) => <div data-testid="ion-icon">{icon?.name || 'icon'}</div>,
   };
@@ -55,7 +55,7 @@ vi.mock('@ionic/react', async () => {
 
 // Mock ionicons
 vi.mock('ionicons/icons', async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = await importOriginal() as any;
   return {
     ...actual,
     people: { name: 'people' },
@@ -77,7 +77,7 @@ vi.mock('../../../src/components/PageHeader', () => ({
 
 // Mock TeamSelectionModal component
 vi.mock('../../../src/components/TeamSelectionModal', () => ({
-  default: ({ isOpen, onTeamSelect, onDidDismiss }: any) => 
+  default: ({ isOpen, onTeamSelect, onDidDismiss }: any) =>
     isOpen ? (
       <div data-testid="team-selection-modal">
         <button onClick={() => onTeamSelect('Test Team 1', 'team-1')}>Test Team 1</button>
@@ -104,18 +104,20 @@ const mockTeams = [
   {
     id: 'team-1',
     name: 'Test Team 1',
-    createdAt: new Date('2023-01-01'),
-    is_opponent: false,
-    created_by_user_id: 'user-1',
-    is_deleted: false
+    createdAt: new Date('2023-01-01').toISOString(),
+    isOpponent: false,
+    createdByUserId: 'user-1',
+    isDeleted: false,
+    updatedAt: new Date('2023-01-01').toISOString()
   },
   {
     id: 'team-2',
     name: 'Test Team 2',
-    createdAt: new Date('2023-01-02'),
-    is_opponent: false,
-    created_by_user_id: 'user-1',
-    is_deleted: false
+    createdAt: new Date('2023-01-02').toISOString(),
+    isOpponent: false,
+    createdByUserId: 'user-1',
+    isDeleted: false,
+    updatedAt: new Date('2023-01-02').toISOString()
   }
 ];
 
@@ -139,7 +141,7 @@ const mockPlayers = [
 describe('LineupManagementPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     // Mock localStorage
     Object.defineProperty(window, 'localStorage', {
       value: {
@@ -157,7 +159,7 @@ describe('LineupManagementPage', () => {
       total: mockTeams.length,
       page: 1,
       limit: 100,
-      totalPages: 1
+      hasMore: false
     });
 
     vi.mocked(teamsApi.getTeamPlayers).mockResolvedValue({
@@ -175,7 +177,7 @@ describe('LineupManagementPage', () => {
     expect(screen.getByTestId('ion-page')).toBeInTheDocument();
     expect(screen.getByTestId('page-header')).toBeInTheDocument();
     expect(screen.getByTestId('ion-content')).toBeInTheDocument();
-    
+
     // Wait for the page to load and show the title
     await waitFor(() => {
       expect(screen.getByText('Lineup Management')).toBeInTheDocument();

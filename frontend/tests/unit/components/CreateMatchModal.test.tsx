@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, MockedFunction, Mocked } from 'vitest';
 import CreateMatchModal from '../../../src/components/CreateMatchModal';
 import { useTeams } from '../../../src/hooks/useTeams';
 import { useSeasons } from '../../../src/hooks/useSeasons';
@@ -17,10 +17,10 @@ vi.mock('../../../src/hooks/useSeasons');
 vi.mock('../../../src/contexts/ToastContext');
 vi.mock('../../../src/services/api/matchesApi');
 
-const mockUseTeams = useTeams as vi.MockedFunction<typeof useTeams>;
-const mockUseSeasons = useSeasons as vi.MockedFunction<typeof useSeasons>;
-const mockUseToast = useToast as vi.MockedFunction<typeof useToast>;
-const mockMatchesApi = matchesApi as vi.Mocked<typeof matchesApi>;
+const mockUseTeams = useTeams as MockedFunction<typeof useTeams>;
+const mockUseSeasons = useSeasons as MockedFunction<typeof useSeasons>;
+const mockUseToast = useToast as MockedFunction<typeof useToast>;
+const mockMatchesApi = matchesApi as Mocked<typeof matchesApi>;
 
 const mockTeams = [
   {
@@ -30,10 +30,10 @@ const mockTeams = [
     homeKitSecondary: '#FFFFFF',
     awayKitPrimary: '#0000FF',
     awayKitSecondary: '#FFFFFF',
-    createdAt: new Date(),
-    created_by_user_id: 'user1',
-    is_deleted: false,
-    is_opponent: false
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false,
+    isOpponent: false
   },
   {
     id: '2',
@@ -42,31 +42,31 @@ const mockTeams = [
     homeKitSecondary: '#000000',
     awayKitPrimary: '#FFFF00',
     awayKitSecondary: '#000000',
-    createdAt: new Date(),
-    created_by_user_id: 'user1',
-    is_deleted: false,
-    is_opponent: false
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false,
+    isOpponent: false
   }
 ];
 
 const mockSeasons = [
   {
-    id: '1',
-    seasonId: '1',
-    label: '2024-25 Season',
+    id: 's1',
+    seasonId: '2023-24',
+    label: '2023/24 Season',
     isCurrent: true,
-    createdAt: new Date(),
-    created_by_user_id: 'user1',
-    is_deleted: false
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false
   },
   {
-    id: '2',
-    seasonId: '2',
-    label: '2023-24 Season',
+    id: 's2',
+    seasonId: '2022-23',
+    label: '2022/23 Season',
     isCurrent: false,
-    createdAt: new Date(),
-    created_by_user_id: 'user1',
-    is_deleted: false
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false
   }
 ];
 
@@ -75,7 +75,7 @@ const mockShowToast = vi.fn();
 describe('CreateMatchModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     mockUseTeams.mockReturnValue({
       teams: mockTeams,
       loading: false,
@@ -107,7 +107,14 @@ describe('CreateMatchModal', () => {
     });
 
     mockUseToast.mockReturnValue({
-      showToast: mockShowToast
+      showToast: mockShowToast,
+      showSuccess: vi.fn(),
+      showError: vi.fn(),
+      showWarning: vi.fn(),
+      showInfo: vi.fn(),
+      dismissToast: vi.fn(),
+      clearAllToasts: vi.fn(),
+      toasts: []
     });
   });
 
@@ -138,7 +145,7 @@ describe('CreateMatchModal', () => {
 
   it('pre-populates date when provided', () => {
     const preselectedDate = new Date('2024-01-15T14:00:00Z');
-    
+
     render(
       <CreateMatchModal
         isOpen={true}
@@ -176,16 +183,16 @@ describe('CreateMatchModal', () => {
     const mockMatch = {
       id: '1',
       seasonId: '1',
-      kickoffTime: new Date(),
+      kickoffTime: new Date().toISOString(),
       homeTeamId: '1',
       awayTeamId: '2',
       durationMinutes: 90,
       periodFormat: 'half',
-      ourScore: 0,
-      opponentScore: 0,
-      createdAt: new Date(),
-      created_by_user_id: 'user1',
-      is_deleted: false
+      homeScore: 0,
+      awayScore: 0,
+      createdAt: new Date().toISOString(),
+      createdByUserId: 'user1',
+      isDeleted: false
     };
 
     mockMatchesApi.quickStart.mockResolvedValue(mockMatch);

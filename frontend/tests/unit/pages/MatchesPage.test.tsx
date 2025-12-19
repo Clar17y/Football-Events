@@ -118,55 +118,77 @@ Object.defineProperty(HTMLElement.prototype, 'focus', {
 describe('MatchesPage Calendar-to-List Navigation', () => {
   const mockUpcomingMatch: Match = {
     id: 'upcoming-match-1',
+    seasonId: 'season1',
     homeTeamId: 'team1',
     awayTeamId: 'team2',
     kickoffTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
     durationMinutes: 90,
     periodFormat: '2x45',
+    homeScore: 0,
+    awayScore: 0,
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false,
     homeTeam: {
       id: 'team1',
       name: 'Home Team',
-      is_opponent: false,
+      isOpponent: false,
       homeKitPrimary: '#2563eb',
       awayKitPrimary: '#ea580c',
+      createdAt: new Date().toISOString(),
+      createdByUserId: 'user1',
+      isDeleted: false,
     } as Team,
     awayTeam: {
       id: 'team2',
       name: 'Away Team',
-      is_opponent: true,
+      isOpponent: true,
       homeKitPrimary: '#dc2626',
       awayKitPrimary: '#059669',
+      createdAt: new Date().toISOString(),
+      createdByUserId: 'user1',
+      isDeleted: false,
     } as Team,
   };
 
   const mockCompletedMatch: Match = {
     id: 'completed-match-1',
+    seasonId: 'season1',
     homeTeamId: 'team1',
     awayTeamId: 'team2',
     kickoffTime: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Yesterday
     durationMinutes: 90,
     periodFormat: '2x45',
-    ourScore: 2,
-    opponentScore: 1,
+    homeScore: 2,
+    awayScore: 1,
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false,
     homeTeam: {
       id: 'team1',
       name: 'Home Team',
-      is_opponent: false,
+      isOpponent: false,
       homeKitPrimary: '#2563eb',
       awayKitPrimary: '#ea580c',
+      createdAt: new Date().toISOString(),
+      createdByUserId: 'user1',
+      isDeleted: false,
     } as Team,
     awayTeam: {
       id: 'team2',
       name: 'Away Team',
-      is_opponent: true,
+      isOpponent: true,
       homeKitPrimary: '#dc2626',
       awayKitPrimary: '#059669',
+      createdAt: new Date().toISOString(),
+      createdByUserId: 'user1',
+      isDeleted: false,
     } as Team,
   };
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    
+
     // Mock the API to return our test matches
     const { matchesApi } = await import('../../../src/services/api/matchesApi');
     (matchesApi.getMatches as any).mockResolvedValue({

@@ -79,8 +79,8 @@ describe('Cache Service Property Tests', () => {
     await db.seasons.clear();
     await db.matches.clear();
     await db.events.clear();
-    await db.match_periods.clear();
-    await db.match_state.clear();
+    await db.matchPeriods.clear();
+    await db.matchState.clear();
     await db.lineup.clear();
   });
 
@@ -91,8 +91,8 @@ describe('Cache Service Property Tests', () => {
     await db.seasons.clear();
     await db.matches.clear();
     await db.events.clear();
-    await db.match_periods.clear();
-    await db.match_state.clear();
+    await db.matchPeriods.clear();
+    await db.matchState.clear();
     await db.lineup.clear();
   });
 
@@ -121,7 +121,7 @@ describe('Cache Service Property Tests', () => {
               ...m,
               id: `old-match-${i}-${m.id}`,
               match_id: `old-match-${i}-${m.id}`,
-              created_at: createOldTimestamp(daysOld),
+              createdAt: createOldTimestamp(daysOld),
               synced: true,
             }));
 
@@ -154,7 +154,7 @@ describe('Cache Service Property Tests', () => {
             const oldSyncedEvents = events.map((e, i) => ({
               ...e,
               id: `old-event-${i}-${e.id}`,
-              created_at: createOldTimestamp(daysOld),
+              createdAt: createOldTimestamp(daysOld),
               synced: true,
               synced_at: createOldTimestamp(daysOld), // Last accessed 30+ days ago
             }));
@@ -180,24 +180,24 @@ describe('Cache Service Property Tests', () => {
           fc.array(matchPeriodArbitrary, { minLength: 1, maxLength: 10 }),
           fc.integer({ min: 31, max: 365 }),
           async (periods, daysOld) => {
-            await db.match_periods.clear();
+            await db.matchPeriods.clear();
 
             const oldSyncedPeriods = periods.map((p, i) => ({
               ...p,
               id: `old-period-${i}-${p.id}`,
-              created_at: createOldTimestamp(daysOld),
+              createdAt: createOldTimestamp(daysOld),
               synced: true,
               synced_at: createOldTimestamp(daysOld), // Last accessed 30+ days ago
             }));
 
-            await db.match_periods.bulkAdd(oldSyncedPeriods as any);
+            await db.matchPeriods.bulkAdd(oldSyncedPeriods as any);
 
-            const countBefore = await db.match_periods.count();
+            const countBefore = await db.matchPeriods.count();
             expect(countBefore).toBe(oldSyncedPeriods.length);
 
             await cleanupOldTemporalData();
 
-            const countAfter = await db.match_periods.count();
+            const countAfter = await db.matchPeriods.count();
             expect(countAfter).toBe(0);
           }
         ),
@@ -211,25 +211,25 @@ describe('Cache Service Property Tests', () => {
           fc.array(matchStateArbitrary, { minLength: 1, maxLength: 10 }),
           fc.integer({ min: 31, max: 365 }),
           async (states, daysOld) => {
-            await db.match_state.clear();
+            await db.matchState.clear();
 
             // Match state uses match_id as primary key, so make those unique
             const oldSyncedStates = states.map((s, i) => ({
               ...s,
-              match_id: `old-state-match-${i}-${s.match_id}`,
-              created_at: createOldTimestamp(daysOld),
+              matchId: `old-state-match-${i}-${s.matchId}`,
+              createdAt: createOldTimestamp(daysOld),
               synced: true,
               synced_at: createOldTimestamp(daysOld), // Last accessed 30+ days ago
             }));
 
-            await db.match_state.bulkAdd(oldSyncedStates as any);
+            await db.matchState.bulkAdd(oldSyncedStates as any);
 
-            const countBefore = await db.match_state.count();
+            const countBefore = await db.matchState.count();
             expect(countBefore).toBe(oldSyncedStates.length);
 
             await cleanupOldTemporalData();
 
-            const countAfter = await db.match_state.count();
+            const countAfter = await db.matchState.count();
             expect(countAfter).toBe(0);
           }
         ),
@@ -248,7 +248,7 @@ describe('Cache Service Property Tests', () => {
             const oldSyncedLineups = lineups.map((l, i) => ({
               ...l,
               id: `old-lineup-${i}-${l.id}`,
-              created_at: createOldTimestamp(daysOld),
+              createdAt: createOldTimestamp(daysOld),
               synced: true,
               synced_at: createOldTimestamp(daysOld), // Last accessed 30+ days ago
             }));
@@ -283,8 +283,8 @@ describe('Cache Service Property Tests', () => {
             // Clear all tables
             await db.matches.clear();
             await db.events.clear();
-            await db.match_periods.clear();
-            await db.match_state.clear();
+            await db.matchPeriods.clear();
+            await db.matchState.clear();
             await db.lineup.clear();
 
             const recentAccessTimestamp = createOldTimestamp(daysSinceAccess);
@@ -330,8 +330,8 @@ describe('Cache Service Property Tests', () => {
 
             await db.matches.add(recentMatch as any);
             await db.events.add(recentEvent as any);
-            await db.match_periods.add(recentPeriod as any);
-            await db.match_state.add(recentState as any);
+            await db.matchPeriods.add(recentPeriod as any);
+            await db.matchState.add(recentState as any);
             await db.lineup.add(recentLineup as any);
 
             // Run cleanup
@@ -340,8 +340,8 @@ describe('Cache Service Property Tests', () => {
             // All recently accessed records should still exist (even though created_at is old)
             expect(await db.matches.get('recent-match')).toBeDefined();
             expect(await db.events.get('recent-event')).toBeDefined();
-            expect(await db.match_periods.get('recent-period')).toBeDefined();
-            expect(await db.match_state.get('recent-state-match')).toBeDefined();
+            expect(await db.matchPeriods.get('recent-period')).toBeDefined();
+            expect(await db.matchState.get('recent-state-match')).toBeDefined();
             expect(await db.lineup.get('recent-lineup')).toBeDefined();
           }
         ),
@@ -379,7 +379,7 @@ describe('Cache Service Property Tests', () => {
               created_at: twentyNineDaysAgo,
               updated_at: twentyNineDaysAgo,
               created_by_user_id: 'test-user',
-              is_deleted: false,
+              isDeleted: false,
               synced: true, // Must be synced to test the age threshold
             };
 
@@ -487,7 +487,7 @@ describe('Cache Service Property Tests', () => {
           for (const team of uniqueTeams) {
             const found = await db.teams.get(team.id);
             expect(found).toBeDefined();
-            expect(found?.name).toBe(team.name);
+            expect((found as any)?.name).toBe(team.name);
           }
         }),
         { numRuns: 100 }
@@ -523,7 +523,7 @@ describe('Cache Service Property Tests', () => {
             for (const player of uniquePlayers) {
               const found = await db.players.get(player.id);
               expect(found).toBeDefined();
-              expect(found?.full_name).toBe(player.full_name);
+              expect((found as any)?.name).toBe(player.name);
             }
           }
         ),
@@ -589,20 +589,20 @@ describe('Cache Service Property Tests', () => {
               ...team,
               id: 'old-team',
               team_id: 'old-team',
-              created_at: veryOldTimestamp,
+              createdAt: veryOldTimestamp,
               synced: true,
             };
             const oldPlayer = {
               ...player,
               id: 'old-player',
-              created_at: veryOldTimestamp,
+              createdAt: veryOldTimestamp,
               synced: true,
             };
             const oldSeason = {
               ...season,
               id: 'old-season',
               season_id: 'old-season',
-              created_at: veryOldTimestamp,
+              createdAt: veryOldTimestamp,
               synced: true,
             };
 
@@ -646,16 +646,22 @@ describe('Cache Service Property Tests', () => {
         data: [],
         hasMore: false,
         total: 0,
+        page: 1,
+        limit: 10,
       });
       vi.mocked(playersApi.getPlayers).mockResolvedValue({
         data: [],
         hasMore: false,
         total: 0,
+        page: 1,
+        limit: 10,
       });
       vi.mocked(seasonsApi.getSeasons).mockResolvedValue({
         data: [],
         hasMore: false,
         total: 0,
+        page: 1,
+        limit: 10,
       });
 
       return { teamsApi, playersApi, seasonsApi };
@@ -707,7 +713,7 @@ describe('Cache Service Property Tests', () => {
             for (const original of originalUnsyncedData) {
               const found = await db.teams.get(original.id);
               expect(found).toBeDefined();
-              expect(found?.name).toBe(original.name);
+              expect((found as any)?.name).toBe(original.name);
               expect(found?.synced).toBe(false);
             }
           }
@@ -730,7 +736,7 @@ describe('Cache Service Property Tests', () => {
               (p, i) => ({
                 ...p,
                 synced: false,
-                full_name: `Unsynced Player ${i}`,
+                name: `Unsynced Player ${i}`,
               })
             );
 
@@ -738,7 +744,7 @@ describe('Cache Service Property Tests', () => {
               (p, i) => ({
                 ...p,
                 synced: true,
-                full_name: `Synced Player ${i}`,
+                name: `Synced Player ${i}`,
               })
             );
 
@@ -749,7 +755,7 @@ describe('Cache Service Property Tests', () => {
             // Store original unsynced player data for comparison
             const originalUnsyncedData = uniqueUnsyncedPlayers.map((p) => ({
               id: p.id,
-              full_name: p.full_name,
+              name: p.name,
             }));
 
             // Mock all API responses with empty data
@@ -762,7 +768,7 @@ describe('Cache Service Property Tests', () => {
             for (const original of originalUnsyncedData) {
               const found = await db.players.get(original.id);
               expect(found).toBeDefined();
-              expect(found?.full_name).toBe(original.full_name);
+              expect((found as any)?.name).toBe(original.name);
               expect(found?.synced).toBe(false);
             }
           }
@@ -856,14 +862,14 @@ describe('Cache Service Property Tests', () => {
             const localPlayer = {
               ...player,
               id: 'conflict-player-id',
-              full_name: 'Local Unsynced Player',
+              name: 'Local Unsynced Player',
               synced: false,
             };
 
             const localSeason = {
               ...season,
               id: 'conflict-season-id',
-              season_id: 'conflict-season-id',
+              seasonId: 'conflict-season-id',
               label: 'Local Unsynced Season',
               synced: false,
             };
@@ -880,10 +886,16 @@ describe('Cache Service Property Tests', () => {
                   name: 'Server Team Name',
                   homeKitPrimary: '#000000',
                   homeKitSecondary: '#ffffff',
+                  createdAt: new Date().toISOString(),
+                  createdByUserId: 'server',
+                  isDeleted: false,
+                  isOpponent: false,
                 },
               ],
               hasMore: false,
               total: 1,
+              page: 1,
+              limit: 10,
             });
 
             vi.mocked(playersApi.getPlayers).mockResolvedValue({
@@ -891,21 +903,33 @@ describe('Cache Service Property Tests', () => {
                 {
                   id: 'conflict-player-id',
                   name: 'Server Player Name',
+                  createdAt: new Date().toISOString(),
+                  createdByUserId: 'server',
+                  isDeleted: false,
                 },
               ],
               hasMore: false,
               total: 1,
+              page: 1,
+              limit: 10,
             });
 
             vi.mocked(seasonsApi.getSeasons).mockResolvedValue({
               data: [
                 {
                   id: 'conflict-season-id',
+                  seasonId: 'conflict-season-id',
                   label: 'Server Season Label',
+                  isCurrent: false,
+                  createdAt: new Date().toISOString(),
+                  createdByUserId: 'server',
+                  isDeleted: false,
                 },
               ],
               hasMore: false,
               total: 1,
+              page: 1,
+              limit: 10,
             });
 
             // Run refresh
@@ -914,12 +938,12 @@ describe('Cache Service Property Tests', () => {
             // Verify unsynced records are preserved with LOCAL data, not server data
             const foundTeam = await db.teams.get('conflict-team-id');
             expect(foundTeam).toBeDefined();
-            expect(foundTeam?.name).toBe('Local Unsynced Team');
+            expect((foundTeam as any)?.name).toBe('Local Unsynced Team');
             expect(foundTeam?.synced).toBe(false);
 
             const foundPlayer = await db.players.get('conflict-player-id');
             expect(foundPlayer).toBeDefined();
-            expect(foundPlayer?.full_name).toBe('Local Unsynced Player');
+            expect((foundPlayer as any)?.name).toBe('Local Unsynced Player');
             expect(foundPlayer?.synced).toBe(false);
 
             const foundSeason = await db.seasons.get('conflict-season-id');
@@ -956,8 +980,8 @@ describe('Cache Service Property Tests', () => {
             const oldUnsyncedMatches = matches.map((m, i) => ({
               ...m,
               id: `old-unsynced-match-${i}-${m.id}`,
-              match_id: `old-unsynced-match-${i}-${m.id}`,
-              created_at: createOldTimestamp(daysOld),
+              matchId: `old-unsynced-match-${i}-${m.id}`,
+              createdAt: createOldTimestamp(daysOld),
               synced: false, // UNSYNCED - should be preserved
             }));
 
@@ -997,7 +1021,7 @@ describe('Cache Service Property Tests', () => {
             const oldUnsyncedEvents = events.map((e, i) => ({
               ...e,
               id: `old-unsynced-event-${i}-${e.id}`,
-              created_at: createOldTimestamp(daysOld),
+              createdAt: createOldTimestamp(daysOld),
               synced: false, // UNSYNCED - should be preserved
             }));
 
@@ -1030,29 +1054,29 @@ describe('Cache Service Property Tests', () => {
           fc.array(matchPeriodArbitrary, { minLength: 1, maxLength: 10 }),
           fc.integer({ min: 31, max: 365 }),
           async (periods, daysOld) => {
-            await db.match_periods.clear();
+            await db.matchPeriods.clear();
 
             const oldUnsyncedPeriods = periods.map((p, i) => ({
               ...p,
               id: `old-unsynced-period-${i}-${p.id}`,
-              created_at: createOldTimestamp(daysOld),
+              createdAt: createOldTimestamp(daysOld),
               synced: false, // UNSYNCED - should be preserved
             }));
 
-            await db.match_periods.bulkAdd(oldUnsyncedPeriods as any);
+            await db.matchPeriods.bulkAdd(oldUnsyncedPeriods as any);
 
-            const countBefore = await db.match_periods.count();
+            const countBefore = await db.matchPeriods.count();
             expect(countBefore).toBe(oldUnsyncedPeriods.length);
 
             await cleanupOldTemporalData();
 
             // All old UNSYNCED periods should be preserved
-            const countAfter = await db.match_periods.count();
+            const countAfter = await db.matchPeriods.count();
             expect(countAfter).toBe(oldUnsyncedPeriods.length);
 
             // Verify each period still exists
             for (const period of oldUnsyncedPeriods) {
-              const found = await db.match_periods.get(period.id);
+              const found = await db.matchPeriods.get(period.id);
               expect(found).toBeDefined();
               expect(found?.synced).toBe(false);
             }
@@ -1068,30 +1092,30 @@ describe('Cache Service Property Tests', () => {
           fc.array(matchStateArbitrary, { minLength: 1, maxLength: 10 }),
           fc.integer({ min: 31, max: 365 }),
           async (states, daysOld) => {
-            await db.match_state.clear();
+            await db.matchState.clear();
 
-            // Match state uses match_id as primary key, so make those unique
+            // Match state uses matchId as primary key, so make those unique
             const oldUnsyncedStates = states.map((s, i) => ({
               ...s,
-              match_id: `old-unsynced-state-match-${i}-${s.match_id}`,
-              created_at: createOldTimestamp(daysOld),
+              matchId: `old-unsynced-state-match-${i}-${s.matchId}`,
+              createdAt: createOldTimestamp(daysOld),
               synced: false, // UNSYNCED - should be preserved
             }));
 
-            await db.match_state.bulkAdd(oldUnsyncedStates as any);
+            await db.matchState.bulkAdd(oldUnsyncedStates as any);
 
-            const countBefore = await db.match_state.count();
+            const countBefore = await db.matchState.count();
             expect(countBefore).toBe(oldUnsyncedStates.length);
 
             await cleanupOldTemporalData();
 
             // All old UNSYNCED states should be preserved
-            const countAfter = await db.match_state.count();
+            const countAfter = await db.matchState.count();
             expect(countAfter).toBe(oldUnsyncedStates.length);
 
             // Verify each state still exists
             for (const state of oldUnsyncedStates) {
-              const found = await db.match_state.get(state.match_id);
+              const found = await db.matchState.get(state.matchId);
               expect(found).toBeDefined();
               expect(found?.synced).toBe(false);
             }
@@ -1112,7 +1136,7 @@ describe('Cache Service Property Tests', () => {
             const oldUnsyncedLineups = lineups.map((l, i) => ({
               ...l,
               id: `old-unsynced-lineup-${i}-${l.id}`,
-              created_at: createOldTimestamp(daysOld),
+              createdAt: createOldTimestamp(daysOld),
               synced: false, // UNSYNCED - should be preserved
             }));
 
@@ -1210,8 +1234,8 @@ describe('Cache Service Property Tests', () => {
             // Clear all tables
             await db.matches.clear();
             await db.events.clear();
-            await db.match_periods.clear();
-            await db.match_state.clear();
+            await db.matchPeriods.clear();
+            await db.matchState.clear();
             await db.lineup.clear();
 
             const veryOldTimestamp = createOldTimestamp(daysOld);
@@ -1220,39 +1244,39 @@ describe('Cache Service Property Tests', () => {
             const veryOldMatch = {
               ...match,
               id: 'very-old-unsynced-match',
-              match_id: 'very-old-unsynced-match',
-              created_at: veryOldTimestamp,
+              matchId: 'very-old-unsynced-match',
+              createdAt: veryOldTimestamp,
               synced: false,
             };
             const veryOldEvent = {
               ...event,
               id: 'very-old-unsynced-event',
-              created_at: veryOldTimestamp,
+              createdAt: veryOldTimestamp,
               synced: false,
             };
             const veryOldPeriod = {
               ...period,
               id: 'very-old-unsynced-period',
-              created_at: veryOldTimestamp,
+              createdAt: veryOldTimestamp,
               synced: false,
             };
             const veryOldState = {
               ...state,
-              match_id: 'very-old-unsynced-state-match',
-              created_at: veryOldTimestamp,
+              matchId: 'very-old-unsynced-state-match',
+              createdAt: veryOldTimestamp,
               synced: false,
             };
             const veryOldLineup = {
               ...lineup,
               id: 'very-old-unsynced-lineup',
-              created_at: veryOldTimestamp,
+              createdAt: veryOldTimestamp,
               synced: false,
             };
 
             await db.matches.add(veryOldMatch as any);
             await db.events.add(veryOldEvent as any);
-            await db.match_periods.add(veryOldPeriod as any);
-            await db.match_state.add(veryOldState as any);
+            await db.matchPeriods.add(veryOldPeriod as any);
+            await db.matchState.add(veryOldState as any);
             await db.lineup.add(veryOldLineup as any);
 
             // Run cleanup
@@ -1261,8 +1285,8 @@ describe('Cache Service Property Tests', () => {
             // All very old UNSYNCED records should still exist
             expect(await db.matches.get('very-old-unsynced-match')).toBeDefined();
             expect(await db.events.get('very-old-unsynced-event')).toBeDefined();
-            expect(await db.match_periods.get('very-old-unsynced-period')).toBeDefined();
-            expect(await db.match_state.get('very-old-unsynced-state-match')).toBeDefined();
+            expect(await db.matchPeriods.get('very-old-unsynced-period')).toBeDefined();
+            expect(await db.matchState.get('very-old-unsynced-state-match')).toBeDefined();
             expect(await db.lineup.get('very-old-unsynced-lineup')).toBeDefined();
           }
         ),
@@ -1295,7 +1319,7 @@ describe('Cache Service Property Tests', () => {
               ...t,
               name: `Cached Team ${i}`,
               synced: true, // Simulating cached data from server
-              is_deleted: false,
+              isDeleted: false,
             }));
 
             await db.teams.bulkAdd(uniqueTeams as any);
@@ -1312,8 +1336,8 @@ describe('Cache Service Property Tests', () => {
 
             // Verify each cached team has the expected data
             for (const team of nonDeletedTeams) {
-              expect(team.id).toBeDefined();
-              expect(team.name).toBeDefined();
+              expect((team as any).id).toBeDefined();
+              expect((team as any).name).toBeDefined();
             }
           }
         ),
@@ -1332,9 +1356,9 @@ describe('Cache Service Property Tests', () => {
             // Make IDs unique and add to local cache
             const uniquePlayers = makeIdsUnique(players, 'offline-player').map((p, i) => ({
               ...p,
-              full_name: `Cached Player ${i}`,
+              name: `Cached Player ${i}`,
               synced: true,
-              is_deleted: false,
+              isDeleted: false,
             }));
 
             await db.players.bulkAdd(uniquePlayers as any);
@@ -1350,8 +1374,8 @@ describe('Cache Service Property Tests', () => {
 
             // Verify each cached player has the expected data
             for (const player of nonDeletedPlayers) {
-              expect(player.id).toBeDefined();
-              expect(player.full_name).toBeDefined();
+              expect((player as any).id).toBeDefined();
+              expect((player as any).name).toBeDefined();
             }
           }
         ),
@@ -1372,7 +1396,7 @@ describe('Cache Service Property Tests', () => {
               ...s,
               label: `Cached Season ${i}`,
               synced: true,
-              is_deleted: false,
+              isDeleted: false,
             }));
 
             await db.seasons.bulkAdd(uniqueSeasons as any);
@@ -1388,7 +1412,7 @@ describe('Cache Service Property Tests', () => {
 
             // Verify each cached season has the expected data
             for (const season of nonDeletedSeasons) {
-              expect(season.season_id).toBeDefined();
+              expect(season.seasonId).toBeDefined();
               expect(season.label).toBeDefined();
             }
           }
@@ -1416,21 +1440,21 @@ describe('Cache Service Property Tests', () => {
               ...t,
               name: `Cached Team ${i}`,
               synced: true,
-              is_deleted: false,
+              isDeleted: false,
             }));
 
             const uniquePlayers = makeIdsUnique(players, 'offline-player').map((p, i) => ({
               ...p,
-              full_name: `Cached Player ${i}`,
+              name: `Cached Player ${i}`,
               synced: true,
-              is_deleted: false,
+              isDeleted: false,
             }));
 
             const uniqueSeasons = makeSeasonIdsUnique(seasons, 'offline-season').map((s, i) => ({
               ...s,
               label: `Cached Season ${i}`,
               synced: true,
-              is_deleted: false,
+              isDeleted: false,
             }));
 
             await db.teams.bulkAdd(uniqueTeams as any);

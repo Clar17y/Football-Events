@@ -20,7 +20,7 @@ describe('Matches API Integration Tests', () => {
         email: 'test@example.com',
         password: 'password123'
       });
-      authToken = loginResult.token;
+      authToken = loginResult.data?.access_token || null;
     } catch (error) {
       console.warn('Could not authenticate test user. Some tests may be skipped.');
     }
@@ -31,7 +31,7 @@ describe('Matches API Integration Tests', () => {
       if (!authToken) return;
 
       const result = await matchesApi.getMatches({ page: 1, limit: 10 });
-      
+
       expect(result).toBeDefined();
       expect(Array.isArray(result.data)).toBe(true);
       expect(result.pagination).toBeDefined();
@@ -46,10 +46,10 @@ describe('Matches API Integration Tests', () => {
 
       // Use a test season ID (this would need to exist in your test data)
       const testSeasonId = '123e4567-e89b-12d3-a456-426614174000';
-      
+
       try {
         const result = await matchesApi.getMatches({ seasonId: testSeasonId });
-        
+
         expect(Array.isArray(result.data)).toBe(true);
         // All returned matches should belong to the specified season
         result.data.forEach(match => {
@@ -66,10 +66,10 @@ describe('Matches API Integration Tests', () => {
 
       // Use a test team ID (this would need to exist in your test data)
       const testTeamId = '123e4567-e89b-12d3-a456-426614174001';
-      
+
       try {
         const result = await matchesApi.getMatches({ teamId: testTeamId });
-        
+
         expect(Array.isArray(result.data)).toBe(true);
         // All returned matches should involve the specified team
         result.data.forEach(match => {
@@ -86,11 +86,11 @@ describe('Matches API Integration Tests', () => {
     it('should search matches by competition', async () => {
       if (!authToken) return;
 
-      const result = await matchesApi.getMatches({ 
+      const result = await matchesApi.getMatches({
         search: 'Premier',
         competition: 'Premier League'
       });
-      
+
       expect(Array.isArray(result.data)).toBe(true);
       // This test documents the search functionality
       // Results may be empty if no matches exist
@@ -101,10 +101,10 @@ describe('Matches API Integration Tests', () => {
 
       // Use a test season ID
       const testSeasonId = '123e4567-e89b-12d3-a456-426614174000';
-      
+
       try {
         const matches = await matchesApi.getMatchesBySeason(testSeasonId);
-        
+
         expect(Array.isArray(matches)).toBe(true);
         // All matches should belong to the specified season
         matches.forEach(match => {
@@ -121,10 +121,10 @@ describe('Matches API Integration Tests', () => {
 
       // Use a test team ID
       const testTeamId = '123e4567-e89b-12d3-a456-426614174001';
-      
+
       try {
         const matches = await matchesApi.getMatchesByTeam(testTeamId);
-        
+
         expect(Array.isArray(matches)).toBe(true);
         // All matches should involve the specified team
         matches.forEach(match => {
@@ -143,10 +143,10 @@ describe('Matches API Integration Tests', () => {
     it('should handle empty search results', async () => {
       if (!authToken) return;
 
-      const result = await matchesApi.getMatches({ 
+      const result = await matchesApi.getMatches({
         search: 'NonExistentMatchSearch12345'
       });
-      
+
       expect(Array.isArray(result.data)).toBe(true);
       expect(result.data.length).toBe(0);
       expect(result.pagination.total).toBe(0);
@@ -156,11 +156,11 @@ describe('Matches API Integration Tests', () => {
       if (!authToken) return;
 
       // Test with very high page number
-      const result = await matchesApi.getMatches({ 
-        page: 9999, 
-        limit: 10 
+      const result = await matchesApi.getMatches({
+        page: 9999,
+        limit: 10
       });
-      
+
       expect(Array.isArray(result.data)).toBe(true);
       expect(result.data.length).toBe(0);
       expect(result.pagination.page).toBe(9999);
@@ -171,7 +171,7 @@ describe('Matches API Integration Tests', () => {
 
       const smallResult = await matchesApi.getMatches({ limit: 1 });
       const largeResult = await matchesApi.getMatches({ limit: 50 });
-      
+
       expect(smallResult.data.length).toBeLessThanOrEqual(1);
       expect(largeResult.data.length).toBeLessThanOrEqual(50);
     }, TEST_TIMEOUT);
@@ -250,14 +250,14 @@ describe('Matches API Integration Tests', () => {
       if (!authToken) return;
 
       const result = await matchesApi.getMatches({ limit: 1 });
-      
+
       if (result.data.length > 0) {
         const match = result.data[0];
-        
+
         // Verify required fields exist
         expect(match.id).toBeDefined();
         expect(typeof match.id).toBe('string');
-        
+
         if (match.homeTeamId) {
           expect(typeof match.homeTeamId).toBe('string');
         }
@@ -278,10 +278,10 @@ describe('Matches API Integration Tests', () => {
 
       // This test ensures the API can handle matches that might have minimal required fields
       const result = await matchesApi.getMatches();
-      
+
       expect(Array.isArray(result.data)).toBe(true);
       expect(result.pagination).toBeDefined();
-      
+
       // Each match should at least have an ID
       result.data.forEach(match => {
         expect(match.id).toBeDefined();

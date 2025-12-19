@@ -39,7 +39,6 @@ describe('Outbox Sync Operations', () => {
       const result = await db.addEnhancedEvent({
         kind: mockEventPayload.kind,
         matchId: mockEventPayload.matchId,
-        seasonId: 'test-season-1', // Required field
         periodNumber: mockEventPayload.period || 1,
         clockMs: (mockEventPayload.minute * 60000) + (mockEventPayload.second * 1000),
         teamId: mockEventPayload.teamId,
@@ -47,7 +46,7 @@ describe('Outbox Sync Operations', () => {
         sentiment: 0, // Default sentiment
         notes: mockEventPayload.data?.notes
       });
-      
+
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
       expect(typeof result.data).toBe('string'); // Event ID
@@ -58,7 +57,6 @@ describe('Outbox Sync Operations', () => {
       await db.addEnhancedEvent({
         kind: mockEventPayload.kind,
         matchId: mockEventPayload.matchId,
-        seasonId: 'test-season-1',
         periodNumber: 1,
         clockMs: 300000,
         teamId: mockEventPayload.teamId,
@@ -66,11 +64,10 @@ describe('Outbox Sync Operations', () => {
         sentiment: 0,
         notes: 'Event 1'
       });
-      
+
       await db.addEnhancedEvent({
         kind: mockEventPayload.kind,
         matchId: mockEventPayload.matchId,
-        seasonId: 'test-season-1',
         periodNumber: 1,
         clockMs: 600000,
         teamId: mockEventPayload.teamId,
@@ -81,7 +78,7 @@ describe('Outbox Sync Operations', () => {
 
       // Check if events were added to the events table (not outbox directly)
       const eventsResult = await db.getEnhancedMatchEvents(mockEventPayload.matchId);
-      
+
       expect(eventsResult.success).toBe(true);
       expect(eventsResult.data).toHaveLength(2);
       await db.clearAllData(); // so it doesn't affect the next test
@@ -161,7 +158,7 @@ describe('Outbox Sync Operations', () => {
         minute: 5,
         second: 30,
         period: 1,
-        data: { 
+        data: {
           notes: 'Test goal',
           assistPlayerId: 'test-player-2',
           customField: 'custom_value'
@@ -214,7 +211,7 @@ describe('Outbox Sync Operations', () => {
   describe('Outbox Performance', () => {
     it('should handle large number of unsynced events efficiently', async () => {
       const startTime = Date.now();
-      
+
       // Add 100 events
       const promises = [];
       for (let i = 0; i < 100; i++) {
@@ -230,9 +227,9 @@ describe('Outbox Sync Operations', () => {
           created: Date.now()
         }));
       }
-      
+
       await Promise.all(promises);
-      
+
       const addTime = Date.now() - startTime;
       expect(addTime).toBeLessThan(5000); // Should complete within 5 seconds
 
