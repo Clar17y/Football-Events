@@ -19,9 +19,20 @@ export const isoDateArbitrary = fc
   .map(ts => new Date(ts).toISOString());
 
 /**
+ * Helper to generate numeric timestamps
+ */
+export const timestampArbitrary = fc
+  .integer({ min: 1600000000000, max: 2000000000000 });
+
+/**
  * Helper to generate optional ISO date strings
  */
 export const optionalIsoDateArbitrary = fc.option(isoDateArbitrary, { nil: undefined });
+
+/**
+ * Helper to generate optional numeric timestamps
+ */
+export const optionalTimestampArbitrary = fc.option(timestampArbitrary, { nil: undefined });
 
 /**
  * Helper to generate hex color strings (e.g., "#ff00aa")
@@ -56,24 +67,8 @@ export const teamArbitrary = fc
     deletedAt: optionalIsoDateArbitrary,
     deletedByUserId: fc.option(fc.string({ minLength: 1, maxLength: 20 }), { nil: undefined }),
     isDeleted: fc.boolean(),
-    synced: fc.boolean(),
     syncedAt: optionalIsoDateArbitrary,
-    // Legacy aliases for backward compatibility
-    teamId: fc.uuid(),
-    colorPrimary: fc.option(hexColorArbitrary, { nil: undefined }),
-    colorSecondary: fc.option(hexColorArbitrary, { nil: undefined }),
-    awayColorPrimary: fc.option(hexColorArbitrary, { nil: undefined }),
-    awayColorSecondary: fc.option(hexColorArbitrary, { nil: undefined }),
-  })
-  .map((t) => ({ 
-    ...t, 
-    teamId: t.id,
-    // Ensure legacy aliases match primary fields
-    colorPrimary: t.homeKitPrimary,
-    colorSecondary: t.homeKitSecondary,
-    awayColorPrimary: t.awayKitPrimary,
-    awayColorSecondary: t.awayKitSecondary,
-  }));
+  });
 
 /**
  * Arbitrary for generating player records compatible with IndexedDB schema (camelCase + ISO strings)
@@ -95,22 +90,8 @@ export const playerArbitrary = fc.record({
   deletedAt: optionalIsoDateArbitrary,
   deletedByUserId: fc.option(fc.string({ minLength: 1, maxLength: 20 }), { nil: undefined }),
   isDeleted: fc.boolean(),
-  synced: fc.boolean(),
   syncedAt: optionalIsoDateArbitrary,
-  // Legacy aliases for backward compatibility
-  fullName: fc.string({ minLength: 1, maxLength: 50 }),
-  preferredPos: fc.option(fc.constantFrom('GK', 'DEF', 'MID', 'FWD'), { nil: undefined }),
-  dob: fc.oneof(
-    fc.constant(undefined),
-    fc.integer({ min: 315532800000, max: 1577836800000 }).map(ts => new Date(ts).toISOString())
-  ),
-}).map((p) => ({
-  ...p,
-  // Ensure legacy aliases match primary fields
-  fullName: p.name,
-  preferredPos: p.preferredPosition,
-  dob: p.dateOfBirth,
-}));
+});
 
 /**
  * Arbitrary for generating season records compatible with IndexedDB schema (camelCase + ISO strings)
@@ -135,12 +116,8 @@ export const seasonArbitrary = fc
     deletedAt: optionalIsoDateArbitrary,
     deletedByUserId: fc.option(fc.string({ minLength: 1, maxLength: 20 }), { nil: undefined }),
     isDeleted: fc.boolean(),
-    synced: fc.boolean(),
     syncedAt: optionalIsoDateArbitrary,
-    // Legacy alias
-    seasonId: fc.uuid(),
-  })
-  .map((s) => ({ ...s, seasonId: s.id }));
+  });
 
 /**
  * Arbitrary for generating match records compatible with IndexedDB schema (camelCase + ISO strings)
@@ -164,11 +141,8 @@ export const matchArbitrary = fc.record({
   deletedAt: optionalIsoDateArbitrary,
   deletedByUserId: fc.option(fc.string({ minLength: 1, maxLength: 20 }), { nil: undefined }),
   isDeleted: fc.boolean(),
-  synced: fc.boolean(),
   syncedAt: optionalIsoDateArbitrary,
-  // Legacy alias
-  matchId: fc.uuid(),
-}).map((m) => ({ ...m, matchId: m.id }));
+});
 
 /**
  * Arbitrary for generating event records compatible with IndexedDB schema (camelCase + ISO strings)
@@ -176,7 +150,6 @@ export const matchArbitrary = fc.record({
 export const eventArbitrary = fc.record({
   id: fc.uuid(),
   matchId: fc.uuid(),
-  tsServer: isoDateArbitrary,
   periodNumber: fc.integer({ min: 1, max: 4 }),
   clockMs: fc.integer({ min: 0, max: 90 * 60 * 1000 }),
   kind: fc.constantFrom(
@@ -214,8 +187,8 @@ export const matchPeriodArbitrary = fc.record({
   matchId: fc.uuid(),
   periodNumber: fc.integer({ min: 1, max: 4 }),
   periodType: fc.constantFrom('REGULAR', 'EXTRA_TIME', 'PENALTY_SHOOTOUT') as fc.Arbitrary<'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT'>,
-  startedAt: isoDateArbitrary,
-  endedAt: optionalIsoDateArbitrary,
+  startedAt: timestampArbitrary,
+  endedAt: optionalTimestampArbitrary,
   durationSeconds: fc.option(fc.integer({ min: 0, max: 60 * 60 }), { nil: undefined }),
   createdAt: isoDateArbitrary,
   updatedAt: isoDateArbitrary,
@@ -235,7 +208,7 @@ export const matchStateArbitrary = fc.record({
   status: fc.constantFrom('NOT_STARTED', 'LIVE', 'PAUSED', 'COMPLETED') as fc.Arbitrary<'NOT_STARTED' | 'LIVE' | 'PAUSED' | 'COMPLETED'>,
   currentPeriodId: fc.option(fc.uuid(), { nil: undefined }),
   timerMs: fc.integer({ min: 0, max: 90 * 60 * 1000 }),
-  lastUpdatedAt: isoDateArbitrary,
+  lastUpdatedAt: timestampArbitrary,
   createdAt: isoDateArbitrary,
   updatedAt: isoDateArbitrary,
   createdByUserId: fc.string({ minLength: 1, maxLength: 20 }),
