@@ -1,0 +1,228 @@
+# Implementation Plan
+
+> **Reference Document:** See `inventory.md` in this spec folder for the complete inventory of all Prisma models, IndexedDB stores, snake_case field locations, and Date type usage that needs to be addressed.
+
+- [x] 0. Preflight - Coverage, Audits, and Reset Strategy
+  - [x] 0.1 Inventory coverage (nothing left behind)
+    - Backend Prisma models (source: `backend/prisma/schema.prisma`): `User`, `Team`, `Player`, `Match`, `Event`, `awards`, `match_awards`, `seasons`, `lineup`, `player_teams`, `match_state`, `match_periods`, `viewer_links`, `default_lineups`, `position_zones`, `live_formations`, `user_role`
+    - Frontend IndexedDB/Dexie stores (source: `frontend/src/db/indexedDB.ts`): `players`, `teams`, `seasons`, `matches`, `events`, `lineup`, `playerTeams`, `matchNotes`, `matchPeriods`, `matchState`, `defaultLineups`, `outbox`, `syncMetadata`, `settings`
+    - Decide for each model/store: shared type name, ISO timestamp fields, and boundary conversion strategy.
+    - _Requirements: 8.1, 8.2_
+  - [x] 0.2 Repo-wide audit for snake_case and legacy timestamp usage (PowerShell)
+    - Search for snake_case field usage outside Prisma boundary (example patterns):
+      - `$paths = (Get-ChildItem -Path backend\\src,frontend\\src,shared -Recurse -File -Include *.ts,*.tsx,*.js,*.jsx,*.json -ErrorAction SilentlyContinue).FullName`
+      - `Select-String -Path $paths -Pattern 'created_by_user_id','deleted_at','deleted_by_user_id','is_deleted','is_opponent'`
+    - Search for shared-type `Date` usage (should be removed from shared API/domain types):
+      - `Select-String -Path shared\\types\\frontend.ts -Pattern '\\bDate\\b'`
+    - _Requirements: 8.3_
+
+- [x] 1. Update Shared Types to camelCase + ISO timestamps
+  - [x] 1.1 Update `shared/types/frontend.ts` entity interfaces
+    - Change `created_by_user_id` → `createdByUserId` in all interfaces
+    - Change `deleted_at` → `deletedAt` in all interfaces
+    - Change `deleted_by_user_id` → `deletedByUserId` in all interfaces
+    - Change `is_deleted` → `isDeleted` in all interfaces
+    - Change `is_opponent` → `isOpponent` in Team interface
+    - Replace `Date` fields with ISO strings (JSON-native) for all date/time fields
+    - Update Player, Team, Match, Event, Season, Lineup, Award, MatchAward, PlayerTeam, MatchState, MatchPeriod, plus any other Prisma models used by the app (see scope)
+    - _Requirements: 1.1, 1.2, 1.3, 8.1_
+  - [x] 1.2 Update `shared/types/frontend.ts` request interfaces
+    - Update TeamCreateRequest: `is_opponent` → `isOpponent`
+    - Verify all other request interfaces use camelCase
+    - Ensure request/response types use ISO strings for date/time fields (no `Date` in shared API/domain types)
+    - _Requirements: 1.1, 1.2, 1.3_
+  - [x] 1.3 Write property test for shared type field naming
+    - **Property 1: Shared Types Follow camelCase and Are JSON-Native**
+    - **Validates: Requirements 1.1, 1.2, 1.3**
+
+- [x] 2. Update Backend Transformers
+  - [x] 2.1 Update `shared/types/transformers.ts` Prisma → Frontend transforms
+    - Update transformPlayer: output `createdByUserId`, `deletedAt`, `deletedByUserId`, `isDeleted`
+    - Update transformTeam: output `createdByUserId`, `deletedAt`, `deletedByUserId`, `isDeleted`, `isOpponent`
+    - Update transformMatch: output `createdByUserId`, `deletedAt`, `deletedByUserId`, `isDeleted`
+    - Update transformEvent: output `createdByUserId`, `deletedAt`, `deletedByUserId`, `isDeleted`
+    - Update transformSeason: output `createdByUserId`, `deletedAt`, `deletedByUserId`, `isDeleted`
+    - Update transformLineup: output `createdByUserId`, `deletedAt`, `deletedByUserId`, `isDeleted`
+    - Update transformAward: output `createdByUserId`, `deletedAt`, `deletedByUserId`, `isDeleted`
+    - Update transformMatchAward: output `createdByUserId`, `deletedAt`, `deletedByUserId`, `isDeleted`
+    - Update transformPlayerTeam: output `createdByUserId`, `deletedAt`, `deletedByUserId`, `isDeleted`
+    - Update transformMatchState: output `createdByUserId`, `deletedAt`, `deletedByUserId`, `isDeleted`
+    - Update transformMatchPeriod: output `createdByUserId`, `deletedAt`, `deletedByUserId`, `isDeleted`
+    - Serialize Prisma `Date` fields to ISO strings on output; parse ISO strings to `Date` for create/update inputs
+    - Audit/update any backend endpoints/services returning ad-hoc DTOs (e.g., DefaultLineup service) to match shared types (camelCase + ISO strings)
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 8.1_
+  - [x] 2.2 Write property test for backend transform output
+    - **Property 2: Backend Transform Output Matches Shared Types**
+    - **Validates: Requirements 4.1, 4.3, 4.4**
+
+- [x] 3. Checkpoint - Verify shared types and backend compile
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 4. Refactor Frontend Schema to Extend Shared Types
+  - [x] 4.1 Create IndexedDB type extensions in `frontend/src/db/schema.ts`
+    - Import entity types from `@shared/types`
+    - Define `SyncableRecord` interface with `synced` and `syncedAt`
+    - Store ISO strings in IndexedDB (no timestamp overrides)
+    - Create `DbPlayer` type extending Player (no renaming, no timestamp conversion)
+    - Create `DbTeam` type extending Team
+    - Create `DbMatch` type extending Match
+    - Create `DbEvent` type extending Event
+    - Create `DbSeason` type extending Season
+    - Create `DbLineup` type extending Lineup
+    - Create `DbMatchState` type for local match state
+    - Create `DbMatchPeriod` type for local match periods
+    - Create `DbDefaultLineup` type for default lineups
+    - Add missing Db* types for all Dexie stores (including `playerTeams`, `matchNotes`, `outbox`, `syncMetadata`, `settings`)
+    - _Requirements: 2.1, 2.2, 3.1, 8.2_
+  - [x] 4.2 Remove duplicate interface definitions from schema.ts
+    - Remove EnhancedPlayer (replaced by DbPlayer)
+    - Remove EnhancedTeam (replaced by DbTeam)
+    - Remove EnhancedMatch (replaced by DbMatch)
+    - Remove EnhancedEvent (replaced by DbEvent)
+    - Remove EnhancedSeason (replaced by DbSeason)
+    - Remove EnhancedLineup (replaced by DbLineup)
+    - Keep SCHEMA_INDEXES, EVENT_RELATIONSHIPS, LINKING_CONFIG, SENTIMENT_SCALE
+    - _Requirements: 2.2, 3.3_
+  - [x] 4.3 Update `frontend/src/db/indexedDB.ts` to use new types
+    - Update Dexie table type declarations
+    - Update method signatures to use Db* types
+    - Ensure Dexie store names and index strings align with `SCHEMA_INDEXES` (no snake_case store/property names in TypeScript code)
+    - _Requirements: 3.1, 8.2_
+
+  - [x] 4.4 Remove legacy frontend DB types that reintroduce snake_case
+    - Identify and remove/quarantine `frontend/src/types/database.ts` and `frontend/src/types/index.ts` usage from the IndexedDB layer
+    - Ensure no code paths still depend on `Stored*` snake_case types for runtime logic
+    - _Requirements: 2.1, 8.3_
+
+- [x] 5. Checkpoint - Verify frontend schema compiles
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 6. Simplify Frontend Transform Layer
+  - [x] 6.1 Update `frontend/src/db/transforms/common.ts`
+    - Remove Date ↔ timestamp conversion helpers (keep only null/undefined normalization helpers if needed)
+    - _Requirements: 5.1, 5.2, 1.3_
+  - [x] 6.2 Update `frontend/src/db/transforms/players.ts`
+    - Update dbToPlayer to be pass-through (no field renaming; no timestamp conversion)
+    - Update serverPlayerToDb to use camelCase field names
+    - Remove field renaming logic
+    - _Requirements: 5.1, 5.2_
+  - [x] 6.3 Update `frontend/src/db/transforms/teams.ts`
+    - Update dbToTeam to be pass-through (no field renaming; no timestamp conversion)
+    - Update serverTeamToDb to use camelCase field names
+    - Remove field renaming logic
+    - _Requirements: 5.1, 5.2_
+  - [x] 6.4 Update `frontend/src/db/transforms/matches.ts`
+    - Update dbToMatch to be pass-through (no field renaming; no timestamp conversion)
+    - Update serverMatchToDb to use camelCase field names
+    - Remove field renaming logic
+    - _Requirements: 5.1, 5.2_
+  - [x] 6.5 Update `frontend/src/db/transforms/events.ts`
+    - Update dbToEvent to be pass-through (no field renaming; no timestamp conversion)
+    - Update serverEventToDb to use camelCase field names
+    - Remove field renaming logic
+    - _Requirements: 5.1, 5.2_
+  - [x] 6.6 Update `frontend/src/db/transforms/seasons.ts`
+    - Update dbToSeason to be pass-through (no field renaming; no timestamp conversion)
+    - Update serverSeasonToDb to use camelCase field names
+    - Remove field renaming logic
+    - _Requirements: 5.1, 5.2_
+  - [x] 6.7 Update `frontend/src/db/transforms/lineups.ts`
+    - Update dbToLineup to be pass-through (no field renaming; no timestamp conversion)
+    - Update serverLineupToDb to use camelCase field names
+    - Remove field renaming logic
+    - _Requirements: 5.1, 5.2_
+  - [x] 6.8 Update `frontend/src/db/transforms/matchState.ts`
+    - Update transforms to use camelCase field names
+    - Remove field renaming logic
+    - _Requirements: 5.1, 5.2_
+  - [x] 6.9 Update `frontend/src/db/transforms/playerTeams.ts`
+    - Update transforms to use camelCase field names
+    - Remove field renaming logic
+    - _Requirements: 5.1, 5.2_
+  - [x] 6.10 Update `frontend/src/db/transforms/defaultLineups.ts`
+    - Update transforms to use camelCase field names
+    - _Requirements: 5.1, 5.2_
+  - [x] 6.11 Write property test for transform round-trip
+    - **Property 3: Frontend Cache is Shape-Preserving**
+    - **Validates: Requirements 3.1, 5.1, 7.2**
+
+- [x] 7. Checkpoint - Verify transform layer compiles
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 8. Update Frontend Services
+  - [x] 8.1 Update `frontend/src/services/cacheService.ts`
+    - Update to use camelCase field access from server responses
+    - Update to use Db* types for IndexedDB operations
+    - _Requirements: 5.1_
+  - [x] 8.2 Update `frontend/src/services/syncService.ts`
+    - Update field access to use camelCase
+    - Update to use Db* types
+    - _Requirements: 5.1_
+  - [x] 8.3 Update `frontend/src/services/dataLayer.ts`
+    - Update field access to use camelCase
+    - _Requirements: 5.1_
+  - [x] 8.4 Update API services in `frontend/src/services/api/`
+    - Update teamsApi.ts, playersApi.ts, seasonsApi.ts, matchesApi.ts, eventsApi.ts, lineupsApi.ts, defaultLineupsApi.ts
+    - Update to expect camelCase + ISO string timestamps from server
+    - _Requirements: 5.1_
+
+- [x] 9. Checkpoint - Verify service layer compiles
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 10. Update Frontend Components and Hooks
+  - [x] 10.1 Update components using entity types
+    - Search for `created_by_user_id`, `is_deleted`, `deleted_at`, `is_opponent` usage and update to camelCase field access
+    - Prefer UI formatting helpers over converting ISO strings to `Date` outside the UI layer
+    - _Requirements: 5.1_
+  - [x] 10.2 Update hooks using entity types
+    - Update useLocalData.ts, useTeams.ts, and other hooks
+    - Update to camelCase field access
+    - _Requirements: 5.1_
+
+  - [x] 10.3 Add ISO date/time formatting helpers (UI-only)
+    - Create/standardize helpers (e.g., `formatDateTime`, `formatDate`) that accept ISO strings
+    - Replace ad-hoc formatting/conversion scattered across components with helper usage
+    - _Requirements: 1.3, 5.1_
+
+- [x] 11. TypeScript Verification
+  - [x] 11.1 Run TypeScript compilation for backend
+    - Execute `cd backend && npx tsc --noEmit`
+    - Fix all type errors
+    - _Requirements: 6.1, 6.2_
+  - [x] 11.2 Run TypeScript compilation for frontend
+    - Execute `cd frontend && npx tsc --noEmit`
+    - Fix all type errors
+    - _Requirements: 6.1, 6.2_
+  - [x] 11.3 Run production builds
+    - Execute `cd frontend && npm run build`
+    - Execute `cd backend && npm run build`
+    - Verify successful builds
+    - _Requirements: 6.3_
+
+- [x] 12. Update Tests
+  - [x] 12.1 Update backend tests with camelCase field names
+    - Search for snake_case field usage in test files
+    - Update to camelCase
+    - _Requirements: 6.2_
+  - [x] 12.2 Update frontend tests with camelCase field names
+    - Search for snake_case field usage in test files
+    - Update to camelCase
+    - _Requirements: 6.2_
+  - [x] 12.3 Write property test for IndexedDB CRUD round-trip
+    - **Property 4: IndexedDB CRUD Round-Trip**
+    - **Validates: Requirements 7.2, 7.4**
+
+- [x] 13. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 14. Final Audit - No mixed casing remains
+  - [ ] 14.1 Repo-wide snake_case audit outside Prisma boundary (PowerShell)
+    - `$paths = (Get-ChildItem -Path backend\\src,frontend\\src,shared -Recurse -File -Include *.ts,*.tsx,*.js,*.jsx,*.json -ErrorAction SilentlyContinue).FullName`
+    - `Select-String -Path $paths -Pattern 'created_by_user_id','deleted_at','deleted_by_user_id','is_deleted','is_opponent'`
+    - Ensure remaining matches are only in Prisma schema/query objects or intentional boundary code.
+    - _Requirements: 8.3_
+  - [ ] 14.2 Shared type timestamp audit
+    - `Select-String -Path shared\\types\\frontend.ts -Pattern '\\bDate\\b'`
+    - Ensure shared API/domain types contain no `Date` fields (ISO strings only).
+    - _Requirements: 1.3_
+

@@ -885,3 +885,30 @@ frontend/src/db/transforms/
 - [x] cacheService uses centralized transforms for: teams, players, seasons, matches, player-teams, default-lineups
 - [x] New transforms follow established patterns (interfaces + transform functions)
 - [x] Index file updated to re-export all transforms
+
+### Phase 6: Clean Up Unused Code ✅ COMPLETED
+
+**Date:** 2025-12-17
+
+**Analysis of shared/types/transformers.ts:**
+- Backend services (`backend/src/services/*.ts`) actively use shared transformers
+- Backend tests use shared transformers for validation
+- Frontend no longer uses shared transformers (has own `frontend/src/db/transforms/`)
+- Decision: Keep file, add documentation clarifying it's for backend use
+
+**Files Modified:**
+
+| File | Changes |
+|------|---------|
+| `shared/types/transformers.ts` | Added documentation comment clarifying backend-only usage |
+| `frontend/src/services/api/teamsApi.ts` | Replaced inline fallback transforms with centralized `dbToPlayers` |
+
+**Fallback Mappings Removed:**
+- `teamsApi.ts` line 235: `p.full_name || p.name || ''` → `p.name` (via dbToPlayers)
+- `teamsApi.ts` line 272: `p.full_name || p.name || ''` → `p.name` (via dbToPlayers)
+
+**Verification:**
+- [x] All 93 transform tests still pass
+- [x] shared/types/transformers.ts documented as backend-only
+- [x] Legacy fallback patterns removed from teamsApi.ts
+- [x] No dual-format fallbacks remain in frontend API services
