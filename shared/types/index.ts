@@ -42,6 +42,7 @@ export type {
   MatchStatusResponse,
   LiveMatchesResponse,
   PlayerWithTeam,
+  TeamWithPlayers,
   MatchWithTeams,
   EventWithDetails,
   LineupWithDetails,
