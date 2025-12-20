@@ -241,23 +241,30 @@ export class GrassrootsDB extends Dexie {
       settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
     });
 
-    // Version 11: camelCase migration - clean slate approach
-    // Bumping version auto-clears old snake_case data since there are no active users
-    this.version(11).stores({
+    // Version 12: camelCase store names - must match class property names
+    // Bumping version auto-clears old snake_case stores since there are no active users
+    this.version(12).stores({
       events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
       matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
       teams: `id, ${SCHEMA_INDEXES.teams.join(', ')}`,
       players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
       seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
       lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
-      player_teams: `id, playerId, teamId, startDate, isActive, createdAt, updatedAt`,
-      match_notes: `matchNoteId, ${SCHEMA_INDEXES.matchNotes.join(', ')}`,
-      match_periods: `id, ${SCHEMA_INDEXES.matchPeriods.join(', ')}`,
-      match_state: `matchId, ${SCHEMA_INDEXES.matchState.join(', ')}`,
-      default_lineups: `id, ${SCHEMA_INDEXES.defaultLineups.join(', ')}`,
+      playerTeams: `id, playerId, teamId, startDate, isActive, createdAt, updatedAt`,
+      matchNotes: `matchNoteId, ${SCHEMA_INDEXES.matchNotes.join(', ')}`,
+      matchPeriods: `id, ${SCHEMA_INDEXES.matchPeriods.join(', ')}`,
+      matchState: `matchId, ${SCHEMA_INDEXES.matchState.join(', ')}`,
+      defaultLineups: `id, ${SCHEMA_INDEXES.defaultLineups.join(', ')}`,
       outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
-      sync_metadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
-      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
+      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`,
+      // Explicitly delete old snake_case stores
+      player_teams: null,
+      match_notes: null,
+      match_periods: null,
+      match_state: null,
+      default_lineups: null,
+      sync_metadata: null
     });
 
     // Hook for auto-linking events
