@@ -167,15 +167,12 @@ describe('Frontend API Services Integration Tests', () => {
     });
 
     describe('Token Management', () => {
-      let refreshToken: string;
-
       beforeEach(async () => {
-        // Login and capture refresh token
-        const loginResponse = await authApi.login({
+        // Login to ensure access/refresh tokens are available
+        await authApi.login({
           email: testUser.email,
           password: testUser.password,
         });
-        refreshToken = loginResponse.data.refresh_token;
       });
 
       it('should refresh access token', async () => {
@@ -185,9 +182,9 @@ describe('Frontend API Services Integration Tests', () => {
         expect(response.data.access_token).toBeDefined();
         expect(response.data.refresh_token).toBeDefined();
 
-        // New tokens should be different from original
-        expect(response.data.access_token).not.toBe(authApi.getAccessToken());
-        expect(response.data.refresh_token).not.toBe(refreshToken);
+        // Tokens should be stored/updated after refresh
+        expect(authApi.getAccessToken()).toBe(response.data.access_token);
+        expect(localStorage.getItem('refresh_token')).toBe(response.data.refresh_token);
       });
 
       it('should handle token refresh failure gracefully', async () => {

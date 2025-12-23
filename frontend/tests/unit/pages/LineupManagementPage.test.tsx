@@ -4,15 +4,20 @@
  */
 
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import LineupManagementPage from '../../../src/pages/LineupManagementPage';
-import { teamsApi } from '../../../src/services/api/teamsApi';
-import { defaultLineupsApi } from '../../../src/services/api/defaultLineupsApi';
+import { useLocalTeams, useLocalPlayers, useLocalDefaultLineup } from '../../../src/hooks/useLocalData';
 
-// Mock the API services
-vi.mock('../../../src/services/api/teamsApi');
-vi.mock('../../../src/services/api/defaultLineupsApi');
+// Mock local data hooks
+vi.mock('../../../src/hooks/useLocalData', () => ({
+  useLocalTeams: vi.fn(),
+  useLocalPlayers: vi.fn(),
+  useLocalDefaultLineup: vi.fn(),
+}));
+vi.mock('../../../src/hooks/useInitialSync', () => ({
+  useInitialSync: () => ({ syncing: false, error: null }),
+}));
 
 // Mock Ionic components
 vi.mock('@ionic/react', async () => {
@@ -81,6 +86,7 @@ vi.mock('../../../src/components/TeamSelectionModal', () => ({
     isOpen ? (
       <div data-testid="team-selection-modal">
         <button onClick={() => onTeamSelect('Test Team 1', 'team-1')}>Test Team 1</button>
+        <button onClick={() => onTeamSelect('Test Team 2', 'team-2')}>Test Team 2</button>
         <button onClick={onDidDismiss}>Close</button>
       </div>
     ) : null,
@@ -95,21 +101,13 @@ vi.mock('../../../src/components/lineup', () => ({
   ),
   PlayerSelectionPanel: ({ players }: any) => (
     <div data-testid="player-selection-panel">
+      <div>Team Squad</div>
       Available players: {players?.length || 0}
     </div>
   ),
 }));
 
 const mockTeams = [
-  {
-    id: 'team-1',
-    name: 'Test Team 1',
-    createdAt: new Date('2023-01-01').toISOString(),
-    isOpponent: false,
-    createdByUserId: 'user-1',
-    isDeleted: false,
-    updatedAt: new Date('2023-01-01').toISOString()
-  },
   {
     id: 'team-2',
     name: 'Test Team 2',
@@ -118,10 +116,19 @@ const mockTeams = [
     createdByUserId: 'user-1',
     isDeleted: false,
     updatedAt: new Date('2023-01-02').toISOString()
+  },
+  {
+    id: 'team-1',
+    name: 'Test Team 1',
+    createdAt: new Date('2023-01-01').toISOString(),
+    isOpponent: false,
+    createdByUserId: 'user-1',
+    isDeleted: false,
+    updatedAt: new Date('2023-01-01').toISOString()
   }
 ];
 
-const mockPlayers = [
+const mockPlayersTeam1 = [
   {
     id: 'player-1',
     name: 'John Doe',
@@ -137,6 +144,22 @@ const mockPlayers = [
     isActive: true
   }
 ];
+const mockPlayersTeam2 = [
+  {
+    id: 'player-3',
+    name: 'Sam Forward',
+    squadNumber: 9,
+    preferredPosition: 'ST',
+    isActive: true
+  }
+];
+
+const emptyTeams: any[] = [];
+const emptyPlayers: any[] = [];
+const playersByTeam: Record<string, any[]> = {
+  'team-1': mockPlayersTeam1,
+  'team-2': mockPlayersTeam2,
+};
 
 describe('LineupManagementPage', () => {
   beforeEach(() => {
@@ -145,7 +168,7 @@ describe('LineupManagementPage', () => {
     // Mock localStorage
     Object.defineProperty(window, 'localStorage', {
       value: {
-        getItem: vi.fn(),
+        getItem: vi.fn().mockReturnValue(null),
         setItem: vi.fn(),
         removeItem: vi.fn(),
         clear: vi.fn(),
@@ -153,21 +176,19 @@ describe('LineupManagementPage', () => {
       writable: true,
     });
 
-    // Setup default API mocks
-    vi.mocked(teamsApi.getTeams).mockResolvedValue({
-      data: mockTeams,
-      total: mockTeams.length,
-      page: 1,
-      limit: 100,
-      hasMore: false
+    // Setup default local data mocks
+    vi.mocked(useLocalTeams).mockReturnValue({
+      teams: mockTeams,
+      loading: false
     });
-
-    vi.mocked(teamsApi.getTeamPlayers).mockResolvedValue({
-      data: mockPlayers,
-      success: true
+    vi.mocked(useLocalPlayers).mockImplementation((options?: any) => ({
+      players: options?.teamId ? (playersByTeam[options.teamId] || emptyPlayers) : emptyPlayers,
+      loading: false
+    }));
+    vi.mocked(useLocalDefaultLineup).mockReturnValue({
+      defaultLineup: null,
+      loading: false
     });
-
-    vi.mocked(defaultLineupsApi.getDefaultLineup).mockResolvedValue(null);
   });
 
   it('renders the page structure correctly', async () => {
@@ -185,6 +206,10 @@ describe('LineupManagementPage', () => {
   });
 
   it('shows loading state initially', () => {
+    vi.mocked(useLocalTeams).mockReturnValue({ teams: emptyTeams, loading: true });
+    vi.mocked(useLocalPlayers).mockReturnValue({ players: emptyPlayers, loading: true });
+    vi.mocked(useLocalDefaultLineup).mockReturnValue({ defaultLineup: null, loading: true });
+
     render(<LineupManagementPage />);
 
     expect(screen.getByTestId('ion-spinner')).toBeInTheDocument();
@@ -195,14 +220,6 @@ describe('LineupManagementPage', () => {
     render(<LineupManagementPage />);
 
     await waitFor(() => {
-      expect(teamsApi.getTeams).toHaveBeenCalledWith({
-        limit: 100,
-        includeOpponents: false
-      });
-    });
-
-    await waitFor(() => {
-      // Should show the selected team name (text is split across elements)
       expect(screen.getByText((content, element) => {
         return element?.textContent === 'Test Team 1 (2 players)';
       })).toBeInTheDocument();
@@ -212,13 +229,28 @@ describe('LineupManagementPage', () => {
   it('loads team data when team is selected', async () => {
     render(<LineupManagementPage />);
 
-    // Wait for teams to load and first team to be auto-selected
     await waitFor(() => {
-      expect(teamsApi.getTeamPlayers).toHaveBeenCalledWith('team-1');
+      expect(screen.getByText((content, element) => {
+        return element?.textContent === 'Test Team 1 (2 players)';
+      })).toBeInTheDocument();
     });
 
+    const teamButton = screen
+      .getByText((content, element) => element?.textContent === 'Test Team 1 (2 players)')
+      .closest('button');
+    expect(teamButton).not.toBeNull();
+    fireEvent.click(teamButton as HTMLButtonElement);
+
     await waitFor(() => {
-      expect(defaultLineupsApi.getDefaultLineup).toHaveBeenCalledWith('team-1');
+      expect(screen.getByTestId('team-selection-modal')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Test Team 2'));
+
+    await waitFor(() => {
+      expect(screen.getByText((content, element) => {
+        return element?.textContent === 'Test Team 2 (1 players)';
+      })).toBeInTheDocument();
     });
   });
 
@@ -259,13 +291,15 @@ describe('LineupManagementPage', () => {
     });
   });
 
-  it('handles API errors gracefully', async () => {
-    vi.mocked(teamsApi.getTeams).mockRejectedValue(new Error('API Error'));
+  it('shows empty state when no teams exist', async () => {
+    vi.mocked(useLocalTeams).mockReturnValue({ teams: emptyTeams, loading: false });
+    vi.mocked(useLocalPlayers).mockReturnValue({ players: emptyPlayers, loading: false });
+    vi.mocked(useLocalDefaultLineup).mockReturnValue({ defaultLineup: null, loading: false });
 
     render(<LineupManagementPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load teams. Please try again.')).toBeInTheDocument();
+      expect(screen.getByText('Add a team to start')).toBeInTheDocument();
     });
   });
 
@@ -274,7 +308,9 @@ describe('LineupManagementPage', () => {
 
     await waitFor(() => {
       // Should select team-1 (created 2023-01-01) over team-2 (created 2023-01-02)
-      expect(teamsApi.getTeamPlayers).toHaveBeenCalledWith('team-1');
+      expect(screen.getByText((content, element) => {
+        return element?.textContent === 'Test Team 1 (2 players)';
+      })).toBeInTheDocument();
     });
   });
 

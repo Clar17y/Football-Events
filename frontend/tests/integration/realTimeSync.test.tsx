@@ -66,7 +66,7 @@ describe('Real-Time Sync Integration', () => {
 
       expect(addResult.success).toBe(true);
       expect(addResult.data).toBeDefined();
-      const eventId = addResult.data!.id;
+      const eventId = addResult.data;
       expect(eventId).toBeDefined();
 
       // Verify initially unsynced

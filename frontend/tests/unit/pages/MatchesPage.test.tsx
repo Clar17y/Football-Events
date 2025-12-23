@@ -4,10 +4,94 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import MatchesPage from '../../../src/pages/MatchesPage';
 import type { Match, Team } from '@shared/types';
 
-// Mock the API modules
+// Test data - defined early so mocks can reference them
+const mockTeam1: Team = {
+  id: 'team1',
+  name: 'Home Team',
+  isOpponent: false,
+  homeKitPrimary: '#2563eb',
+  awayKitPrimary: '#ea580c',
+  createdAt: new Date().toISOString(),
+  createdByUserId: 'user1',
+  isDeleted: false,
+};
+
+const mockTeam2: Team = {
+  id: 'team2',
+  name: 'Away Team',
+  isOpponent: true,
+  homeKitPrimary: '#dc2626',
+  awayKitPrimary: '#059669',
+  createdAt: new Date().toISOString(),
+  createdByUserId: 'user1',
+  isDeleted: false,
+};
+
+const mockUpcomingMatch: Match = {
+  id: 'upcoming-match-1',
+  seasonId: 'season1',
+  homeTeamId: 'team1',
+  awayTeamId: 'team2',
+  kickoffTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  durationMinutes: 90,
+  periodFormat: '2x45',
+  homeScore: 0,
+  awayScore: 0,
+  createdAt: new Date().toISOString(),
+  createdByUserId: 'user1',
+  isDeleted: false,
+  homeTeam: mockTeam1,
+  awayTeam: mockTeam2,
+};
+
+const mockCompletedMatch: Match = {
+  id: 'completed-match-1',
+  seasonId: 'season1',
+  homeTeamId: 'team1',
+  awayTeamId: 'team2',
+  kickoffTime: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+  durationMinutes: 90,
+  periodFormat: '2x45',
+  homeScore: 2,
+  awayScore: 1,
+  createdAt: new Date().toISOString(),
+  createdByUserId: 'user1',
+  isDeleted: false,
+  homeTeam: mockTeam1,
+  awayTeam: mockTeam2,
+};
+
+// Mock the local data hooks - this is what the component actually uses
+vi.mock('../../../src/hooks/useLocalData', () => ({
+  useLocalMatches: () => ({
+    matches: [mockUpcomingMatch, mockCompletedMatch],
+    loading: false,
+  }),
+  useLocalTeams: () => ({
+    teams: [mockTeam1, mockTeam2],
+    loading: false,
+  }),
+  useLocalMatchState: () => ({
+    matchState: null,
+    loading: false,
+  }),
+}));
+
+// Mock useInitialSync hook
+vi.mock('../../../src/hooks/useInitialSync', () => ({
+  useInitialSync: () => {},
+}));
+
+// Mock useDeepLinkScrollHighlight hook
+vi.mock('../../../src/hooks/useDeepLinkScrollHighlight', () => ({
+  default: () => {},
+}));
+
+// Mock the API modules (still needed for delete operations etc)
 vi.mock('../../../src/services/api/matchesApi', () => ({
   matchesApi: {
     getMatches: vi.fn().mockResolvedValue({ data: [] }),
+    deleteMatch: vi.fn().mockResolvedValue({}),
   }
 }));
 
@@ -61,7 +145,7 @@ vi.mock('../../../src/components/MatchesCalendar', () => ({
 
 vi.mock('../../../src/components/UpcomingMatchesList', () => ({
   default: ({ matches }: any) => (
-    <div data-testid="upcoming-matches-list">
+    <div data-testid="upcoming-matches-list" className="upcoming-matches-list">
       {matches
         .filter((match: Match) => new Date(match.kickoffTime) >= new Date())
         .map((match: Match) => (
@@ -69,6 +153,7 @@ vi.mock('../../../src/components/UpcomingMatchesList', () => ({
             key={match.id}
             data-testid={`upcoming-match-${match.id}`}
             data-match-id={match.id}
+            className="upcoming-match-item"
             tabIndex={-1}
           >
             {match.id}
@@ -80,7 +165,7 @@ vi.mock('../../../src/components/UpcomingMatchesList', () => ({
 
 vi.mock('../../../src/components/CompletedMatchesList', () => ({
   default: ({ matches }: any) => (
-    <div data-testid="completed-matches-list">
+    <div data-testid="completed-matches-list" className="completed-matches-list">
       {matches
         .filter((match: Match) => new Date(match.kickoffTime) < new Date())
         .map((match: Match) => (
@@ -88,6 +173,7 @@ vi.mock('../../../src/components/CompletedMatchesList', () => ({
             key={match.id}
             data-testid={`completed-match-${match.id}`}
             data-match-id={match.id}
+            className="completed-match-item"
             tabIndex={-1}
           >
             {match.id}
@@ -116,84 +202,8 @@ Object.defineProperty(HTMLElement.prototype, 'focus', {
 });
 
 describe('MatchesPage Calendar-to-List Navigation', () => {
-  const mockUpcomingMatch: Match = {
-    id: 'upcoming-match-1',
-    seasonId: 'season1',
-    homeTeamId: 'team1',
-    awayTeamId: 'team2',
-    kickoffTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
-    durationMinutes: 90,
-    periodFormat: '2x45',
-    homeScore: 0,
-    awayScore: 0,
-    createdAt: new Date().toISOString(),
-    createdByUserId: 'user1',
-    isDeleted: false,
-    homeTeam: {
-      id: 'team1',
-      name: 'Home Team',
-      isOpponent: false,
-      homeKitPrimary: '#2563eb',
-      awayKitPrimary: '#ea580c',
-      createdAt: new Date().toISOString(),
-      createdByUserId: 'user1',
-      isDeleted: false,
-    } as Team,
-    awayTeam: {
-      id: 'team2',
-      name: 'Away Team',
-      isOpponent: true,
-      homeKitPrimary: '#dc2626',
-      awayKitPrimary: '#059669',
-      createdAt: new Date().toISOString(),
-      createdByUserId: 'user1',
-      isDeleted: false,
-    } as Team,
-  };
-
-  const mockCompletedMatch: Match = {
-    id: 'completed-match-1',
-    seasonId: 'season1',
-    homeTeamId: 'team1',
-    awayTeamId: 'team2',
-    kickoffTime: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Yesterday
-    durationMinutes: 90,
-    periodFormat: '2x45',
-    homeScore: 2,
-    awayScore: 1,
-    createdAt: new Date().toISOString(),
-    createdByUserId: 'user1',
-    isDeleted: false,
-    homeTeam: {
-      id: 'team1',
-      name: 'Home Team',
-      isOpponent: false,
-      homeKitPrimary: '#2563eb',
-      awayKitPrimary: '#ea580c',
-      createdAt: new Date().toISOString(),
-      createdByUserId: 'user1',
-      isDeleted: false,
-    } as Team,
-    awayTeam: {
-      id: 'team2',
-      name: 'Away Team',
-      isOpponent: true,
-      homeKitPrimary: '#dc2626',
-      awayKitPrimary: '#059669',
-      createdAt: new Date().toISOString(),
-      createdByUserId: 'user1',
-      isDeleted: false,
-    } as Team,
-  };
-
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-
-    // Mock the API to return our test matches
-    const { matchesApi } = await import('../../../src/services/api/matchesApi');
-    (matchesApi.getMatches as any).mockResolvedValue({
-      data: [mockUpcomingMatch, mockCompletedMatch]
-    });
   });
 
   it('should scroll to upcoming match when calendar match indicator is clicked', async () => {

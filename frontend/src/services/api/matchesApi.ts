@@ -6,13 +6,13 @@
  */
 
 import apiClient from './baseApi';
-import { createLocalQuickMatch } from '../guestQuickMatch';
 import { isOnline, shouldUseOfflineFallback, getCurrentUserId } from '../../utils/network';
 import { db } from '../../db/indexedDB';
 import { dbToMatch, dbToMatches, dbToMatchState, dbToMatchPeriod } from '../../db/transforms';
 import type { Match, MatchUpdateRequest } from '@shared/types';
 import type { MatchState, MatchPeriod } from '@shared/types';
 import type { DbMatch, DbMatchState, DbMatchPeriod } from '../../db/schema';
+import { teamsDataLayer, seasonsDataLayer, matchesDataLayer } from '../dataLayer';
 
 /**
  * Show offline toast notification
@@ -80,106 +80,161 @@ export const matchesApi = {
     };
   },
   /**
-   * Quick-start a match
+   * Quick-start a match - LOCAL-FIRST
+   * 
+   * This method follows the local-first architecture:
+   * 1. Creates opponent team (if needed) in IndexedDB with synced: false
+   * 2. Creates/finds season in IndexedDB with synced: false
+   * 3. Creates match in IndexedDB with synced: false
+   * 4. Returns immediately - syncService handles server sync
+   * 
+   * Requirements: Local-first architecture - all writes go to IndexedDB first
    */
   async quickStart(payload: QuickStartPayload): Promise<Match> {
-    try {
-      const response = await apiClient.post<Match>('/matches/quick-start', payload);
-      const createdMatch = response.data as unknown as Match;
+    const userId = getCurrentUserId();
 
-      // Persist server-created match (and any newly created opponent team) into IndexedDB
-      // so useLiveQuery-driven screens update immediately without a manual refresh.
-      try {
-        const now = Date.now();
-        const kickoffTs = createdMatch.kickoffTime ? new Date(createdMatch.kickoffTime as any).getTime() : now;
-        const createdAtTs = (createdMatch as any).createdAt ? new Date((createdMatch as any).createdAt).getTime() : now;
-        const updatedAtTs = (createdMatch as any).updatedAt ? new Date((createdMatch as any).updatedAt).getTime() : createdAtTs;
-        const userId = (createdMatch as any).createdByUserId || getCurrentUserId();
-
-        await db.matches.put({
-          id: createdMatch.id,
-          matchId: createdMatch.id,
-          seasonId: createdMatch.seasonId,
-          kickoffTime: createdMatch.kickoffTime,
-          competition: createdMatch.competition,
-          homeTeamId: createdMatch.homeTeamId,
-          awayTeamId: createdMatch.awayTeamId,
-          venue: createdMatch.venue,
-          durationMins: createdMatch.durationMinutes ?? 60,
-          periodFormat: (createdMatch.periodFormat as any) || 'quarter',
-          homeScore: createdMatch.homeScore ?? 0,
-          awayScore: createdMatch.awayScore ?? 0,
-          notes: createdMatch.notes,
-          createdAt: createdAtTs,
-          updatedAt: updatedAtTs,
-          createdByUserId: userId,
-          isDeleted: (createdMatch as any).isDeleted ?? false,
-          synced: true,
-          syncedAt: now,
-        } as any);
-
-        const upsertTeam = async (team: { id: string; name?: string; isOpponent?: boolean } | undefined) => {
-          if (!team?.id) return;
-          const existing = await db.teams.get(team.id);
-
-          // Avoid clobbering unsynced local edits; just ensure the name exists for display.
-          if (existing && existing.synced === false) {
-            if (!existing.name && team.name) {
-              await db.teams.update(team.id, { name: team.name, updatedAt: now } as any);
-            }
-            return;
-          }
-
-          await db.teams.put({
-            ...existing,
-            id: team.id,
-            teamId: team.id,
-            name: team.name ?? existing?.name ?? 'Team',
-            isOpponent: team.isOpponent ?? (existing as any)?.isOpponent ?? false,
-            createdAt: existing?.createdAt ?? now,
-            updatedAt: now,
-            createdByUserId: existing?.createdByUserId ?? userId,
-            isDeleted: existing?.isDeleted ?? false,
-            synced: true,
-            syncedAt: now,
-          } as any);
-        };
-
-        // Prefer any team objects if the API included them (most endpoints do, quick-start may not)
-        await upsertTeam(createdMatch.homeTeam as any);
-        await upsertTeam(createdMatch.awayTeam as any);
-
-        // Ensure opponent team exists locally even if the API response omitted nested team info
-        const opponentName = payload.opponentName?.trim();
-        if (opponentName && createdMatch.homeTeamId && createdMatch.awayTeamId) {
-          let opponentTeamId: string | undefined;
-          const myTeamId = payload.myTeamId;
-
-          if (myTeamId) {
-            if (createdMatch.homeTeamId === myTeamId) opponentTeamId = createdMatch.awayTeamId;
-            else if (createdMatch.awayTeamId === myTeamId) opponentTeamId = createdMatch.homeTeamId;
-          }
-
-          // Fallback to the user's explicit home/away selection if myTeamId isn't usable.
-          if (!opponentTeamId) {
-            opponentTeamId = payload.isHome ? createdMatch.awayTeamId : createdMatch.homeTeamId;
-          }
-
-          await upsertTeam({ id: opponentTeamId, name: opponentName, isOpponent: true });
+    // 1) Ensure season exists (use provided or find/create default)
+    let seasonId = payload.seasonId;
+    if (!seasonId) {
+      // Try to find an existing current season
+      const allSeasons = await db.seasons.filter(s => !s.isDeleted).toArray();
+      const currentSeason = allSeasons.find(s => s.isCurrent);
+      
+      if (currentSeason) {
+        seasonId = currentSeason.id;
+      } else {
+        // Create a default season for the current year
+        const year = new Date().getFullYear();
+        const seasonLabel = `${year}-${year + 1} Season`;
+        
+        // Check if a season with this label already exists
+        const existingSeason = allSeasons.find(s => s.label === seasonLabel);
+        if (existingSeason) {
+          seasonId = existingSeason.id;
+        } else {
+          const newSeason = await seasonsDataLayer.create({
+            label: seasonLabel,
+            startDate: `${year}-08-01`,
+            endDate: `${year + 1}-07-31`,
+            isCurrent: true,
+            description: 'Auto-created season',
+          });
+          seasonId = newSeason.id;
         }
-
-        try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
-      } catch (persistErr) {
-        console.warn('[matchesApi] Failed to persist quick-start result to IndexedDB:', persistErr);
       }
-
-      return createdMatch;
-    } catch (e) {
-      // Authenticated but offline: create locally with synced: false
-      // The match is written directly to the matches table by createLocalQuickMatch
-      const local = await createLocalQuickMatch(payload as any);
-      return (await import('../../services/guestQuickMatch')).getLocalMatch(local.id) as unknown as Match;
     }
+
+    // 2) Ensure our team exists (use provided id or find by name)
+    let ourTeamId = payload.myTeamId;
+    if (!ourTeamId && payload.myTeamName) {
+      // Search by name
+      const existingTeam = await db.teams
+        .filter(t => !t.isDeleted && t.name === payload.myTeamName)
+        .first();
+      
+      if (existingTeam) {
+        ourTeamId = existingTeam.id;
+      } else {
+        const newTeam = await teamsDataLayer.create({
+          name: payload.myTeamName,
+          isOpponent: false,
+        });
+        ourTeamId = newTeam.id;
+      }
+    }
+    
+    if (!ourTeamId) {
+      // Fallback: create a default team
+      const newTeam = await teamsDataLayer.create({
+        name: 'My Team',
+        isOpponent: false,
+      });
+      ourTeamId = newTeam.id;
+    }
+
+    // 3) Ensure opponent team exists (by name)
+    const opponentName = payload.opponentName?.trim() || 'Opponent';
+    let opponentTeam = await db.teams
+      .filter(t => !t.isDeleted && t.name === opponentName && t.isOpponent === true)
+      .first();
+    
+    if (!opponentTeam) {
+      // Also check for any team with this name (might not be marked as opponent yet)
+      opponentTeam = await db.teams
+        .filter(t => !t.isDeleted && t.name === opponentName)
+        .first();
+    }
+    
+    if (!opponentTeam) {
+      opponentTeam = await teamsDataLayer.create({
+        name: opponentName,
+        isOpponent: true,
+      });
+    }
+
+    // 4) Determine home/away team IDs
+    const homeTeamId = payload.isHome ? ourTeamId : opponentTeam.id;
+    const awayTeamId = payload.isHome ? opponentTeam.id : ourTeamId;
+
+    // 5) Create the match locally
+    const kickoffTime = payload.kickoffTime || new Date().toISOString();
+    const match = await matchesDataLayer.create({
+      seasonId,
+      kickoffTime,
+      homeTeamId,
+      awayTeamId,
+      competition: payload.competition,
+      venue: payload.venue,
+      durationMinutes: payload.durationMinutes ?? 60,
+      periodFormat: (payload.periodFormat === 'quarter' || payload.periodFormat === 'half') 
+        ? payload.periodFormat 
+        : 'quarter',
+      notes: payload.notes,
+    });
+
+    // 6) Return the match with team info for immediate UI update
+    const homeTeam = await db.teams.get(homeTeamId);
+    const awayTeam = await db.teams.get(awayTeamId);
+
+    const result: Match = {
+      id: match.id,
+      seasonId: match.seasonId,
+      kickoffTime: match.kickoffTime,
+      competition: match.competition,
+      homeTeamId: match.homeTeamId,
+      awayTeamId: match.awayTeamId,
+      venue: match.venue,
+      durationMinutes: match.durationMinutes ?? 60,
+      periodFormat: match.periodFormat as any,
+      homeScore: match.homeScore ?? 0,
+      awayScore: match.awayScore ?? 0,
+      notes: match.notes,
+      createdAt: match.createdAt,
+      updatedAt: match.updatedAt,
+      createdByUserId: match.createdByUserId,
+      isDeleted: match.isDeleted ?? false,
+      homeTeam: homeTeam ? {
+        id: homeTeam.id,
+        name: homeTeam.name,
+        isOpponent: homeTeam.isOpponent ?? false,
+        createdAt: homeTeam.createdAt,
+        createdByUserId: homeTeam.createdByUserId,
+        isDeleted: homeTeam.isDeleted ?? false,
+      } as any : undefined,
+      awayTeam: awayTeam ? {
+        id: awayTeam.id,
+        name: awayTeam.name,
+        isOpponent: awayTeam.isOpponent ?? false,
+        createdAt: awayTeam.createdAt,
+        createdByUserId: awayTeam.createdByUserId,
+        isDeleted: awayTeam.isDeleted ?? false,
+      } as any : undefined,
+    };
+
+    // Trigger data:changed event for any listeners
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
+
+    return result;
   },
   /**
    * Get matches by season ID
@@ -321,8 +376,6 @@ export const matchesApi = {
    * Update an existing match - LOCAL-FIRST
    */
   async updateMatch(id: string, matchData: MatchUpdateRequest): Promise<Match> {
-    const { matchesDataLayer } = await import('../dataLayer');
-
     const cleanData = Object.fromEntries(
       Object.entries(matchData).filter(([_, value]) => value !== undefined)
     );
@@ -342,7 +395,7 @@ export const matchesApi = {
     try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     // Return the updated local match
-    return (await import('../../services/guestQuickMatch')).getLocalMatch(id) as unknown as Match;
+    return this.getMatch(id);
   },
 
   // === Live Match – State & Periods ===

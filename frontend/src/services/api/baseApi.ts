@@ -42,7 +42,7 @@ export class ApiClient {
     }
 
     // Auto-detect based on current hostname
-    const hostname = window.location.hostname;
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       // PC development
