@@ -226,7 +226,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isDeleted: false
       };
 
-      // REAL-TIME FIRST APPROACH: Try real-time first, fallback to outbox
+      // REAL-TIME FIRST APPROACH: Try real-time first, fallback to local storage
       const result = await realTimeService.publishEvent(event);
 
       if (result.success) {
@@ -236,10 +236,10 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (result.method === 'realtime') {
           console.log('Event sent real-time:', event.id);
         } else {
-          console.log('Event queued in outbox (will sync when connected):', event.id);
+          console.log('Event stored locally (will sync when connected):', event.id);
         }
       } else {
-        throw new Error('Failed to publish event via real-time or outbox');
+        throw new Error('Failed to publish event via real-time or local storage');
       }
 
       return event;

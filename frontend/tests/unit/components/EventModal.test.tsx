@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import EventModal from '../../../src/components/EventModal';
 import { MatchProvider } from '../../../src/contexts/MatchContext';
 import { ToastProvider } from '../../../src/contexts/ToastContext';
+import { DatabaseProvider } from '../../../src/contexts/DatabaseContext';
 import { db } from '../../../src/db/indexedDB';
 
 // Mock the database
@@ -26,11 +27,13 @@ import { useSpeechToText } from '../../../src/utils/useSpeechToText';
 
 // Test wrapper with required providers
 const TestWrapper = ({ children }: { children: React.ReactNode }) => (
-  <ToastProvider>
-    <MatchProvider>
-      {children}
-    </MatchProvider>
-  </ToastProvider>
+  <DatabaseProvider>
+    <ToastProvider>
+      <MatchProvider>
+        {children}
+      </MatchProvider>
+    </ToastProvider>
+  </DatabaseProvider>
 );
 
 const mockTeam = {
@@ -230,7 +233,6 @@ describe('EventModal Component', () => {
         expect.objectContaining({
           kind: 'goal',
           matchId: 'match-1',
-          seasonId: 'season-1',
           periodNumber: 1,
           teamId: 'team-1',
           playerId: 'player-1',

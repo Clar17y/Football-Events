@@ -87,7 +87,7 @@ describe('CompletedMatchesList', () => {
   };
 
   const defaultProps = {
-    matches: [mockCompletedMatch, mockUpcomingMatch],
+    matches: [mockCompletedMatch], // Only pass completed matches - filtering happens at parent level
     expandedMatches: new Set<string>(),
     onToggleExpand: vi.fn(),
     onMatchSelect: vi.fn(),
@@ -185,7 +185,7 @@ describe('CompletedMatchesList', () => {
     expect(screen.getByText('Show Match Events')).toBeInTheDocument();
   });
 
-  it('shows Show Match Events button as disabled (stubbed for future)', () => {
+  it('shows Show Match Events button when expanded', () => {
     const expandedMatches = new Set(['match1']);
     render(
       <CompletedMatchesList
@@ -195,7 +195,7 @@ describe('CompletedMatchesList', () => {
     );
 
     const viewEventsButton = screen.getByText('Show Match Events');
-    expect(viewEventsButton).toBeDisabled();
+    expect(viewEventsButton).toBeInTheDocument();
   });
 
   it('shows loading state', () => {
@@ -206,7 +206,7 @@ describe('CompletedMatchesList', () => {
   });
 
   it('shows empty state when no completed matches', () => {
-    render(<CompletedMatchesList {...defaultProps} matches={[mockUpcomingMatch]} />);
+    render(<CompletedMatchesList {...defaultProps} matches={[]} />);
 
     expect(screen.getByText('No Completed Matches')).toBeInTheDocument();
     expect(screen.getByText('Completed matches will appear here after they\'ve been played.')).toBeInTheDocument();

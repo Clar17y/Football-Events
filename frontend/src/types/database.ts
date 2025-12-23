@@ -9,43 +9,9 @@ import type { ID, Timestamp } from './index';
 import type { EventPayload } from './events';
 
 /**
- * Outbox event for offline sync
- */
-export interface OutboxEvent {
-  /** Auto-generated ID */
-  id?: number;
-  /** Table name being synced */
-  tableName: string;
-  /** Record ID being synced */
-  recordId: string;
-  /** Operation type */
-  operation: 'INSERT' | 'UPDATE' | 'DELETE';
-  /** Record data (for INSERT/UPDATE) */
-  data?: any;
-  /** Event payload for match events (legacy compatibility) */
-  payload?: EventPayload;
-  /** Whether the event has been synced to server */
-  synced: boolean;
-  /** When the event was created locally */
-  createdAt: Timestamp;
-  /** Number of sync attempts */
-  retryCount?: number;
-  /** Last sync attempt timestamp */
-  lastSyncAttempt?: Timestamp;
-  /** Error message if sync failed */
-  syncError?: string;
-  /** When sync failed (if applicable) */
-  failedAt?: Timestamp;
-  /** User who created this outbox entry */
-  createdByUserId: string;
-}
-
-/**
  * Database table schemas
  */
 export interface DatabaseSchema {
-  /** Match events outbox for sync */
-  outbox: OutboxEvent;
   /** Matches table */
   matches: StoredMatch;
   /** Teams table */
@@ -386,8 +352,6 @@ export interface ExportData {
   lineup: StoredLineup[];
   /** Exported player teams */
   playerTeams: StoredPlayerTeam[];
-  /** Exported outbox events */
-  outbox: OutboxEvent[];
   /** Exported settings */
   settings: StoredSetting[];
 }

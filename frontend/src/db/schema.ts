@@ -8,7 +8,7 @@
  * - All field names use camelCase (aligned with shared types)
  * - All date/time fields use ISO strings (JSON-native)
  * - Db* types extend shared types with sync metadata
- * - Local-only types (outbox, sync metadata, settings) are defined here
+ * - Local-only types (sync metadata, settings) are defined here
  */
 
 import type {
@@ -245,38 +245,6 @@ export interface DbMatchNote {
 }
 
 /**
- * Outbox event for offline sync (local-only)
- */
-export interface DbOutboxEvent {
-  /** Auto-generated ID */
-  id?: number;
-  /** Table name being synced */
-  tableName: string;
-  /** Record ID being synced */
-  recordId: string;
-  /** Operation type */
-  operation: 'INSERT' | 'UPDATE' | 'DELETE';
-  /** Record data (for INSERT/UPDATE) */
-  data?: unknown;
-  /** Event payload for match events (legacy compatibility) */
-  payload?: unknown;
-  /** Whether the event has been synced to server (0/1 for IndexedDB) */
-  synced: number;
-  /** When the event was created locally (timestamp) */
-  createdAt: number;
-  /** Number of sync attempts */
-  retryCount: number;
-  /** Last sync attempt timestamp */
-  lastSyncAttempt?: number;
-  /** Error message if sync failed */
-  syncError?: string;
-  /** When sync failed (if applicable) */
-  failedAt?: number;
-  /** User who created this outbox entry */
-  createdByUserId: string;
-}
-
-/**
  * Sync metadata for conflict resolution (local-only)
  */
 export interface DbSyncMetadata {
@@ -344,9 +312,6 @@ export type LocalMatchState = DbMatchState;
 /** @deprecated Use DbDefaultLineup instead */
 export type LocalDefaultLineup = DbDefaultLineup;
 
-/** @deprecated Use DbOutboxEvent instead */
-export type EnhancedOutboxEvent = DbOutboxEvent;
-
 /** @deprecated Use DbSyncMetadata instead */
 export type EnhancedSyncMetadata = DbSyncMetadata;
 
@@ -372,7 +337,6 @@ export interface DatabaseSchema {
   defaultLineups: DbDefaultLineup;
 
   // Sync infrastructure
-  outbox: DbOutboxEvent;
   syncMetadata: DbSyncMetadata;
 
   // Settings
@@ -490,18 +454,6 @@ export const SCHEMA_INDEXES = {
     'matchId',                           // Match-specific notes
     '[matchId+periodNumber]',           // Period-specific notes
     'updatedAt'                          // Change tracking
-  ],
-
-  // Outbox table - sync optimization
-  outbox: [
-    'synced',                            // Unsynced items
-    'tableName',                         // Table-specific sync
-    'operation',                         // Operation-specific sync
-    'createdByUserId',                   // Source attribution (guest/import detection)
-    '[synced+createdAt]',               // Sync queue ordering
-    '[tableName+synced]',               // Table-specific sync status
-    'retryCount',                        // Failed sync tracking
-    'lastSyncAttempt'                    // Retry timing
   ],
 
   // Sync metadata table

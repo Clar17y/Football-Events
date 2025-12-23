@@ -882,7 +882,7 @@ async function syncMatchState(): Promise<SyncResult> {
 /**
  * SyncService class for managing background synchronization.
  * 
- * Requirements: 5.2 - Use table-based sync exclusively without reading from the outbox
+ * Uses table-based sync exclusively - sync state is tracked on entity tables.
  */
 class SyncService {
   private timer: number | null = null;
@@ -958,8 +958,8 @@ class SyncService {
   /**
    * Flush all unsynced data to the server.
    * 
-   * Requirements: 5.2 - Use table-based sync exclusively without reading from the outbox
-   * Requirements: 3.3, 3.4 - Sync in dependency order: seasons → teams → players → matches → lineups → default_lineups → events → match_periods → match_state
+   * Uses table-based sync - queries each entity table for synced === false records.
+   * Syncs in dependency order: seasons → teams → players → matches → lineups → default_lineups → events → match_periods → match_state
    */
   async flushOnce(): Promise<SyncResult> {
     const combinedResult: SyncResult = { synced: 0, failed: 0, errors: [] };

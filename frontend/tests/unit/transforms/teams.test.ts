@@ -11,10 +11,6 @@ describe('teams transforms', () => {
     homeKitSecondary: '#ffffff',
     awayKitPrimary: '#0000ff',
     awayKitSecondary: '#ffff00',
-    colorPrimary: '#ff0000',
-    colorSecondary: '#ffffff',
-    awayColorPrimary: '#0000ff',
-    awayColorSecondary: '#ffff00',
     logoUrl: 'https://example.com/logo.png',
     isOpponent: false,
     createdAt: '2023-11-14T22:13:20.000Z',
@@ -126,11 +122,6 @@ describe('teams transforms', () => {
       expect(result.awayKitSecondary).toBe('#ffff00');
       expect(result.logoUrl).toBe('https://example.com/logo.png');
       expect(result.isOpponent).toBe(true);
-      // Legacy aliases
-      expect(result.colorPrimary).toBe('#ff0000');
-      expect(result.colorSecondary).toBe('#ffffff');
-      expect(result.awayColorPrimary).toBe('#0000ff');
-      expect(result.awayColorSecondary).toBe('#ffff00');
     });
 
     it('handles minimal input', () => {

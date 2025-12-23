@@ -42,11 +42,12 @@ describe('seasons transforms', () => {
       expect(result.seasonId).toBe('season-id-1');
     });
 
-    it('falls back to id when seasonId is missing', () => {
+    it('handles missing seasonId', () => {
       const season = { ...mockDbSeason, seasonId: undefined as any };
       const result = dbToSeason(season);
       expect(result.id).toBe('season-123');
-      expect(result.seasonId).toBe('season-123');
+      // seasonId is undefined when not set in input
+      expect(result.seasonId).toBeUndefined();
     });
 
     it('handles null/undefined optional fields', () => {

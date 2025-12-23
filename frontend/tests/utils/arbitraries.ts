@@ -141,6 +141,7 @@ export const matchArbitrary = fc.record({
   deletedAt: optionalIsoDateArbitrary,
   deletedByUserId: fc.option(fc.string({ minLength: 1, maxLength: 20 }), { nil: undefined }),
   isDeleted: fc.boolean(),
+  synced: fc.boolean(),
   syncedAt: optionalIsoDateArbitrary,
 });
 

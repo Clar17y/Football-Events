@@ -47,6 +47,7 @@ vi.mock('ionicons/icons', () => ({
   stopwatch: 'stopwatch',
   trophy: 'trophy',
   create: 'create',
+  play: 'play',
 }));
 
 describe('UpcomingMatchesList', () => {
@@ -130,7 +131,7 @@ describe('UpcomingMatchesList', () => {
     expect(screen.getByText('(H)')).toBeInTheDocument(); // Home indicator
   });
 
-  it('filters out past matches', () => {
+  it('renders all matches passed to it (filtering happens at parent level)', () => {
     const props = {
       ...defaultProps,
       matches: [mockUpcomingMatch, mockPastMatch],
@@ -138,9 +139,9 @@ describe('UpcomingMatchesList', () => {
 
     render(<UpcomingMatchesList {...props} />);
 
-    // Should only show the upcoming match - use more specific selector
+    // Component renders all matches - filtering is done by parent
     const matchItems = document.querySelectorAll('.upcoming-match-item');
-    expect(matchItems).toHaveLength(1);
+    expect(matchItems).toHaveLength(2);
   });
 
   it('sorts matches chronologically', () => {
@@ -238,7 +239,7 @@ describe('UpcomingMatchesList', () => {
     expect(screen.getByText('Schedule your next match to see it appear here.')).toBeInTheDocument();
   });
 
-  it('shows empty state when only past matches exist', () => {
+  it('renders matches even if they are past (filtering is parent responsibility)', () => {
     const props = {
       ...defaultProps,
       matches: [mockPastMatch],
@@ -246,18 +247,23 @@ describe('UpcomingMatchesList', () => {
 
     const { container } = render(<UpcomingMatchesList {...props} />);
 
-    expect(container.querySelector('.upcoming-matches-empty')).toBeInTheDocument();
+    // Component renders the match - it doesn't filter by date
+    const matchItems = container.querySelectorAll('.upcoming-match-item');
+    expect(matchItems).toHaveLength(1);
   });
 
-  it('determines home/away correctly based on primaryTeamId', () => {
+  it('determines home/away correctly based on isOpponent flag', () => {
+    // When homeTeam has isOpponent: false, it's always considered "our team" (home perspective)
+    // The primaryTeamId is only used as fallback when isOpponent flags aren't set
     const props = {
       ...defaultProps,
-      primaryTeamId: 'team2', // Away team is now primary
+      primaryTeamId: 'team2', // This is ignored because isOpponent flags are set
     };
 
     render(<UpcomingMatchesList {...props} />);
 
-    expect(screen.getByText('(A)')).toBeInTheDocument(); // Away indicator
+    // Since mockTeam1 (home) has isOpponent: false, we're always showing home perspective
+    expect(screen.getByText('(H)')).toBeInTheDocument();
   });
 
   it('handles missing team data gracefully', () => {
@@ -308,7 +314,8 @@ describe('UpcomingMatchesList', () => {
     const opponentIndicator = colorIndicators[1]; // Second indicator is opponent
 
     expect(opponentIndicator).toHaveClass('transparent');
-    expect(opponentIndicator).toHaveStyle('background-color: transparent');
+    // transparent is converted to rgba(0, 0, 0, 0) by the browser
+    expect(opponentIndicator).toHaveStyle('background-color: rgba(0, 0, 0, 0)');
   });
 
   it('shows edit match button when onEditMatch is provided and match is expanded', () => {

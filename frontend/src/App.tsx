@@ -79,20 +79,14 @@ const AppRoutes: React.FC = () => {
       setShowImportPrompt(true);
     };
 
-    // Clear outbox and resume sync after import completes
+    // Resume sync after import completes
     const onImportCompleted = async () => {
       console.log('[App] import:completed event received');
       try {
-        const { db } = await import('./db/indexedDB');
-        const { getGuestId } = await import('./utils/guest');
-        const guestId = getGuestId();
-        // Ensure outbox is cleared of guest items
-        await db.outbox.where('created_by_user_id').equals(guestId).delete();
-        console.log('[App] Guest outbox items cleared');
         // Trigger a sync attempt
         syncService.flushOnce().catch(() => {});
       } catch (err) {
-        console.error('[App] Error clearing outbox after import:', err);
+        console.error('[App] Error after import:', err);
       }
     };
 

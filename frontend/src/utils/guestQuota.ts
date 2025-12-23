@@ -54,24 +54,14 @@ export async function canAddEvent(matchId: string, kind?: string): Promise<Quota
   const guestId = getGuestId();
   const { db } = await import('../db/indexedDB');
 
-  // Count non-scoring events in events table
+  // Count non-scoring events in events table (includes both synced and unsynced)
   const eventsTableCount = await db.events
     .where('matchId')
     .equals(matchId)
     .and(e => e.createdByUserId === guestId && !e.isDeleted && !isScoring(String(e.kind)))
     .count();
 
-  // Count non-scoring events queued in outbox for this match
-  const outbox = await db.outbox
-    .filter(ev => {
-      const payload = (ev as any).data || (ev as any).payload || ev;
-      if (!payload) return false;
-      const mk = String(payload.kind || '');
-      return payload.matchId === matchId && !isScoring(mk);
-    })
-    .toArray();
-
-  const total = eventsTableCount + outbox.length;
+  const total = eventsTableCount;
   const remaining = Math.max(0, GUEST_LIMITS.maxNonScoringEventsPerMatch - total);
   return remaining > 0 ? { ok: true, remaining } : { ok: false, remaining: 0, reason: 'Guest limit reached: 50 non-scoring events per match' };
 }
@@ -81,23 +71,14 @@ export async function canChangeFormation(matchId: string): Promise<QuotaResult> 
   const guestId = getGuestId();
   const { db } = await import('../db/indexedDB');
 
-  // Count formation_change events in events table
+  // Count formation_change events in events table (includes both synced and unsynced)
   const tableCount = await db.events
     .where('matchId')
     .equals(matchId)
     .and(e => e.createdByUserId === guestId && !e.isDeleted && String(e.kind) === 'formation_change')
     .count();
 
-  // Count in outbox as well
-  const outboxCount = (await db.outbox
-    .filter(ev => {
-      const payload = (ev as any).data || (ev as any).payload || ev;
-      if (!payload) return false;
-      return payload.matchId === matchId && String(payload.kind || '') === 'formation_change';
-    })
-    .toArray()).length;
-
-  const total = tableCount + outboxCount;
+  const total = tableCount;
   const remaining = Math.max(0, GUEST_LIMITS.maxFormationChangesPerMatch - total);
   return remaining > 0 ? { ok: true, remaining } : { ok: false, remaining: 0, reason: 'Guest limit reached: 10 formation changes per match' };
 }

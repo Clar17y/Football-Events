@@ -6,12 +6,9 @@ describe('players transforms', () => {
   const mockDbPlayer: DbPlayer = {
     id: 'player-123',
     name: 'John Smith',
-    fullName: 'John Smith',
     squadNumber: 10,
     preferredPosition: 'MF',
-    preferredPos: 'MF',
     dateOfBirth: '2010-05-15',
-    dob: '2010-05-15',
     notes: 'Great midfielder',
     currentTeam: 'team-456',
     createdAt: '2023-11-14T22:13:20.000Z',
@@ -42,7 +39,6 @@ describe('players transforms', () => {
       const minimalPlayer: DbPlayer = {
         id: 'player-minimal',
         name: 'Jane Doe',
-        fullName: 'Jane Doe',
         createdAt: '2023-11-14T22:13:20.000Z',
         updatedAt: '2023-11-14T22:13:20.000Z',
         createdByUserId: 'user-1',
@@ -80,7 +76,7 @@ describe('players transforms', () => {
     it('transforms array of players', () => {
       const players = [
         mockDbPlayer,
-        { ...mockDbPlayer, id: 'player-456', name: 'Bob Jones', fullName: 'Bob Jones' },
+        { ...mockDbPlayer, id: 'player-456', name: 'Bob Jones' },
       ];
       const result = dbToPlayers(players);
 
@@ -109,12 +105,9 @@ describe('players transforms', () => {
       const result = playerWriteToDb(input);
 
       expect(result.name).toBe('New Player');
-      expect(result.fullName).toBe('New Player');
       expect(result.squadNumber).toBe(7);
       expect(result.preferredPosition).toBe('FW');
-      expect(result.preferredPos).toBe('FW');
       expect(result.dateOfBirth).toBe('2012-03-20');
-      expect(result.dob).toBe('2012-03-20');
       expect(result.notes).toBe('Promising striker');
       expect(result.currentTeam).toBe('team-123');
     });
@@ -124,7 +117,6 @@ describe('players transforms', () => {
       const result = playerWriteToDb(input);
 
       expect(result.name).toBe('Minimal Player');
-      expect(result.fullName).toBe('Minimal Player');
       expect(result.squadNumber).toBeUndefined();
       expect(result.preferredPosition).toBeUndefined();
       expect(result.dateOfBirth).toBeUndefined();

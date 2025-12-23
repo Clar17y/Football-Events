@@ -73,7 +73,7 @@ const GoalModal: React.FC<Props> = ({
     try {
       const kind = ownGoalFlag ? 'own_goal' : 'goal';
 
-      // Use addEventToTable to store in events table (not outbox)
+      // Use addEventToTable to store in events table
       const result = await db.addEventToTable({
         kind: kind as 'goal' | 'own_goal',
         matchId: matchId,

@@ -320,22 +320,10 @@ export async function performHealthCheck(): Promise<{
     // Test basic connectivity
     await db.events.limit(1).toArray();
 
-    // Check for large numbers of unsynced items
-    const unsyncedCount = await db.outbox.where('synced').equals(0).count();
+    // Check for large numbers of unsynced events
+    const unsyncedCount = await db.events.filter(e => e.synced === false).count();
     if (unsyncedCount > 100) {
-      issues.push(`High number of unsynced items: ${unsyncedCount}`);
-      isHealthy = false;
-    }
-
-    // Check for failed sync items
-    const failedSyncCount = await db.outbox
-      .where('retry_count')
-      .above(3)
-      .and(item => !item.synced)
-      .count();
-
-    if (failedSyncCount > 0) {
-      issues.push(`${failedSyncCount} items have failed to sync multiple times`);
+      issues.push(`High number of unsynced events: ${unsyncedCount}`);
       isHealthy = false;
     }
 

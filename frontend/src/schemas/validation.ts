@@ -205,20 +205,6 @@ export const MatchSchema = z.object({
 });
 
 /**
- * Outbox event validation schema
- */
-export const OutboxEventSchema = z.object({
-  id: z.number().int().positive().optional(),
-  payload: EventPayloadSchema,
-  synced: z.boolean(),
-  createdAt: z.number(),
-  retryCount: z.number().int().min(0).optional(),
-  lastSyncAttempt: z.number().optional(),
-  syncError: OptionalStringSchema,
-  failedAt: z.number().optional(),
-});
-
-/**
  * Validation helper functions
  */
 export class ValidationError extends Error {

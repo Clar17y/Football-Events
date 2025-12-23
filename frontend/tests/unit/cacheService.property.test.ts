@@ -143,7 +143,7 @@ describe('Cache Service Property Tests', () => {
       );
     });
 
-    it('should delete synced events not accessed in 30 days (based on synced_at)', async () => {
+    it('should delete synced events not accessed in 30 days (based on syncedAt)', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.array(eventArbitrary, { minLength: 1, maxLength: 10 }),
@@ -156,7 +156,7 @@ describe('Cache Service Property Tests', () => {
               id: `old-event-${i}-${e.id}`,
               createdAt: createOldTimestamp(daysOld),
               synced: true,
-              synced_at: createOldTimestamp(daysOld), // Last accessed 30+ days ago
+              syncedAt: createOldTimestamp(daysOld), // Last accessed 30+ days ago
             }));
 
             await db.events.bulkAdd(oldSyncedEvents as any);
@@ -174,7 +174,7 @@ describe('Cache Service Property Tests', () => {
       );
     });
 
-    it('should delete synced match periods not accessed in 30 days (based on synced_at)', async () => {
+    it('should delete synced match periods not accessed in 30 days (based on syncedAt)', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.array(matchPeriodArbitrary, { minLength: 1, maxLength: 10 }),
@@ -187,7 +187,7 @@ describe('Cache Service Property Tests', () => {
               id: `old-period-${i}-${p.id}`,
               createdAt: createOldTimestamp(daysOld),
               synced: true,
-              synced_at: createOldTimestamp(daysOld), // Last accessed 30+ days ago
+              syncedAt: createOldTimestamp(daysOld), // Last accessed 30+ days ago
             }));
 
             await db.matchPeriods.bulkAdd(oldSyncedPeriods as any);
@@ -205,7 +205,7 @@ describe('Cache Service Property Tests', () => {
       );
     });
 
-    it('should delete synced match state not accessed in 30 days (based on synced_at)', async () => {
+    it('should delete synced match state not accessed in 30 days (based on syncedAt)', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.array(matchStateArbitrary, { minLength: 1, maxLength: 10 }),
@@ -219,7 +219,7 @@ describe('Cache Service Property Tests', () => {
               matchId: `old-state-match-${i}-${s.matchId}`,
               createdAt: createOldTimestamp(daysOld),
               synced: true,
-              synced_at: createOldTimestamp(daysOld), // Last accessed 30+ days ago
+              syncedAt: createOldTimestamp(daysOld), // Last accessed 30+ days ago
             }));
 
             await db.matchState.bulkAdd(oldSyncedStates as any);
@@ -237,7 +237,7 @@ describe('Cache Service Property Tests', () => {
       );
     });
 
-    it('should delete synced lineups not accessed in 30 days (based on synced_at)', async () => {
+    it('should delete synced lineups not accessed in 30 days (based on syncedAt)', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.array(lineupArbitrary, { minLength: 1, maxLength: 10 }),
@@ -250,7 +250,7 @@ describe('Cache Service Property Tests', () => {
               id: `old-lineup-${i}-${l.id}`,
               createdAt: createOldTimestamp(daysOld),
               synced: true,
-              synced_at: createOldTimestamp(daysOld), // Last accessed 30+ days ago
+              syncedAt: createOldTimestamp(daysOld), // Last accessed 30+ days ago
             }));
 
             await db.lineup.bulkAdd(oldSyncedLineups as any);
@@ -268,7 +268,7 @@ describe('Cache Service Property Tests', () => {
       );
     });
 
-    it('should NOT delete synced temporal data that was accessed within 30 days (based on synced_at)', async () => {
+    it('should NOT delete synced temporal data that was accessed within 30 days (based on syncedAt)', async () => {
       await fc.assert(
         fc.asyncProperty(
           fc.record({
@@ -294,38 +294,38 @@ describe('Cache Service Property Tests', () => {
             const recentMatch = {
               ...match,
               id: 'recent-match',
-              match_id: 'recent-match',
-              created_at: oldCreatedTimestamp,
+              matchId: 'recent-match',
+              createdAt: oldCreatedTimestamp,
               synced: true,
-              synced_at: recentAccessTimestamp, // Recently accessed
+              syncedAt: recentAccessTimestamp, // Recently accessed
             };
             const recentEvent = {
               ...event,
               id: 'recent-event',
-              created_at: oldCreatedTimestamp,
+              createdAt: oldCreatedTimestamp,
               synced: true,
-              synced_at: recentAccessTimestamp, // Recently accessed
+              syncedAt: recentAccessTimestamp, // Recently accessed
             };
             const recentPeriod = {
               ...period,
               id: 'recent-period',
-              created_at: oldCreatedTimestamp,
+              createdAt: oldCreatedTimestamp,
               synced: true,
-              synced_at: recentAccessTimestamp, // Recently accessed
+              syncedAt: recentAccessTimestamp, // Recently accessed
             };
             const recentState = {
               ...state,
-              match_id: 'recent-state-match',
-              created_at: oldCreatedTimestamp,
+              matchId: 'recent-state-match',
+              createdAt: oldCreatedTimestamp,
               synced: true,
-              synced_at: recentAccessTimestamp, // Recently accessed
+              syncedAt: recentAccessTimestamp, // Recently accessed
             };
             const recentLineup = {
               ...lineup,
               id: 'recent-lineup',
-              created_at: oldCreatedTimestamp,
+              createdAt: oldCreatedTimestamp,
               synced: true,
-              synced_at: recentAccessTimestamp, // Recently accessed
+              syncedAt: recentAccessTimestamp, // Recently accessed
             };
 
             await db.matches.add(recentMatch as any);
@@ -376,7 +376,7 @@ describe('Cache Service Property Tests', () => {
               period_format: matchData.period_format,
               home_score: 0,
               away_score: 0,
-              created_at: twentyNineDaysAgo,
+              createdAt: twentyNineDaysAgo,
               updated_at: twentyNineDaysAgo,
               created_by_user_id: 'test-user',
               isDeleted: false,
@@ -409,7 +409,7 @@ describe('Cache Service Property Tests', () => {
               ...m,
               id: `old-match-${i}`,
               match_id: `old-match-${i}`,
-              created_at: createOldTimestamp(45), // 45 days old
+              createdAt: createOldTimestamp(45), // 45 days old
               synced: true,
             }));
 
@@ -418,7 +418,7 @@ describe('Cache Service Property Tests', () => {
               ...m,
               id: `recent-match-${i}`,
               match_id: `recent-match-${i}`,
-              created_at: createOldTimestamp(10), // 10 days old
+              createdAt: createOldTimestamp(10), // 10 days old
               synced: true,
             }));
 
@@ -638,33 +638,23 @@ describe('Cache Service Property Tests', () => {
   describe('Property 14: Refresh Preserves Unsynced Records', () => {
     // Helper to setup all API mocks with empty responses
     const setupEmptyApiMocks = async () => {
-      const { teamsApi } = await import('../../src/services/api/teamsApi');
-      const { playersApi } = await import('../../src/services/api/playersApi');
-      const { seasonsApi } = await import('../../src/services/api/seasonsApi');
-
-      vi.mocked(teamsApi.getTeams).mockResolvedValue({
-        data: [],
-        hasMore: false,
-        total: 0,
-        page: 1,
-        limit: 10,
-      });
-      vi.mocked(playersApi.getPlayers).mockResolvedValue({
-        data: [],
-        hasMore: false,
-        total: 0,
-        page: 1,
-        limit: 10,
-      });
-      vi.mocked(seasonsApi.getSeasons).mockResolvedValue({
-        data: [],
-        hasMore: false,
-        total: 0,
-        page: 1,
-        limit: 10,
+      const { apiClient } = await import('../../src/services/api/baseApi');
+      
+      // Mock apiClient.get to return empty paginated responses
+      vi.mocked(apiClient.get).mockImplementation((url: string) => {
+        // Return empty paginated response for all endpoints
+        return Promise.resolve({
+          data: {
+            data: [],
+            hasMore: false,
+            total: 0,
+            page: 1,
+            limit: 25,
+          }
+        });
       });
 
-      return { teamsApi, playersApi, seasonsApi };
+      return { apiClient };
     };
 
     it('should preserve unsynced team records during refresh while replacing synced ones', async () => {
@@ -1176,7 +1166,7 @@ describe('Cache Service Property Tests', () => {
               ...m,
               id: `old-synced-match-${i}`,
               match_id: `old-synced-match-${i}`,
-              created_at: createOldTimestamp(45), // 45 days old
+              createdAt: createOldTimestamp(45), // 45 days old
               synced: true,
             }));
 
@@ -1185,7 +1175,7 @@ describe('Cache Service Property Tests', () => {
               ...m,
               id: `old-unsynced-match-${i}`,
               match_id: `old-unsynced-match-${i}`,
-              created_at: createOldTimestamp(60), // 60 days old
+              createdAt: createOldTimestamp(60), // 60 days old
               synced: false,
             }));
 

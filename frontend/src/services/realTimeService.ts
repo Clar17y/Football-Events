@@ -1,31 +1,13 @@
 /**
  * Real-Time First Service
  * 
- * Implements the real-time first architecture with IndexedDB outbox as fallback.
- * Priority: Try WebSocket first, use outbox only when real-time fails.
+ * Implements the real-time first architecture with direct events table storage as fallback.
+ * Priority: Try WebSocket first, store locally only when real-time fails.
  */
 
 import { io, Socket } from 'socket.io-client';
 // Database import removed - will use dynamic import to avoid blocking
 import type { MatchEvent } from '../types/events';
-import type { DbOutboxEvent } from '../db/schema';
-import type { EventKind } from '../types/events';
-
-/**
- * Payload structure for outbox events
- */
-interface OutboxEventPayload {
-  kind?: EventKind;
-  matchId?: string;
-  teamId?: string;
-  playerId?: string;
-  periodNumber?: number;
-  clockMs?: number;
-  notes?: string;
-  createdAt?: string;
-  createdByUserId?: string;
-  id?: string;
-}
 
 export interface RealTimeConfig {
   serverUrl: string;
@@ -79,12 +61,12 @@ export class RealTimeService {
         this.joinMatch(this.currentMatchId);
       }
 
-      // Sync any queued events
-      this.syncOutboxEvents();
+      // Sync any unsynced events
+      this.syncUnsyncedEvents();
     });
 
     this.socket.on('disconnect', () => {
-      console.log('📡 Real-time connection lost - using outbox mode');
+      console.log('📡 Real-time connection lost - using local storage mode');
       this.isConnected = false;
       this.notifyConnectionChange(false);
     });
@@ -103,16 +85,16 @@ export class RealTimeService {
 
     this.socket.on('match_event_confirmed', (eventId: string) => {
       console.log('✅ Event confirmed by server:', eventId);
-      // Mark as synced in outbox if it exists
+      // Mark as synced in events table
       this.markEventSynced(eventId);
     });
   }
 
   /**
    * Real-time first event publishing
-   * Try real-time first, fallback to outbox if it fails
+   * Try real-time first, fallback to local storage if it fails
    */
-  async publishEvent(event: MatchEvent): Promise<{ success: boolean; method: 'realtime' | 'outbox' }> {
+  async publishEvent(event: MatchEvent): Promise<{ success: boolean; method: 'realtime' | 'local' }> {
     // 1. ALWAYS try real-time first
     if (this.isConnected && this.socket) {
       try {
@@ -122,18 +104,18 @@ export class RealTimeService {
           return { success: true, method: 'realtime' };
         }
       } catch (error) {
-        console.log('❌ Real-time failed, using outbox:', error);
+        console.log('❌ Real-time failed, storing locally:', error);
       }
     }
 
-    // 2. ONLY use outbox if real-time fails
+    // 2. ONLY store locally if real-time fails
     try {
-      await this.addToOutbox(event);
-      console.log('📦 Event queued in outbox:', event.id);
-      return { success: true, method: 'outbox' };
+      await this.storeEventLocally(event);
+      console.log('📦 Event stored locally:', event.id);
+      return { success: true, method: 'local' };
     } catch (error) {
-      console.error('❌ Failed to queue event in outbox:', error);
-      return { success: false, method: 'outbox' };
+      console.error('❌ Failed to store event locally:', error);
+      return { success: false, method: 'local' };
     }
   }
 
@@ -158,17 +140,16 @@ export class RealTimeService {
   }
 
   /**
-   * Add event to outbox as fallback
+   * Store event locally in the events table (for offline-first architecture)
+   * Events are stored with synced: false and will be synced when connectivity is restored
    */
-  private async addToOutbox(event: MatchEvent): Promise<void> {
+  private async storeEventLocally(event: MatchEvent): Promise<void> {
     try {
       const { db } = await import('../db/indexedDB');
-      // createdAt is an ISO string, convert to timestamp
-      const createdTimestamp = event.createdAt ? new Date(event.createdAt).getTime() : Date.now();
-      const result = await db.addEvent({
+      const result = await db.addEventToTable({
         kind: event.kind,
         matchId: event.matchId,
-        teamId: event.teamId || null,
+        teamId: event.teamId || undefined,
         playerId: event.playerId || null,
         clockMs: event.clockMs || 0,
         periodNumber: event.periodNumber,
@@ -178,10 +159,10 @@ export class RealTimeService {
       });
 
       if (!result.success) {
-        throw new Error(result.error || 'Failed to add to outbox');
+        throw new Error(result.error || 'Failed to store event locally');
       }
     } catch (dbError) {
-      console.warn('Database not available for outbox:', dbError);
+      console.warn('Database not available for local storage:', dbError);
       throw new Error('Database not available');
     }
   }
@@ -211,123 +192,99 @@ export class RealTimeService {
   }
 
   /**
-   * Sync outbox events when connection is restored
+   * Sync unsynced events when connection is restored
+   * Queries events table for records where synced === false
    */
-  private async syncOutboxEvents(): Promise<void> {
+  private async syncUnsyncedEvents(): Promise<void> {
     if (this.syncInProgress || !this.isConnected) {
       return;
     }
 
     this.syncInProgress = true;
-    console.log('🔄 Syncing outbox events...');
+    console.log('🔄 Syncing unsynced events...');
 
     try {
       const { db } = await import('../db/indexedDB');
-      const result = await db.getUnsyncedEvents();
-      if (!result.success || !result.data) {
+      
+      // Query events table for unsynced records
+      // Use filter since synced is a boolean and not indexed as IndexableType
+      const unsyncedEvents = await db.events
+        .filter(event => event.synced === false)
+        .toArray();
+      
+      if (unsyncedEvents.length === 0) {
         console.log('No unsynced events to process');
         return;
       }
 
-      const unsyncedEvents = result.data;
       console.log(`📦 Found ${unsyncedEvents.length} unsynced events`);
 
-      for (const outboxEvent of unsyncedEvents) {
+      for (const event of unsyncedEvents) {
         try {
-          // Check if outboxEvent has the expected structure
-          if (!outboxEvent || typeof outboxEvent !== 'object') {
-            console.warn('Invalid outbox event structure:', outboxEvent);
-            try {
-              const { db: dbInstance } = await import('../db/indexedDB');
-              await dbInstance.markEventSyncFailed((outboxEvent as DbOutboxEvent)?.id ?? 0, 'Invalid event structure');
-            } catch (e) { /* ignore db errors during cleanup */ }
+          // Validate event has required fields
+          if (!event || typeof event !== 'object' || !event.kind || !event.matchId) {
+            console.warn('Invalid event structure or missing required fields:', event);
             continue;
           }
 
-          // Handle different outbox event structures - cast to proper type
-          const typedOutboxEvent = outboxEvent as DbOutboxEvent;
-          let payload: OutboxEventPayload;
-          if (typedOutboxEvent.data) {
-            payload = typedOutboxEvent.data as OutboxEventPayload;
-          } else {
-            // Direct event structure (fallback)
-            payload = typedOutboxEvent as unknown as OutboxEventPayload;
-          }
-
-          if (!payload.kind || !payload.matchId) {
-            console.warn('Missing required fields in outbox event:', payload);
-            try {
-              const { db: dbInstance } = await import('../db/indexedDB');
-              await dbInstance.markEventSyncFailed(typedOutboxEvent.id ?? 0, 'Missing required fields');
-            } catch (e) { /* ignore db errors during cleanup */ }
-            continue;
-          }
-
-          // Convert outbox event back to MatchEvent format
+          // Convert DbEvent to MatchEvent format for transmission
           const matchEvent: MatchEvent = {
-            id: crypto.randomUUID(), // Generate new ID for real-time transmission
-            kind: payload.kind,
-            matchId: payload.matchId,
-            teamId: payload.teamId,
-            playerId: payload.playerId,
-            periodNumber: payload.periodNumber || 1,
-            clockMs: payload.clockMs || 0,
-            sentiment: 0, // Default sentiment
-            notes: payload.notes || '',
-            createdAt: payload.createdAt || new Date().toISOString(),
-            createdByUserId: payload.createdByUserId || 'system',
-            isDeleted: false
+            id: event.id,
+            kind: event.kind,
+            matchId: event.matchId,
+            teamId: event.teamId,
+            playerId: event.playerId,
+            periodNumber: event.periodNumber || 1,
+            clockMs: event.clockMs || 0,
+            sentiment: event.sentiment || 0,
+            notes: event.notes || '',
+            createdAt: event.createdAt || new Date().toISOString(),
+            createdByUserId: event.createdByUserId || 'system',
+            isDeleted: event.isDeleted || false
           };
 
           const success = await this.tryRealTimePublish(matchEvent);
 
           if (success) {
-            try {
-              const { db: dbInstance } = await import('../db/indexedDB');
-              await dbInstance.markEventSynced(typedOutboxEvent.id ?? 0);
-            } catch (e) { /* ignore db errors */ }
-            console.log(`✅ Synced event: ${matchEvent.id}`);
+            // On success: set synced: true and syncedAt to ISO string
+            const nowIso = new Date().toISOString();
+            await db.events.update(event.id, {
+              synced: true,
+              syncedAt: nowIso
+            });
+            console.log(`✅ Synced event: ${event.id}`);
           } else {
-            try {
-              const { db: dbInstance } = await import('../db/indexedDB');
-              await dbInstance.markEventSyncFailed(typedOutboxEvent.id ?? 0, 'Real-time sync failed');
-            } catch (e) { /* ignore db errors */ }
-            console.log(`❌ Failed to sync event: ${matchEvent.id}`);
+            // On failure: keep synced: false (no update needed)
+            console.log(`❌ Failed to sync event: ${event.id}`);
           }
         } catch (error) {
-          const eventId = (outboxEvent as DbOutboxEvent)?.id ?? 0;
-          try {
-            const { db: dbInstance } = await import('../db/indexedDB');
-            await dbInstance.markEventSyncFailed(eventId, error instanceof Error ? error.message : 'Unknown error');
-          } catch (e) { /* ignore db errors */ }
-          console.error(`❌ Error syncing event ${eventId}:`, error);
+          // On error: keep synced: false (no update needed)
+          console.error(`❌ Error syncing event ${event.id}:`, error);
         }
       }
 
-      console.log('🔄 Outbox sync completed');
+      console.log('🔄 Event sync completed');
     } catch (error) {
-      console.error('❌ Outbox sync failed:', error);
+      console.error('❌ Event sync failed:', error);
     } finally {
       this.syncInProgress = false;
     }
   }
 
   /**
-   * Mark event as synced in outbox
+   * Mark event as synced in events table
+   * Called when server confirms event receipt
    */
   private async markEventSynced(eventId: string): Promise<void> {
     try {
       const { db } = await import('../db/indexedDB');
-      // Find the outbox event by payload ID
-      const outboxEvents = await db.outbox.where('synced').equals(0).toArray();
-      const outboxEvent = outboxEvents.find(e => {
-        const payload = e.data as OutboxEventPayload | undefined;
-        return payload?.id === eventId;
+      const nowIso = new Date().toISOString();
+      
+      // Update the event directly in the events table
+      await db.events.update(eventId, {
+        synced: true,
+        syncedAt: nowIso
       });
-
-      if (outboxEvent && outboxEvent.id !== undefined) {
-        await db.markEventSynced(outboxEvent.id);
-      }
     } catch (error) {
       console.warn('Failed to mark event as synced:', error);
     }

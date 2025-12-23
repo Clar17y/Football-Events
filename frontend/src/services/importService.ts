@@ -116,7 +116,7 @@ export interface ImportError {
  * Full import orchestrator: imports seasons, teams, players, matches, events, lineups, match periods, and match state.
  * 
  * Key changes from legacy implementation:
- * - Reads events from events table (not outbox) - Requirements: 1.2
+ * - Reads events from events table - Requirements: 1.2
  * - Reads match periods from match_periods table with preserved timestamps - Requirements: 1.3
  * - Reads match state from match_state table - Requirements: 1.4
  * - Uses new period import endpoint for periods with timestamp preservation
@@ -153,7 +153,7 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
   };
 
   // Get ALL guest data from local tables (any created_by_user_id starting with "guest-")
-  // Requirements: 1.2 - Read events from events table (not outbox)
+  // Requirements: 1.2 - Read events from events table
   // Requirements: 1.3 - Read match periods from match_periods table with preserved timestamps
   // Requirements: 1.4 - Read match state from match_state table
   const [
@@ -180,7 +180,7 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
   const teams = allTeams.filter(t => isGuestId(t.createdByUserId));
   const players = allPlayers.filter(p => isGuestId(p.createdByUserId));
   const matches = allMatches.filter(m => isGuestId(m.createdByUserId));
-  // Requirements: 1.2 - Read events from events table (not outbox)
+  // Requirements: 1.2 - Read events from events table
   const events = allEvents.filter(e => isGuestId(e.createdByUserId));
   const lineups = allLineups.filter(l => isGuestId(l.createdByUserId));
   // Requirements: 1.3 - Read match periods from match_periods table with preserved timestamps
@@ -434,7 +434,7 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
     done++;
   }
 
-  // Requirements: 1.2 - Import events from events table (not outbox) with ID mapping
+  // Requirements: 1.2 - Import events from events table with ID mapping
   for (const e of events) {
     const serverMatchId = matchMap.get(e.matchId);
     if (!serverMatchId) {
@@ -602,9 +602,6 @@ async function cleanupGuestData(
 
       // Clear matchState records for guest
       await db.matchState.where('createdByUserId').equals(guestId).delete();
-
-      // Outbox cleanup
-      await db.outbox.where('createdByUserId').equals(guestId).delete();
     }
 
     // CRITICAL: Delete ALL local matches to prevent ID conflicts
@@ -628,32 +625,6 @@ async function cleanupGuestData(
         await db.defaultLineups.bulkDelete(ids);
         console.log(`[Import] Deleted ${ids.length} default lineups for guest ${guestId}`);
       }
-    }
-
-    // Clear temp outbox items (created by guest mode without user ID)
-    try {
-      const tempUserDeleted = await db.outbox.where('createdByUserId').equals('temp-user-id').delete();
-      if (tempUserDeleted > 0) {
-        console.log(`[Import] Deleted ${tempUserDeleted} outbox items with temp-user-id`);
-      }
-    } catch (err) {
-      console.error('[Import] Failed to delete temp-user-id outbox items:', err);
-    }
-
-    // Also clean up any match_commands that might be lingering in outbox
-    try {
-      const allOutbox = await db.outbox.toArray();
-      const matchCommandIds = allOutbox
-        .filter((item: any) => item.tableName === 'matchCommands' || item.tableName === 'match_commands')
-        .map((item: any) => item.id)
-        .filter((id: any): id is number => id !== undefined);
-
-      if (matchCommandIds.length > 0) {
-        await db.outbox.bulkDelete(matchCommandIds);
-        console.log(`[Import] Deleted ${matchCommandIds.length} match_commands from outbox`);
-      }
-    } catch (err) {
-      console.error('[Import] Failed to delete match_commands from outbox:', err);
     }
 
     console.log('[Import] Guest data cleanup completed');

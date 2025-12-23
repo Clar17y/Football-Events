@@ -7,7 +7,6 @@
 
 import apiClient from './baseApi';
 import { createLocalQuickMatch } from '../guestQuickMatch';
-import { addToOutbox } from '../../db/utils';
 import { isOnline, shouldUseOfflineFallback, getCurrentUserId } from '../../utils/network';
 import { db } from '../../db/indexedDB';
 import { dbToMatch, dbToMatches, dbToMatchState, dbToMatchPeriod } from '../../db/transforms';
@@ -176,9 +175,9 @@ export const matchesApi = {
 
       return createdMatch;
     } catch (e) {
-      // Authenticated but offline: create locally and enqueue quick-start outbox
+      // Authenticated but offline: create locally with synced: false
+      // The match is written directly to the matches table by createLocalQuickMatch
       const local = await createLocalQuickMatch(payload as any);
-      await addToOutbox('matches', local.id, 'INSERT', { ...payload, quickStart: true } as any, 'offline');
       return (await import('../../services/guestQuickMatch')).getLocalMatch(local.id) as unknown as Match;
     }
   },

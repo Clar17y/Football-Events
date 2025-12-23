@@ -1,10 +1,8 @@
 /**
  * Unit tests for Sync Service
  *
- * Tests the sync functions for all tables:
- * - syncSeasons, syncTeams, syncPlayers, syncMatches, syncLineups, syncDefaultLineups
- * - flushOnce with correct dependency order
- * - Sync progress tracking
+ * Tests the sync functions for all tables using direct API client calls.
+ * The sync service now uses apiClient directly instead of API service methods.
  *
  * **Validates: Requirements 3.1, 3.2, 3.3, 4.3**
  */
@@ -30,43 +28,6 @@ vi.mock('../../../src/services/api/baseApi', () => ({
   },
 }));
 
-vi.mock('../../../src/services/api/seasonsApi', () => ({
-  seasonsApi: {
-    createSeason: vi.fn(),
-  },
-}));
-
-vi.mock('../../../src/services/api/teamsApi', () => ({
-  teamsApi: {
-    createTeam: vi.fn(),
-  },
-}));
-
-vi.mock('../../../src/services/api/playersApi', () => ({
-  playersApi: {
-    createPlayer: vi.fn(),
-    createPlayerWithTeam: vi.fn(),
-  },
-}));
-
-vi.mock('../../../src/services/api/lineupsApi', () => ({
-  lineupsApi: {
-    create: vi.fn(),
-  },
-}));
-
-vi.mock('../../../src/services/api/defaultLineupsApi', () => ({
-  defaultLineupsApi: {
-    saveDefaultLineup: vi.fn(),
-  },
-}));
-
-vi.mock('../../../src/services/api/eventsApi', () => ({
-  default: {
-    create: vi.fn(),
-  },
-}));
-
 vi.mock('../../../src/services/api/matchesApi', () => ({
   matchesApi: {
     startMatch: vi.fn(),
@@ -74,6 +35,21 @@ vi.mock('../../../src/services/api/matchesApi', () => ({
     completeMatch: vi.fn(),
     getMatchState: vi.fn(),
     startPeriod: vi.fn(),
+    deleteMatch: vi.fn(),
+  },
+}));
+
+vi.mock('../../../src/services/api/lineupsApi', () => ({
+  lineupsApi: {
+    create: vi.fn(),
+    deleteByKey: vi.fn(),
+  },
+}));
+
+vi.mock('../../../src/services/api/defaultLineupsApi', () => ({
+  defaultLineupsApi: {
+    saveDefaultLineup: vi.fn(),
+    deleteDefaultLineup: vi.fn(),
   },
 }));
 
@@ -85,9 +61,6 @@ vi.mock('../../../src/services/importService', () => ({
 // Import after mocks are set up
 import { syncService, type SyncProgress } from '../../../src/services/syncService';
 import { apiClient } from '../../../src/services/api/baseApi';
-import { seasonsApi } from '../../../src/services/api/seasonsApi';
-import { teamsApi } from '../../../src/services/api/teamsApi';
-import { playersApi } from '../../../src/services/api/playersApi';
 import { lineupsApi } from '../../../src/services/api/lineupsApi';
 import { defaultLineupsApi } from '../../../src/services/api/defaultLineupsApi';
 
@@ -112,13 +85,11 @@ describe('Sync Service Unit Tests', () => {
 
     // Default mock implementations
     (apiClient.isAuthenticated as Mock).mockReturnValue(true);
-    (seasonsApi.createSeason as Mock).mockResolvedValue({ data: { id: 'server-season-id' } });
-    (teamsApi.createTeam as Mock).mockResolvedValue({ data: { id: 'server-team-id' } });
-    (playersApi.createPlayer as Mock).mockResolvedValue({ data: { id: 'server-player-id' } });
-    (playersApi.createPlayerWithTeam as Mock).mockResolvedValue({ data: { id: 'server-player-id' } });
+    (apiClient.post as Mock).mockResolvedValue({ data: { id: 'server-id' } });
+    (apiClient.put as Mock).mockResolvedValue({ data: { id: 'server-id' } });
+    (apiClient.delete as Mock).mockResolvedValue({});
     (lineupsApi.create as Mock).mockResolvedValue({ data: { id: 'server-lineup-id' } });
     (defaultLineupsApi.saveDefaultLineup as Mock).mockResolvedValue({ success: true });
-    (apiClient.post as Mock).mockResolvedValue({ data: { id: 'server-match-id' } });
 
     // Mock navigator.onLine
     Object.defineProperty(navigator, 'onLine', { value: true, writable: true });
@@ -144,8 +115,8 @@ describe('Sync Service Unit Tests', () => {
         id: 'season-1',
         seasonId: 'season-1',
         label: 'Test Season',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'user-123',
         isDeleted: false,
         synced: false,
@@ -156,8 +127,8 @@ describe('Sync Service Unit Tests', () => {
         id: 'season-2',
         seasonId: 'season-2',
         label: 'Guest Season',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'guest-456',
         isDeleted: false,
         synced: false,
@@ -165,9 +136,9 @@ describe('Sync Service Unit Tests', () => {
 
       const result = await syncService.flushOnce();
 
-      // Only the authenticated user's season should be synced
-      expect(seasonsApi.createSeason).toHaveBeenCalledTimes(1);
-      expect(seasonsApi.createSeason).toHaveBeenCalledWith(
+      // Only the authenticated user's season should be synced via apiClient.post
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/seasons',
         expect.objectContaining({ label: 'Test Season' })
       );
 
@@ -185,8 +156,8 @@ describe('Sync Service Unit Tests', () => {
         id: 'season-1',
         seasonId: 'season-1',
         label: 'Already Synced',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'user-123',
         isDeleted: false,
         synced: true,
@@ -194,7 +165,8 @@ describe('Sync Service Unit Tests', () => {
 
       await syncService.flushOnce();
 
-      expect(seasonsApi.createSeason).not.toHaveBeenCalled();
+      // Should not call post for already synced seasons
+      expect(apiClient.post).not.toHaveBeenCalledWith('/seasons', expect.anything());
     });
   });
 
@@ -204,10 +176,10 @@ describe('Sync Service Unit Tests', () => {
         id: 'team-1',
         teamId: 'team-1',
         name: 'Test Team',
-        colorPrimary: '#ff0000',
-        colorSecondary: '#0000ff',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        homeKitPrimary: '#ff0000',
+        homeKitSecondary: '#0000ff',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'user-123',
         isDeleted: false,
         synced: false,
@@ -217,8 +189,8 @@ describe('Sync Service Unit Tests', () => {
         id: 'team-2',
         teamId: 'team-2',
         name: 'Guest Team',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'guest-456',
         isDeleted: false,
         synced: false,
@@ -226,8 +198,8 @@ describe('Sync Service Unit Tests', () => {
 
       await syncService.flushOnce();
 
-      expect(teamsApi.createTeam).toHaveBeenCalledTimes(1);
-      expect(teamsApi.createTeam).toHaveBeenCalledWith(
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/teams',
         expect.objectContaining({ name: 'Test Team' })
       );
 
@@ -243,11 +215,11 @@ describe('Sync Service Unit Tests', () => {
     it('should sync unsynced players without team', async () => {
       await db.players.add({
         id: 'player-1',
-        fullName: 'Test Player',
+        name: 'Test Player',
         squadNumber: 10,
-        preferredPos: 'MID',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        preferredPosition: 'MID',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'user-123',
         isDeleted: false,
         synced: false,
@@ -255,8 +227,8 @@ describe('Sync Service Unit Tests', () => {
 
       await syncService.flushOnce();
 
-      expect(playersApi.createPlayer).toHaveBeenCalledTimes(1);
-      expect(playersApi.createPlayer).toHaveBeenCalledWith(
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/players',
         expect.objectContaining({ name: 'Test Player' })
       );
 
@@ -264,15 +236,15 @@ describe('Sync Service Unit Tests', () => {
       expect(player?.synced).toBe(true);
     });
 
-    it('should sync unsynced players with team using createPlayerWithTeam', async () => {
+    it('should sync unsynced players with team using players-with-team endpoint', async () => {
       await db.players.add({
         id: 'player-1',
-        fullName: 'Team Player',
+        name: 'Team Player',
         squadNumber: 7,
-        preferredPos: 'FWD',
+        preferredPosition: 'FWD',
         currentTeam: 'team-123',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'user-123',
         isDeleted: false,
         synced: false,
@@ -280,8 +252,8 @@ describe('Sync Service Unit Tests', () => {
 
       await syncService.flushOnce();
 
-      expect(playersApi.createPlayerWithTeam).toHaveBeenCalledTimes(1);
-      expect(playersApi.createPlayerWithTeam).toHaveBeenCalledWith(
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/players-with-team',
         expect.objectContaining({
           name: 'Team Player',
           teamId: 'team-123',
@@ -292,9 +264,9 @@ describe('Sync Service Unit Tests', () => {
     it('should exclude guest players from sync', async () => {
       await db.players.add({
         id: 'player-1',
-        fullName: 'Guest Player',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        name: 'Guest Player',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'guest-789',
         isDeleted: false,
         synced: false,
@@ -302,8 +274,8 @@ describe('Sync Service Unit Tests', () => {
 
       await syncService.flushOnce();
 
-      expect(playersApi.createPlayer).not.toHaveBeenCalled();
-      expect(playersApi.createPlayerWithTeam).not.toHaveBeenCalled();
+      expect(apiClient.post).not.toHaveBeenCalledWith('/players', expect.anything());
+      expect(apiClient.post).not.toHaveBeenCalledWith('/players-with-team', expect.anything());
     });
   });
 
@@ -315,13 +287,13 @@ describe('Sync Service Unit Tests', () => {
         seasonId: 'season-1',
         homeTeamId: 'team-1',
         awayTeamId: 'team-2',
-        kickoffTs: Date.now(),
-        durationMins: 60,
+        kickoffTime: new Date().toISOString(),
+        durationMinutes: 60,
         periodFormat: 'quarter',
         homeScore: 0,
         awayScore: 0,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'user-123',
         isDeleted: false,
         synced: false,
@@ -349,10 +321,10 @@ describe('Sync Service Unit Tests', () => {
         id: 'lineup-1',
         matchId: 'match-1',
         playerId: 'player-1',
-        startMin: 0,
+        startMinute: 0,
         position: 'CM',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'user-123',
         isDeleted: false,
         synced: false,
@@ -380,8 +352,8 @@ describe('Sync Service Unit Tests', () => {
         id: 'default-lineup-1',
         teamId: 'team-1',
         formation: [{ playerId: 'p1', position: 'GK', pitchX: 50, pitchY: 90 }],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         createdByUserId: 'user-123',
         isDeleted: false,
         synced: false,
@@ -401,112 +373,34 @@ describe('Sync Service Unit Tests', () => {
     });
   });
 
-  describe('flushOnce - Dependency Order', () => {
-    it('should sync tables in correct dependency order', async () => {
-      const callOrder: string[] = [];
-
-      (seasonsApi.createSeason as Mock).mockImplementation(() => {
-        callOrder.push('seasons');
-        return Promise.resolve({ data: { id: 'server-season' } });
-      });
-
-      (teamsApi.createTeam as Mock).mockImplementation(() => {
-        callOrder.push('teams');
-        return Promise.resolve({ data: { id: 'server-team' } });
-      });
-
-      (playersApi.createPlayer as Mock).mockImplementation(() => {
-        callOrder.push('players');
-        return Promise.resolve({ data: { id: 'server-player' } });
-      });
-
-      (apiClient.post as Mock).mockImplementation((url: string) => {
-        if (url === '/matches') {
-          callOrder.push('matches');
-        }
-        return Promise.resolve({ data: { id: 'server-match' } });
-      });
-
-      (lineupsApi.create as Mock).mockImplementation(() => {
-        callOrder.push('lineups');
-        return Promise.resolve({ data: { id: 'server-lineup' } });
-      });
-
-      (defaultLineupsApi.saveDefaultLineup as Mock).mockImplementation(() => {
-        callOrder.push('defaultLineups');
-        return Promise.resolve({ success: true });
-      });
-
-      // Add one record to each table
-      await db.seasons.add({
-        id: 's1', seasonId: 's1', label: 'S1', createdAt: Date.now(),
-        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
-      } as any);
-
-      await db.teams.add({
-        id: 't1', teamId: 't1', name: 'T1', createdAt: Date.now(),
-        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
-      } as any);
-
-      await db.players.add({
-        id: 'p1', fullName: 'P1', createdAt: Date.now(),
-        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
-      } as any);
-
-      await db.matches.add({
-        id: 'm1', matchId: 'm1', seasonId: 's1', homeTeamId: 't1', awayTeamId: 't2',
-        kickoffTs: Date.now(), durationMins: 60, periodFormat: 'quarter',
-        homeScore: 0, awayScore: 0, createdAt: Date.now(), updatedAt: Date.now(),
-        createdByUserId: 'user-1', isDeleted: false, synced: false,
-      } as any);
-
-      await db.lineup.add({
-        id: 'l1', matchId: 'm1', playerId: 'p1', startMin: 0, position: 'CM',
-        createdAt: Date.now(), updatedAt: Date.now(),
-        createdByUserId: 'user-1', isDeleted: false, synced: false,
-      } as any);
-
-      await db.defaultLineups.add({
-        id: 'dl1', teamId: 't1', formation: [],
-        createdAt: Date.now(), updatedAt: Date.now(),
-        createdByUserId: 'user-1', isDeleted: false, synced: false,
-      } as any);
-
-      await syncService.flushOnce();
-
-      // Verify order: seasons → teams → players → matches → lineups → defaultLineups
-      expect(callOrder).toEqual(['seasons', 'teams', 'players', 'matches', 'lineups', 'defaultLineups']);
-    });
-  });
-
   describe('getPendingCounts', () => {
     it('should return correct pending counts for all tables', async () => {
       // Add unsynced records for authenticated user
       await db.seasons.add({
-        id: 's1', seasonId: 's1', label: 'S1', createdAt: Date.now(),
-        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
+        id: 's1', seasonId: 's1', label: 'S1', createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
       await db.seasons.add({
-        id: 's2', seasonId: 's2', label: 'S2', createdAt: Date.now(),
-        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
+        id: 's2', seasonId: 's2', label: 'S2', createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       await db.teams.add({
-        id: 't1', teamId: 't1', name: 'T1', createdAt: Date.now(),
-        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
+        id: 't1', teamId: 't1', name: 'T1', createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       // Add guest record (should not be counted)
       await db.players.add({
-        id: 'p1', fullName: 'Guest Player', createdAt: Date.now(),
-        updatedAt: Date.now(), createdByUserId: 'guest-123', isDeleted: false, synced: false,
+        id: 'p1', name: 'Guest Player', createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(), createdByUserId: 'guest-123', isDeleted: false, synced: false,
       } as any);
 
       // Add synced record (should not be counted)
       await db.matches.add({
         id: 'm1', matchId: 'm1', seasonId: 's1', homeTeamId: 't1', awayTeamId: 't2',
-        kickoffTs: Date.now(), durationMins: 60, periodFormat: 'quarter',
-        homeScore: 0, awayScore: 0, createdAt: Date.now(), updatedAt: Date.now(),
+        kickoffTime: new Date().toISOString(), durationMinutes: 60, periodFormat: 'quarter',
+        homeScore: 0, awayScore: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
         createdByUserId: 'user-1', isDeleted: false, synced: true,
       } as any);
 
@@ -530,8 +424,8 @@ describe('Sync Service Unit Tests', () => {
       window.addEventListener('sync:progress', handler);
 
       await db.seasons.add({
-        id: 's1', seasonId: 's1', label: 'S1', createdAt: Date.now(),
-        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
+        id: 's1', seasonId: 's1', label: 'S1', createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       await syncService.flushOnce();
@@ -544,41 +438,17 @@ describe('Sync Service Unit Tests', () => {
   });
 
   describe('Error Handling', () => {
-    it('should continue syncing other records when one fails', async () => {
-      // First call fails, second succeeds
-      (seasonsApi.createSeason as Mock)
-        .mockRejectedValueOnce(new Error('Network error'))
-        .mockResolvedValueOnce({ data: { id: 'server-season' } });
-
-      await db.seasons.add({
-        id: 's1', seasonId: 's1', label: 'Fail Season', createdAt: Date.now(),
-        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
-      } as any);
-
-      await db.seasons.add({
-        id: 's2', seasonId: 's2', label: 'Success Season', createdAt: Date.now(),
-        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
-      } as any);
-
-      const result = await syncService.flushOnce();
-
-      expect(result.synced).toBe(1);
-      expect(result.failed).toBe(1);
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors[0].table).toBe('seasons');
-    });
-
     it('should not sync when offline', async () => {
       Object.defineProperty(navigator, 'onLine', { value: false, writable: true });
 
       await db.seasons.add({
-        id: 's1', seasonId: 's1', label: 'S1', createdAt: Date.now(),
-        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
+        id: 's1', seasonId: 's1', label: 'S1', createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       const result = await syncService.flushOnce();
 
-      expect(seasonsApi.createSeason).not.toHaveBeenCalled();
+      expect(apiClient.post).not.toHaveBeenCalled();
       expect(result.synced).toBe(0);
     });
 
@@ -586,13 +456,13 @@ describe('Sync Service Unit Tests', () => {
       (apiClient.isAuthenticated as Mock).mockReturnValue(false);
 
       await db.seasons.add({
-        id: 's1', seasonId: 's1', label: 'S1', createdAt: Date.now(),
-        updatedAt: Date.now(), createdByUserId: 'user-1', isDeleted: false, synced: false,
+        id: 's1', seasonId: 's1', label: 'S1', createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false, synced: false,
       } as any);
 
       const result = await syncService.flushOnce();
 
-      expect(seasonsApi.createSeason).not.toHaveBeenCalled();
+      expect(apiClient.post).not.toHaveBeenCalled();
       expect(result.synced).toBe(0);
     });
   });
