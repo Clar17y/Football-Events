@@ -2,6 +2,7 @@
 // Provides a stable guest_id and helpers for checking guest state
 
 import { authApi } from '../services/api/authApi';
+import { getCurrentUserId } from './network';
 
 const GUEST_ID_KEY = 'guest_id';
 
@@ -27,10 +28,7 @@ export function isGuest(): boolean {
 }
 
 export function getCurrentUserOrGuestId(): string {
-  // In guest mode, return guest_id; when authenticated, return a placeholder
-  // Note: Most server writes ignore client-provided created_by_user_id and use token claims.
   if (isGuest()) return getGuestId();
-  // We don't have direct access to user ID here; callers should avoid relying on it.
-  return 'authenticated-user';
+  return getCurrentUserId();
 }
 

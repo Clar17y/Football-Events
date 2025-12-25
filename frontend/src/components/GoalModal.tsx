@@ -84,7 +84,6 @@ const GoalModal: React.FC<Props> = ({
         sentiment: ownGoalFlag ? -2 : 2, // Default sentiment
         notes: assistId ? `${notes} (Assist: ${assistId})` : notes,
         createdAt: new Date().toISOString(),
-        createdByUserId: 'local-user',
         isDeleted: false
       });
       if (!result.success) {

@@ -239,11 +239,31 @@ export class LineupService {
         matchWhere.created_by_user_id = userId;
       }
 
-      const match = await this.prisma.match.findFirst({ where: matchWhere });
+      const match = await this.prisma.match.findFirst({
+        where: matchWhere,
+        select: { match_id: true, home_team_id: true, away_team_id: true }
+      });
       if (!match) {
         const error = new Error('Match not found or access denied');
         (error as any).code = 'MATCH_ACCESS_DENIED';
         (error as any).statusCode = 403;
+        throw error;
+      }
+
+      const playerTeam = await this.prisma.player_teams.findFirst({
+        where: {
+          player_id: data.playerId,
+          team_id: { in: [match.home_team_id, match.away_team_id] },
+          is_active: true,
+          is_deleted: false,
+          player: { is_deleted: false }
+        }
+      });
+
+      if (!playerTeam) {
+        const error = new Error('Player does not belong to this match') as any;
+        (error as any).code = 'INVALID_MATCH_PLAYER';
+        (error as any).statusCode = 400;
         throw error;
       }
 
@@ -784,11 +804,42 @@ export class LineupService {
         matchWhere.created_by_user_id = userId;
       }
 
-      const match = await this.prisma.match.findFirst({ where: matchWhere });
+      const match = await this.prisma.match.findFirst({
+        where: matchWhere,
+        select: { match_id: true, home_team_id: true, away_team_id: true }
+      });
       if (!match) {
         const error = new Error('Match not found or access denied');
         (error as any).code = 'MATCH_ACCESS_DENIED';
         (error as any).statusCode = 403;
+        throw error;
+      }
+
+      const [playerOffTeam, playerOnTeam] = await Promise.all([
+        this.prisma.player_teams.findFirst({
+          where: {
+            player_id: playerOffId,
+            team_id: { in: [match.home_team_id, match.away_team_id] },
+            is_active: true,
+            is_deleted: false,
+            player: { is_deleted: false }
+          }
+        }),
+        this.prisma.player_teams.findFirst({
+          where: {
+            player_id: playerOnId,
+            team_id: { in: [match.home_team_id, match.away_team_id] },
+            is_active: true,
+            is_deleted: false,
+            player: { is_deleted: false }
+          }
+        })
+      ]);
+
+      if (!playerOffTeam || !playerOnTeam) {
+        const error = new Error('Players must belong to this match') as any;
+        (error as any).code = 'INVALID_MATCH_PLAYER';
+        (error as any).statusCode = 400;
         throw error;
       }
 

@@ -404,7 +404,7 @@ export const eventsDataLayer = {
         kind: string;
         periodNumber?: number;
         clockMs?: number;
-        teamId?: string;
+        teamId: string;
         playerId?: string;
         notes?: string;
         sentiment?: number;
@@ -418,7 +418,7 @@ export const eventsDataLayer = {
             kind: data.kind as any,
             periodNumber: data.periodNumber ?? 1,
             clockMs: data.clockMs ?? 0,
-            teamId: data.teamId ?? '',
+            teamId: data.teamId,
             playerId: data.playerId ?? '',
             notes: data.notes,
             sentiment: data.sentiment ?? 0,

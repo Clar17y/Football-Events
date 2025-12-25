@@ -211,8 +211,8 @@ export class PlayerTeamService {
         const userTeamIds = await this.getUserTeamIds(userId);
         const userPlayerIds = await this.getUserPlayerIds(userId);
         
-        if (!userTeamIds.includes(teamId) && !userPlayerIds.includes(playerId)) {
-          const error = new Error('Access denied: You can only create relationships for teams you own or players you created') as any;
+        if (!userTeamIds.includes(teamId) || !userPlayerIds.includes(playerId)) {
+          const error = new Error('Access denied: You can only create relationships for teams and players you own') as any;
           error.statusCode = 403;
           throw error;
         }

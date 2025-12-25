@@ -1,7 +1,7 @@
 import apiClient from './baseApi';
 import { authApi } from './authApi';
 import { canChangeFormation } from '../../utils/guestQuota';
-import { getGuestId, isGuest } from '../../utils/guest';
+import { db } from '../../db/indexedDB';
 
 export interface FormationPlayerDTO {
   id: string;
@@ -67,11 +67,24 @@ export const formationsApi = {
 
     // LOCAL-FIRST: create event via dataLayer
     const { eventsDataLayer } = await import('../dataLayer');
+    const match = await db.matches.get(matchId);
+    if (!match) {
+      throw new Error('Match not found');
+    }
+    const [homeTeam, awayTeam] = await Promise.all([
+      db.teams.get(match.homeTeamId),
+      db.teams.get(match.awayTeamId)
+    ]);
+    const formationTeamId =
+      (homeTeam && !homeTeam.isOpponent ? homeTeam.id : null) ||
+      (awayTeam && !awayTeam.isOpponent ? awayTeam.id : null) ||
+      match.homeTeamId;
 
     await eventsDataLayer.create({
       matchId,
       kind: 'formation_change',
       clockMs: Math.floor((startMin || 0) * 60 * 1000),
+      teamId: formationTeamId,
       notes: notes,
     });
 

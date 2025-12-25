@@ -115,7 +115,13 @@ const mockTeams = [
     isOpponent: false,
     createdByUserId: 'user-1',
     isDeleted: false,
-    updatedAt: new Date('2023-01-02').toISOString()
+    updatedAt: new Date('2023-01-02').toISOString(),
+    homeKitPrimary: '#FF0000',
+    homeKitSecondary: '#FFFFFF',
+    awayKitPrimary: '#0000FF',
+    awayKitSecondary: '#FFFFFF',
+    logoUrl: undefined,
+    synced: true
   },
   {
     id: 'team-1',
@@ -124,7 +130,13 @@ const mockTeams = [
     isOpponent: false,
     createdByUserId: 'user-1',
     isDeleted: false,
-    updatedAt: new Date('2023-01-01').toISOString()
+    updatedAt: new Date('2023-01-01').toISOString(),
+    homeKitPrimary: '#00FF00',
+    homeKitSecondary: '#FFFFFF',
+    awayKitPrimary: '#FFFF00',
+    awayKitSecondary: '#000000',
+    logoUrl: undefined,
+    synced: true
   }
 ];
 

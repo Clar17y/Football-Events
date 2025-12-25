@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { db } from '../../src/db/indexedDB';
-import type { MatchEvent } from '../../src/types/events';
+import type { DbEvent } from '../../src/db/schema';
 
 // Mock Socket.IO to prevent actual connections
 vi.mock('socket.io-client', () => ({
@@ -45,7 +45,7 @@ describe('Real-Time Sync Integration', () => {
       });
 
       // Verify event was stored with synced=false
-      const unsyncedResult = await db.getUnsyncedRecords<MatchEvent>('events');
+      const unsyncedResult = await db.getUnsyncedRecords<DbEvent>('events');
       expect(unsyncedResult.data).toHaveLength(1);
       expect(unsyncedResult.data![0].synced).toBe(false);
       expect(unsyncedResult.data![0].kind).toBe('goal');
@@ -70,14 +70,14 @@ describe('Real-Time Sync Integration', () => {
       expect(eventId).toBeDefined();
 
       // Verify initially unsynced
-      let unsyncedResult = await db.getUnsyncedRecords<MatchEvent>('events');
+      let unsyncedResult = await db.getUnsyncedRecords<DbEvent>('events');
       expect(unsyncedResult.data).toHaveLength(1);
 
       // Simulate marking as synced (what sync service would do)
       await db.events.update(eventId!, { synced: true });
 
       // Verify now synced
-      unsyncedResult = await db.getUnsyncedRecords<MatchEvent>('events');
+      unsyncedResult = await db.getUnsyncedRecords<DbEvent>('events');
       expect(unsyncedResult.data).toHaveLength(0);
     });
   });
@@ -108,7 +108,7 @@ describe('Real-Time Sync Integration', () => {
       });
 
       // Verify both events are unsynced
-      const unsyncedResult = await db.getUnsyncedRecords<MatchEvent>('events');
+      const unsyncedResult = await db.getUnsyncedRecords<DbEvent>('events');
       expect(unsyncedResult.data).toHaveLength(2);
     });
 
@@ -123,6 +123,7 @@ describe('Real-Time Sync Integration', () => {
         periodNumber: 1,
         clockMs: 100000,
         notes: 'Synced goal',
+        sentiment: 0,
         createdAt: new Date().toISOString(),
         createdByUserId: 'server',
         isDeleted: false,
@@ -142,7 +143,7 @@ describe('Real-Time Sync Integration', () => {
       });
 
       // Verify only unsynced event is returned
-      const unsyncedResult = await db.getUnsyncedRecords<MatchEvent>('events');
+      const unsyncedResult = await db.getUnsyncedRecords<DbEvent>('events');
       expect(unsyncedResult.data).toHaveLength(1);
       expect(unsyncedResult.data![0].notes).toBe('Local goal');
 
@@ -167,20 +168,20 @@ describe('Real-Time Sync Integration', () => {
       });
 
       // Verify event exists and is unsynced
-      const unsyncedResult = await db.getUnsyncedRecords<MatchEvent>('events');
+      const unsyncedResult = await db.getUnsyncedRecords<DbEvent>('events');
       expect(unsyncedResult.data).toHaveLength(1);
 
       // Simulate sync failure (event should remain unsynced)
       // In real scenario, sync service would not mark as synced on failure
 
       // Verify event is still unsynced
-      const stillUnsyncedResult = await db.getUnsyncedRecords<MatchEvent>('events');
+      const stillUnsyncedResult = await db.getUnsyncedRecords<DbEvent>('events');
       expect(stillUnsyncedResult.data).toHaveLength(1);
     });
 
     it('should handle database errors gracefully', async () => {
       // Test that getUnsyncedRecords handles errors
-      const result = await db.getUnsyncedRecords<MatchEvent>('events');
+      const result = await db.getUnsyncedRecords<DbEvent>('events');
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
     });

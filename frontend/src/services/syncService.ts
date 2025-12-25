@@ -2,8 +2,7 @@ import { apiClient } from './api/baseApi';
 import { matchesApi } from './api/matchesApi';
 import { isGuestId } from './importService';
 import { db } from '../db/indexedDB';
-import { lineupsApi } from './api/lineupsApi';
-import { defaultLineupsApi } from './api/defaultLineupsApi';
+import { getAuthUserId } from '../utils/network';
 import {
   dbTeamToServerPayload,
   dbPlayerToServerPayload,
@@ -32,6 +31,11 @@ export interface SyncError {
  * Requirements: 2.6 - Batch operations (50 records per batch)
  */
 const BATCH_SIZE = 50;
+const LEGACY_USER_IDS = new Set(['authenticated-user', 'local-user']);
+
+function isOwnedByAuth(record: { createdByUserId?: string }, authUserId: string): boolean {
+  return record.createdByUserId === authUserId || LEGACY_USER_IDS.has(record.createdByUserId || '');
+}
 
 /**
  * Handle soft-deleted records:
@@ -120,8 +124,11 @@ function emitSyncProgress(progress: SyncProgress): void {
  * Requirements: 3.3 - Update synced to true and set synced_at on success
  * Requirements: 3.3 - Exclude guest records
  */
-async function syncSeasons(): Promise<SyncResult> {
+async function syncSeasons(authUserId: string): Promise<SyncResult> {
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
+  if (!authUserId) {
+    return result;
+  }
 
   try {
     if (!db.seasons) {
@@ -138,7 +145,7 @@ async function syncSeasons(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records
     const unsyncedSeasons = allSeasons
-      .filter(s => s.synced === false && !isGuestId(s.createdByUserId))
+      .filter(s => s.synced === false && !isGuestId(s.createdByUserId) && isOwnedByAuth(s, authUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first
@@ -192,8 +199,11 @@ async function syncSeasons(): Promise<SyncResult> {
  * Requirements: 3.3 - Update synced to true and set synced_at on success
  * Requirements: 3.3 - Exclude guest records
  */
-async function syncTeams(): Promise<SyncResult> {
+async function syncTeams(authUserId: string): Promise<SyncResult> {
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
+  if (!authUserId) {
+    return result;
+  }
 
   try {
     if (!db.teams) {
@@ -210,7 +220,7 @@ async function syncTeams(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records
     const unsyncedTeams = allTeams
-      .filter(t => t.synced === false && !isGuestId(t.createdByUserId))
+      .filter(t => t.synced === false && !isGuestId(t.createdByUserId) && isOwnedByAuth(t, authUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first
@@ -264,8 +274,11 @@ async function syncTeams(): Promise<SyncResult> {
  * Requirements: 3.3 - Update synced to true and set synced_at on success
  * Requirements: 3.3 - Exclude guest records
  */
-async function syncPlayers(): Promise<SyncResult> {
+async function syncPlayers(authUserId: string): Promise<SyncResult> {
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
+  if (!authUserId) {
+    return result;
+  }
 
   try {
     if (!db.players) {
@@ -282,7 +295,7 @@ async function syncPlayers(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records
     const unsyncedPlayers = allPlayers
-      .filter(p => p.synced === false && !isGuestId(p.createdByUserId))
+      .filter(p => p.synced === false && !isGuestId(p.createdByUserId) && isOwnedByAuth(p, authUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first
@@ -347,8 +360,11 @@ async function syncPlayers(): Promise<SyncResult> {
  * Requirements: 3.3 - Update synced to true and set synced_at on success
  * Requirements: 3.3 - Exclude guest records
  */
-async function syncMatches(): Promise<SyncResult> {
+async function syncMatches(authUserId: string): Promise<SyncResult> {
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
+  if (!authUserId) {
+    return result;
+  }
 
   try {
     if (!db.matches) {
@@ -365,7 +381,7 @@ async function syncMatches(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records
     const unsyncedMatches = allMatches
-      .filter(m => m.synced === false && !isGuestId(m.createdByUserId))
+      .filter(m => m.synced === false && !isGuestId(m.createdByUserId) && isOwnedByAuth(m, authUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first
@@ -418,8 +434,11 @@ async function syncMatches(): Promise<SyncResult> {
  * Requirements: 3.3 - Update synced to true and set synced_at on success
  * Requirements: 3.3 - Exclude guest records
  */
-async function syncLineups(): Promise<SyncResult> {
+async function syncLineups(authUserId: string): Promise<SyncResult> {
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
+  if (!authUserId) {
+    return result;
+  }
 
   try {
     if (!db.lineup) {
@@ -436,7 +455,7 @@ async function syncLineups(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records
     const unsyncedLineups = allLineups
-      .filter(l => l.synced === false && !isGuestId(l.createdByUserId))
+      .filter(l => l.synced === false && !isGuestId(l.createdByUserId) && isOwnedByAuth(l, authUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first
@@ -446,7 +465,7 @@ async function syncLineups(): Promise<SyncResult> {
       async (id) => {
         const lineup = unsyncedLineups.find(l => l.id === id);
         if (lineup) {
-          await lineupsApi.deleteByKey(lineup.matchId, lineup.playerId, lineup.startMinute);
+          await apiClient.delete(`/lineups/by-key/${lineup.matchId}/${lineup.playerId}/${lineup.startMinute}`);
         }
       },
       'lineup',
@@ -455,10 +474,7 @@ async function syncLineups(): Promise<SyncResult> {
 
     for (const lineup of lineupsToSync) {
       try {
-        await lineupsApi.create({
-          matchId: lineup.matchId,
-          playerId: lineup.playerId,
-          startMinute: lineup.startMinute,
+        await apiClient.put(`/lineups/by-key/${lineup.matchId}/${lineup.playerId}/${lineup.startMinute}`, {
           endMinute: lineup.endMinute,
           position: lineup.position,
         });
@@ -492,8 +508,11 @@ async function syncLineups(): Promise<SyncResult> {
  * Requirements: 3.3 - Update synced to true and set synced_at on success
  * Requirements: 3.3 - Exclude guest records
  */
-async function syncDefaultLineups(): Promise<SyncResult> {
+async function syncDefaultLineups(authUserId: string): Promise<SyncResult> {
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
+  if (!authUserId) {
+    return result;
+  }
 
   try {
     if (!db.defaultLineups) {
@@ -510,7 +529,7 @@ async function syncDefaultLineups(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records
     const unsyncedDefaultLineups = allDefaultLineups
-      .filter(dl => dl.synced === false && !isGuestId(dl.createdByUserId))
+      .filter(dl => dl.synced === false && !isGuestId(dl.createdByUserId) && isOwnedByAuth(dl, authUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first
@@ -520,7 +539,7 @@ async function syncDefaultLineups(): Promise<SyncResult> {
       async (id) => {
         const dl = unsyncedDefaultLineups.find(d => d.id === id);
         if (dl) {
-          await defaultLineupsApi.deleteDefaultLineup(dl.teamId);
+          await apiClient.delete(`/default-lineups/${dl.teamId}`);
         }
       },
       'default_lineups',
@@ -529,7 +548,7 @@ async function syncDefaultLineups(): Promise<SyncResult> {
 
     for (const defaultLineup of defaultLineupsToSync) {
       try {
-        await defaultLineupsApi.saveDefaultLineup({
+        await apiClient.post('/default-lineups', {
           teamId: defaultLineup.teamId,
           formation: defaultLineup.formation,
         });
@@ -563,8 +582,11 @@ async function syncDefaultLineups(): Promise<SyncResult> {
  * Requirements: 2.4 - Update synced to true and set synced_at on success
  * Requirements: 2.6 - Exclude records where created_by_user_id starts with 'guest-'
  */
-async function syncEvents(): Promise<SyncResult> {
+async function syncEvents(authUserId: string): Promise<SyncResult> {
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
+  if (!authUserId) {
+    return result;
+  }
 
   try {
     // Check if table exists and is accessible
@@ -585,7 +607,7 @@ async function syncEvents(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records (Requirements: 2.6)
     const unsyncedEvents = allEvents
-      .filter(e => e.synced === false && !isGuestId(e.createdByUserId))
+      .filter(e => e.synced === false && !isGuestId(e.createdByUserId) && isOwnedByAuth(e, authUserId))
       .slice(0, BATCH_SIZE);
 
     const isUuid = (value: string): boolean =>
@@ -693,8 +715,11 @@ async function syncEvents(): Promise<SyncResult> {
  * Requirements: 2.4 - Update synced to true and set synced_at on success
  * Requirements: 2.6 - Exclude guest records
  */
-async function syncMatchPeriods(): Promise<SyncResult> {
+async function syncMatchPeriods(authUserId: string): Promise<SyncResult> {
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
+  if (!authUserId) {
+    return result;
+  }
 
   try {
     // Check if table exists and is accessible
@@ -715,7 +740,7 @@ async function syncMatchPeriods(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records (Requirements: 2.6)
     const unsyncedPeriods = allPeriods
-      .filter(p => p.synced === false && !isGuestId(p.createdByUserId))
+      .filter(p => p.synced === false && !isGuestId(p.createdByUserId) && isOwnedByAuth(p, authUserId))
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first (periods are rarely deleted, but handle it)
@@ -796,8 +821,11 @@ async function syncMatchPeriods(): Promise<SyncResult> {
  * Requirements: 2.4 - Update synced to true and set synced_at on success
  * Requirements: 2.6 - Exclude guest records
  */
-async function syncMatchState(): Promise<SyncResult> {
+async function syncMatchState(authUserId: string): Promise<SyncResult> {
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
+  if (!authUserId) {
+    return result;
+  }
 
   try {
     // Check if table exists and is accessible
@@ -818,7 +846,7 @@ async function syncMatchState(): Promise<SyncResult> {
 
     // Filter for unsynced, non-guest records (Requirements: 2.6)
     const statesToSync = allStates
-      .filter(s => s.synced === false && !isGuestId(s.createdByUserId))
+      .filter(s => s.synced === false && !isGuestId(s.createdByUserId) && isOwnedByAuth(s, authUserId))
       .slice(0, BATCH_SIZE);
 
     for (const state of statesToSync) {
@@ -924,6 +952,10 @@ class SyncService {
     };
 
     try {
+      const authUserId = getAuthUserId();
+      if (!authUserId) {
+        return progress;
+      }
       const [seasons, teams, players, matches, lineups, defaultLineups, events, matchPeriods, matchState] = await Promise.all([
         db.seasons?.toArray().catch(() => []) || [],
         db.teams?.toArray().catch(() => []) || [],
@@ -936,15 +968,15 @@ class SyncService {
         db.matchState?.toArray().catch(() => []) || [],
       ]);
 
-      progress.seasons = seasons.filter(s => s.synced === false && !isGuestId(s.createdByUserId)).length;
-      progress.teams = teams.filter(t => t.synced === false && !isGuestId(t.createdByUserId)).length;
-      progress.players = players.filter(p => p.synced === false && !isGuestId(p.createdByUserId)).length;
-      progress.matches = matches.filter(m => m.synced === false && !isGuestId(m.createdByUserId)).length;
-      progress.lineups = lineups.filter(l => l.synced === false && !isGuestId(l.createdByUserId)).length;
-      progress.defaultLineups = defaultLineups.filter(dl => dl.synced === false && !isGuestId(dl.createdByUserId)).length;
-      progress.events = events.filter(e => e.synced === false && !isGuestId(e.createdByUserId)).length;
-      progress.matchPeriods = matchPeriods.filter(p => p.synced === false && !isGuestId(p.createdByUserId)).length;
-      progress.matchState = matchState.filter(s => s.synced === false && !isGuestId(s.createdByUserId)).length;
+      progress.seasons = seasons.filter(s => s.synced === false && !isGuestId(s.createdByUserId) && isOwnedByAuth(s, authUserId)).length;
+      progress.teams = teams.filter(t => t.synced === false && !isGuestId(t.createdByUserId) && isOwnedByAuth(t, authUserId)).length;
+      progress.players = players.filter(p => p.synced === false && !isGuestId(p.createdByUserId) && isOwnedByAuth(p, authUserId)).length;
+      progress.matches = matches.filter(m => m.synced === false && !isGuestId(m.createdByUserId) && isOwnedByAuth(m, authUserId)).length;
+      progress.lineups = lineups.filter(l => l.synced === false && !isGuestId(l.createdByUserId) && isOwnedByAuth(l, authUserId)).length;
+      progress.defaultLineups = defaultLineups.filter(dl => dl.synced === false && !isGuestId(dl.createdByUserId) && isOwnedByAuth(dl, authUserId)).length;
+      progress.events = events.filter(e => e.synced === false && !isGuestId(e.createdByUserId) && isOwnedByAuth(e, authUserId)).length;
+      progress.matchPeriods = matchPeriods.filter(p => p.synced === false && !isGuestId(p.createdByUserId) && isOwnedByAuth(p, authUserId)).length;
+      progress.matchState = matchState.filter(s => s.synced === false && !isGuestId(s.createdByUserId) && isOwnedByAuth(s, authUserId)).length;
 
       progress.total = progress.seasons + progress.teams + progress.players + progress.matches +
         progress.lineups + progress.defaultLineups + progress.events + progress.matchPeriods + progress.matchState;
@@ -973,6 +1005,8 @@ class SyncService {
       if (typeof navigator !== 'undefined' && !navigator.onLine) return combinedResult;
       // Only attempt sync when authenticated; guests keep data local
       if (!apiClient.isAuthenticated()) return combinedResult;
+      const authUserId = getAuthUserId();
+      if (!authUserId) return combinedResult;
 
       // If guest data exists locally, pause automatic sync to avoid 400/403s until import completes
       try {
@@ -998,55 +1032,55 @@ class SyncService {
       // seasons → teams → players → matches → lineups → default_lineups → events → match_periods → match_state
 
       // 1. Sync seasons first (no dependencies)
-      const seasonsResult = await syncSeasons();
+      const seasonsResult = await syncSeasons(authUserId);
       combinedResult.synced += seasonsResult.synced;
       combinedResult.failed += seasonsResult.failed;
       combinedResult.errors.push(...seasonsResult.errors);
 
       // 2. Sync teams (depends on seasons for some contexts)
-      const teamsResult = await syncTeams();
+      const teamsResult = await syncTeams(authUserId);
       combinedResult.synced += teamsResult.synced;
       combinedResult.failed += teamsResult.failed;
       combinedResult.errors.push(...teamsResult.errors);
 
       // 3. Sync players (depends on teams)
-      const playersResult = await syncPlayers();
+      const playersResult = await syncPlayers(authUserId);
       combinedResult.synced += playersResult.synced;
       combinedResult.failed += playersResult.failed;
       combinedResult.errors.push(...playersResult.errors);
 
       // 4. Sync matches (depends on seasons and teams)
-      const matchesResult = await syncMatches();
+      const matchesResult = await syncMatches(authUserId);
       combinedResult.synced += matchesResult.synced;
       combinedResult.failed += matchesResult.failed;
       combinedResult.errors.push(...matchesResult.errors);
 
       // 5. Sync lineups (depends on matches and players)
-      const lineupsResult = await syncLineups();
+      const lineupsResult = await syncLineups(authUserId);
       combinedResult.synced += lineupsResult.synced;
       combinedResult.failed += lineupsResult.failed;
       combinedResult.errors.push(...lineupsResult.errors);
 
       // 6. Sync default lineups (depends on teams and players)
-      const defaultLineupsResult = await syncDefaultLineups();
+      const defaultLineupsResult = await syncDefaultLineups(authUserId);
       combinedResult.synced += defaultLineupsResult.synced;
       combinedResult.failed += defaultLineupsResult.failed;
       combinedResult.errors.push(...defaultLineupsResult.errors);
 
       // 7. Sync events from events table (depends on matches and players)
-      const eventsResult = await syncEvents();
+      const eventsResult = await syncEvents(authUserId);
       combinedResult.synced += eventsResult.synced;
       combinedResult.failed += eventsResult.failed;
       combinedResult.errors.push(...eventsResult.errors);
 
       // 8. Sync match periods from match_periods table (depends on matches)
-      const periodsResult = await syncMatchPeriods();
+      const periodsResult = await syncMatchPeriods(authUserId);
       combinedResult.synced += periodsResult.synced;
       combinedResult.failed += periodsResult.failed;
       combinedResult.errors.push(...periodsResult.errors);
 
       // 9. Sync match state from match_state table (depends on matches)
-      const stateResult = await syncMatchState();
+      const stateResult = await syncMatchState(authUserId);
       combinedResult.synced += stateResult.synced;
       combinedResult.failed += stateResult.failed;
       combinedResult.errors.push(...stateResult.errors);

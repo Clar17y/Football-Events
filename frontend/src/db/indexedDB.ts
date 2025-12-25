@@ -44,6 +44,7 @@ import { autoLinkEvents } from './eventLinking';
 import { runMigrations } from './migrations';
 import { performanceMonitor } from './performance';
 import { getGuestId, isGuest } from '../utils/guest';
+import { getCurrentUserId } from '../utils/network';
 import { canAddEvent } from '../utils/guestQuota';
 
 /**
@@ -401,7 +402,7 @@ export class GrassrootsDB extends Dexie {
         notes: eventData.notes,
         createdAt: nowIso,
         updatedAt: nowIso,
-        createdByUserId: eventData.createdByUserId || (isGuest() ? getGuestId() : 'authenticated-user'),
+        createdByUserId: eventData.createdByUserId || (isGuest() ? getGuestId() : getCurrentUserId()),
         isDeleted: false,
         synced: false,
       };
@@ -478,7 +479,7 @@ export class GrassrootsDB extends Dexie {
   async addEventToTable(payload: {
     kind: string;
     matchId: string;
-    teamId?: string; // Optional for formation_change events
+    teamId: string;
     playerId?: string | null;
     minute?: number;
     second?: number;
@@ -493,7 +494,7 @@ export class GrassrootsDB extends Dexie {
     isDeleted?: boolean;
   }): Promise<DatabaseResult<string>> {
     try {
-      // Validate required fields (teamId is optional for formation_change events)
+      // Validate required fields
       if (!payload.kind || !payload.matchId) {
         return {
           success: false,
@@ -501,11 +502,10 @@ export class GrassrootsDB extends Dexie {
           affected_count: 0
         };
       }
-      // teamId is required for most events, but optional for formation_change
-      if (!payload.teamId && payload.kind !== 'formation_change') {
+      if (!payload.teamId) {
         return {
           success: false,
-          error: 'Missing required field: teamId is required for non-formation events',
+          error: 'Missing required field: teamId is required for events',
           affected_count: 0
         };
       }
@@ -538,13 +538,13 @@ export class GrassrootsDB extends Dexie {
         periodNumber: payload.periodNumber ?? payload.period ?? 1,
         clockMs: clockMs,
         kind: payload.kind as any,
-        teamId: payload.teamId || '', // Empty string for formation_change events
+        teamId: payload.teamId,
         playerId: payload.playerId ?? '',
         sentiment: payload.sentiment ?? 0,
         notes: payload.notes || (payload.data?.notes as string) || '',
         createdAt: payload.createdAt || nowIso,
         updatedAt: nowIso,
-        createdByUserId: payload.createdByUserId || (isGuest() ? getGuestId() : 'authenticated-user'),
+        createdByUserId: payload.createdByUserId || (isGuest() ? getGuestId() : getCurrentUserId()),
         isDeleted: payload.isDeleted ?? false,
         synced: false, // Mark as unsynced
       };
@@ -795,7 +795,7 @@ export class GrassrootsDB extends Dexie {
         durationSeconds: period.durationSeconds,
         createdAt: nowIso,
         updatedAt: nowIso,
-        createdByUserId: period.createdByUserId || (isGuest() ? getGuestId() : 'authenticated-user'),
+        createdByUserId: period.createdByUserId || (isGuest() ? getGuestId() : getCurrentUserId()),
         isDeleted: false,
         synced: false,
       };
@@ -913,7 +913,7 @@ export class GrassrootsDB extends Dexie {
           lastUpdatedAt: nowMs,
           createdAt: nowIso,
           updatedAt: nowIso,
-          createdByUserId: updates.createdByUserId || (isGuest() ? getGuestId() : 'authenticated-user'),
+          createdByUserId: updates.createdByUserId || (isGuest() ? getGuestId() : getCurrentUserId()),
           isDeleted: false,
           synced: false,
         };

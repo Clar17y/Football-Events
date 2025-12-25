@@ -146,8 +146,7 @@ export const eventCreateSchema = z.object({
     'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal'
   ]),
   teamId: z.string()
-    .uuid('Team ID must be a valid UUID')
-    .optional(),
+    .uuid('Team ID must be a valid UUID'),
   playerId: z.string()
     .uuid('Player ID must be a valid UUID')
     .nullable()

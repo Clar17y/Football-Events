@@ -79,12 +79,48 @@ export class LiveFormationService {
       // Authorization via match ownership
       const matchWhere: any = { match_id: matchId, is_deleted: false };
       if (userRole !== 'ADMIN') matchWhere.created_by_user_id = userId;
-      const match = await this.prisma.match.findFirst({ where: matchWhere });
+      const match = await this.prisma.match.findFirst({
+        where: matchWhere,
+        select: { match_id: true, home_team_id: true, away_team_id: true }
+      });
       if (!match) {
         const error = new Error('Match not found or access denied');
         (error as any).code = 'MATCH_ACCESS_DENIED';
         (error as any).statusCode = 403;
         throw error;
+      }
+
+      const teams = await this.prisma.team.findMany({
+        where: {
+          id: { in: [match.home_team_id, match.away_team_id] },
+          is_deleted: false
+        },
+        select: { id: true, name: true, is_opponent: true }
+      });
+      const primaryTeam = teams.find(t => !t.is_opponent);
+      const formationTeamId = primaryTeam?.id || match.home_team_id;
+      const formationTeamName = primaryTeam?.name;
+
+      const formationPlayerIds = formation.players.map(p => p.id).filter(Boolean);
+      if (formationPlayerIds.length > 0) {
+        const playerTeams = await this.prisma.player_teams.findMany({
+          where: {
+            team_id: formationTeamId,
+            player_id: { in: formationPlayerIds },
+            is_active: true,
+            is_deleted: false,
+            player: { is_deleted: false }
+          },
+          select: { player_id: true }
+        });
+        const validIds = new Set(playerTeams.map(pt => pt.player_id));
+        const invalid = formationPlayerIds.filter(id => !validIds.has(id));
+        if (invalid.length > 0) {
+          const error = new Error(`Players not found in team: ${invalid.join(', ')}`);
+          (error as any).code = 'INVALID_TEAM_PLAYERS';
+          (error as any).statusCode = 400;
+          throw error;
+        }
       }
 
       // Idempotency for local-first sync retries: if we've already persisted the formation_change event,
@@ -268,6 +304,7 @@ export class LiveFormationService {
               ...(eventId ? { id: eventId } : {}),
               match_id: matchId,
               kind: 'formation_change' as any,
+              team_id: formationTeamId,
               period_number: activePeriod?.period_number || null,
               clock_ms: Math.round(Number(start) * 60000),
               notes: JSON.stringify(notesPayload),
@@ -281,8 +318,8 @@ export class LiveFormationService {
             sseHub.broadcast(matchId, 'event_created', { event: {
               id: event.id,
               kind: 'formation_change',
-              teamId: null,
-              teamName: undefined,
+              teamId: formationTeamId,
+              teamName: formationTeamName,
               playerId: null,
               playerName: undefined,
               periodType: activePeriod?.period_type,

@@ -146,16 +146,18 @@ export class RealTimeService {
   private async storeEventLocally(event: MatchEvent): Promise<void> {
     try {
       const { db } = await import('../db/indexedDB');
+      if (!event.teamId) {
+        throw new Error('Team ID is required for events');
+      }
       const result = await db.addEventToTable({
         kind: event.kind,
         matchId: event.matchId,
-        teamId: event.teamId || undefined,
+        teamId: event.teamId,
         playerId: event.playerId || null,
         clockMs: event.clockMs || 0,
         periodNumber: event.periodNumber,
         notes: event.notes || '',
-        createdAt: event.createdAt || new Date().toISOString(),
-        createdByUserId: (await import('../utils/guest')).isGuest() ? (await import('../utils/guest')).getGuestId() : 'authenticated-user'
+        createdAt: event.createdAt || new Date().toISOString()
       });
 
       if (!result.success) {

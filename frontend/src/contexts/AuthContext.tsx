@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { authApi } from '../services/api/authApi';
+import { db } from '../db/indexedDB';
 import type { UserProfile } from '../services/api/authApi';
 
 interface AuthContextType {
@@ -175,6 +176,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await authApi.logout();
       setUser(null);
       setTokenExpiryMs(null);
+      try {
+        await db.clearAllData();
+      } catch (clearErr) {
+        console.warn('Failed to clear local data on logout:', clearErr);
+      }
       // Broadcast logout to interested listeners
       try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
     } catch (error) {
@@ -182,6 +188,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Clear user state even if logout request fails
       setUser(null);
       setTokenExpiryMs(null);
+      try {
+        await db.clearAllData();
+      } catch (clearErr) {
+        console.warn('Failed to clear local data on logout:', clearErr);
+      }
       try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
     } finally {
       setIsLoading(false);
@@ -207,6 +218,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Force logout flow and redirect handled by AppRoutes depending on isAuthenticated
       setUser(null);
       setTokenExpiryMs(null);
+      try {
+        void db.clearAllData();
+      } catch (clearErr) {
+        console.warn('Failed to clear local data on auth reset:', clearErr);
+      }
     };
     const onRefreshed = () => {
       setTokenExpiryMs(getAccessTokenExpiryMs());

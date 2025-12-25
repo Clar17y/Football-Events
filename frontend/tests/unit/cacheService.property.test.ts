@@ -639,11 +639,12 @@ describe('Cache Service Property Tests', () => {
     // Helper to setup all API mocks with empty responses
     const setupEmptyApiMocks = async () => {
       const { apiClient } = await import('../../src/services/api/baseApi');
-      
+
       // Mock apiClient.get to return empty paginated responses
-      vi.mocked(apiClient.get).mockImplementation((url: string) => {
+      vi.mocked(apiClient.get).mockImplementation((_url: string, _params?: URLSearchParams) => {
         // Return empty paginated response for all endpoints
         return Promise.resolve({
+          success: true,
           data: {
             data: [],
             hasMore: false,

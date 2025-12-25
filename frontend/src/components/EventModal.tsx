@@ -96,7 +96,6 @@ const EventModal: React.FC<EventModalProps> = ({
         sentiment,
         notes,
         createdAt: new Date().toISOString(),
-        createdByUserId: 'local-user', // Should ideally come from auth
         isDeleted: false
       };
 

@@ -179,12 +179,49 @@ export class EventService {
   }
 
   async createEvent(data: EventCreateRequest, userId: string, userRole: string): Promise<Event> {
+    if (!data.teamId) {
+      const error = new Error('Team ID is required for all events') as any;
+      error.statusCode = 400;
+      throw error;
+    }
+
     // Validate that user can create events for this match (only match creator or admin)
+    const matchWhere: any = { match_id: data.matchId, is_deleted: false };
     if (userRole !== 'ADMIN') {
-      const canCreateEvents = await this.canUserModifyMatch(data.matchId, userId);
-      if (!canCreateEvents) {
-        const error = new Error('Access denied: You can only create events for matches you created') as any;
-        error.statusCode = 403;
+      matchWhere.created_by_user_id = userId;
+    }
+
+    const match = await this.prisma.match.findFirst({
+      where: matchWhere,
+      select: { home_team_id: true, away_team_id: true }
+    });
+
+    if (!match) {
+      const error = new Error('Match not found or access denied') as any;
+      error.statusCode = 403;
+      throw error;
+    }
+
+    if (data.teamId !== match.home_team_id && data.teamId !== match.away_team_id) {
+      const error = new Error('Team does not belong to this match') as any;
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (data.playerId) {
+      const playerTeam = await this.prisma.player_teams.findFirst({
+        where: {
+          team_id: data.teamId,
+          player_id: data.playerId,
+          is_active: true,
+          is_deleted: false,
+          player: { is_deleted: false }
+        }
+      });
+
+      if (!playerTeam) {
+        const error = new Error('Player does not belong to the specified team') as any;
+        error.statusCode = 400;
         throw error;
       }
     }
@@ -346,10 +383,47 @@ export class EventService {
       }
 
       // Validate that user can modify events for this match (only match creator or admin)
+      const matchWhere: any = { match_id: existingEvent.match_id, is_deleted: false };
       if (userRole !== 'ADMIN') {
-        const canModifyEvents = await this.canUserModifyMatch(existingEvent.match_id, userId);
-        if (!canModifyEvents) {
-          return null; // Access denied - return null to indicate not found
+        matchWhere.created_by_user_id = userId;
+      }
+      const match = await this.prisma.match.findFirst({
+        where: matchWhere,
+        select: { home_team_id: true, away_team_id: true }
+      });
+      if (!match) {
+        return null; // Match not found or access denied
+      }
+
+      const teamId = data.teamId ?? existingEvent.team_id;
+      if (!teamId) {
+        const error = new Error('Team ID is required for all events') as any;
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (teamId !== match.home_team_id && teamId !== match.away_team_id) {
+        const error = new Error('Team does not belong to this match') as any;
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const playerId = data.playerId === null ? null : (data.playerId ?? existingEvent.player_id);
+      if (playerId) {
+        const playerTeam = await this.prisma.player_teams.findFirst({
+          where: {
+            team_id: teamId,
+            player_id: playerId,
+            is_active: true,
+            is_deleted: false,
+            player: { is_deleted: false }
+          }
+        });
+
+        if (!playerTeam) {
+          const error = new Error('Player does not belong to the specified team') as any;
+          error.statusCode = 400;
+          throw error;
         }
       }
 
@@ -620,7 +694,7 @@ export class EventService {
 
   private isCompleteEventData(data: EventUpdateRequest): boolean {
     // Check if we have the minimum required fields to create an event
-    return !!(data.matchId && data.kind);
+    return !!(data.matchId && data.kind && data.teamId);
   }
 
   /**

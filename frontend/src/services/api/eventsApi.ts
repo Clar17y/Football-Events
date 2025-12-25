@@ -29,6 +29,9 @@ export const eventsApi = {
    */
   async create(event: EventCreateRequest): Promise<Event> {
     const { eventsDataLayer } = await import('../dataLayer');
+    if (!event.teamId) {
+      throw new Error('Team ID is required for events');
+    }
 
     const localEvent = await eventsDataLayer.create({
       matchId: event.matchId,
