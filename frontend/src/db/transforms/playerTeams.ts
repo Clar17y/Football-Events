@@ -84,3 +84,51 @@ export function serverPlayerTeamToDb(pt: ServerPlayerTeamResponse): DbPlayerTeam
     syncedAt: now,
   };
 }
+
+// ============================================================================
+// SYNC SERVICE TRANSFORMS (IndexedDB → Server API)
+// ============================================================================
+
+/**
+ * Server API player-team payload (camelCase) for sync
+ */
+export interface ServerPlayerTeamPayload {
+  /** Client-generated UUID for local-first sync */
+  id: string;
+  playerId: string;
+  teamId: string;
+  startDate?: string;
+  endDate?: string;
+  isActive?: boolean;
+}
+
+/**
+ * Transform IndexedDB player-team to Server API payload for sync
+ */
+export function dbPlayerTeamToServerPayload(pt: DbPlayerTeam): ServerPlayerTeamPayload {
+  // Handle startDate - could be Date or string
+  let startDateStr: string | undefined;
+  if (pt.startDate) {
+    startDateStr = typeof pt.startDate === 'string'
+      ? pt.startDate
+      : String(pt.startDate);
+  }
+
+  // Handle endDate - could be Date or string
+  let endDateStr: string | undefined;
+  if (pt.endDate) {
+    endDateStr = typeof pt.endDate === 'string'
+      ? pt.endDate
+      : String(pt.endDate);
+  }
+
+  return {
+    id: pt.id,
+    playerId: pt.playerId,
+    teamId: pt.teamId,
+    startDate: startDateStr,
+    endDate: endDateStr,
+    isActive: pt.isActive ?? true,
+  };
+}
+

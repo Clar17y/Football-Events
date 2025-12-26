@@ -99,14 +99,14 @@ export const matchesApi = {
       // Try to find an existing current season
       const allSeasons = await db.seasons.filter(s => !s.isDeleted).toArray();
       const currentSeason = allSeasons.find(s => s.isCurrent);
-      
+
       if (currentSeason) {
         seasonId = currentSeason.id;
       } else {
         // Create a default season for the current year
         const year = new Date().getFullYear();
         const seasonLabel = `${year}-${year + 1} Season`;
-        
+
         // Check if a season with this label already exists
         const existingSeason = allSeasons.find(s => s.label === seasonLabel);
         if (existingSeason) {
@@ -131,7 +131,7 @@ export const matchesApi = {
       const existingTeam = await db.teams
         .filter(t => !t.isDeleted && t.name === payload.myTeamName)
         .first();
-      
+
       if (existingTeam) {
         ourTeamId = existingTeam.id;
       } else {
@@ -142,7 +142,7 @@ export const matchesApi = {
         ourTeamId = newTeam.id;
       }
     }
-    
+
     if (!ourTeamId) {
       // Fallback: create a default team
       const newTeam = await teamsDataLayer.create({
@@ -157,14 +157,14 @@ export const matchesApi = {
     let opponentTeam = await db.teams
       .filter(t => !t.isDeleted && t.name === opponentName && t.isOpponent === true)
       .first();
-    
+
     if (!opponentTeam) {
       // Also check for any team with this name (might not be marked as opponent yet)
       opponentTeam = await db.teams
         .filter(t => !t.isDeleted && t.name === opponentName)
         .first();
     }
-    
+
     if (!opponentTeam) {
       opponentTeam = await teamsDataLayer.create({
         name: opponentName,
@@ -186,8 +186,8 @@ export const matchesApi = {
       competition: payload.competition,
       venue: payload.venue,
       durationMinutes: payload.durationMinutes ?? 60,
-      periodFormat: (payload.periodFormat === 'quarter' || payload.periodFormat === 'half') 
-        ? payload.periodFormat 
+      periodFormat: (payload.periodFormat === 'quarter' || payload.periodFormat === 'half')
+        ? payload.periodFormat
         : 'quarter',
       notes: payload.notes,
     });
@@ -408,27 +408,12 @@ export const matchesApi = {
     return response.data as unknown as MatchPeriod[];
   },
   /**
-   * Start a match with offline fallback
+   * Start a match - LOCAL-FIRST
    * 
-   * Requirements: 2.1 - Create local match_state with status LIVE and first match_period record
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async startMatch(id: string): Promise<MatchState> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<MatchState>(`/matches/${id}/start`);
-        return response.data as unknown as MatchState;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: create local match_state with status LIVE
+    // Local-first: write to IndexedDB first
     const now = Date.now();
     const userId = getCurrentUserId();
     const periodId = `period-${now}-${Math.random().toString(36).slice(2, 11)}`;
@@ -476,9 +461,9 @@ export const matchesApi = {
       isDeleted: false,
       synced: false,
     };
-    await db.matchPeriods.add(localPeriod);
+    await db.matchPeriods.put(localPeriod);
 
-    showOfflineToast('Match started locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     // Return the updated state
     const updatedState = await db.matchState.get(id);
@@ -488,27 +473,12 @@ export const matchesApi = {
     return dbToMatchState(updatedState);
   },
   /**
-   * Pause a match with offline fallback
+   * Pause a match - LOCAL-FIRST
    * 
-   * Requirements: 2.2 - Update local match_state to PAUSED
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async pauseMatch(id: string): Promise<MatchState> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<MatchState>(`/matches/${id}/pause`);
-        return response.data as unknown as MatchState;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: update local match_state to PAUSED
+    // Local-first: update local match_state to PAUSED
     const now = Date.now();
     const existingState = await db.matchState.get(id);
 
@@ -523,7 +493,7 @@ export const matchesApi = {
       synced: false,
     });
 
-    showOfflineToast('Match paused locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     const updatedState = await db.matchState.get(id);
     if (!updatedState) {
@@ -532,27 +502,12 @@ export const matchesApi = {
     return dbToMatchState(updatedState);
   },
   /**
-   * Resume a match with offline fallback
+   * Resume a match - LOCAL-FIRST
    * 
-   * Requirements: 2.2 - Update local match_state to LIVE
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async resumeMatch(id: string): Promise<MatchState> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<MatchState>(`/matches/${id}/resume`);
-        return response.data as unknown as MatchState;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: update local match_state to LIVE
+    // Local-first: update local match_state to LIVE
     const now = Date.now();
     const existingState = await db.matchState.get(id);
 
@@ -567,7 +522,7 @@ export const matchesApi = {
       synced: false,
     });
 
-    showOfflineToast('Match resumed locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     const updatedState = await db.matchState.get(id);
     if (!updatedState) {
@@ -576,31 +531,12 @@ export const matchesApi = {
     return dbToMatchState(updatedState);
   },
   /**
-   * Complete a match with offline fallback
+   * Complete a match - LOCAL-FIRST
    * 
-   * Requirements: 2.3 - Update local match_state to COMPLETED and end any open periods
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async completeMatch(id: string, finalScore?: { home: number; away: number }, notes?: string): Promise<MatchState> {
-    const body: any = {};
-    if (finalScore) body.finalScore = finalScore;
-    if (notes) body.notes = notes;
-
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<MatchState>(`/matches/${id}/complete`, body);
-        return response.data as unknown as MatchState;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: update local match_state to COMPLETED
+    // Local-first: update local match_state to COMPLETED
     const now = Date.now();
     const existingState = await db.matchState.get(id);
 
@@ -650,7 +586,7 @@ export const matchesApi = {
       }
     }
 
-    showOfflineToast('Match completed locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     const updatedState = await db.matchState.get(id);
     if (!updatedState) {
@@ -704,27 +640,12 @@ export const matchesApi = {
     };
   },
   /**
-   * Start a new period with offline fallback
+   * Start a new period - LOCAL-FIRST
    * 
-   * Requirements: 2.1 - Create local match_periods record
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async startPeriod(id: string, periodType?: 'regular' | 'extra_time' | 'penalty_shootout'): Promise<MatchPeriod> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<MatchPeriod>(`/matches/${id}/periods/start`, periodType ? { periodType } : undefined);
-        return response.data as unknown as MatchPeriod;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: create local match_periods record
+    // Local-first: create local match_periods record
     const now = Date.now();
     const userId = getCurrentUserId();
     const periodId = `period-${now}-${Math.random().toString(36).slice(2, 11)}`;
@@ -769,32 +690,17 @@ export const matchesApi = {
       });
     }
 
-    showOfflineToast('Period started locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     return dbToMatchPeriod(localPeriod);
   },
   /**
-   * End a period with offline fallback
+   * End a period - LOCAL-FIRST
    * 
-   * Requirements: 2.1 - Update local matchPeriods with endedAt
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async endPeriod(id: string, periodId: string, payload?: { reason?: string; actualDurationSeconds?: number }): Promise<MatchPeriod> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<MatchPeriod>(`/matches/${id}/periods/${periodId}/end`, payload || {});
-        return response.data as unknown as MatchPeriod;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: update local match_periods with endedAt
+    // Local-first: update local match_periods with endedAt
     const now = Date.now();
     const existingPeriod = await db.matchPeriods.get(periodId);
 
@@ -824,7 +730,7 @@ export const matchesApi = {
       });
     }
 
-    showOfflineToast('Period ended locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     const updatedPeriod = await db.matchPeriods.get(periodId);
     if (!updatedPeriod) {

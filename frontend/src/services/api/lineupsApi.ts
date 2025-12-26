@@ -163,11 +163,48 @@ export const lineupsApi = {
   },
 
   /**
-   * Update lineup by composite key (with upsert capability)
+   * Update lineup by composite key (with upsert capability) - LOCAL-FIRST
    */
   async updateByKey(matchId: string, playerId: string, startMinute: number, data: LineupUpdateRequest): Promise<Lineup> {
-    const response = await apiClient.put<Lineup>(`/lineups/by-key/${matchId}/${playerId}/${startMinute}`, data);
-    return response.data as unknown as Lineup;
+    const { lineupsDataLayer } = await import('../dataLayer');
+    const compositeId = generateLineupId(matchId, playerId, startMinute);
+
+    // Try to find existing lineup by composite ID or by matching fields
+    let existingLineup = await db.lineup.get(compositeId);
+
+    if (!existingLineup) {
+      // Try to find by matching matchId, playerId, and startMinute
+      const matchingLineups = await db.lineup
+        .where('matchId')
+        .equals(matchId)
+        .filter(l => l.playerId === playerId && l.startMinute === startMinute && !l.isDeleted)
+        .toArray();
+      existingLineup = matchingLineups[0];
+    }
+
+    if (existingLineup) {
+      // Update existing lineup
+      await lineupsDataLayer.update(existingLineup.id, {
+        startMinute: data.startMinute,
+        endMinute: data.endMinute,
+        position: data.position,
+      });
+      const updated = await db.lineup.get(existingLineup.id);
+      if (!updated) throw new Error('Lineup not found after update');
+      try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
+      return dbToLineup(updated);
+    } else {
+      // Create new lineup (upsert)
+      const newLineup = await lineupsDataLayer.create({
+        matchId,
+        playerId,
+        startMinute,
+        endMinute: data.endMinute,
+        position: data.position || 'SUB',
+      });
+      try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
+      return dbToLineup(newLineup);
+    }
   },
 
   /**
@@ -180,34 +217,37 @@ export const lineupsApi = {
   },
 
   /**
-   * Delete lineup by composite key
+   * Delete lineup by composite key - LOCAL-FIRST
    */
   async deleteByKey(matchId: string, playerId: string, startMinute: number): Promise<void> {
-    await apiClient.delete(`/lineups/by-key/${matchId}/${playerId}/${startMinute}`);
+    const { lineupsDataLayer } = await import('../dataLayer');
+    const compositeId = generateLineupId(matchId, playerId, startMinute);
+
+    // Try to find existing lineup by composite ID or by matching fields
+    let existingLineup = await db.lineup.get(compositeId);
+
+    if (!existingLineup) {
+      // Try to find by matching matchId, playerId, and startMinute
+      const matchingLineups = await db.lineup
+        .where('matchId')
+        .equals(matchId)
+        .filter(l => l.playerId === playerId && l.startMinute === startMinute && !l.isDeleted)
+        .toArray();
+      existingLineup = matchingLineups[0];
+    }
+
+    if (existingLineup) {
+      await lineupsDataLayer.delete(existingLineup.id);
+      try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
+    }
   },
 
   /**
-   * Batch operations for lineups with offline fallback
+   * Batch operations for lineups - LOCAL-FIRST
    * 
-   * Requirements: 3.3 - Process batch create/update/delete operations locally when offline
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async batch(operations: LineupBatchRequest): Promise<LineupBatchResult> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<LineupBatchResult>('/lineups/batch', operations);
-        return response.data as unknown as LineupBatchResult;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: process batch operations locally
     const now = Date.now();
     const userId = getCurrentUserId();
 
@@ -238,7 +278,7 @@ export const lineupsApi = {
             synced: false,
           };
 
-          await db.lineup.add(localLineup);
+          await db.lineup.put(localLineup);
           result.created.success++;
           result.created.items.push(dbToLineup(localLineup));
         } catch {
@@ -307,50 +347,34 @@ export const lineupsApi = {
       }
     }
 
-    showOfflineToast('Lineup batch saved locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
     return result;
   },
 
   /**
-   * Batch operations scoped to a specific match
+   * Batch operations scoped to a specific match - LOCAL-FIRST
+   * 
+   * Delegates to batch() which handles local-first writes to IndexedDB.
    */
   async batchByMatch(matchId: string, operations: Omit<LineupBatchRequest, 'matchId'>): Promise<LineupBatchResult> {
-    const response = await apiClient.post<LineupBatchResult>('/lineups/batch-by-match', {
-      matchId,
-      ...operations
-    });
-    return response.data as unknown as LineupBatchResult;
+    // Augment create operations with matchId
+    const augmentedOperations: LineupBatchRequest = {
+      create: operations.create?.map(c => ({ ...c, matchId })),
+      update: operations.update,
+      delete: operations.delete,
+    };
+    return this.batch(augmentedOperations);
   },
 
   /**
-   * Make a substitution during a match with offline fallback
+   * Make a substitution during a match - LOCAL-FIRST
    * 
-   * Requirements: 3.3 - Update local lineup records for substitution when offline
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async makeSubstitution(matchId: string, substitution: SubstitutionRequest): Promise<{
     playerOff: Lineup;
     playerOn: Lineup;
   }> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<{
-          playerOff: Lineup;
-          playerOn: Lineup;
-        }>(`/lineups/match/${matchId}/substitute`, substitution);
-        return response.data as unknown as {
-          playerOff: Lineup;
-          playerOn: Lineup;
-        };
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
 
     // Offline fallback: update local lineup records
     const now = Date.now();
@@ -399,8 +423,8 @@ export const lineupsApi = {
       synced: false,
     };
 
-    await db.lineup.add(playerOnLineup);
-    showOfflineToast('Substitution saved locally - will sync when online');
+    await db.lineup.put(playerOnLineup);
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     return {
       playerOff: dbToLineup(updatedPlayerOff),

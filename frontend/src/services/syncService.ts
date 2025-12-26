@@ -9,6 +9,7 @@ import {
   dbSeasonToServerPayload,
   dbMatchToServerPayload,
   dbEventToServerPayload,
+  dbPlayerTeamToServerPayload,
 } from '../db/transforms';
 
 /**
@@ -348,6 +349,77 @@ async function syncPlayers(authUserId: string): Promise<SyncResult> {
     }
   } catch (err) {
     console.error('[SyncService] Error syncing players:', err);
+  }
+
+  return result;
+}
+
+/**
+ * Sync player-teams from the player_teams table to the server.
+ * 
+ * Requirements: 3.3 - Process unsynced player-teams where synced equals false
+ * Requirements: 3.3 - Update synced to true and set synced_at on success
+ * Requirements: 3.3 - Exclude guest records
+ */
+async function syncPlayerTeams(authUserId: string): Promise<SyncResult> {
+  const result: SyncResult = { synced: 0, failed: 0, errors: [] };
+  if (!authUserId) {
+    return result;
+  }
+
+  try {
+    if (!db.playerTeams) {
+      return result;
+    }
+
+    let allPlayerTeams;
+    try {
+      allPlayerTeams = await db.playerTeams.toArray();
+    } catch (dbErr) {
+      console.debug('[SyncService] Player teams table not ready:', dbErr);
+      return result;
+    }
+
+    // Filter for unsynced, non-guest records
+    const unsyncedPlayerTeams = allPlayerTeams
+      .filter(pt => pt.synced === false && !isGuestId(pt.createdByUserId) && isOwnedByAuth(pt, authUserId))
+      .slice(0, BATCH_SIZE);
+
+    // Process soft deletes first
+    const playerTeamsToSync = await processSoftDeletes(
+      db.playerTeams,
+      unsyncedPlayerTeams,
+      async (id) => {
+        await apiClient.delete(`/player-teams/${id}`);
+      },
+      'player_teams',
+      result
+    );
+
+    for (const playerTeam of playerTeamsToSync) {
+      try {
+        const payload = dbPlayerTeamToServerPayload(playerTeam);
+
+        // Use PUT for upsert behavior with client-generated ID
+        await apiClient.put(`/player-teams/${playerTeam.id}`, payload);
+
+        await db.playerTeams.update(playerTeam.id, {
+          synced: true,
+          syncedAt: new Date().toISOString(),
+        });
+
+        result.synced++;
+      } catch (err) {
+        result.failed++;
+        result.errors.push({
+          table: 'player_teams',
+          recordId: playerTeam.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[SyncService] Error syncing player teams:', err);
   }
 
   return result;
@@ -1048,6 +1120,12 @@ class SyncService {
       combinedResult.synced += playersResult.synced;
       combinedResult.failed += playersResult.failed;
       combinedResult.errors.push(...playersResult.errors);
+
+      // 3.5. Sync player-teams (depends on players and teams)
+      const playerTeamsResult = await syncPlayerTeams(authUserId);
+      combinedResult.synced += playerTeamsResult.synced;
+      combinedResult.failed += playerTeamsResult.failed;
+      combinedResult.errors.push(...playerTeamsResult.errors);
 
       // 4. Sync matches (depends on seasons and teams)
       const matchesResult = await syncMatches(authUserId);

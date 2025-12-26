@@ -392,79 +392,157 @@ export const playersApi = {
   },
 
   /**
-   * Create a new player with team assignment in one operation
+   * Create a new player with team assignment in one operation - LOCAL-FIRST
+   * 
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async createPlayerWithTeam(playerData: PlayerCreateRequest & { teamId: string; startDate?: string }): Promise<PlayerResponse> {
+    // Check guest quota if not authenticated
     if (!authApi.isAuthenticated()) {
       const q = await canAddPlayer(playerData.teamId);
       if (!q.ok) throw new Error(q.reason);
-      // Local create
-      const { db } = await import('../../db/indexedDB');
-      const now = Date.now();
-      const id = crypto?.randomUUID ? crypto.randomUUID() : `player-${now}-${Math.random().toString(36).slice(2)}`;
-      await db.players.add({
-        id,
-        fullName: playerData.name,
-        squadNumber: playerData.squadNumber,
-        preferredPos: playerData.preferredPosition,
-        dob: playerData.dateOfBirth ? new Date(playerData.dateOfBirth).toISOString() : undefined,
-        notes: playerData.notes,
-        currentTeam: playerData.teamId,
-        createdAt: now,
-        updatedAt: now,
-        createdByUserId: getGuestId(),
-        isDeleted: false,
-        synced: false,
-      } as any);
-      try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch { }
-      return { data: { id, name: playerData.name } as any, success: true, message: 'Player created locally' };
     }
-    const { teamId, startDate = '2024-01-01', ...playerFields } = playerData;
-    const requestData = { ...playerFields, teamId, startDate, isActive: true };
-    const response = await apiClient.post('/players-with-team', requestData);
+
+    const { db } = await import('../../db/indexedDB');
+    const { playersDataLayer } = await import('../dataLayer');
+    const now = new Date();
+    const nowIso = now.toISOString();
+
+    // Get the current user ID (authenticated or guest)
+    const userId = authApi.isAuthenticated()
+      ? (await authApi.getCurrentUser().catch(() => null))?.data?.id || getGuestId()
+      : getGuestId();
+
+    // Create player using dataLayer (writes to IndexedDB with synced: false)
+    const player = await playersDataLayer.create({
+      name: playerData.name,
+      squadNumber: playerData.squadNumber,
+      preferredPosition: playerData.preferredPosition,
+      dateOfBirth: playerData.dateOfBirth ? new Date(playerData.dateOfBirth).toISOString() : undefined,
+      notes: playerData.notes,
+      teamId: playerData.teamId,
+    });
+
+    // Create player_teams junction entry
+    const ptId = crypto?.randomUUID ? crypto.randomUUID() : `pt-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const startDate = playerData.startDate ? new Date(playerData.startDate) : now;
+
+    await db.playerTeams.put({
+      id: ptId,
+      playerId: player.id,
+      teamId: playerData.teamId,
+      startDate: startDate,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      createdByUserId: userId,
+      isDeleted: false,
+      synced: false,
+    } as any);
+
+    // Dispatch change event for UI updates
+    try {
+      window.dispatchEvent(new CustomEvent('data:changed'));
+      if (!authApi.isAuthenticated()) {
+        window.dispatchEvent(new CustomEvent('guest:changed'));
+      }
+    } catch { }
+
     return {
-      data: (response.data as any).player as Player,
+      data: {
+        id: player.id,
+        name: player.fullName || playerData.name,
+        squadNumber: player.squadNumber,
+        preferredPosition: player.preferredPos,
+        dateOfBirth: player.dob ? new Date(player.dob) : undefined,
+        notes: player.notes,
+        currentTeam: playerData.teamId,
+      } as any,
       success: true,
-      message: 'Player created and assigned to team successfully'
+      message: 'Player created and assigned to team'
     };
   },
 
   /**
-   * Create a new player with multiple team assignments in one operation
+   * Create a new player with multiple team assignments in one operation - LOCAL-FIRST
+   * 
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async createPlayerWithTeams(playerData: PlayerCreateRequest & { teamIds: string[]; startDate?: string }): Promise<PlayerResponse> {
-    if (!authApi.isAuthenticated()) {
-      const firstTeam = playerData.teamIds?.[0];
-      if (firstTeam) {
-        const q = await canAddPlayer(firstTeam);
-        if (!q.ok) throw new Error(q.reason);
-      }
-      const { db } = await import('../../db/indexedDB');
-      const now = Date.now();
-      const id = crypto?.randomUUID ? crypto.randomUUID() : `player-${now}-${Math.random().toString(36).slice(2)}`;
-      await db.players.add({
-        id,
-        fullName: playerData.name,
-        squadNumber: playerData.squadNumber,
-        preferredPos: playerData.preferredPosition,
-        dob: playerData.dateOfBirth ? new Date(playerData.dateOfBirth).toISOString() : undefined,
-        notes: playerData.notes,
-        currentTeam: firstTeam,
-        createdAt: now,
-        updatedAt: now,
-        createdByUserId: getGuestId(),
-        isDeleted: false,
-      } as any);
-      try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch { }
-      return { data: { id, name: playerData.name } as any, success: true, message: 'Player created locally' };
+    const firstTeam = playerData.teamIds?.[0];
+
+    // Check guest quota if not authenticated
+    if (!authApi.isAuthenticated() && firstTeam) {
+      const q = await canAddPlayer(firstTeam);
+      if (!q.ok) throw new Error(q.reason);
     }
-    const { teamIds, startDate = '2024-01-01', ...playerFields } = playerData;
-    const requestData = { ...playerFields, teamIds, startDate, isActive: true };
-    const response = await apiClient.post('/players-with-teams', requestData);
+
+    const { db } = await import('../../db/indexedDB');
+    const { playersDataLayer } = await import('../dataLayer');
+    const now = new Date();
+    const nowIso = now.toISOString();
+
+    // Get the current user ID (authenticated or guest)
+    const userId = authApi.isAuthenticated()
+      ? (await authApi.getCurrentUser().catch(() => null))?.data?.id || getGuestId()
+      : getGuestId();
+
+    // Get team names for currentTeam field
+    const teams = await db.teams.where('id').anyOf(playerData.teamIds).toArray();
+    const currentTeamNames = teams.map(t => t.name).filter(Boolean).join(', ');
+
+    // Create player using dataLayer (writes to IndexedDB with synced: false)
+    const player = await playersDataLayer.create({
+      name: playerData.name,
+      squadNumber: playerData.squadNumber,
+      preferredPosition: playerData.preferredPosition,
+      dateOfBirth: playerData.dateOfBirth ? new Date(playerData.dateOfBirth).toISOString() : undefined,
+      notes: playerData.notes,
+      teamId: firstTeam,
+    });
+
+    // Update currentTeam with all team names
+    if (currentTeamNames) {
+      await db.players.update(player.id, { currentTeam: currentTeamNames } as any);
+    }
+
+    // Create player_teams junction entries for all teams
+    const startDate = playerData.startDate ? new Date(playerData.startDate) : now;
+
+    for (const teamId of playerData.teamIds) {
+      const ptId = crypto?.randomUUID ? crypto.randomUUID() : `pt-${Date.now()}-${Math.random().toString(36).slice(2)}-${teamId}`;
+      await db.playerTeams.put({
+        id: ptId,
+        playerId: player.id,
+        teamId: teamId,
+        startDate: startDate,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        createdByUserId: userId,
+        isDeleted: false,
+        synced: false,
+      } as any);
+    }
+
+    // Dispatch change event for UI updates
+    try {
+      window.dispatchEvent(new CustomEvent('data:changed'));
+      if (!authApi.isAuthenticated()) {
+        window.dispatchEvent(new CustomEvent('guest:changed'));
+      }
+    } catch { }
+
     return {
-      data: (response.data as any).player as Player,
+      data: {
+        id: player.id,
+        name: player.fullName || playerData.name,
+        squadNumber: player.squadNumber,
+        preferredPosition: player.preferredPos,
+        dateOfBirth: player.dob ? new Date(player.dob) : undefined,
+        notes: player.notes,
+        currentTeam: currentTeamNames || firstTeam,
+      } as any,
       success: true,
-      message: `Player created and assigned to ${teamIds.length} team${teamIds.length !== 1 ? 's' : ''} successfully`
+      message: `Player created and assigned to ${playerData.teamIds.length} team${playerData.teamIds.length !== 1 ? 's' : ''}`
     };
   }
 };
