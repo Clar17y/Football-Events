@@ -76,6 +76,8 @@ export function teamWriteToDb(data: TeamWriteInput): Partial<DbTeam> {
  * Server API team payload (camelCase)
  */
 export interface ServerTeamPayload {
+  /** Client-generated UUID for local-first sync */
+  id: string;
   name: string;
   homeKitPrimary?: string;
   homeKitSecondary?: string;
@@ -90,6 +92,7 @@ export interface ServerTeamPayload {
  */
 export function dbTeamToServerPayload(t: DbTeam): ServerTeamPayload {
   return {
+    id: t.id,
     name: t.name,
     homeKitPrimary: nullToUndefined(t.homeKitPrimary),
     homeKitSecondary: nullToUndefined(t.homeKitSecondary),

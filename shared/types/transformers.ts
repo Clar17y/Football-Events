@@ -265,6 +265,8 @@ export const transformPlayerCreateRequest = (
   request: PlayerCreateRequest,
   created_by_user_id: string
 ): PrismaPlayerCreateInput => ({
+  // Use client-provided ID if available (for local-first sync)
+  ...(request.id ? { id: request.id } : {}),
   name: request.name,
   squad_number: request.squadNumber ?? null,
   preferred_pos: request.preferredPosition ?? null,
@@ -277,7 +279,7 @@ export const transformPlayerUpdateRequest = (
   request: PlayerUpdateRequest
 ): PrismaPlayerUpdateInput => {
   const update: PrismaPlayerUpdateInput = {};
-  
+
   if (request.name !== undefined) update.name = request.name;
   if (request.squadNumber !== undefined) update.squad_number = request.squadNumber;
   if (request.preferredPosition !== undefined) update.preferred_pos = request.preferredPosition;
@@ -285,7 +287,7 @@ export const transformPlayerUpdateRequest = (
     update.dob = request.dateOfBirth ? new Date(request.dateOfBirth) : null;
   }
   if (request.notes !== undefined) update.notes = request.notes;
-  
+
   return update;
 };
 
@@ -293,8 +295,10 @@ export const transformTeamCreateRequest = (
   request: TeamCreateRequest,
   created_by_user_id: string
 ): PrismaTeamCreateInput => {
-  
+
   const result = {
+    // Use client-provided ID if available (for local-first sync)
+    ...(request.id ? { id: request.id } : {}),
     name: request.name,
     is_opponent: (request as any).isOpponent ?? false,
     home_kit_primary: request.homeKitPrimary ?? null,
@@ -312,14 +316,14 @@ export const transformTeamUpdateRequest = (
   request: TeamUpdateRequest
 ): PrismaTeamUpdateInput => {
   const update: PrismaTeamUpdateInput = {};
-  
+
   if (request.name !== undefined) update.name = request.name;
   if (request.homeKitPrimary !== undefined) update.home_kit_primary = request.homeKitPrimary;
   if (request.homeKitSecondary !== undefined) update.home_kit_secondary = request.homeKitSecondary;
   if (request.awayKitPrimary !== undefined) update.away_kit_primary = request.awayKitPrimary;
   if (request.awayKitSecondary !== undefined) update.away_kit_secondary = request.awayKitSecondary;
   if (request.logoUrl !== undefined) update.logo_url = request.logoUrl;
-  
+
   return update;
 };
 
@@ -327,6 +331,8 @@ export const transformMatchCreateRequest = (
   request: MatchCreateRequest,
   created_by_user_id: string
 ): PrismaMatchCreateInput => ({
+  // Use client-provided ID if available (for local-first sync)
+  ...(request.id ? { match_id: request.id } : {}),
   season_id: request.seasonId,
   kickoff_ts: new Date(request.kickoffTime),
   competition: request.competition ?? null,
@@ -343,7 +349,7 @@ export const transformMatchUpdateRequest = (
   request: MatchUpdateRequest
 ): PrismaMatchUpdateInput => {
   const update: PrismaMatchUpdateInput = {};
-  
+
   if (request.seasonId !== undefined) update.season_id = request.seasonId;
   if (request.kickoffTime !== undefined) update.kickoff_ts = new Date(request.kickoffTime);
   if (request.competition !== undefined) update.competition = request.competition;
@@ -355,7 +361,7 @@ export const transformMatchUpdateRequest = (
   if (request.homeScore !== undefined) update.home_score = request.homeScore;
   if (request.awayScore !== undefined) update.away_score = request.awayScore;
   if (request.notes !== undefined) update.notes = request.notes;
-  
+
   return update;
 };
 
@@ -379,6 +385,8 @@ export const transformSeasonCreateRequest = (
   request: SeasonCreateRequest,
   created_by_user_id: string
 ): PrismaSeasonCreateInput => ({
+  // Use client-provided ID if available (for local-first sync)
+  ...(request.id ? { season_id: request.id } : {}),
   label: request.label,
   start_date: new Date(request.startDate),
   end_date: new Date(request.endDate),
@@ -419,6 +427,8 @@ export const transformLineupCreateRequest = (
   request: LineupCreateRequest,
   created_by_user_id: string
 ): PrismaLineupCreateInput => ({
+  // Use client-provided ID if available (for local-first sync)
+  ...(request.id ? { id: request.id } : {}),
   match_id: request.matchId,
   player_id: request.playerId,
   start_min: request.startMinute ?? 0,
@@ -481,6 +491,8 @@ export const transformPlayerTeamCreateRequest = (
   request: PlayerTeamCreateRequest,
   created_by_user_id: string
 ): PrismaPlayerTeamCreateInput => ({
+  // Use client-provided ID if available (for local-first sync)
+  ...(request.id ? { id: request.id } : {}),
   player_id: request.playerId,
   team_id: request.teamId,
   start_date: new Date(request.startDate),

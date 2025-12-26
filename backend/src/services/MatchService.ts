@@ -1,14 +1,14 @@
 import { PrismaClient } from '@prisma/client';
-import { 
-  transformMatch, 
-  transformMatchCreateRequest, 
+import {
+  transformMatch,
+  transformMatchCreateRequest,
   transformMatchUpdateRequest,
-  transformMatches 
+  transformMatches
 } from '@shared/types';
-import type { 
-  Match, 
-  MatchCreateRequest, 
-  MatchUpdateRequest 
+import type {
+  Match,
+  MatchCreateRequest,
+  MatchUpdateRequest
 } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { NaturalKeyResolver, NaturalKeyResolverError } from '../utils/naturalKeyResolver';
@@ -55,7 +55,7 @@ export class MatchService {
     const where: any = {
       is_deleted: false // Exclude soft-deleted matches
     };
-    
+
     if (search) {
       where.OR = [
         {
@@ -78,18 +78,18 @@ export class MatchService {
         }
       ];
     }
-    
+
     if (seasonId) {
       where.season_id = seasonId;
     }
-    
+
     if (teamId) {
       where.OR = [
         { home_team_id: teamId },
         { away_team_id: teamId }
       ];
     }
-    
+
     if (competition) {
       where.competition = {
         contains: competition,
@@ -163,9 +163,9 @@ export class MatchService {
   }
 
   async getMatchById(id: string, userId: string, userRole: string): Promise<Match | null> {
-    const where: any = { 
+    const where: any = {
       match_id: id,
-      is_deleted: false 
+      is_deleted: false
     };
 
     // Non-admin users can only see matches they created
@@ -193,7 +193,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         },
         awayTeam: {
@@ -205,7 +205,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         }
       }
@@ -250,8 +250,8 @@ export class MatchService {
         prisma: this.prisma,
         model: 'match',
         uniqueConstraints: SoftDeletePatterns.matchConstraint(
-          data.homeTeamId, 
-          data.awayTeamId, 
+          data.homeTeamId,
+          data.awayTeamId,
           new Date(data.kickoffTime)
         ),
         createData: transformMatchCreateRequest(data, userId),
@@ -284,9 +284,9 @@ export class MatchService {
   async updateMatch(id: string, data: MatchUpdateRequest, userId: string, userRole: string): Promise<Match | null> {
     try {
       // First check if match exists and user has permission (only creator or admin)
-      const where: any = { 
+      const where: any = {
         match_id: id,
-        is_deleted: false 
+        is_deleted: false
       };
 
       // Non-admin users can only update matches they created
@@ -388,9 +388,9 @@ export class MatchService {
   async deleteMatch(id: string, userId: string, userRole: string): Promise<boolean> {
     try {
       // First check if match exists and user has permission (only creator or admin)
-      const where: any = { 
+      const where: any = {
         match_id: id,
-        is_deleted: false 
+        is_deleted: false
       };
 
       // Non-admin users can only delete matches they created
@@ -468,7 +468,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         },
         awayTeam: {
@@ -480,7 +480,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         }
       }
@@ -521,7 +521,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         },
         awayTeam: {
@@ -533,7 +533,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         }
       }
@@ -585,7 +585,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         },
         awayTeam: {
@@ -597,7 +597,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         }
       }
@@ -649,7 +649,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         },
         awayTeam: {
@@ -661,7 +661,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         }
       }
@@ -699,7 +699,7 @@ export class MatchService {
           home_kit_primary: true,
           home_kit_secondary: true,
           logo_url: true,
-              is_opponent: true
+          is_opponent: true
         }
       }),
       this.prisma.team.findUnique({
@@ -710,7 +710,7 @@ export class MatchService {
           away_kit_primary: true,
           away_kit_secondary: true,
           logo_url: true,
-              is_opponent: true
+          is_opponent: true
         }
       })
     ]);
@@ -787,10 +787,11 @@ export class MatchService {
                     is_deleted: false
                   }
                 }
+              }
             }
           }
         }
-      }}),
+      }),
       this.prisma.event.findMany({
         where: { match_id: id, is_deleted: false },
         orderBy: [{ clock_ms: 'desc' }, { created_at: 'desc' }],
@@ -889,20 +890,6 @@ export class MatchService {
     };
   }
 
-  /**
-   * Get all team IDs that belong to a user
-   */
-  private async getUserTeamIds(userId: string): Promise<string[]> {
-    const teams = await this.prisma.team.findMany({
-      where: { 
-        created_by_user_id: userId,
-        is_deleted: false 
-      },
-      select: { id: true }
-    });
-
-    return teams.map(team => team.id);
-  }
 
   async createQuickStartMatch(payload: any, userId: string, userRole: string): Promise<Match> {
     const {

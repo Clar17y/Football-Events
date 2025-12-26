@@ -73,6 +73,8 @@ export function playerWriteToDb(data: PlayerWriteInput): Partial<DbPlayer> {
  * Server API player payload (camelCase)
  */
 export interface ServerPlayerPayload {
+  /** Client-generated UUID for local-first sync */
+  id: string;
   name: string;
   squadNumber?: number;
   preferredPosition?: string;
@@ -94,6 +96,7 @@ export function dbPlayerToServerPayload(p: DbPlayer): ServerPlayerPayload {
   }
 
   return {
+    id: p.id,
     name: p.name || '',
     squadNumber: nullToUndefined(p.squadNumber),
     preferredPosition: nullToUndefined(p.preferredPosition),

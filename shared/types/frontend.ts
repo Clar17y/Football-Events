@@ -163,6 +163,8 @@ export interface Lineup {
 // ============================================================================
 
 export interface PlayerCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   name: string;
   squadNumber?: number;
   preferredPosition?: string;
@@ -181,6 +183,8 @@ export interface PlayerUpdateRequest {
 }
 
 export interface TeamCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   name: string;
   homeKitPrimary?: string;
   homeKitSecondary?: string;
@@ -201,6 +205,8 @@ export interface TeamUpdateRequest {
 }
 
 export interface MatchCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   seasonId: string;
   kickoffTime: IsoDateTimeString;
   competition?: string;
@@ -251,6 +257,8 @@ export interface EventUpdateRequest {
 }
 
 export interface SeasonCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   label: string;
   startDate: IsoDateString;
   endDate: IsoDateString;
@@ -277,6 +285,8 @@ export interface PositionUpdateRequest {
 }
 
 export interface LineupCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   matchId: string;
   playerId: string;
   startMinute?: number;
@@ -363,6 +373,8 @@ export interface PlayerTeam {
 }
 
 export interface PlayerTeamCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   playerId: string;
   teamId: string;
   startDate: IsoDateString;

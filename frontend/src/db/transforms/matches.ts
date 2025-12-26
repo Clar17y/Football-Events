@@ -88,6 +88,8 @@ export function matchWriteToDb(data: MatchWriteInput): Partial<DbMatch> {
  * Server API match payload (camelCase)
  */
 export interface ServerMatchPayload {
+  /** Client-generated UUID for local-first sync */
+  id: string;
   seasonId: string;
   kickoffTime: string;
   homeTeamId: string;
@@ -104,6 +106,7 @@ export interface ServerMatchPayload {
  */
 export function dbMatchToServerPayload(m: DbMatch): ServerMatchPayload {
   return {
+    id: m.id,
     seasonId: m.seasonId,
     kickoffTime: m.kickoffTime,
     homeTeamId: m.homeTeamId,

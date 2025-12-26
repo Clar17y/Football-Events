@@ -80,6 +80,8 @@ export function eventWriteToDb(data: EventWriteInput): Partial<DbEvent> {
  * Server API event payload (camelCase)
  */
 export interface ServerEventPayload {
+  /** Client-generated UUID for local-first sync */
+  id: string;
   matchId: string;
   kind: string;
   periodNumber: number;
@@ -95,6 +97,7 @@ export interface ServerEventPayload {
  */
 export function dbEventToServerPayload(e: DbEvent): ServerEventPayload {
   return {
+    id: e.id,
     matchId: e.matchId,
     kind: e.kind,
     periodNumber: e.periodNumber ?? 1,
