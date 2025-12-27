@@ -7,7 +7,9 @@ export const CORE_EVENT_KINDS = [
   'penalty',
   'foul',
   'free_kick',
-  'ball_out',
+  'assist',
+  'yellow_card',
+  'red_card',
 ] as const;
 
 export type CoreEventKind = (typeof CORE_EVENT_KINDS)[number];

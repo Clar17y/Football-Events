@@ -143,8 +143,10 @@ export const eventCreateSchema = z.object({
   matchId: z.string()
     .uuid('Match ID must be a valid UUID'),
   kind: z.enum([
-    'goal', 'assist', 'key_pass', 'save', 'interception', 
-    'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal'
+    'goal', 'assist', 'key_pass', 'save', 'interception',
+    'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal',
+    'formation_change', 'yellow_card', 'red_card', 'corner', 'offside',
+    'shot_on_target', 'shot_off_target', 'clearance', 'block', 'cross', 'header'
   ]),
   teamId: z.string()
     .uuid('Team ID must be a valid UUID'),
@@ -176,8 +178,10 @@ export const eventUpdateSchema = z.object({
     .uuid('Match ID must be a valid UUID')
     .optional(),
   kind: z.enum([
-    'goal', 'assist', 'key_pass', 'save', 'interception', 
-    'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal'
+    'goal', 'assist', 'key_pass', 'save', 'interception',
+    'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal',
+    'formation_change', 'yellow_card', 'red_card', 'corner', 'offside',
+    'shot_on_target', 'shot_off_target', 'clearance', 'block', 'cross', 'header'
   ]).optional(),
   teamId: z.string().uuid().optional(),
   playerId: z.string().uuid().nullable().optional(),
@@ -226,22 +230,22 @@ const awardCreateBaseSchema = z.object({
 });
 
 export const awardCreateSchema = awardCreateBaseSchema
-.refine(data => !!(data.seasonId || data.seasonLabel), {
-  message: 'Provide either seasonId or seasonLabel',
-  path: ['seasonId']
-})
-.refine(data => !!(data.playerId || data.playerName), {
-  message: 'Provide either playerId or playerName',
-  path: ['playerId']
-})
-.refine(data => !(data.seasonId && data.seasonLabel), {
-  message: 'Provide only one of seasonId or seasonLabel',
-  path: ['seasonId']
-})
-.refine(data => !(data.playerId && data.playerName), {
-  message: 'Provide only one of playerId or playerName',
-  path: ['playerId']
-});
+  .refine(data => !!(data.seasonId || data.seasonLabel), {
+    message: 'Provide either seasonId or seasonLabel',
+    path: ['seasonId']
+  })
+  .refine(data => !!(data.playerId || data.playerName), {
+    message: 'Provide either playerId or playerName',
+    path: ['playerId']
+  })
+  .refine(data => !(data.seasonId && data.seasonLabel), {
+    message: 'Provide only one of seasonId or seasonLabel',
+    path: ['seasonId']
+  })
+  .refine(data => !(data.playerId && data.playerName), {
+    message: 'Provide only one of playerId or playerName',
+    path: ['playerId']
+  });
 
 export const awardUpdateSchema = awardCreateBaseSchema.partial();
 
@@ -265,22 +269,22 @@ const matchAwardCreateBaseSchema = z.object({
 });
 
 export const matchAwardCreateSchema = matchAwardCreateBaseSchema
-.refine(data => !!(data.matchId || (data.homeTeamName && data.awayTeamName && data.kickoffTime)), {
-  message: 'Provide either matchId or (homeTeamName, awayTeamName, kickoffTime)',
-  path: ['matchId']
-})
-.refine(data => !(data.matchId && (data.homeTeamName || data.awayTeamName || data.kickoffTime)), {
-  message: 'Provide only one of matchId or match natural keys',
-  path: ['matchId']
-})
-.refine(data => !!(data.playerId || data.playerName), {
-  message: 'Provide either playerId or playerName',
-  path: ['playerId']
-})
-.refine(data => !(data.playerId && data.playerName), {
-  message: 'Provide only one of playerId or playerName',
-  path: ['playerId']
-});
+  .refine(data => !!(data.matchId || (data.homeTeamName && data.awayTeamName && data.kickoffTime)), {
+    message: 'Provide either matchId or (homeTeamName, awayTeamName, kickoffTime)',
+    path: ['matchId']
+  })
+  .refine(data => !(data.matchId && (data.homeTeamName || data.awayTeamName || data.kickoffTime)), {
+    message: 'Provide only one of matchId or match natural keys',
+    path: ['matchId']
+  })
+  .refine(data => !!(data.playerId || data.playerName), {
+    message: 'Provide either playerId or playerName',
+    path: ['playerId']
+  })
+  .refine(data => !(data.playerId && data.playerName), {
+    message: 'Provide only one of playerId or playerName',
+    path: ['playerId']
+  });
 
 export const matchAwardUpdateSchema = matchAwardCreateBaseSchema.partial();
 
@@ -351,15 +355,15 @@ const eventBatchSchemaBase = z.object({
 
 const applyTotalBatchCap = <T extends z.ZodTypeAny>(schema: T) =>
   (schema as any).superRefine((data: any, ctx: z.RefinementCtx) => {
-  const total = (data.create?.length || 0) + (data.update?.length || 0) + (data.delete?.length || 0);
-  if (total > MAX_BATCH_ITEMS) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: [],
-      message: `Total batch operations cannot exceed ${MAX_BATCH_ITEMS}`
-    });
-  }
-}) as T;
+    const total = (data.create?.length || 0) + (data.update?.length || 0) + (data.delete?.length || 0);
+    if (total > MAX_BATCH_ITEMS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [],
+        message: `Total batch operations cannot exceed ${MAX_BATCH_ITEMS}`
+      });
+    }
+  }) as T;
 
 export const eventBatchSchema = applyTotalBatchCap(eventBatchSchemaBase);
 
@@ -415,7 +419,9 @@ export const lineupBatchByMatchSchema = applyTotalBatchCap(lineupBatchSchemaBase
 export const matchQuickEventSchema = z.object({
   kind: z.enum([
     'goal', 'assist', 'key_pass', 'save', 'interception',
-    'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal'
+    'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal',
+    'formation_change', 'yellow_card', 'red_card', 'corner', 'offside',
+    'shot_on_target', 'shot_off_target', 'clearance', 'block', 'cross', 'header'
   ]),
   teamId: z.string().uuid('Team ID must be a valid UUID'),
   playerId: z.string().uuid('Player ID must be a valid UUID').nullable().optional(),

@@ -488,6 +488,16 @@ enum event_kind {
   ball_out
   own_goal
   formation_change
+  yellow_card
+  red_card
+  corner
+  offside
+  shot_on_target
+  shot_off_target
+  clearance
+  block
+  cross
+  header
 
   @@schema("grassroots")
 }

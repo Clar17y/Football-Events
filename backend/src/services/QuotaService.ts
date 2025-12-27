@@ -31,12 +31,20 @@ export type Usage = {
 
 const ALL_EVENT_KINDS = [
   ...CORE_EVENT_KINDS,
-  'assist',
   'key_pass',
   'save',
   'interception',
   'tackle',
   'formation_change',
+  'corner',
+  'offside',
+  'shot_on_target',
+  'shot_off_target',
+  'clearance',
+  'block',
+  'cross',
+  'header',
+  'ball_out',
 ] as const;
 
 const HARD_CAPS = {
@@ -82,7 +90,7 @@ const FEATURES_BY_PLAN: Record<PlanType, Features> = {
 const isScoringEventKind = (kind: string): boolean => kind === 'goal' || kind === 'own_goal';
 
 export class QuotaService {
-  constructor(private prisma: PrismaClient) {}
+  constructor(private prisma: PrismaClient) { }
 
   async getPlanType(userId: string, userRole?: string): Promise<PlanType> {
     if (userRole === 'ADMIN') return 'premium';
