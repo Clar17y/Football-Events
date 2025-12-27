@@ -11,6 +11,8 @@
 import { db } from '../db/indexedDB';
 import { getGuestId, isGuest } from '../utils/guest';
 import { getCurrentUserId } from '../utils/network';
+import { getCachedMeLimits, type MeLimits } from './limitsCache';
+import { CORE_EVENT_KINDS } from '@shared/types/limits';
 import type {
     DbTeam,
     DbPlayer,
@@ -22,6 +24,34 @@ import type {
     DbMatchState,
     DbDefaultLineup
 } from '../db/schema';
+
+const DEFAULT_FREE_LIMITS: MeLimits = {
+    ownedTeams: 1,
+    playersPerOwnedTeam: 20,
+    seasons: 5,
+    matchesPerSeason: 30,
+    eventsPerMatch: 40,
+    formationChangesPerMatch: 5,
+    activeShareLinks: 1,
+};
+
+const DEFAULT_FREE_ALLOWED_EVENT_KINDS = new Set<string>(CORE_EVENT_KINDS);
+
+async function getAuthLimitsForOfflineWrite(): Promise<{ limits: MeLimits; allowedEventKinds: Set<string> } | null> {
+    try {
+        if (typeof navigator === 'undefined' || navigator.onLine) return null;
+        if (isGuest()) return null;
+
+        const cached = await getCachedMeLimits();
+        const limits = cached?.limits || DEFAULT_FREE_LIMITS;
+        const allowedEventKinds = cached?.allowedEventKinds?.length
+            ? new Set(cached.allowedEventKinds)
+            : DEFAULT_FREE_ALLOWED_EVENT_KINDS;
+        return { limits, allowedEventKinds };
+    } catch {
+        return { limits: DEFAULT_FREE_LIMITS, allowedEventKinds: DEFAULT_FREE_ALLOWED_EVENT_KINDS };
+    }
+}
 
 /**
  * Get the current user ID (authenticated or guest)
@@ -92,6 +122,14 @@ export const teamsDataLayer = {
         logoUrl?: string;
         isOpponent?: boolean;
     }): Promise<DbTeam> {
+        const authLimits = await getAuthLimitsForOfflineWrite();
+        if (authLimits && !(data.isOpponent ?? false)) {
+            const ownedTeams = await db.teams.filter(t => !t.isDeleted && !t.isOpponent).count();
+            if (ownedTeams >= authLimits.limits.ownedTeams) {
+                throw new Error(`Team limit reached (${authLimits.limits.ownedTeams}).`);
+            }
+        }
+
         const id = generateId();
         const team: DbTeam = {
             id,
@@ -240,6 +278,14 @@ export const seasonsDataLayer = {
         isCurrent?: boolean;
         description?: string;
     }): Promise<DbSeason> {
+        const authLimits = await getAuthLimitsForOfflineWrite();
+        if (authLimits && authLimits.limits.seasons != null) {
+            const seasons = await db.seasons.filter(s => !s.isDeleted).count();
+            if (seasons >= authLimits.limits.seasons) {
+                throw new Error(`Season limit reached (${authLimits.limits.seasons}).`);
+            }
+        }
+
         const id = generateId();
         const season: DbSeason = {
             id,
@@ -310,6 +356,18 @@ export const matchesDataLayer = {
         periodFormat?: 'half' | 'quarter';
         notes?: string;
     }): Promise<DbMatch> {
+        const authLimits = await getAuthLimitsForOfflineWrite();
+        if (authLimits && authLimits.limits.matchesPerSeason != null) {
+            const matchesInSeason = await db.matches
+                .where('seasonId')
+                .equals(data.seasonId)
+                .filter(m => !m.isDeleted)
+                .count();
+            if (matchesInSeason >= authLimits.limits.matchesPerSeason) {
+                throw new Error(`Match limit reached (${authLimits.limits.matchesPerSeason}).`);
+            }
+        }
+
         const id = generateId();
         const kickoffTimeIso = typeof data.kickoffTime === 'string'
             ? data.kickoffTime
@@ -409,6 +467,35 @@ export const eventsDataLayer = {
         notes?: string;
         sentiment?: number;
     }): Promise<DbEvent> {
+        const authLimits = await getAuthLimitsForOfflineWrite();
+        if (authLimits) {
+            const kind = String(data.kind);
+            const isScoring = kind === 'goal' || kind === 'own_goal';
+
+            if (kind === 'formation_change') {
+                const formationChanges = await db.events
+                    .where('matchId')
+                    .equals(data.matchId)
+                    .filter(e => !e.isDeleted && String(e.kind) === 'formation_change')
+                    .count();
+                if (formationChanges >= authLimits.limits.formationChangesPerMatch) {
+                    throw new Error(`Formation change limit reached (${authLimits.limits.formationChangesPerMatch}).`);
+                }
+            } else if (!isScoring) {
+                if (!authLimits.allowedEventKinds.has(kind)) {
+                    throw new Error('This event type requires Premium.');
+                }
+                const nonScoringEvents = await db.events
+                    .where('matchId')
+                    .equals(data.matchId)
+                    .filter(e => !e.isDeleted && !['goal', 'own_goal', 'formation_change'].includes(String(e.kind)))
+                    .count();
+                if (nonScoringEvents >= authLimits.limits.eventsPerMatch) {
+                    throw new Error(`Event limit reached (${authLimits.limits.eventsPerMatch}).`);
+                }
+            }
+        }
+
         const id = generateId();
         const now = new Date().toISOString();
 

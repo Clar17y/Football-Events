@@ -23,6 +23,7 @@ import type {
   DbMatchState,
   DbDefaultLineup,
   DbSyncMetadata,
+  DbSyncFailure,
   DbSetting,
   // Legacy type aliases for backward compatibility
   EnhancedEvent,
@@ -38,6 +39,7 @@ import type {
 } from './schema';
 
 type SyncMetadata = DbSyncMetadata;
+type SyncFailure = DbSyncFailure;
 
 import { SCHEMA_INDEXES } from './schema';
 import { autoLinkEvents } from './eventLinking';
@@ -64,6 +66,7 @@ export class GrassrootsDB extends Dexie {
   public matchState!: Table<DbMatchState, string>;
   public defaultLineups!: Table<DbDefaultLineup, string>;
   public syncMetadata!: Table<DbSyncMetadata, number>;
+  public syncFailures!: Table<SyncFailure, [string, string]>;
   public settings!: Table<DbSetting, string>;
 
   constructor() {
@@ -267,6 +270,26 @@ export class GrassrootsDB extends Dexie {
       matchState: `matchId, ${SCHEMA_INDEXES.matchState.join(', ')}`,
       defaultLineups: `id, ${SCHEMA_INDEXES.defaultLineups.join(', ')}`,
       syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
+      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`,
+      // Legacy table cleanup
+      outbox: null
+    });
+
+    // Version 14: Add per-record sync failure tracking for backoff/quarantine
+    this.version(14).stores({
+      events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
+      matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
+      teams: `id, ${SCHEMA_INDEXES.teams.join(', ')}`,
+      players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
+      seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
+      lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
+      playerTeams: `id, playerId, teamId, startDate, isActive, createdAt, updatedAt`,
+      matchNotes: `matchNoteId, ${SCHEMA_INDEXES.matchNotes.join(', ')}`,
+      matchPeriods: `id, ${SCHEMA_INDEXES.matchPeriods.join(', ')}`,
+      matchState: `matchId, ${SCHEMA_INDEXES.matchState.join(', ')}`,
+      defaultLineups: `id, ${SCHEMA_INDEXES.defaultLineups.join(', ')}`,
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
+      syncFailures: '&[table+recordId], table, recordId, nextRetryAt, permanent, lastAttemptAt, reasonCode',
       settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`,
       // Legacy table cleanup
       outbox: null
@@ -966,10 +989,14 @@ export class GrassrootsDB extends Dexie {
         this.players.clear(),
         this.seasons.clear(),
         this.lineup.clear(),
+        this.playerTeams.clear(),
+        this.matchNotes.clear(),
         this.matchPeriods.clear(),
         this.matchState.clear(),
+        this.defaultLineups.clear(),
         this.settings.clear(),
-        this.syncMetadata.clear()
+        this.syncMetadata.clear(),
+        this.syncFailures.clear()
       ]);
 
       return {

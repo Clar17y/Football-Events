@@ -77,6 +77,9 @@ describe('LineupService - Enhanced Functionality', () => {
       match: {
         findFirst: vi.fn()
       },
+      player_teams: {
+        findFirst: vi.fn()
+      },
       lineup: {
         findMany: vi.fn(),
         findFirst: vi.fn(),
@@ -109,13 +112,15 @@ describe('LineupService - Enhanced Functionality', () => {
 
       const result = await lineupService.getCurrentLineup(mockMatchId, currentTime, mockUserId, 'USER');
 
-      expect(mockPrisma.match.findFirst).toHaveBeenCalledWith({
-        where: {
-          match_id: mockMatchId,
-          is_deleted: false,
-          created_by_user_id: mockUserId
-        }
-      });
+      expect(mockPrisma.match.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            match_id: mockMatchId,
+            is_deleted: false,
+            created_by_user_id: mockUserId
+          }
+        })
+      );
 
       expect(mockPrisma.lineup.findMany).toHaveBeenCalledWith({
         where: {
@@ -167,12 +172,14 @@ describe('LineupService - Enhanced Functionality', () => {
 
       await lineupService.getCurrentLineup(mockMatchId, 45, 'admin-user', 'ADMIN');
 
-      expect(mockPrisma.match.findFirst).toHaveBeenCalledWith({
-        where: {
-          match_id: mockMatchId,
-          is_deleted: false
-        }
-      });
+      expect(mockPrisma.match.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            match_id: mockMatchId,
+            is_deleted: false
+          }
+        })
+      );
     });
   });
 
@@ -260,6 +267,12 @@ describe('LineupService - Enhanced Functionality', () => {
       start_min: 0,
       end_min: null,
       position: 'ST',
+      created_at: new Date(),
+      updated_at: new Date(),
+      created_by_user_id: mockUserId,
+      deleted_at: null,
+      deleted_by_user_id: null,
+      is_deleted: false,
       players: {
         ...mockPlayer,
         id: mockPlayerOffId,
@@ -274,6 +287,12 @@ describe('LineupService - Enhanced Functionality', () => {
       start_min: currentTime,
       end_min: null,
       position: 'ST',
+      created_at: new Date(),
+      updated_at: new Date(),
+      created_by_user_id: mockUserId,
+      deleted_at: null,
+      deleted_by_user_id: null,
+      is_deleted: false,
       players: {
         ...mockPlayer,
         id: mockPlayerOnId,
@@ -321,6 +340,9 @@ describe('LineupService - Enhanced Functionality', () => {
 
     it('should successfully make a substitution', async () => {
       mockPrisma.match.findFirst.mockResolvedValue(mockMatch);
+      mockPrisma.player_teams.findFirst
+        .mockResolvedValueOnce({ player_id: mockPlayerOffId })
+        .mockResolvedValueOnce({ player_id: mockPlayerOnId });
 
       const result = await lineupService.makeSubstitution(
         mockMatchId,
@@ -333,13 +355,15 @@ describe('LineupService - Enhanced Functionality', () => {
         substitutionReason
       );
 
-      expect(mockPrisma.match.findFirst).toHaveBeenCalledWith({
-        where: {
-          match_id: mockMatchId,
-          is_deleted: false,
-          created_by_user_id: mockUserId
-        }
-      });
+      expect(mockPrisma.match.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            match_id: mockMatchId,
+            is_deleted: false,
+            created_by_user_id: mockUserId
+          }
+        })
+      );
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
       expect(result).toHaveProperty('playerOff');
@@ -366,6 +390,9 @@ describe('LineupService - Enhanced Functionality', () => {
 
     it('should throw error when player is not currently on pitch', async () => {
       mockPrisma.match.findFirst.mockResolvedValue(mockMatch);
+      mockPrisma.player_teams.findFirst
+        .mockResolvedValueOnce({ player_id: mockPlayerOffId })
+        .mockResolvedValueOnce({ player_id: mockPlayerOnId });
       
       mockPrisma.$transaction.mockImplementation(async (callback) => {
         const mockTx = {
@@ -396,6 +423,9 @@ describe('LineupService - Enhanced Functionality', () => {
 
     it('should allow admin to make substitutions for any match', async () => {
       mockPrisma.match.findFirst.mockResolvedValue(mockMatch);
+      mockPrisma.player_teams.findFirst
+        .mockResolvedValueOnce({ player_id: mockPlayerOffId })
+        .mockResolvedValueOnce({ player_id: mockPlayerOnId });
 
       await lineupService.makeSubstitution(
         mockMatchId,
@@ -407,16 +437,21 @@ describe('LineupService - Enhanced Functionality', () => {
         'ADMIN'
       );
 
-      expect(mockPrisma.match.findFirst).toHaveBeenCalledWith({
-        where: {
-          match_id: mockMatchId,
-          is_deleted: false
-        }
-      });
+      expect(mockPrisma.match.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            match_id: mockMatchId,
+            is_deleted: false
+          }
+        })
+      );
     });
 
     it('should handle substitution without reason', async () => {
       mockPrisma.match.findFirst.mockResolvedValue(mockMatch);
+      mockPrisma.player_teams.findFirst
+        .mockResolvedValueOnce({ player_id: mockPlayerOffId })
+        .mockResolvedValueOnce({ player_id: mockPlayerOnId });
 
       const result = await lineupService.makeSubstitution(
         mockMatchId,

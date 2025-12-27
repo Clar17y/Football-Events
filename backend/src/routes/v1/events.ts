@@ -9,7 +9,8 @@ import { requireMatchCreator } from '../../middleware/matchCreator';
 import { 
   eventCreateSchema, 
   eventUpdateSchema, 
-  eventBatchSchema
+  eventBatchSchema,
+  eventBatchByMatchSchema
 } from '../../validation/schemas';
 
 const router = Router();
@@ -195,35 +196,8 @@ router.post('/batch', authenticateToken, validateRequest(eventBatchSchema), asyn
 }));
 
 // POST /api/v1/events/batch-by-match - Match-scoped batch operations for events
-router.post('/batch-by-match', authenticateToken, asyncHandler(async (req, res) => {
-  const { matchId } = req.body;
-  
-  if (!matchId) {
-    return res.status(400).json({
-      error: 'Validation Error',
-      message: 'matchId is required for match-scoped batch operations'
-    });
-  }
-
-  // Validate that all operations are for the specified match
-  const operations = req.body;
-  const invalidOperations: string[] = [];
-  
-  if (operations.create) {
-    operations.create.forEach((event: any, index: number) => {
-      if (event.matchId !== matchId) {
-        invalidOperations.push(`create[${index}]: matchId mismatch`);
-      }
-    });
-  }
-  
-  if (invalidOperations.length > 0) {
-    return res.status(400).json({
-      error: 'Validation Error',
-      message: 'All operations must be for the specified match',
-      details: invalidOperations
-    });
-  }
+router.post('/batch-by-match', authenticateToken, validateRequest(eventBatchByMatchSchema), asyncHandler(async (req, res) => {
+  const { matchId, ...operations } = req.body;
 
   const result = await eventService.batchEvents(operations, req.user!.id, req.user!.role);
   

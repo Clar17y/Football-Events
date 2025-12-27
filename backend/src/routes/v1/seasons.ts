@@ -58,7 +58,7 @@ router.post('/',
   validateRequest(seasonCreateSchema),
   asyncHandler(async (req, res) => {
     try {
-      const season = await seasonService.createSeason(req.body, req.user!.id);
+      const season = await seasonService.createSeason(req.body, req.user!.id, req.user!.role);
       return res.status(201).json(season);
     } catch (error: any) {
       const apiError = extractApiError(error);
@@ -66,6 +66,8 @@ router.post('/',
         return res.status(apiError.statusCode).json({
           error: apiError.error,
           message: apiError.message,
+          code: apiError.code,
+          details: apiError.details,
           field: apiError.field,
           constraint: apiError.constraint
         });

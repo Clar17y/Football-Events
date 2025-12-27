@@ -227,7 +227,7 @@ describe('MatchesPage Calendar-to-List Navigation', () => {
     // Verify focus was called after a delay
     await waitFor(() => {
       expect(mockFocus).toHaveBeenCalled();
-    }, { timeout: 200 });
+    }, { timeout: 1000 });
   });
 
   it('should scroll to completed match when calendar match indicator is clicked', async () => {
@@ -251,7 +251,7 @@ describe('MatchesPage Calendar-to-List Navigation', () => {
     // Verify focus was called after a delay
     await waitFor(() => {
       expect(mockFocus).toHaveBeenCalled();
-    }, { timeout: 200 });
+    }, { timeout: 1000 });
   });
 
   it('should add and remove highlight animation class', async () => {

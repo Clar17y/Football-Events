@@ -1,7 +1,7 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]
-  binaryTargets   = ["native", "windows"]
+  binaryTargets   = ["native", "windows", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -17,6 +17,7 @@ model User {
   first_name           String?
   last_name            String?
   role                 UserRole       @default(USER)
+  subscription_tier    subscription_tier @default(free)
   email_verified       Boolean        @default(false)
   created_at           DateTime       @default(now())
   updated_at           DateTime       @updatedAt
@@ -425,6 +426,13 @@ enum UserRole {
   USER
 
   @@map("user_role")
+  @@schema("grassroots")
+}
+
+enum subscription_tier {
+  free
+  premium
+
   @@schema("grassroots")
 }
 

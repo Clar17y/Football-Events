@@ -265,6 +265,25 @@ export interface DbSyncMetadata {
 }
 
 /**
+ * Per-record sync failure tracking (local-only).
+ *
+ * This prevents retry storms by allowing backoff and permanent quarantine.
+ */
+export interface DbSyncFailure {
+  /** Table name (e.g. 'teams') */
+  table: string;
+  /** Record primary key in that table */
+  recordId: string;
+  attemptCount: number;
+  lastAttemptAt: number;
+  nextRetryAt: number;
+  lastStatus?: number;
+  lastError?: string;
+  permanent: boolean;
+  reasonCode?: string;
+}
+
+/**
  * Application settings (local-only)
  */
 export interface DbSetting {
@@ -338,6 +357,7 @@ export interface DatabaseSchema {
 
   // Sync infrastructure
   syncMetadata: DbSyncMetadata;
+  syncFailures: DbSyncFailure;
 
   // Settings
   settings: DbSetting;
@@ -463,6 +483,17 @@ export const SCHEMA_INDEXES = {
     '[tableName+recordId]',             // Unique record tracking
     '[tableName+lastSynced]',           // Table sync status
     'lastSynced'                         // Global sync status
+  ],
+
+  // Per-record sync failure tracking
+  syncFailures: [
+    'table',
+    'recordId',
+    '[table+recordId]',
+    'nextRetryAt',
+    'permanent',
+    'lastAttemptAt',
+    'reasonCode'
   ],
 
   // Settings table

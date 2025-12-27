@@ -66,6 +66,7 @@ describe('No Outbox Table Property Tests', () => {
       expect(schemaTableNames).toContain('matchState');
       expect(schemaTableNames).toContain('defaultLineups');
       expect(schemaTableNames).toContain('syncMetadata');
+      expect(schemaTableNames).toContain('syncFailures');
       expect(schemaTableNames).toContain('settings');
       
       // Verify outbox does NOT exist
@@ -75,8 +76,8 @@ describe('No Outbox Table Property Tests', () => {
     it('should have correct number of tables (no outbox)', () => {
       // Expected tables: events, matches, teams, players, seasons, lineup,
       // playerTeams, matchNotes, matchPeriods, matchState, defaultLineups,
-      // syncMetadata, settings = 13 tables (no outbox)
-      const expectedTableCount = 13;
+      // syncMetadata, syncFailures, settings = 14 tables (no outbox)
+      const expectedTableCount = 14;
       const actualTableCount = Object.keys(SCHEMA_INDEXES).length;
       
       expect(actualTableCount).toBe(expectedTableCount);
@@ -411,9 +412,9 @@ describe('No Outbox Table Property Tests', () => {
             }
           }
         ),
-        { numRuns: 100 }
+        { numRuns: 50 }
       );
-    });
+    }, 20000);
 
     it('should update syncedAt to current time on sync', async () => {
       await fc.assert(

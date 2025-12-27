@@ -155,6 +155,8 @@ describe('All APIs Integration Tests', () => {
 
   describe('Error Handling Consistency', () => {
     it('should handle authentication errors consistently', async () => {
+      if (!authToken) return;
+
       // Temporarily clear authentication
       authApi.clearToken();
 

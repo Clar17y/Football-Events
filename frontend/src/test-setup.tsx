@@ -498,7 +498,9 @@ vi.mock('ionicons/icons', () => ({
   chevronUpOutline: 'chevron-up-outline-icon',
   flashOutline: 'flash-outline-icon',
   exitOutline: 'exit-outline-icon',
+  downloadOutline: 'download-outline-icon',
   optionsOutline: 'options-outline-icon',
+  arrowUpCircleOutline: 'arrow-up-circle-outline-icon',
   handLeftOutline: 'hand-left-outline-icon',
 }));
 

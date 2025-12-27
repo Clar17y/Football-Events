@@ -54,6 +54,7 @@ import { getLocalMatch } from '../services/guestQuickMatch';
 import { authApi } from '../services/api/authApi';
 import { useInitialSync } from '../hooks/useInitialSync';
 import { useLocalEvents, useLocalMatchPeriods, useLocalMatchState } from '../hooks/useLocalData';
+import { useMeLimits } from '../hooks/useMeLimits';
 import { matchStateDataLayer, matchPeriodsDataLayer } from '../services/dataLayer';
 
 interface LiveMatchPageProps {
@@ -64,6 +65,8 @@ interface LiveMatchPageProps {
 const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) => {
   // Trigger initial sync from server for authenticated users
   useInitialSync();
+  const { allowedEventKinds, planType } = useMeLimits();
+  const allowedEventKindSet = useMemo(() => new Set(allowedEventKinds), [allowedEventKinds]);
 
   const [upcoming, setUpcoming] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1722,6 +1725,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               </IonButton>
             </div>
 
+
             {/* Attacking group (forwards color) */}
             <div className="event-grid event-section">
               {(['goal', 'assist', 'key_pass'] as QuickEventKind[]).map(k => {
@@ -1731,10 +1735,19 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                   assist: swapHorizontalOutline || arrowForwardOutline,
                   key_pass: navigateOutline || arrowForwardOutline,
                 };
+                const allowed = allowedEventKindSet.has(k);
                 return (
-                  <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--rose" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--rose${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
                     <IonIcon slot="start" icon={iconMap[k] || footballOutline} />
-                    {k.replace('_', ' ')}
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
                   </IonButton>
                 );
               })}
@@ -1748,10 +1761,19 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                   tackle: bodyOutline,
                   foul: alertCircleOutline,
                 };
+                const allowed = allowedEventKindSet.has(k);
                 return (
-                  <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--indigo" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--indigo${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
                     <IonIcon slot="start" icon={iconMap[k] || shieldOutline} />
-                    {k.replace('_', ' ')}
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
                   </IonButton>
                 );
               })}
@@ -1759,12 +1781,23 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
 
             {/* Goalkeeper group (goalkeeper color) */}
             <div className="event-grid event-section">
-              {(['save'] as QuickEventKind[]).map(k => (
-                <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--emerald" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
-                  <IonIcon slot="start" icon={shieldCheckmarkOutline} />
-                  {k.replace('_', ' ')}
-                </IonButton>
-              ))}
+              {(['save'] as QuickEventKind[]).map(k => {
+                const allowed = allowedEventKindSet.has(k);
+                return (
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--emerald${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
+                    <IonIcon slot="start" icon={shieldCheckmarkOutline} />
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
+                  </IonButton>
+                );
+              })}
             </div>
 
             {/* Other group (midfielder/amber) */}
@@ -1776,10 +1809,19 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                   ball_out: exitOutline,
                   own_goal: footballOutline,
                 };
+                const allowed = allowedEventKindSet.has(k);
                 return (
-                  <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--amber" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--amber${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
                     <IonIcon slot="start" icon={iconMap[k] || optionsOutline} />
-                    {k.replace('_', ' ')}
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
                   </IonButton>
                 );
               })}

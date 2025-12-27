@@ -22,6 +22,7 @@ import StatisticsPage from './pages/StatisticsPage';
 import LiveMatchPage from './pages/LiveMatchPage';
 import LineupDemoPage from './pages/LineupDemoPage';
 import LineupManagementPage from './pages/LineupManagementPage';
+import SyncIssuesPage from './pages/SyncIssuesPage';
 // import MatchConsole from './pages/MatchConsole'; // Removed - will be redesigned
 import { syncService } from './services/syncService';
 import ImportPromptModal from './components/ImportPromptModal';
@@ -215,6 +216,8 @@ const AppRoutes: React.FC = () => {
         return <LineupDemoPage />;
       case 'lineup-management':
         return <LineupManagementPage onNavigate={handleNavigation} />;
+      case 'sync-issues':
+        return <SyncIssuesPage onNavigate={handleNavigation} />;
       case 'home':
       default:
         return <HomePage onNavigate={handleNavigation} />;
