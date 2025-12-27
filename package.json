@@ -42,8 +42,5 @@
     "nodejs"
   ],
   "author": "Your Name",
-  "license": "MIT",
-  "dependencies": {
-    "@openai/codex": "^0.21.0"
-  }
+  "license": "MIT"
 }

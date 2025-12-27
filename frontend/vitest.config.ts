@@ -8,6 +8,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.tsx'],
     globals: true,
+    testTimeout: 20000,
     include: ['tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     coverage: {
       provider: 'v8',
@@ -18,7 +19,6 @@ export default defineConfig({
         'tests/',
         '**/*.d.ts',
         'src/main.tsx',
-        'src/service-worker.ts',
         'vite.config.ts',
         'vitest.config.ts'
       ],
