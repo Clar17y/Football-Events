@@ -37,20 +37,25 @@ export class MatchPeriodsService {
       return true;
     }
 
-    // Check if user created the match
     const match = await this.prisma.match.findFirst({
       where: {
         match_id: matchId,
         is_deleted: false,
-        created_by_user_id: userId
-      }
+      },
+      select: {
+        created_by_user_id: true,
+        homeTeam: { select: { created_by_user_id: true } },
+        awayTeam: { select: { created_by_user_id: true } },
+      },
     });
 
-    if (!match) {
-      return false;
-    }
+    if (!match) return false;
 
-    return match.created_by_user_id === userId;
+    return (
+      match.created_by_user_id === userId ||
+      match.homeTeam?.created_by_user_id === userId ||
+      match.awayTeam?.created_by_user_id === userId
+    );
   }
 
   /**

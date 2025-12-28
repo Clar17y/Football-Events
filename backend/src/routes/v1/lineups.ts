@@ -8,7 +8,9 @@ import { authenticateToken } from '../../middleware/auth';
 import {
   lineupCreateSchema,
   lineupUpdateSchema,
-  lineupBatchSchema
+  lineupBatchSchema,
+  lineupBatchByMatchSchema,
+  lineupSubstitutionSchema
 } from '../../validation/schemas';
 
 const router = Router();
@@ -232,35 +234,8 @@ router.post('/batch', authenticateToken, validateRequest(lineupBatchSchema), asy
 }));
 
 // POST /api/v1/lineups/batch-by-match - Match-scoped batch operations for lineups
-router.post('/batch-by-match', authenticateToken, asyncHandler(async (req, res) => {
-  const { matchId } = req.body;
-
-  if (!matchId) {
-    return res.status(400).json({
-      error: 'Validation Error',
-      message: 'matchId is required for match-scoped batch operations'
-    });
-  }
-
-  // Validate that all operations are for the specified match
-  const operations = req.body;
-  const invalidOperations: string[] = [];
-
-  if (operations.create) {
-    operations.create.forEach((lineup: any, index: number) => {
-      if (lineup.matchId !== matchId) {
-        invalidOperations.push(`create[${index}]: matchId mismatch`);
-      }
-    });
-  }
-
-  if (invalidOperations.length > 0) {
-    return res.status(400).json({
-      error: 'Validation Error',
-      message: 'All operations must be for the specified match',
-      details: invalidOperations
-    });
-  }
+router.post('/batch-by-match', authenticateToken, validateRequest(lineupBatchByMatchSchema), asyncHandler(async (req, res) => {
+  const { matchId, ...operations } = req.body;
 
   const result = await lineupService.batchLineups(operations, req.user!.id, req.user!.role);
 
@@ -332,22 +307,8 @@ router.get('/match/:matchId/active-at/:timeMinutes', authenticateToken, validate
 }));
 
 // POST /api/v1/lineups/match/:matchId/substitute - Make a substitution
-router.post('/match/:matchId/substitute', authenticateToken, validateUUID('matchId'), asyncHandler(async (req, res) => {
+router.post('/match/:matchId/substitute', authenticateToken, validateUUID('matchId'), validateRequest(lineupSubstitutionSchema), asyncHandler(async (req, res) => {
   const { playerOffId, playerOnId, position, currentTime, substitutionReason } = req.body;
-
-  if (!playerOffId || !playerOnId || !position || currentTime === undefined) {
-    return res.status(400).json({
-      error: 'Validation Error',
-      message: 'playerOffId, playerOnId, position, and currentTime are required'
-    });
-  }
-
-  if (typeof currentTime !== 'number' || currentTime < 0) {
-    return res.status(400).json({
-      error: 'Validation Error',
-      message: 'currentTime must be a non-negative number'
-    });
-  }
 
   try {
     const substitutionResult = await lineupService.makeSubstitution(

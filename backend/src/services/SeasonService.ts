@@ -12,6 +12,7 @@ import type {
 } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { createOrRestoreSoftDeleted, UniqueConstraintBuilders } from '../utils/softDeleteUtils';
+import { QuotaService } from './QuotaService';
 
 export interface GetSeasonsOptions {
   page: number;
@@ -33,9 +34,11 @@ export interface PaginatedSeasons {
 
 export class SeasonService {
   private prisma: PrismaClient;
+  private quotaService: QuotaService;
 
   constructor() {
     this.prisma = new PrismaClient();
+    this.quotaService = new QuotaService(this.prisma);
   }
 
   async getSeasons(userId: string, userRole: string, options: GetSeasonsOptions): Promise<PaginatedSeasons> {
@@ -147,8 +150,10 @@ export class SeasonService {
     return currentSeason ? transformSeason(currentSeason) : null;
   }
 
-  async createSeason(data: SeasonCreateRequest, userId: string): Promise<Season> {
+  async createSeason(data: SeasonCreateRequest, userId: string, userRole: string): Promise<Season> {
     return withPrismaErrorHandling(async () => {
+      await this.quotaService.assertCanCreateSeason({ userId, userRole });
+
       const season = await createOrRestoreSoftDeleted({
         prisma: this.prisma,
         model: 'seasons',

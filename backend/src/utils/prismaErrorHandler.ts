@@ -18,8 +18,10 @@ export interface ApiError {
   statusCode: number;
   error: string;
   message: string;
+  code?: string;
   field?: string;
   constraint?: string;
+  details?: any;
 }
 
 /**
@@ -140,10 +142,14 @@ export const withPrismaErrorHandling = async <T>(
         statusCode: error.statusCode,
         error: error.code.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
         message: error.message,
+        code: error.code,
+        details: error.details,
         constraint: error.code.toLowerCase()
       };
       const customError = new Error(apiError.message) as any;
       customError.statusCode = apiError.statusCode;
+      customError.code = apiError.code;
+      customError.details = apiError.details;
       customError.apiError = apiError;
       throw customError;
     }

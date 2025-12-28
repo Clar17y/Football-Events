@@ -54,6 +54,7 @@ import { getLocalMatch } from '../services/guestQuickMatch';
 import { authApi } from '../services/api/authApi';
 import { useInitialSync } from '../hooks/useInitialSync';
 import { useLocalEvents, useLocalMatchPeriods, useLocalMatchState } from '../hooks/useLocalData';
+import { useMeLimits } from '../hooks/useMeLimits';
 import { matchStateDataLayer, matchPeriodsDataLayer } from '../services/dataLayer';
 
 interface LiveMatchPageProps {
@@ -64,6 +65,8 @@ interface LiveMatchPageProps {
 const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) => {
   // Trigger initial sync from server for authenticated users
   useInitialSync();
+  const { allowedEventKinds, planType } = useMeLimits();
+  const allowedEventKindSet = useMemo(() => new Set(allowedEventKinds), [allowedEventKinds]);
 
   const [upcoming, setUpcoming] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1182,7 +1185,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   };
 
   // ========== Events Quick Add ==========
-  type QuickEventKind = 'goal' | 'assist' | 'key_pass' | 'save' | 'interception' | 'tackle' | 'foul' | 'penalty' | 'free_kick' | 'ball_out' | 'own_goal';
+  type QuickEventKind = 'goal' | 'assist' | 'key_pass' | 'save' | 'interception' | 'tackle' | 'foul' | 'penalty' | 'free_kick' | 'ball_out' | 'own_goal' | 'formation_change' | 'yellow_card' | 'red_card' | 'corner' | 'offside' | 'shot_on_target' | 'shot_off_target' | 'clearance' | 'block' | 'cross' | 'header';
   const [selectedTeam, setSelectedTeam] = useState<'home' | 'away'>('home');
   const [showLineupModal, setShowLineupModal] = useState(false);
   const [hasDefaultLineup, setHasDefaultLineup] = useState<Record<string, boolean>>({});
@@ -1722,64 +1725,153 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               </IonButton>
             </div>
 
-            {/* Attacking group (forwards color) */}
+
+            {/* Scoring group (goals/assists) - rose color */}
             <div className="event-grid event-section">
-              {(['goal', 'assist', 'key_pass'] as QuickEventKind[]).map(k => {
+              {(['goal', 'own_goal', 'assist'] as QuickEventKind[]).map(k => {
                 const iconMap: Record<string, string> = {
                   goal: footballOutline,
                   own_goal: footballOutline,
                   assist: swapHorizontalOutline || arrowForwardOutline,
-                  key_pass: navigateOutline || arrowForwardOutline,
                 };
+                const allowed = allowedEventKindSet.has(k);
                 return (
-                  <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--rose" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--rose${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
                     <IonIcon slot="start" icon={iconMap[k] || footballOutline} />
-                    {k.replace('_', ' ')}
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
                   </IonButton>
                 );
               })}
             </div>
 
-            {/* Defender group (defender color) */}
+            {/* Cards group - amber/warning color */}
             <div className="event-grid event-section">
-              {(['interception', 'tackle', 'foul'] as QuickEventKind[]).map(k => {
-                const iconMap: Record<string, string> = {
-                  interception: handLeftOutline || shieldOutline,
-                  tackle: bodyOutline,
-                  foul: alertCircleOutline,
-                };
+              {(['yellow_card', 'red_card'] as QuickEventKind[]).map(k => {
+                const allowed = allowedEventKindSet.has(k);
                 return (
-                  <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--indigo" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
-                    <IonIcon slot="start" icon={iconMap[k] || shieldOutline} />
-                    {k.replace('_', ' ')}
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--amber${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
+                    <IonIcon slot="start" icon={alertCircleOutline} />
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
                   </IonButton>
                 );
               })}
             </div>
 
-            {/* Goalkeeper group (goalkeeper color) */}
+            {/* Shots group - indigo color */}
             <div className="event-grid event-section">
-              {(['save'] as QuickEventKind[]).map(k => (
-                <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--emerald" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
-                  <IonIcon slot="start" icon={shieldCheckmarkOutline} />
-                  {k.replace('_', ' ')}
-                </IonButton>
-              ))}
+              {(['shot_on_target', 'shot_off_target'] as QuickEventKind[]).map(k => {
+                const allowed = allowedEventKindSet.has(k);
+                return (
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--indigo${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
+                    <IonIcon slot="start" icon={footballOutline} />
+                    {k.replace(/_/g, ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
+                  </IonButton>
+                );
+              })}
             </div>
 
-            {/* Other group (midfielder/amber) */}
+            {/* Set pieces & decisions - emerald color */}
             <div className="event-grid event-section">
-              {(['penalty', 'free_kick', 'ball_out', 'own_goal'] as QuickEventKind[]).map(k => {
+              {(['corner', 'offside', 'penalty', 'free_kick'] as QuickEventKind[]).map(k => {
                 const iconMap: Record<string, string> = {
+                  corner: flagOutline,
+                  offside: flagOutline,
                   penalty: flagOutline,
                   free_kick: flashOutline,
-                  ball_out: exitOutline,
-                  own_goal: footballOutline,
                 };
+                const allowed = allowedEventKindSet.has(k);
                 return (
-                  <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--amber" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--emerald${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
+                    <IonIcon slot="start" icon={iconMap[k] || flagOutline} />
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
+                  </IonButton>
+                );
+              })}
+            </div>
+
+            {/* Defensive actions - indigo color */}
+            <div className="event-grid event-section">
+              {(['tackle', 'interception', 'clearance', 'block', 'header', 'cross'] as QuickEventKind[]).map(k => {
+                const iconMap: Record<string, string> = {
+                  tackle: bodyOutline,
+                  interception: handLeftOutline || shieldOutline,
+                  clearance: shieldOutline,
+                  block: shieldOutline,
+                  header: bodyOutline,
+                  cross: arrowForwardOutline,
+                };
+                const allowed = allowedEventKindSet.has(k);
+                return (
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--indigo${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
+                    <IonIcon slot="start" icon={iconMap[k] || shieldOutline} />
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
+                  </IonButton>
+                );
+              })}
+            </div>
+
+            {/* Other - GK saves, fouls, ball out */}
+            <div className="event-grid event-section">
+              {(['save', 'key_pass', 'foul', 'ball_out'] as QuickEventKind[]).map(k => {
+                const iconMap: Record<string, string> = {
+                  save: shieldCheckmarkOutline,
+                  key_pass: navigateOutline || arrowForwardOutline,
+                  foul: alertCircleOutline,
+                  ball_out: exitOutline,
+                };
+                const allowed = allowedEventKindSet.has(k);
+                return (
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--amber${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
                     <IonIcon slot="start" icon={iconMap[k] || optionsOutline} />
-                    {k.replace('_', ' ')}
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
                   </IonButton>
                 );
               })}

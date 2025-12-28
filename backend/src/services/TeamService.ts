@@ -12,6 +12,7 @@ import type {
 } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { createOrRestoreSoftDeleted, UniqueConstraintBuilders } from '../utils/softDeleteUtils';
+import { QuotaService } from './QuotaService';
 
 export interface GetTeamsOptions {
   page: number;
@@ -34,9 +35,11 @@ export interface PaginatedTeams {
 
 export class TeamService {
   private prisma: PrismaClient;
+  private quotaService: QuotaService;
 
   constructor() {
     this.prisma = new PrismaClient();
+    this.quotaService = new QuotaService(this.prisma);
   }
 
   async getOpponentTeams(userId: string, _userRole: string, search?: string): Promise<Team[]> {
@@ -144,8 +147,14 @@ export class TeamService {
     return team ? transformTeam(team) : null;
   }
 
-  async createTeam(data: TeamCreateRequest, userId: string): Promise<Team> {
+  async createTeam(data: TeamCreateRequest, userId: string, userRole: string): Promise<Team> {
     return withPrismaErrorHandling(async () => {
+      await this.quotaService.assertCanCreateTeam({
+        userId,
+        userRole,
+        isOpponent: !!data.isOpponent
+      });
+
       const transformedData = transformTeamCreateRequest(data, userId);
 
       const team = await createOrRestoreSoftDeleted({

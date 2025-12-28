@@ -15,18 +15,21 @@ export class ApiRequestError extends Error {
   status: number;
   code?: string;
   response?: any;
+  retryAfterMs?: number;
 
-  constructor(message: string, status: number, code?: string, response?: any) {
+  constructor(message: string, status: number, code?: string, response?: any, retryAfterMs?: number) {
     super(message);
     // Ensure enumerable properties for JSON.stringify and spreading
     this.status = status;
     this.code = code;
     this.message = message;
+    this.retryAfterMs = retryAfterMs;
 
     Object.defineProperty(this, 'message', { enumerable: true, writable: true });
     Object.defineProperty(this, 'status', { enumerable: true, writable: true });
     Object.defineProperty(this, 'code', { enumerable: true, writable: true });
     Object.defineProperty(this, 'response', { enumerable: true, writable: true });
+    Object.defineProperty(this, 'retryAfterMs', { enumerable: true, writable: true });
   }
 }
 
@@ -148,6 +151,18 @@ export class ApiClient {
     } catch { }
 
     if (!response.ok) {
+      const retryAfterHeader = response.headers.get('Retry-After');
+      let retryAfterMs: number | undefined = undefined;
+      if (retryAfterHeader) {
+        const seconds = Number(retryAfterHeader);
+        if (Number.isFinite(seconds)) {
+          retryAfterMs = Math.max(0, seconds * 1000);
+        } else {
+          const until = Date.parse(retryAfterHeader);
+          if (!Number.isNaN(until)) retryAfterMs = Math.max(0, until - Date.now());
+        }
+      }
+
       const apiError: ApiError = {
         message: data?.error || data?.message || `HTTP ${response.status}: ${response.statusText}`,
         status: response.status,
@@ -170,7 +185,7 @@ export class ApiClient {
         } catch { }
       }
 
-      throw new ApiRequestError(apiError.message, apiError.status, apiError.code, data);
+      throw new ApiRequestError(apiError.message, apiError.status, apiError.code, data, retryAfterMs);
     }
 
     // Backend APIs return { success: true, data: T } format

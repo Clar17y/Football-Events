@@ -13,6 +13,7 @@ import type {
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { NaturalKeyResolver, NaturalKeyResolverError } from '../utils/naturalKeyResolver';
 import { createOrRestoreSoftDeleted, SoftDeletePatterns } from '../utils/softDeleteUtils';
+import { QuotaService } from './QuotaService';
 
 export interface GetMatchesOptions {
   page: number;
@@ -41,10 +42,12 @@ export class MatchService {
 
   private prisma: PrismaClient;
   private nkr: NaturalKeyResolver;
+  private quotaService: QuotaService;
 
   constructor() {
     this.prisma = new PrismaClient();
     this.nkr = new NaturalKeyResolver(this.prisma);
+    this.quotaService = new QuotaService(this.prisma);
   }
 
   async getMatches(userId: string, userRole: string, options: GetMatchesOptions): Promise<PaginatedMatches> {
@@ -245,6 +248,8 @@ export class MatchService {
           throw error;
         }
       }
+
+      await this.quotaService.assertCanCreateMatch({ userId, userRole, seasonId: data.seasonId });
 
       const match = await createOrRestoreSoftDeleted({
         prisma: this.prisma,
@@ -862,6 +867,13 @@ export class MatchService {
       }
     }
 
+    await this.quotaService.assertCanCreateEvent({
+      userId,
+      userRole,
+      matchId,
+      kind: eventData.kind
+    });
+
     // Create the event
     const event = await this.prisma.event.create({
       data: {
@@ -918,6 +930,7 @@ export class MatchService {
         resolvedMyTeamId = await this.nkr.resolveTeamByName(myTeamName, userId, userRole, { isOpponent: false });
       } catch (err: any) {
         if (err instanceof NaturalKeyResolverError && err.code === 'NOT_FOUND') {
+          await this.quotaService.assertCanCreateTeam({ userId, userRole, isOpponent: false });
           const created = await this.prisma.team.create({
             data: {
               name: String(myTeamName).trim(),
@@ -960,6 +973,7 @@ export class MatchService {
       resolvedOpponentTeamId = await this.nkr.resolveTeamByName(oppName, userId, userRole, { isOpponent: true });
     } catch (err: any) {
       if (err instanceof NaturalKeyResolverError && err.code === 'NOT_FOUND') {
+        await this.quotaService.assertCanCreateTeam({ userId, userRole, isOpponent: true });
         const createdOpp = await this.prisma.team.create({
           data: {
             name: oppName,
@@ -1018,6 +1032,7 @@ export class MatchService {
         if (current) {
           finalSeasonId = current.season_id;
         } else {
+          await this.quotaService.assertCanCreateSeason({ userId, userRole });
           // Auto-create based on current date (Aug 1 -> Jun 30 next year)
           const now = new Date();
           const m = now.getMonth();
@@ -1051,6 +1066,8 @@ export class MatchService {
         }
       }
     }
+
+    await this.quotaService.assertCanCreateMatch({ userId, userRole, seasonId: finalSeasonId! });
 
     // Create match (restore if soft-deleted with same unique constraint)
     const match = await createOrRestoreSoftDeleted({

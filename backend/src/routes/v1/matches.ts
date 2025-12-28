@@ -14,6 +14,9 @@ import {
   matchCreateSchema, 
   matchUpdateSchema, 
   matchQuickStartSchema, 
+  matchQuickEventSchema,
+  matchShareSchema,
+  matchFormationChangeSchema,
   matchStartSchema,
   matchPauseSchema,
   matchResumeSchema,
@@ -26,6 +29,7 @@ import {
 import { asyncHandler } from '../../utils/asyncHandler';
 import { extractApiError } from '../../utils/prismaErrorHandler';
 import { LiveFormationService } from '../../services/LiveFormationService';
+import { QuotaService } from '../../services/QuotaService';
 
 const router = Router();
 const matchService = new MatchService();
@@ -76,6 +80,8 @@ router.get('/states', authenticateToken, asyncHandler(async (req, res) => {
         success: false,
         error: apiError.error,
         message: apiError.message,
+        code: apiError.code,
+        details: apiError.details,
         field: apiError.field,
         constraint: apiError.constraint
       });
@@ -125,6 +131,8 @@ router.post('/',
         return res.status(apiError.statusCode).json({
           error: apiError.error,
           message: apiError.message,
+          code: apiError.code,
+          details: apiError.details,
           field: apiError.field,
           constraint: apiError.constraint
         });
@@ -167,6 +175,8 @@ router.post('/quick-start',
         return res.status(apiError.statusCode).json({
           error: apiError.error,
           message: apiError.message,
+          code: apiError.code,
+          details: apiError.details,
           field: apiError.field,
           constraint: apiError.constraint
         });
@@ -240,34 +250,20 @@ router.get('/:id/current-formation', authenticateToken, validateUUID(), asyncHan
 }));
 
 // POST /api/v1/matches/:id/formation-changes - Apply formation change with dual-table transaction
-router.post('/:id/formation-changes', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
-  const { startMin, formation, reason, eventId } = req.body || {};
-  if (typeof startMin !== 'number' || !formation || !Array.isArray(formation.players)) {
-    return res.status(400).json({
-      error: 'Validation Error',
-      message: 'startMin (number) and formation.players (array) are required'
-    });
-  }
-  if (eventId != null) {
-    const isUuid = (value: string) =>
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-    if (typeof eventId !== 'string' || !isUuid(eventId)) {
-      return res.status(400).json({
-        error: 'Validation Error',
-        message: 'eventId must be a valid UUID'
-      });
-    }
-  }
-
+router.post('/:id/formation-changes',
+  authenticateToken,
+  validateUUID(),
+  validateRequest(matchFormationChangeSchema),
+  asyncHandler(async (req, res) => {
   try {
     const result = await liveFormationService.applyFormationChange({
       matchId: req.params['id']!,
-      startMin,
-      formation,
-      eventId,
+      startMin: req.body.startMin,
+      formation: req.body.formation,
+      eventId: req.body.eventId,
       userId: req.user!.id,
       userRole: req.user!.role,
-      reason
+      reason: req.body.reason
     });
     return res.status(201).json(result);
   } catch (error: any) {
@@ -276,6 +272,8 @@ router.post('/:id/formation-changes', authenticateToken, validateUUID(), asyncHa
       return res.status(apiError.statusCode).json({
         error: apiError.error,
         message: apiError.message,
+        code: apiError.code,
+        details: apiError.details,
         field: apiError.field,
         constraint: apiError.constraint
       });
@@ -419,7 +417,7 @@ router.get('/:id/live-state', authenticateToken, validateUUID(), asyncHandler(as
 }));
 
 // POST /api/v1/matches/:id/quick-event - Quick event creation for live matches
-router.post('/:id/quick-event', authenticateToken, validateUUID(), asyncHandler(async (req, res) => {
+router.post('/:id/quick-event', authenticateToken, validateUUID(), validateRequest(matchQuickEventSchema), asyncHandler(async (req, res) => {
   const event = await matchService.createQuickEvent(
     req.params['id']!,
     req.body,
@@ -777,15 +775,16 @@ export default router;
 // ===== Viewer Sharing & Public Read/SSE Endpoints =====
 
 // POST /api/v1/matches/:id/share - Mint viewer token (auth required)
-router.post('/:id/share', authenticateToken, validateUUID(), requireMatchCreator('id'), asyncHandler(async (req, res) => {
-  const { expiresInMinutes } = req.body || {};
-  const minutes = typeof expiresInMinutes === 'number' ? expiresInMinutes : 480;
+router.post('/:id/share', authenticateToken, validateUUID(), validateRequest(matchShareSchema), requireMatchCreator('id'), asyncHandler(async (req, res) => {
+  const minutes = typeof req.body.expiresInMinutes === 'number' ? req.body.expiresInMinutes : 480;
   const matchId = req.params['id']!;
   const { token, expiresAt } = signViewerToken(matchId, minutes);
 
   // Create or mint a short code
   const { PrismaClient } = await import('@prisma/client');
   const prisma = new PrismaClient();
+  const quotaService = new QuotaService(prisma);
+  await quotaService.assertCanCreateViewerLink({ userId: req.user!.id, userRole: req.user!.role });
   const expiresAtDate = new Date(expiresAt);
   let code = '';
   for (let i = 0; i < 5; i++) {

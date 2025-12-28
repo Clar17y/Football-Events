@@ -12,6 +12,7 @@ import type {
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { createOrRestoreSoftDeleted, SoftDeletePatterns } from '../utils/softDeleteUtils';
 import { NaturalKeyResolver } from '../utils/naturalKeyResolver';
+import { QuotaService } from './QuotaService';
 
 // Extend shared interfaces to include service-specific fields
 export interface PlayerTeamCreateRequest extends SharedPlayerTeamCreateRequest {
@@ -60,10 +61,12 @@ export interface BatchPlayerTeamResult {
 export class PlayerTeamService {
   private prisma: PrismaClient;
   private naturalKeyResolver: NaturalKeyResolver;
+  private quotaService: QuotaService;
 
   constructor() {
     this.prisma = new PrismaClient();
     this.naturalKeyResolver = new NaturalKeyResolver(this.prisma);
+    this.quotaService = new QuotaService(this.prisma);
   }
 
   async getPlayerTeams(userId: string, userRole: string, options: GetPlayerTeamsOptions): Promise<PaginatedPlayerTeams> {
@@ -239,6 +242,17 @@ export class PlayerTeamService {
         throw error;
       }
 
+      // Quotas apply to active assignments only
+      const isActive = resolvedInput.isActive ?? true;
+      if (isActive) {
+        await this.quotaService.assertCanAddPlayerToTeam({
+          userId,
+          userRole,
+          teamId,
+          teamIsOpponent: !!team.is_opponent
+        });
+      }
+
       // Check for overlapping active relationships before creating/restoring
       const startDateObj = new Date(resolvedInput.startDate);
       const existingActiveRelationship = await this.prisma.player_teams.findFirst({
@@ -309,6 +323,22 @@ export class PlayerTeamService {
       const existingPlayerTeam = await this.prisma.player_teams.findFirst({ where });
       if (!existingPlayerTeam) {
         return null; // Not found or no permission
+      }
+
+      // Enforce plan quotas when re-activating a relationship
+      if (data.isActive === true && existingPlayerTeam.is_active === false) {
+        const team = await this.prisma.team.findFirst({
+          where: { id: existingPlayerTeam.team_id, is_deleted: false },
+          select: { is_opponent: true }
+        });
+        if (team) {
+          await this.quotaService.assertCanAddPlayerToTeam({
+            userId,
+            userRole,
+            teamId: existingPlayerTeam.team_id,
+            teamIsOpponent: !!team.is_opponent
+          });
+        }
       }
 
       // Transform the request using shared transformer

@@ -73,6 +73,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUser(response.data);
             setTokenExpiryMs(getAccessTokenExpiryMs());
             try { window.dispatchEvent(new CustomEvent('auth:loggedin')); } catch {}
+            try {
+              if (navigator.onLine) {
+                const { fetchAndCacheMeLimits } = await import('../services/limitsService');
+                void fetchAndCacheMeLimits();
+              }
+            } catch {}
           } else {
             console.log('AuthContext: Profile failed, trying refresh...');
             // Token might be expired, try to refresh
@@ -85,6 +91,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                   setUser(retryResponse.data);
                   setTokenExpiryMs(getAccessTokenExpiryMs());
                   try { window.dispatchEvent(new CustomEvent('auth:loggedin')); } catch {}
+                  try {
+                    if (navigator.onLine) {
+                      const { fetchAndCacheMeLimits } = await import('../services/limitsService');
+                      void fetchAndCacheMeLimits();
+                    }
+                  } catch {}
                 }
             } else {
               console.log('AuthContext: Refresh failed, clearing tokens...');
@@ -123,6 +135,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (profileResponse.success && profileResponse.data) {
           setUser(profileResponse.data);
           setTokenExpiryMs(getAccessTokenExpiryMs());
+          try { window.dispatchEvent(new CustomEvent('auth:loggedin')); } catch {}
+          try {
+            if (navigator.onLine) {
+              const { fetchAndCacheMeLimits } = await import('../services/limitsService');
+              void fetchAndCacheMeLimits();
+            }
+          } catch {}
           return { success: true };
         } else {
           return { success: false, error: 'Failed to get user profile' };
@@ -238,6 +257,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       window.removeEventListener('auth:refreshed', onRefreshed as EventListener);
     };
   }, []);
+
+  // Periodically refresh cached limits while authenticated and online
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let intervalId: number | undefined;
+    const refresh = async () => {
+      try {
+        if (!navigator.onLine) return;
+        const { fetchAndCacheMeLimits } = await import('../services/limitsService');
+        await fetchAndCacheMeLimits();
+      } catch {}
+    };
+
+    refresh();
+    intervalId = window.setInterval(refresh, 10 * 60 * 1000);
+    const onOnline = () => { void refresh(); };
+    window.addEventListener('online', onOnline);
+
+    return () => {
+      if (intervalId) window.clearInterval(intervalId);
+      window.removeEventListener('online', onOnline);
+    };
+  }, [isAuthenticated]);
 
   // Sliding session: refresh token on user activity
   useEffect(() => {

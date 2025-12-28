@@ -26,7 +26,10 @@ export class AuthTestHelper {
   /**
    * Register a new test user and return credentials
    */
-  async createTestUser(role: 'USER' | 'ADMIN' = 'USER'): Promise<TestUser> {
+  async createTestUser(
+    role: 'USER' | 'ADMIN' = 'USER',
+    planType: 'free' | 'premium' = 'premium'
+  ): Promise<TestUser> {
     const userData = {
       email: `test-${randomUUID()}@example.com`,
       password: 'TestPassword123!',
@@ -41,6 +44,23 @@ export class AuthTestHelper {
 
     const userId = registerResponse.body.data.user.id;
     this.createdUserIds.push(userId);
+
+    // Default tests to Premium to avoid accidentally hitting Free quotas in unrelated suites.
+    try {
+      const { PrismaClient } = await import('@prisma/client');
+      const prisma = new PrismaClient();
+      try {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { subscription_tier: planType }
+        });
+      } finally {
+        await prisma.$disconnect();
+      }
+    } catch (err) {
+      // Non-fatal; tests can still run as Free if needed
+      console.warn('[AuthTestHelper] Failed to set subscription_tier:', err);
+    }
 
     // If admin role requested, we need to update the user role directly in DB
     // For now, we'll create a regular user and handle admin separately
@@ -68,7 +88,7 @@ export class AuthTestHelper {
    */
   async createAdminUser(): Promise<TestUser> {
     // Create a regular user first
-    const user = await this.createTestUser('USER');
+    const user = await this.createTestUser('USER', 'premium');
     
     // Import Prisma and auth utilities
     const { PrismaClient } = await import('@prisma/client');

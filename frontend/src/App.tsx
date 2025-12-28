@@ -22,6 +22,9 @@ import StatisticsPage from './pages/StatisticsPage';
 import LiveMatchPage from './pages/LiveMatchPage';
 import LineupDemoPage from './pages/LineupDemoPage';
 import LineupManagementPage from './pages/LineupManagementPage';
+import LandingPage from './pages/LandingPage';
+import PricingPage from './pages/PricingPage';
+import SyncIssuesPage from './pages/SyncIssuesPage';
 // import MatchConsole from './pages/MatchConsole'; // Removed - will be redesigned
 import { syncService } from './services/syncService';
 import ImportPromptModal from './components/ImportPromptModal';
@@ -39,11 +42,11 @@ const AppRoutes: React.FC = () => {
   // On initial load and back/forward, parse URL path to set page state
   useEffect(() => {
     // Start background sync service
-    try { syncService.start(); } catch {}
+    try { syncService.start(); } catch { }
 
     // Set up cache refresh triggers for online/offline transitions
     // Requirements: 3.4, 3.5 - Trigger cache refresh on app load and when coming back online
-    try { setupCacheRefreshTriggers(); } catch {}
+    try { setupCacheRefreshTriggers(); } catch { }
 
     // Initial cache refresh if online and authenticated
     // Requirements: 3.4 - Call refreshCache() on app load when online and authenticated
@@ -84,7 +87,7 @@ const AppRoutes: React.FC = () => {
       console.log('[App] import:completed event received');
       try {
         // Trigger a sync attempt
-        syncService.flushOnce().catch(() => {});
+        syncService.flushOnce().catch(() => { });
       } catch (err) {
         console.error('[App] Error after import:', err);
       }
@@ -129,7 +132,7 @@ const AppRoutes: React.FC = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const teamId = urlParams.get('teamId');
     const teamName = urlParams.get('teamName');
-    
+
     if (teamId && teamName) {
       return {
         teamId: teamId,
@@ -215,9 +218,19 @@ const AppRoutes: React.FC = () => {
         return <LineupDemoPage />;
       case 'lineup-management':
         return <LineupManagementPage onNavigate={handleNavigation} />;
+      case 'pricing':
+        return <PricingPage onNavigate={handleNavigation} />;
+      case 'sync-issues':
+        return <SyncIssuesPage onNavigate={handleNavigation} />;
+      case 'dashboard':
+        // Guest dashboard: always show the main app interface
+        return <HomePage onNavigate={handleNavigation} />;
       case 'home':
       default:
-        return <HomePage onNavigate={handleNavigation} />;
+        // Show marketing landing page for guests, dashboard for authenticated users
+        return isAuthenticated
+          ? <HomePage onNavigate={handleNavigation} />
+          : <LandingPage onNavigate={handleNavigation} />;
     }
   };
 

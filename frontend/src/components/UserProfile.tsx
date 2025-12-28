@@ -19,15 +19,17 @@ import {
   logOutOutline,
   settingsOutline,
   chevronDownOutline,
+  sparkles,
 } from 'ionicons/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 
 interface UserProfileProps {
   className?: string;
+  onNavigate?: (page: string) => void;
 }
 
-const UserProfile: React.FC<UserProfileProps> = ({ className }) => {
+const UserProfile: React.FC<UserProfileProps> = ({ className, onNavigate }) => {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const { user, logout } = useAuth();
   const { showSuccess, showError } = useToast();
@@ -132,6 +134,18 @@ const UserProfile: React.FC<UserProfileProps> = ({ className }) => {
             <IonItem button>
               <IonIcon icon={personOutline} slot="start" />
               <IonLabel>Profile Settings</IonLabel>
+            </IonItem>
+
+            <IonItem
+              button
+              onClick={() => {
+                setIsPopoverOpen(false);
+                onNavigate?.('pricing');
+              }}
+              style={{ '--background': 'linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(139, 92, 246, 0.1))' } as React.CSSProperties}
+            >
+              <IonIcon icon={sparkles} slot="start" color="primary" />
+              <IonLabel color="primary">Upgrade to Premium</IonLabel>
             </IonItem>
 
             <IonItem button>

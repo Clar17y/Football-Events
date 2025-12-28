@@ -1,4 +1,4 @@
-import { apiClient } from './api/baseApi';
+import { apiClient, ApiRequestError } from './api/baseApi';
 import { matchesApi } from './api/matchesApi';
 import { isGuestId } from './importService';
 import { db } from '../db/indexedDB';
@@ -34,6 +34,151 @@ export interface SyncError {
 const BATCH_SIZE = 50;
 const LEGACY_USER_IDS = new Set(['authenticated-user', 'local-user']);
 
+const ENABLE_SYNC_QUARANTINE = (() => {
+  try {
+    return (import.meta as any).env?.VITE_ENABLE_SYNC_QUARANTINE !== 'false';
+  } catch {
+    return true;
+  }
+})();
+
+// Feature flag visibility (helps avoid rollout/debug confusion)
+try {
+  const mode = (import.meta as any).env?.MODE;
+  if (mode !== 'test' && !ENABLE_SYNC_QUARANTINE) {
+    // eslint-disable-next-line no-console
+    console.info('[SyncService] Quarantine/backoff disabled (VITE_ENABLE_SYNC_QUARANTINE=false)');
+  }
+} catch {}
+
+const BACKOFF_BASE_MS = 30_000;
+const BACKOFF_MAX_MS = 24 * 60 * 60 * 1000;
+const BACKOFF_JITTER = 0.2;
+
+let globalBackoffUntilMs = 0;
+
+function jitter(ms: number): number {
+  const j = (Math.random() * 2 - 1) * BACKOFF_JITTER;
+  return Math.max(0, Math.round(ms * (1 + j)));
+}
+
+type FailureDisposition = 'auth' | 'transient' | 'permanent';
+type FailureClassification = {
+  disposition: FailureDisposition;
+  status?: number;
+  code?: string;
+  retryAfterMs?: number;
+  reasonCode?: string;
+  message?: string;
+};
+
+function classifySyncError(error: unknown): FailureClassification {
+  if (typeof ApiRequestError === 'function' && error instanceof ApiRequestError) {
+    const status = error.status;
+    if (status === 401) return { disposition: 'auth', status, code: error.code, message: error.message };
+    if (status === 429) return { disposition: 'transient', status, code: error.code, retryAfterMs: error.retryAfterMs, reasonCode: 'RATE_LIMIT', message: error.message };
+    if (status >= 500) return { disposition: 'transient', status, code: error.code, reasonCode: 'SERVER_ERROR', message: error.message };
+    if (status >= 400) {
+      const reasonCode =
+        error.code ||
+        (status === 403 ? 'ACCESS_DENIED' : status === 402 ? 'QUOTA_EXCEEDED' : status === 400 ? 'INVALID_PAYLOAD' : `HTTP_${status}`);
+      return { disposition: 'permanent', status, code: error.code, reasonCode, message: error.message };
+    }
+  }
+
+  // Network / fetch errors (TypeError in browsers)
+  if (error instanceof TypeError) {
+    return { disposition: 'transient', status: 0, reasonCode: 'NETWORK', message: error.message };
+  }
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('network') || msg.includes('fetch') || msg.includes('offline') || msg.includes('timeout')) {
+      return { disposition: 'transient', status: 0, reasonCode: 'NETWORK', message: error.message };
+    }
+    if (msg.includes('invalid') && msg.includes('payload')) {
+      return { disposition: 'permanent', status: 400, reasonCode: 'INVALID_PAYLOAD', message: error.message };
+    }
+    return { disposition: 'transient', status: 0, reasonCode: 'TRANSIENT', message: error.message };
+  }
+
+  return { disposition: 'transient', status: 0, reasonCode: 'TRANSIENT', message: String(error) };
+}
+
+function isAuthStopError(error: unknown): boolean {
+  return classifySyncError(error).disposition === 'auth';
+}
+
+async function getSyncFailure(table: string, recordId: string) {
+  try {
+    if (!db.syncFailures) return null;
+    return await db.syncFailures.get([table, recordId]);
+  } catch {
+    return null;
+  }
+}
+
+async function shouldAttemptSync(table: string, recordId: string): Promise<boolean> {
+  if (!ENABLE_SYNC_QUARANTINE) return true;
+  const now = Date.now();
+  if (globalBackoffUntilMs > now) return false;
+
+  const failure = await getSyncFailure(table, recordId);
+  if (!failure) return true;
+  if (failure.permanent) return false;
+  if (failure.nextRetryAt && failure.nextRetryAt > now) return false;
+  return true;
+}
+
+async function clearSyncFailure(table: string, recordId: string): Promise<void> {
+  if (!ENABLE_SYNC_QUARANTINE) return;
+  try {
+    await db.syncFailures?.delete([table, recordId]);
+  } catch {}
+}
+
+async function recordSyncFailure(table: string, recordId: string, error: unknown): Promise<{ abortAll: boolean }> {
+  const classification = classifySyncError(error);
+
+  if (classification.disposition === 'auth') {
+    return { abortAll: true };
+  }
+
+  if (!ENABLE_SYNC_QUARANTINE || !db.syncFailures) {
+    return { abortAll: false };
+  }
+
+  const now = Date.now();
+  const existing = await getSyncFailure(table, recordId);
+  const attemptCount = (existing?.attemptCount ?? 0) + 1;
+
+  const permanent = classification.disposition === 'permanent';
+  let nextRetryAt = now;
+
+  if (!permanent) {
+    const retryAfterMs = classification.retryAfterMs;
+    const delay = retryAfterMs != null ? Math.min(BACKOFF_MAX_MS, Math.max(0, retryAfterMs)) : jitter(Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** Math.min(attemptCount - 1, 16)));
+    nextRetryAt = now + delay;
+
+    if (classification.status === 429) {
+      globalBackoffUntilMs = Math.max(globalBackoffUntilMs, nextRetryAt);
+    }
+  }
+
+  await db.syncFailures.put({
+    table,
+    recordId,
+    attemptCount,
+    lastAttemptAt: now,
+    nextRetryAt,
+    lastStatus: classification.status,
+    lastError: classification.message || (error instanceof Error ? error.message : String(error)),
+    permanent,
+    reasonCode: classification.reasonCode || classification.code,
+  } as any);
+
+  return { abortAll: false };
+}
+
 function isOwnedByAuth(record: { createdByUserId?: string }, authUserId: string): boolean {
   return record.createdByUserId === authUserId || LEGACY_USER_IDS.has(record.createdByUserId || '');
 }
@@ -60,18 +205,25 @@ async function processSoftDeletes<T extends { id: string; isDeleted?: boolean; s
         // Never synced to server - just delete locally
         try {
           await table.delete(record.id);
+          await clearSyncFailure(tableName, record.id);
           console.debug(`[SyncService] Deleted local-only ${tableName} record:`, record.id);
         } catch (err) {
           console.error(`[SyncService] Failed to delete local ${tableName}:`, err);
         }
       } else {
+        if (!(await shouldAttemptSync(tableName, record.id))) {
+          continue;
+        }
         // Was synced before - tell server to delete, then delete locally
         try {
           await deleteApiCall(record.id);
           await table.delete(record.id);
+          await clearSyncFailure(tableName, record.id);
           result.synced++;
           console.debug(`[SyncService] Deleted synced ${tableName} record from server:`, record.id);
         } catch (err) {
+          const { abortAll } = await recordSyncFailure(tableName, record.id, err);
+          if (abortAll) throw err;
           result.failed++;
           result.errors.push({
             table: tableName,
@@ -96,6 +248,7 @@ export interface SyncProgress {
   seasons: number;
   teams: number;
   players: number;
+  playerTeams: number;
   matches: number;
   lineups: number;
   defaultLineups: number;
@@ -103,7 +256,10 @@ export interface SyncProgress {
   matchPeriods: number;
   matchState: number;
   total: number;
+  eligible: number;
+  blocked: number;
   synced: number;
+  nextRetryAtMs?: number;
 }
 
 /**
@@ -160,6 +316,9 @@ async function syncSeasons(authUserId: string): Promise<SyncResult> {
 
     for (const season of seasonsToSync) {
       try {
+        if (!(await shouldAttemptSync('seasons', season.id))) {
+          continue;
+        }
         // Use centralized transform: IndexedDB → Server API payload
         const seasonData = dbSeasonToServerPayload(season as any);
 
@@ -175,9 +334,12 @@ async function syncSeasons(authUserId: string): Promise<SyncResult> {
           synced: true,
           syncedAt: new Date().toISOString(),
         });
+        await clearSyncFailure('seasons', season.id);
 
         result.synced++;
       } catch (err) {
+        const { abortAll } = await recordSyncFailure('seasons', season.id, err);
+        if (abortAll) throw err;
         result.failed++;
         result.errors.push({
           table: 'seasons',
@@ -187,6 +349,7 @@ async function syncSeasons(authUserId: string): Promise<SyncResult> {
       }
     }
   } catch (err) {
+    if (isAuthStopError(err)) throw err;
     console.error('[SyncService] Error syncing seasons:', err);
   }
 
@@ -235,6 +398,9 @@ async function syncTeams(authUserId: string): Promise<SyncResult> {
 
     for (const team of teamsToSync) {
       try {
+        if (!(await shouldAttemptSync('teams', team.id))) {
+          continue;
+        }
         // Use centralized transform: IndexedDB → Server API payload
         const teamData = dbTeamToServerPayload(team as any);
 
@@ -250,9 +416,12 @@ async function syncTeams(authUserId: string): Promise<SyncResult> {
           synced: true,
           syncedAt: new Date().toISOString(),
         });
+        await clearSyncFailure('teams', team.id);
 
         result.synced++;
       } catch (err) {
+        const { abortAll } = await recordSyncFailure('teams', team.id, err);
+        if (abortAll) throw err;
         result.failed++;
         result.errors.push({
           table: 'teams',
@@ -262,6 +431,7 @@ async function syncTeams(authUserId: string): Promise<SyncResult> {
       }
     }
   } catch (err) {
+    if (isAuthStopError(err)) throw err;
     console.error('[SyncService] Error syncing teams:', err);
   }
 
@@ -310,6 +480,9 @@ async function syncPlayers(authUserId: string): Promise<SyncResult> {
 
     for (const player of playersToSync) {
       try {
+        if (!(await shouldAttemptSync('players', player.id))) {
+          continue;
+        }
         // Use centralized transform: IndexedDB → Server API payload
         const playerData = dbPlayerToServerPayload(player);
 
@@ -336,9 +509,12 @@ async function syncPlayers(authUserId: string): Promise<SyncResult> {
           synced: true,
           syncedAt: new Date().toISOString(),
         });
+        await clearSyncFailure('players', player.id);
 
         result.synced++;
       } catch (err) {
+        const { abortAll } = await recordSyncFailure('players', player.id, err);
+        if (abortAll) throw err;
         result.failed++;
         result.errors.push({
           table: 'players',
@@ -348,6 +524,7 @@ async function syncPlayers(authUserId: string): Promise<SyncResult> {
       }
     }
   } catch (err) {
+    if (isAuthStopError(err)) throw err;
     console.error('[SyncService] Error syncing players:', err);
   }
 
@@ -392,12 +569,15 @@ async function syncPlayerTeams(authUserId: string): Promise<SyncResult> {
       async (id) => {
         await apiClient.delete(`/player-teams/${id}`);
       },
-      'player_teams',
+      'playerTeams',
       result
     );
 
     for (const playerTeam of playerTeamsToSync) {
       try {
+        if (!(await shouldAttemptSync('playerTeams', playerTeam.id))) {
+          continue;
+        }
         const payload = dbPlayerTeamToServerPayload(playerTeam);
 
         // Use PUT for upsert behavior with client-generated ID
@@ -407,18 +587,22 @@ async function syncPlayerTeams(authUserId: string): Promise<SyncResult> {
           synced: true,
           syncedAt: new Date().toISOString(),
         });
+        await clearSyncFailure('playerTeams', playerTeam.id);
 
         result.synced++;
       } catch (err) {
+        const { abortAll } = await recordSyncFailure('playerTeams', playerTeam.id, err);
+        if (abortAll) throw err;
         result.failed++;
         result.errors.push({
-          table: 'player_teams',
+          table: 'playerTeams',
           recordId: playerTeam.id,
           error: err instanceof Error ? err.message : String(err),
         });
       }
     }
   } catch (err) {
+    if (isAuthStopError(err)) throw err;
     console.error('[SyncService] Error syncing player teams:', err);
   }
 
@@ -467,6 +651,9 @@ async function syncMatches(authUserId: string): Promise<SyncResult> {
 
     for (const match of matchesToSync) {
       try {
+        if (!(await shouldAttemptSync('matches', match.id))) {
+          continue;
+        }
         // Use centralized transform: IndexedDB → Server API payload
         const matchData = dbMatchToServerPayload(match);
 
@@ -481,9 +668,12 @@ async function syncMatches(authUserId: string): Promise<SyncResult> {
           synced: true,
           syncedAt: new Date().toISOString(),
         });
+        await clearSyncFailure('matches', match.id);
 
         result.synced++;
       } catch (err) {
+        const { abortAll } = await recordSyncFailure('matches', match.id, err);
+        if (abortAll) throw err;
         result.failed++;
         result.errors.push({
           table: 'matches',
@@ -493,6 +683,7 @@ async function syncMatches(authUserId: string): Promise<SyncResult> {
       }
     }
   } catch (err) {
+    if (isAuthStopError(err)) throw err;
     console.error('[SyncService] Error syncing matches:', err);
   }
 
@@ -546,6 +737,9 @@ async function syncLineups(authUserId: string): Promise<SyncResult> {
 
     for (const lineup of lineupsToSync) {
       try {
+        if (!(await shouldAttemptSync('lineup', lineup.id))) {
+          continue;
+        }
         await apiClient.put(`/lineups/by-key/${lineup.matchId}/${lineup.playerId}/${lineup.startMinute}`, {
           endMinute: lineup.endMinute,
           position: lineup.position,
@@ -555,9 +749,12 @@ async function syncLineups(authUserId: string): Promise<SyncResult> {
           synced: true,
           syncedAt: new Date().toISOString(),
         });
+        await clearSyncFailure('lineup', lineup.id);
 
         result.synced++;
       } catch (err) {
+        const { abortAll } = await recordSyncFailure('lineup', lineup.id, err);
+        if (abortAll) throw err;
         result.failed++;
         result.errors.push({
           table: 'lineup',
@@ -567,6 +764,7 @@ async function syncLineups(authUserId: string): Promise<SyncResult> {
       }
     }
   } catch (err) {
+    if (isAuthStopError(err)) throw err;
     console.error('[SyncService] Error syncing lineups:', err);
   }
 
@@ -614,12 +812,15 @@ async function syncDefaultLineups(authUserId: string): Promise<SyncResult> {
           await apiClient.delete(`/default-lineups/${dl.teamId}`);
         }
       },
-      'default_lineups',
+      'defaultLineups',
       result
     );
 
     for (const defaultLineup of defaultLineupsToSync) {
       try {
+        if (!(await shouldAttemptSync('defaultLineups', defaultLineup.id))) {
+          continue;
+        }
         await apiClient.post('/default-lineups', {
           teamId: defaultLineup.teamId,
           formation: defaultLineup.formation,
@@ -629,18 +830,22 @@ async function syncDefaultLineups(authUserId: string): Promise<SyncResult> {
           synced: true,
           syncedAt: new Date().toISOString(),
         });
+        await clearSyncFailure('defaultLineups', defaultLineup.id);
 
         result.synced++;
       } catch (err) {
+        const { abortAll } = await recordSyncFailure('defaultLineups', defaultLineup.id, err);
+        if (abortAll) throw err;
         result.failed++;
         result.errors.push({
-          table: 'default_lineups',
+          table: 'defaultLineups',
           recordId: defaultLineup.id,
           error: err instanceof Error ? err.message : String(err),
         });
       }
     }
   } catch (err) {
+    if (isAuthStopError(err)) throw err;
     console.error('[SyncService] Error syncing default lineups:', err);
   }
 
@@ -727,6 +932,9 @@ async function syncEvents(authUserId: string): Promise<SyncResult> {
 
     for (const event of eventsToSync) {
       try {
+        if (!(await shouldAttemptSync('events', event.id))) {
+          continue;
+        }
         if (event.kind === 'formation_change') {
           const parsed = (() => {
             try { return event.notes ? JSON.parse(event.notes) : null; } catch { return null; }
@@ -761,9 +969,12 @@ async function syncEvents(authUserId: string): Promise<SyncResult> {
           synced: true,
           syncedAt: new Date().toISOString(),
         });
+        await clearSyncFailure('events', event.id);
 
         result.synced++;
       } catch (err) {
+        const { abortAll } = await recordSyncFailure('events', event.id, err);
+        if (abortAll) throw err;
         result.failed++;
         result.errors.push({
           table: 'events',
@@ -773,6 +984,7 @@ async function syncEvents(authUserId: string): Promise<SyncResult> {
       }
     }
   } catch (err) {
+    if (isAuthStopError(err)) throw err;
     console.error('[SyncService] Error syncing events:', err);
   }
 
@@ -830,6 +1042,9 @@ async function syncMatchPeriods(authUserId: string): Promise<SyncResult> {
 
     for (const period of periodsToSync) {
       try {
+        if (!(await shouldAttemptSync('matchPeriods', period.id))) {
+          continue;
+        }
         // Use appropriate API based on period completion status
         if (period.endedAt) {
           // Period is complete - use the import endpoint to preserve timestamps
@@ -868,9 +1083,12 @@ async function syncMatchPeriods(authUserId: string): Promise<SyncResult> {
           synced: true,
           syncedAt: new Date().toISOString(),
         });
+        await clearSyncFailure('matchPeriods', period.id);
 
         result.synced++;
       } catch (err) {
+        const { abortAll } = await recordSyncFailure('matchPeriods', period.id, err);
+        if (abortAll) throw err;
         result.failed++;
         result.errors.push({
           table: 'matchPeriods',
@@ -880,6 +1098,7 @@ async function syncMatchPeriods(authUserId: string): Promise<SyncResult> {
       }
     }
   } catch (err) {
+    if (isAuthStopError(err)) throw err;
     console.error('[SyncService] Error syncing match periods:', err);
   }
 
@@ -923,6 +1142,9 @@ async function syncMatchState(authUserId: string): Promise<SyncResult> {
 
     for (const state of statesToSync) {
       try {
+        if (!(await shouldAttemptSync('matchState', state.matchId))) {
+          continue;
+        }
         // Sync state changes to server based on status
         // Note: Local schema uses 'NOT_STARTED', server uses 'SCHEDULED'
         const status = state.status;
@@ -960,9 +1182,12 @@ async function syncMatchState(authUserId: string): Promise<SyncResult> {
           synced: true,
           syncedAt: new Date().toISOString(),
         });
+        await clearSyncFailure('matchState', state.matchId);
 
         result.synced++;
       } catch (err) {
+        const { abortAll } = await recordSyncFailure('matchState', state.matchId, err);
+        if (abortAll) throw err;
         result.failed++;
         result.errors.push({
           table: 'matchState',
@@ -972,6 +1197,7 @@ async function syncMatchState(authUserId: string): Promise<SyncResult> {
       }
     }
   } catch (err) {
+    if (isAuthStopError(err)) throw err;
     console.error('[SyncService] Error syncing match state:', err);
   }
 
@@ -1013,6 +1239,7 @@ class SyncService {
       seasons: 0,
       teams: 0,
       players: 0,
+      playerTeams: 0,
       matches: 0,
       lineups: 0,
       defaultLineups: 0,
@@ -1020,6 +1247,8 @@ class SyncService {
       matchPeriods: 0,
       matchState: 0,
       total: 0,
+      eligible: 0,
+      blocked: 0,
       synced: 0,
     };
 
@@ -1028,10 +1257,23 @@ class SyncService {
       if (!authUserId) {
         return progress;
       }
-      const [seasons, teams, players, matches, lineups, defaultLineups, events, matchPeriods, matchState] = await Promise.all([
+
+      const failures = ENABLE_SYNC_QUARANTINE && db.syncFailures ? await db.syncFailures.toArray().catch(() => []) : [];
+      const failureMap = new Map<string, any>();
+      for (const f of failures) {
+        failureMap.set(`${f.table}:${f.recordId}`, f);
+      }
+      progress.blocked = failures.filter((f: any) => f.permanent).length;
+
+      const now = Date.now();
+      const globalBackoffActive = globalBackoffUntilMs > now;
+      let nextRetryAtMs: number | null = globalBackoffActive ? globalBackoffUntilMs : null;
+
+      const [seasons, teams, players, playerTeams, matches, lineups, defaultLineups, events, matchPeriods, matchState] = await Promise.all([
         db.seasons?.toArray().catch(() => []) || [],
         db.teams?.toArray().catch(() => []) || [],
         db.players?.toArray().catch(() => []) || [],
+        db.playerTeams?.toArray().catch(() => []) || [],
         db.matches?.toArray().catch(() => []) || [],
         db.lineup?.toArray().catch(() => []) || [],
         db.defaultLineups?.toArray().catch(() => []) || [],
@@ -1040,18 +1282,128 @@ class SyncService {
         db.matchState?.toArray().catch(() => []) || [],
       ]);
 
-      progress.seasons = seasons.filter(s => s.synced === false && !isGuestId(s.createdByUserId) && isOwnedByAuth(s, authUserId)).length;
-      progress.teams = teams.filter(t => t.synced === false && !isGuestId(t.createdByUserId) && isOwnedByAuth(t, authUserId)).length;
-      progress.players = players.filter(p => p.synced === false && !isGuestId(p.createdByUserId) && isOwnedByAuth(p, authUserId)).length;
-      progress.matches = matches.filter(m => m.synced === false && !isGuestId(m.createdByUserId) && isOwnedByAuth(m, authUserId)).length;
-      progress.lineups = lineups.filter(l => l.synced === false && !isGuestId(l.createdByUserId) && isOwnedByAuth(l, authUserId)).length;
-      progress.defaultLineups = defaultLineups.filter(dl => dl.synced === false && !isGuestId(dl.createdByUserId) && isOwnedByAuth(dl, authUserId)).length;
-      progress.events = events.filter(e => e.synced === false && !isGuestId(e.createdByUserId) && isOwnedByAuth(e, authUserId)).length;
-      progress.matchPeriods = matchPeriods.filter(p => p.synced === false && !isGuestId(p.createdByUserId) && isOwnedByAuth(p, authUserId)).length;
-      progress.matchState = matchState.filter(s => s.synced === false && !isGuestId(s.createdByUserId) && isOwnedByAuth(s, authUserId)).length;
+      const count = (
+        table: string,
+        recordId: string | undefined | null,
+        createdByUserId: string | undefined,
+        ownedCheck: boolean,
+        synced: boolean
+      ): { include: boolean; eligible: boolean } => {
+        if (!recordId) return { include: false, eligible: false };
+        if (synced !== false) return { include: false, eligible: false };
+        if (!createdByUserId || isGuestId(createdByUserId)) return { include: false, eligible: false };
+        if (!ownedCheck) return { include: false, eligible: false };
+        const failure = failureMap.get(`${table}:${recordId}`);
+        if (failure?.permanent) return { include: false, eligible: false };
+        if (globalBackoffActive) {
+          nextRetryAtMs = nextRetryAtMs == null ? globalBackoffUntilMs : Math.min(nextRetryAtMs, globalBackoffUntilMs);
+          return { include: true, eligible: false };
+        }
+        if (failure?.nextRetryAt && failure.nextRetryAt > now) {
+          nextRetryAtMs = nextRetryAtMs == null ? failure.nextRetryAt : Math.min(nextRetryAtMs, failure.nextRetryAt);
+          return { include: true, eligible: false };
+        }
+        return { include: true, eligible: true };
+      };
 
-      progress.total = progress.seasons + progress.teams + progress.players + progress.matches +
-        progress.lineups + progress.defaultLineups + progress.events + progress.matchPeriods + progress.matchState;
+      for (const s of seasons) {
+        const recordId = (s as any).id || (s as any).seasonId;
+        const { include, eligible } = count('seasons', recordId, s.createdByUserId, isOwnedByAuth(s, authUserId), s.synced);
+        if (include) {
+          progress.seasons++;
+          if (eligible) progress.eligible++;
+        }
+      }
+
+      for (const t of teams) {
+        const { include, eligible } = count('teams', t.id || t.teamId, t.createdByUserId, isOwnedByAuth(t, authUserId), t.synced);
+        if (include) {
+          progress.teams++;
+          if (eligible) progress.eligible++;
+        }
+      }
+
+      for (const p of players) {
+        const { include, eligible } = count('players', p.id, p.createdByUserId, isOwnedByAuth(p, authUserId), p.synced);
+        if (include) {
+          progress.players++;
+          if (eligible) progress.eligible++;
+        }
+      }
+
+      for (const pt of playerTeams) {
+        const { include, eligible } = count('playerTeams', pt.id, pt.createdByUserId, isOwnedByAuth(pt, authUserId), pt.synced);
+        if (include) {
+          progress.playerTeams++;
+          if (eligible) progress.eligible++;
+        }
+      }
+
+      for (const m of matches) {
+        const recordId = (m as any).id || (m as any).matchId;
+        const { include, eligible } = count('matches', recordId, m.createdByUserId, isOwnedByAuth(m, authUserId), m.synced);
+        if (include) {
+          progress.matches++;
+          if (eligible) progress.eligible++;
+        }
+      }
+
+      for (const l of lineups) {
+        const { include, eligible } = count('lineup', l.id, l.createdByUserId, isOwnedByAuth(l, authUserId), l.synced);
+        if (include) {
+          progress.lineups++;
+          if (eligible) progress.eligible++;
+        }
+      }
+
+      for (const dl of defaultLineups) {
+        const { include, eligible } = count('defaultLineups', dl.id, dl.createdByUserId, isOwnedByAuth(dl, authUserId), dl.synced);
+        if (include) {
+          progress.defaultLineups++;
+          if (eligible) progress.eligible++;
+        }
+      }
+
+      for (const e of events) {
+        const { include, eligible } = count('events', e.id, e.createdByUserId, isOwnedByAuth(e, authUserId), e.synced);
+        if (include) {
+          progress.events++;
+          if (eligible) progress.eligible++;
+        }
+      }
+
+      for (const mp of matchPeriods) {
+        const { include, eligible } = count('matchPeriods', mp.id, mp.createdByUserId, isOwnedByAuth(mp, authUserId), mp.synced);
+        if (include) {
+          progress.matchPeriods++;
+          if (eligible) progress.eligible++;
+        }
+      }
+
+      for (const ms of matchState) {
+        const recordId = (ms as any).matchId;
+        const { include, eligible } = count('matchState', recordId, ms.createdByUserId, isOwnedByAuth(ms, authUserId), ms.synced);
+        if (include) {
+          progress.matchState++;
+          if (eligible) progress.eligible++;
+        }
+      }
+
+      progress.total =
+        progress.seasons +
+        progress.teams +
+        progress.players +
+        progress.playerTeams +
+        progress.matches +
+        progress.lineups +
+        progress.defaultLineups +
+        progress.events +
+        progress.matchPeriods +
+        progress.matchState;
+
+      if (nextRetryAtMs != null && nextRetryAtMs > now) {
+        progress.nextRetryAtMs = nextRetryAtMs;
+      }
     } catch (err) {
       console.error('[SyncService] Error getting pending counts:', err);
     }
@@ -1079,6 +1431,15 @@ class SyncService {
       if (!apiClient.isAuthenticated()) return combinedResult;
       const authUserId = getAuthUserId();
       if (!authUserId) return combinedResult;
+
+      if (ENABLE_SYNC_QUARANTINE && globalBackoffUntilMs > Date.now()) {
+        // Respect global backoff (e.g., Retry-After on 429) to avoid request storms.
+        try {
+          const progress = await this.getPendingCounts();
+          emitSyncProgress(progress);
+        } catch {}
+        return combinedResult;
+      }
 
       // If guest data exists locally, pause automatic sync to avoid 400/403s until import completes
       try {
@@ -1171,6 +1532,12 @@ class SyncService {
       if (combinedResult.synced > 0 || combinedResult.failed > 0) {
         console.log(`[SyncService] Sync complete - synced: ${combinedResult.synced}, failed: ${combinedResult.failed}`);
       }
+    } catch (err) {
+      if (isAuthStopError(err)) {
+        // apiClient clears the token on 401; stop this flush and wait for re-auth.
+        return combinedResult;
+      }
+      console.error('[SyncService] flushOnce failed:', err);
     } finally {
       this.running = false;
     }
@@ -1180,3 +1547,14 @@ class SyncService {
 }
 
 export const syncService = new SyncService();
+
+// Minimal exports for unit tests (avoid coupling production code to internals).
+export const __syncQuarantineTestUtils = {
+  classifySyncError,
+  shouldAttemptSync,
+  recordSyncFailure,
+  resetGlobalBackoff: () => {
+    globalBackoffUntilMs = 0;
+  },
+  getGlobalBackoffUntilMs: () => globalBackoffUntilMs,
+};

@@ -2,6 +2,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { LineupService } from './LineupService';
 import { PositionCalculatorService } from './PositionCalculatorService';
+import { QuotaService } from './QuotaService';
 
 export type FormationData = {
   players: Array<{
@@ -17,11 +18,13 @@ export class LiveFormationService {
   private prisma: PrismaClient;
   private lineupService: LineupService;
   private positionCalc: PositionCalculatorService;
+  private quotaService: QuotaService;
 
   constructor() {
     this.prisma = new PrismaClient();
     this.lineupService = new LineupService();
     this.positionCalc = new PositionCalculatorService();
+    this.quotaService = new QuotaService(this.prisma);
   }
 
   async getCurrentFormation(matchId: string, userId: string, userRole: string): Promise<FormationData | null> {
@@ -144,6 +147,8 @@ export class LiveFormationService {
           // ignore lookup errors; proceed to apply change
         }
       }
+
+      await this.quotaService.assertCanApplyFormationChange({ userId, userRole, matchId });
 
       // Capture current active lineup players to compute substitutions
       const currentActive = await this.prisma.lineup.findMany({

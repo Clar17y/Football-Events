@@ -11,6 +11,7 @@ import type {
   EventCreateRequest,
   EventUpdateRequest
 } from '@shared/types';
+import { QuotaService } from './QuotaService';
 
 export interface GetEventsOptions {
   page: number;
@@ -49,9 +50,11 @@ export interface BatchEventResult {
 
 export class EventService {
   private prisma: PrismaClient;
+  private quotaService: QuotaService;
 
   constructor() {
     this.prisma = new PrismaClient();
+    this.quotaService = new QuotaService(this.prisma);
   }
 
   async getEvents(userId: string, userRole: string, options: GetEventsOptions): Promise<PaginatedEvents> {
@@ -250,6 +253,13 @@ export class EventService {
       }
     }
 
+    await this.quotaService.assertCanCreateEvent({
+      userId,
+      userRole,
+      matchId: data.matchId,
+      kind: data.kind
+    });
+
     // Create unique constraint for event (match + team + player + kind + clock)
     const uniqueConstraints: any = { match_id: data.matchId };
     if (data.teamId) uniqueConstraints.team_id = data.teamId;
@@ -425,6 +435,16 @@ export class EventService {
           error.statusCode = 400;
           throw error;
         }
+      }
+
+      if (data.kind !== undefined && data.kind !== existingEvent.kind) {
+        await this.quotaService.assertCanUpdateEventKind({
+          userId,
+          userRole,
+          matchId: existingEvent.match_id,
+          existingKind: existingEvent.kind as any,
+          nextKind: data.kind
+        });
       }
 
       // Update existing event

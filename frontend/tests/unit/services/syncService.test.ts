@@ -12,6 +12,17 @@ import { db } from '../../../src/db/indexedDB';
 
 // Mock all API modules before importing syncService
 vi.mock('../../../src/services/api/baseApi', () => ({
+  ApiRequestError: class ApiRequestError extends Error {
+    status: number;
+    code?: string;
+    retryAfterMs?: number;
+    constructor(message: string, status: number, code?: string, _response?: any, retryAfterMs?: number) {
+      super(message);
+      this.status = status;
+      this.code = code;
+      this.retryAfterMs = retryAfterMs;
+    }
+  },
   apiClient: {
     isAuthenticated: vi.fn(() => true),
     get: vi.fn(),
@@ -59,12 +70,18 @@ vi.mock('../../../src/services/importService', () => ({
 }));
 
 // Import after mocks are set up
-import { syncService, type SyncProgress } from '../../../src/services/syncService';
-import { apiClient } from '../../../src/services/api/baseApi';
+import { syncService, __syncQuarantineTestUtils, type SyncProgress } from '../../../src/services/syncService';
+import { apiClient, ApiRequestError } from '../../../src/services/api/baseApi';
 import { lineupsApi } from '../../../src/services/api/lineupsApi';
 import { defaultLineupsApi } from '../../../src/services/api/defaultLineupsApi';
 
 describe('Sync Service Unit Tests', () => {
+  const setAuthUser = (userId: string) => {
+    const header = btoa(JSON.stringify({ alg: 'none', typ: 'JWT' }));
+    const payload = btoa(JSON.stringify({ sub: userId }));
+    localStorage.setItem('access_token', `${header}.${payload}.sig`);
+  };
+
   beforeEach(async () => {
     // Initialize the database
     await db.open();
@@ -75,13 +92,18 @@ describe('Sync Service Unit Tests', () => {
     await db.players.clear();
     await db.matches.clear();
     await db.lineup.clear();
+    await db.playerTeams.clear();
     await db.defaultLineups.clear();
     await db.events.clear();
     await db.matchPeriods.clear();
     await db.matchState.clear();
+    await db.syncFailures.clear();
+
+    setAuthUser('user-123');
 
     // Reset all mocks
     vi.clearAllMocks();
+    __syncQuarantineTestUtils.resetGlobalBackoff();
 
     // Default mock implementations
     (apiClient.isAuthenticated as Mock).mockReturnValue(true);
@@ -102,10 +124,13 @@ describe('Sync Service Unit Tests', () => {
     await db.players.clear();
     await db.matches.clear();
     await db.lineup.clear();
+    await db.playerTeams.clear();
     await db.defaultLineups.clear();
     await db.events.clear();
     await db.matchPeriods.clear();
     await db.matchState.clear();
+    await db.syncFailures.clear();
+    localStorage.removeItem('access_token');
   });
 
   describe('syncSeasons', () => {
@@ -332,11 +357,9 @@ describe('Sync Service Unit Tests', () => {
 
       await syncService.flushOnce();
 
-      expect(lineupsApi.create).toHaveBeenCalledTimes(1);
-      expect(lineupsApi.create).toHaveBeenCalledWith(
+      expect(apiClient.put).toHaveBeenCalledWith(
+        '/lineups/by-key/match-1/player-1/0',
         expect.objectContaining({
-          matchId: 'match-1',
-          playerId: 'player-1',
           position: 'CM',
         })
       );
@@ -361,8 +384,8 @@ describe('Sync Service Unit Tests', () => {
 
       await syncService.flushOnce();
 
-      expect(defaultLineupsApi.saveDefaultLineup).toHaveBeenCalledTimes(1);
-      expect(defaultLineupsApi.saveDefaultLineup).toHaveBeenCalledWith(
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/default-lineups',
         expect.objectContaining({
           teamId: 'team-1',
         })
@@ -378,16 +401,16 @@ describe('Sync Service Unit Tests', () => {
       // Add unsynced records for authenticated user
       await db.seasons.add({
         id: 's1', seasonId: 's1', label: 'S1', createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false, synced: false,
+        updatedAt: new Date().toISOString(), createdByUserId: 'user-123', isDeleted: false, synced: false,
       } as any);
       await db.seasons.add({
         id: 's2', seasonId: 's2', label: 'S2', createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false, synced: false,
+        updatedAt: new Date().toISOString(), createdByUserId: 'user-123', isDeleted: false, synced: false,
       } as any);
 
       await db.teams.add({
         id: 't1', teamId: 't1', name: 'T1', createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false, synced: false,
+        updatedAt: new Date().toISOString(), createdByUserId: 'user-123', isDeleted: false, synced: false,
       } as any);
 
       // Add guest record (should not be counted)
@@ -401,7 +424,7 @@ describe('Sync Service Unit Tests', () => {
         id: 'm1', matchId: 'm1', seasonId: 's1', homeTeamId: 't1', awayTeamId: 't2',
         kickoffTime: new Date().toISOString(), durationMinutes: 60, periodFormat: 'quarter',
         homeScore: 0, awayScore: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-        createdByUserId: 'user-1', isDeleted: false, synced: true,
+        createdByUserId: 'user-123', isDeleted: false, synced: true,
       } as any);
 
       const progress = await syncService.getPendingCounts();
@@ -409,7 +432,10 @@ describe('Sync Service Unit Tests', () => {
       expect(progress.seasons).toBe(2);
       expect(progress.teams).toBe(1);
       expect(progress.players).toBe(0); // Guest player excluded
+      expect(progress.playerTeams).toBe(0);
       expect(progress.matches).toBe(0); // Already synced
+      expect(progress.blocked).toBe(0);
+      expect(progress.eligible).toBe(3);
       expect(progress.total).toBe(3); // 2 seasons + 1 team
     });
   });
@@ -425,7 +451,7 @@ describe('Sync Service Unit Tests', () => {
 
       await db.seasons.add({
         id: 's1', seasonId: 's1', label: 'S1', createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false, synced: false,
+        updatedAt: new Date().toISOString(), createdByUserId: 'user-123', isDeleted: false, synced: false,
       } as any);
 
       await syncService.flushOnce();
@@ -437,13 +463,107 @@ describe('Sync Service Unit Tests', () => {
     });
   });
 
+  describe('Sync Quarantine & Backoff', () => {
+    it('classifies 401 as auth stop', () => {
+      const err = new ApiRequestError('nope', 401, 'ACCESS_DENIED');
+      const classification = __syncQuarantineTestUtils.classifySyncError(err);
+      expect(classification.disposition).toBe('auth');
+      expect(classification.status).toBe(401);
+    });
+
+    it('classifies 429 as transient and preserves retryAfterMs', () => {
+      const err = new ApiRequestError('rate limited', 429, 'RATE_LIMIT', undefined, 60_000);
+      const classification = __syncQuarantineTestUtils.classifySyncError(err);
+      expect(classification.disposition).toBe('transient');
+      expect(classification.status).toBe(429);
+      expect(classification.retryAfterMs).toBe(60_000);
+    });
+
+    it('records transient failures with backoff and increments attemptCount', async () => {
+      const now = Date.parse('2025-01-01T00:00:00.000Z');
+      const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+      try {
+        const res = await __syncQuarantineTestUtils.recordSyncFailure('teams', 't1', new TypeError('Failed to fetch'));
+        expect(res.abortAll).toBe(false);
+
+        const row: any = await db.syncFailures.get(['teams', 't1']);
+        expect(row).toBeTruthy();
+        expect(row.attemptCount).toBe(1);
+        expect(row.permanent).toBe(false);
+        expect(row.nextRetryAt).toBe(now + 30_000);
+      } finally {
+        randomSpy.mockRestore();
+        dateNowSpy.mockRestore();
+      }
+    });
+
+    it('records permanent failures without retry scheduling', async () => {
+      const now = Date.parse('2025-01-01T00:00:00.000Z');
+      const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      try {
+        const res = await __syncQuarantineTestUtils.recordSyncFailure(
+          'events',
+          'e1',
+          new ApiRequestError('bad request', 400, 'INVALID_PAYLOAD')
+        );
+        expect(res.abortAll).toBe(false);
+
+        const row: any = await db.syncFailures.get(['events', 'e1']);
+        expect(row).toBeTruthy();
+        expect(row.attemptCount).toBe(1);
+        expect(row.permanent).toBe(true);
+        expect(row.reasonCode).toBe('INVALID_PAYLOAD');
+      } finally {
+        dateNowSpy.mockRestore();
+      }
+    });
+
+    it('respects Retry-After for 429 and applies global backoff', async () => {
+      const now = Date.parse('2025-01-01T00:00:00.000Z');
+      const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
+
+      try {
+        const retryAfterMs = 90_000;
+        await __syncQuarantineTestUtils.recordSyncFailure(
+          'events',
+          'e2',
+          new ApiRequestError('rate limited', 429, 'RATE_LIMIT', undefined, retryAfterMs)
+        );
+
+        const row: any = await db.syncFailures.get(['events', 'e2']);
+        expect(row).toBeTruthy();
+        expect(row.permanent).toBe(false);
+        expect(row.nextRetryAt).toBe(now + retryAfterMs);
+
+        expect(__syncQuarantineTestUtils.getGlobalBackoffUntilMs()).toBe(now + retryAfterMs);
+        expect(await __syncQuarantineTestUtils.shouldAttemptSync('teams', 't2')).toBe(false);
+      } finally {
+        dateNowSpy.mockRestore();
+      }
+    });
+
+    it('aborts all sync on 401 and does not quarantine the record', async () => {
+      const res = await __syncQuarantineTestUtils.recordSyncFailure(
+        'teams',
+        't3',
+        new ApiRequestError('unauthorized', 401, 'ACCESS_DENIED')
+      );
+      expect(res.abortAll).toBe(true);
+      const row = await db.syncFailures.get(['teams', 't3']);
+      expect(row).toBeUndefined();
+    });
+  });
+
   describe('Error Handling', () => {
     it('should not sync when offline', async () => {
       Object.defineProperty(navigator, 'onLine', { value: false, writable: true });
 
       await db.seasons.add({
         id: 's1', seasonId: 's1', label: 'S1', createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false, synced: false,
+        updatedAt: new Date().toISOString(), createdByUserId: 'user-123', isDeleted: false, synced: false,
       } as any);
 
       const result = await syncService.flushOnce();
@@ -457,7 +577,7 @@ describe('Sync Service Unit Tests', () => {
 
       await db.seasons.add({
         id: 's1', seasonId: 's1', label: 'S1', createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false, synced: false,
+        updatedAt: new Date().toISOString(), createdByUserId: 'user-123', isDeleted: false, synced: false,
       } as any);
 
       const result = await syncService.flushOnce();
