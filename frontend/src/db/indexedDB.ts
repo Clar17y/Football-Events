@@ -22,6 +22,7 @@ import type {
   DbMatchPeriod,
   DbMatchState,
   DbDefaultLineup,
+  DbGlobalStats,
   DbSyncMetadata,
   DbSyncFailure,
   DbSetting,
@@ -65,6 +66,7 @@ export class GrassrootsDB extends Dexie {
   public matchPeriods!: Table<DbMatchPeriod, string>;
   public matchState!: Table<DbMatchState, string>;
   public defaultLineups!: Table<DbDefaultLineup, string>;
+  public globalStats!: Table<DbGlobalStats, string>;
   public syncMetadata!: Table<DbSyncMetadata, number>;
   public syncFailures!: Table<SyncFailure, [string, string]>;
   public settings!: Table<DbSetting, string>;
@@ -288,6 +290,27 @@ export class GrassrootsDB extends Dexie {
       matchPeriods: `id, ${SCHEMA_INDEXES.matchPeriods.join(', ')}`,
       matchState: `matchId, ${SCHEMA_INDEXES.matchState.join(', ')}`,
       defaultLineups: `id, ${SCHEMA_INDEXES.defaultLineups.join(', ')}`,
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
+      syncFailures: '&[table+recordId], table, recordId, nextRetryAt, permanent, lastAttemptAt, reasonCode',
+      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`,
+      // Legacy table cleanup
+      outbox: null
+    });
+
+    // Version 15: Add global stats cache table (single row)
+    this.version(15).stores({
+      events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
+      matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
+      teams: `id, ${SCHEMA_INDEXES.teams.join(', ')}`,
+      players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
+      seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
+      lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
+      playerTeams: `id, playerId, teamId, startDate, isActive, createdAt, updatedAt`,
+      matchNotes: `matchNoteId, ${SCHEMA_INDEXES.matchNotes.join(', ')}`,
+      matchPeriods: `id, ${SCHEMA_INDEXES.matchPeriods.join(', ')}`,
+      matchState: `matchId, ${SCHEMA_INDEXES.matchState.join(', ')}`,
+      defaultLineups: `id, ${SCHEMA_INDEXES.defaultLineups.join(', ')}`,
+      globalStats: `id, ${SCHEMA_INDEXES.globalStats.join(', ')}`,
       syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
       syncFailures: '&[table+recordId], table, recordId, nextRetryAt, permanent, lastAttemptAt, reasonCode',
       settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`,
@@ -1184,5 +1207,6 @@ export type {
   DbPlayerTeam,
   DbMatchPeriod,
   DbMatchState,
-  DbDefaultLineup
+  DbDefaultLineup,
+  DbGlobalStats
 } from './schema';

@@ -24,6 +24,7 @@ import type {
   IsoDateTimeString,
 } from '@shared/types';
 import type { EventKind } from '../types/events';
+import type { GlobalStatsData } from '../types/globalStats';
 
 // ============================================================================
 // DATABASE OPERATION TYPES
@@ -186,6 +187,15 @@ export interface DbMatchPeriod extends SyncableRecord {
   deletedAt?: IsoDateTimeString;
   deletedByUserId?: string;
   isDeleted: boolean;
+}
+
+/**
+ * Cached global (platform-wide) statistics (single-row, read-only on client).
+ */
+export interface DbGlobalStats {
+  id: 'current';
+  data: GlobalStatsData;
+  lastUpdated: number;
 }
 
 // ============================================================================
@@ -354,6 +364,9 @@ export interface DatabaseSchema {
   matchPeriods: DbMatchPeriod;
   matchState: DbMatchState;
   defaultLineups: DbDefaultLineup;
+
+  // Global stats cache
+  globalStats: DbGlobalStats;
 
   // Sync infrastructure
   syncMetadata: DbSyncMetadata;
@@ -531,6 +544,12 @@ export const SCHEMA_INDEXES = {
     'isDeleted',                         // Soft delete filtering
     'synced',                            // Sync status
     '[synced+createdByUserId]'          // Unsynced guest data
+  ]
+  ,
+
+  // Global stats cache (single row)
+  globalStats: [
+    'lastUpdated'
   ]
 } as const;
 

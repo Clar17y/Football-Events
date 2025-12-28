@@ -61,7 +61,7 @@ interface HomePageProps {
 const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const { user } = useAuth();
   const { showInfo } = useToast();
-  const { stats, loading, error, fromCache } = useGlobalStats();
+  const { stats, loading, error, fromCache, lastUpdated } = useGlobalStats();
 
   // Quick Start state
   const [teams, setTeams] = useState<Team[]>([]);
@@ -270,6 +270,12 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             ))}
           </div>
 
+          {fromCache && lastUpdated && (
+            <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--grassroots-text-tertiary)', marginTop: '0.5rem' }}>
+              Last updated: {new Date(lastUpdated).toLocaleString()}
+            </div>
+          )}
+
           {/* Call to action for non-authenticated users */}
           {!user && (
             <div style={{ textAlign: 'center', marginTop: '1rem' }}>
@@ -292,12 +298,6 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             </div>
           )}
 
-          {/* Show cache/error status for debugging */}
-          {fromCache && (
-            <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--grassroots-text-tertiary)', marginTop: '0.5rem' }}>
-              Showing cached data
-            </div>
-          )}
           {error && (
             <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--grassroots-danger)', marginTop: '0.5rem' }}>
               Using offline data
