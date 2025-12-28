@@ -52,6 +52,14 @@ npm run test:watch    # Watch mode
 npx tsc --noEmit      # Type check
 ```
 
+## Offline Verification (Manual)
+
+1. `npm run build --workspace=frontend`
+2. `npm run preview --workspace=frontend`
+3. Open the printed preview URL once while online and confirm `service-worker.js` is active (Chrome DevTools → Application → Service Workers).
+4. Chrome DevTools → Network → check **Offline**.
+5. Navigate across routes (including lazy-loaded routes) and hard-refresh a deep route; the app should load and navigate without dynamic import fetch errors.
+
 ## Scripts
 
 | Command | Description |
