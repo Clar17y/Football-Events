@@ -5,7 +5,7 @@ import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from 'workbox-precaching';
-import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies';
+import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies';
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<unknown>;
@@ -19,8 +19,6 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
 });
-
-self.skipWaiting();
 clientsClaim();
 
 cleanupOutdatedCaches();
@@ -43,7 +41,9 @@ registerRoute(
           request: new Request(APP_SHELL_URL, { cache: 'reload' }),
         });
         if (response) return response;
-      } catch { }
+      } catch (err) {
+        console.warn('[sw] app-shell strategy failed', err);
+      }
 
       const precached = await matchPrecache(APP_SHELL_URL);
       if (precached) return precached;
@@ -54,32 +54,6 @@ registerRoute(
       denylist: [/^\/api(\/|$)/, /\/[^/?]+\.[^/]+$/],
     }
   )
-);
-
-registerRoute(
-  ({ url, request }) =>
-    request.method === 'GET' && (url.pathname.startsWith('/api/') || url.pathname.startsWith('/api/v1/')),
-  new NetworkFirst({
-    cacheName: 'api-get',
-    networkTimeoutSeconds: 3,
-    plugins: [
-      new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 5 * 60 }),
-      {
-        cacheWillUpdate: async ({ request, response }) => {
-          if (!response || response.status !== 200) return null;
-          if (request.headers.has('Authorization')) return null;
-          if (request.credentials === 'include') return null;
-          const requestUrl = new URL(request.url);
-          if (requestUrl.origin === self.location.origin && request.credentials !== 'omit') return null;
-          const cacheControl = response.headers.get('Cache-Control') ?? '';
-          if (/no-store/i.test(cacheControl)) return null;
-          if (/private/i.test(cacheControl)) return null;
-          return response;
-        },
-      },
-    ],
-  }),
-  'GET'
 );
 
 registerRoute(
