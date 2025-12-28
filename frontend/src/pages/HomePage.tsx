@@ -23,7 +23,6 @@ import {
   person,
   calendar,
   statsChart,
-  refresh as refreshIcon,
   play,
   ribbon,
   football
@@ -62,7 +61,7 @@ interface HomePageProps {
 const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const { user } = useAuth();
   const { showInfo } = useToast();
-  const { stats, loading, error, fromCache, lastUpdated, refresh } = useGlobalStats();
+  const { stats, loading, error, fromCache, lastUpdated } = useGlobalStats();
 
   // Quick Start state
   const [teams, setTeams] = useState<Team[]>([]);
@@ -271,18 +270,11 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             ))}
           </div>
 
-          <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--grassroots-text-tertiary)', marginTop: '0.5rem' }}>
-            <span>Last updated: {lastUpdated ? new Date(lastUpdated).toLocaleString() : '—'}</span>
-            <IonButton
-              fill="clear"
-              size="small"
-              onClick={() => refresh()}
-              style={{ marginLeft: 6, textTransform: 'none' }}
-            >
-              <IonIcon slot="start" icon={refreshIcon} />
-              Refresh
-            </IonButton>
-          </div>
+          {fromCache && lastUpdated && (
+            <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--grassroots-text-tertiary)', marginTop: '0.5rem' }}>
+              Last updated: {new Date(lastUpdated).toLocaleString()}
+            </div>
+          )}
 
           {/* Call to action for non-authenticated users */}
           {!user && (
@@ -306,12 +298,6 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             </div>
           )}
 
-          {/* Show cache/error status for debugging */}
-          {fromCache && (
-            <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--grassroots-text-tertiary)', marginTop: '0.5rem' }}>
-              Showing cached data
-            </div>
-          )}
           {error && (
             <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--grassroots-danger)', marginTop: '0.5rem' }}>
               Using offline data
