@@ -104,13 +104,14 @@ describe('Team Schema Alignment Tests', () => {
         awayKitPrimary: '#000000',
         awayKitSecondary: '#FFD700',
         logoUrl: 'https://example.com/logos/manchester-united.png',
-        createdAt: createdTeam.created_at,
+        createdAt: createdTeam.created_at.toISOString(),
         updatedAt: undefined,
-        // Authorization and soft delete fields
-        created_by_user_id: testUserId,
-        deleted_at: undefined,
-        deleted_by_user_id: undefined,
-        is_deleted: false
+        // Authorization and soft delete fields (camelCase)
+        createdByUserId: testUserId,
+        deletedAt: undefined,
+        deletedByUserId: undefined,
+        isDeleted: false,
+        isOpponent: false
       });
     });
 

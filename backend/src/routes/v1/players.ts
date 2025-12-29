@@ -14,6 +14,9 @@ const playerService = new PlayerService();
 router.get('/', authenticateToken, asyncHandler(async (req, res) => {
   const { page = 1, limit = 25, search, teamId, teamIds, noTeam, position } = req.query;
   
+  const parsedTeamIds = typeof teamIds === 'string' ? (teamIds as string).split(',').filter(Boolean) : [];
+  const parsedNoTeam = typeof noTeam === 'string' ? (noTeam as string) === 'true' : false;
+  
   const result = await playerService.getPlayers(
     req.user!.id,
     req.user!.role,
@@ -22,13 +25,13 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
       limit: Number(limit),
       search: search as string,
       teamId: teamId as string,
-      teamIds: typeof teamIds === 'string' ? (teamIds as string).split(',').filter(Boolean) : undefined,
-      noTeam: typeof noTeam === 'string' ? (noTeam as string) === 'true' : undefined,
+      teamIds: parsedTeamIds.length > 0 ? parsedTeamIds : [],
+      noTeam: parsedNoTeam,
       position: position as string
     }
   );
   
-  res.json(result);
+  return res.json(result);
 }));
 
 // POST /api/v1/players - Create new player
@@ -38,7 +41,7 @@ router.post('/',
   asyncHandler(async (req, res) => {
     try {
       const player = await playerService.createPlayer(req.body, req.user!.id, req.user!.role);
-      res.status(201).json(player);
+      return res.status(201).json(player);
     } catch (error: any) {
       const apiError = extractApiError(error);
       if (apiError) {

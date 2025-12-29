@@ -1,7 +1,7 @@
 import apiClient from './baseApi';
 import { authApi } from './authApi';
 import { canChangeFormation } from '../../utils/guestQuota';
-import { getGuestId, isGuest } from '../../utils/guest';
+import { db } from '../../db/indexedDB';
 
 export interface FormationPlayerDTO {
   id: string;
@@ -44,7 +44,7 @@ export const formationsApi = {
     try {
       // Guests should not call server; getCurrent will short-circuit
       await this.getCurrent(matchId, { useCache: true });
-    } catch {}
+    } catch { }
   },
 
   setCached(matchId: string, data: FormationDataDTO) {
@@ -59,52 +59,39 @@ export const formationsApi = {
     const prev = formationCache.get(matchId);
     const notes = JSON.stringify({ reason: reason || null, formation, prevFormation: prev || null });
 
-    // Guest mode: enforce quota and record local event in events table
+    // Guest mode: enforce quota
     if (!authApi.isAuthenticated()) {
       const q = await canChangeFormation(matchId);
       if (!q.ok) throw new Error(q.reason);
-      try {
-        const { db } = await import('../../db/indexedDB');
-        // Use addEventToTable to store in events table (not outbox)
-        await db.addEventToTable({
-          kind: 'formation_change',
-          match_id: matchId,
-          team_id: '', // Formation changes are match-level, not team-specific
-          minute: Math.max(0, Math.floor(startMin || 0)),
-          second: 0,
-          notes: notes,
-          created_by_user_id: getGuestId(),
-        });
-      } catch (e) { 
-        console.warn('Failed to save formation change:', e);
-      }
-      formationCache.set(matchId, formation);
-      try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
-      return { success: true, data: { local: true } } as any;
     }
 
-    // Authenticated path, with offline fallback
-    try {
-      const resp = await apiClient.post(`/matches/${matchId}/formation-changes`, { startMin, formation, reason });
-      formationCache.set(matchId, formation);
-      return resp.data as any;
-    } catch (e) {
-      // Offline fallback: record formation_change in events table
-      try {
-        const { db } = await import('../../db/indexedDB');
-        await db.addEventToTable({
-          kind: 'formation_change',
-          match_id: matchId,
-          team_id: '', // Formation changes are match-level, not team-specific
-          minute: Math.max(0, Math.floor(startMin || 0)),
-          second: 0,
-          notes: notes,
-          created_by_user_id: 'offline',
-        });
-      } catch {}
-      formationCache.set(matchId, formation);
-      return { success: true, data: { local: true } } as any;
+    // LOCAL-FIRST: create event via dataLayer
+    const { eventsDataLayer } = await import('../dataLayer');
+    const match = await db.matches.get(matchId);
+    if (!match) {
+      throw new Error('Match not found');
     }
+    const [homeTeam, awayTeam] = await Promise.all([
+      db.teams.get(match.homeTeamId),
+      db.teams.get(match.awayTeamId)
+    ]);
+    const formationTeamId =
+      (homeTeam && !homeTeam.isOpponent ? homeTeam.id : null) ||
+      (awayTeam && !awayTeam.isOpponent ? awayTeam.id : null) ||
+      match.homeTeamId;
+
+    await eventsDataLayer.create({
+      matchId,
+      kind: 'formation_change',
+      clockMs: Math.floor((startMin || 0) * 60 * 1000),
+      teamId: formationTeamId,
+      notes: notes,
+    });
+
+    formationCache.set(matchId, formation);
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
+
+    return { success: true, data: { local: true } } as any;
   }
 };
 

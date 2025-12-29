@@ -1,12 +1,23 @@
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'path';
 
+const RUN_DB_TESTS = process.env['RUN_DB_TESTS'] === 'true';
+
 export default defineConfig({
   test: {
     environment: 'node',
     setupFiles: ['./tests/setup.ts'],
     globals: true,
     include: ['tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts}'],
+    exclude: RUN_DB_TESTS
+      ? []
+      : [
+          'tests/api/**',
+          'tests/routes/**',
+          'tests/schema-alignment/**',
+          'tests/integration/**',
+          'tests/unit/naturalKeyResolver.test.ts',
+        ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

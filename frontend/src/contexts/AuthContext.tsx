@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { authApi } from '../services/api/authApi';
+import { db } from '../db/indexedDB';
 import type { UserProfile } from '../services/api/authApi';
 
 interface AuthContextType {
@@ -72,6 +73,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUser(response.data);
             setTokenExpiryMs(getAccessTokenExpiryMs());
             try { window.dispatchEvent(new CustomEvent('auth:loggedin')); } catch {}
+            try {
+              if (navigator.onLine) {
+                const { fetchAndCacheMeLimits } = await import('../services/limitsService');
+                void fetchAndCacheMeLimits();
+              }
+            } catch {}
           } else {
             console.log('AuthContext: Profile failed, trying refresh...');
             // Token might be expired, try to refresh
@@ -84,6 +91,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                   setUser(retryResponse.data);
                   setTokenExpiryMs(getAccessTokenExpiryMs());
                   try { window.dispatchEvent(new CustomEvent('auth:loggedin')); } catch {}
+                  try {
+                    if (navigator.onLine) {
+                      const { fetchAndCacheMeLimits } = await import('../services/limitsService');
+                      void fetchAndCacheMeLimits();
+                    }
+                  } catch {}
                 }
             } else {
               console.log('AuthContext: Refresh failed, clearing tokens...');
@@ -122,6 +135,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (profileResponse.success && profileResponse.data) {
           setUser(profileResponse.data);
           setTokenExpiryMs(getAccessTokenExpiryMs());
+          try { window.dispatchEvent(new CustomEvent('auth:loggedin')); } catch {}
+          try {
+            if (navigator.onLine) {
+              const { fetchAndCacheMeLimits } = await import('../services/limitsService');
+              void fetchAndCacheMeLimits();
+            }
+          } catch {}
           return { success: true };
         } else {
           return { success: false, error: 'Failed to get user profile' };
@@ -175,6 +195,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await authApi.logout();
       setUser(null);
       setTokenExpiryMs(null);
+      try {
+        await db.clearAllData();
+      } catch (clearErr) {
+        console.warn('Failed to clear local data on logout:', clearErr);
+      }
       // Broadcast logout to interested listeners
       try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
     } catch (error) {
@@ -182,6 +207,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Clear user state even if logout request fails
       setUser(null);
       setTokenExpiryMs(null);
+      try {
+        await db.clearAllData();
+      } catch (clearErr) {
+        console.warn('Failed to clear local data on logout:', clearErr);
+      }
       try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
     } finally {
       setIsLoading(false);
@@ -207,6 +237,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Force logout flow and redirect handled by AppRoutes depending on isAuthenticated
       setUser(null);
       setTokenExpiryMs(null);
+      try {
+        void db.clearAllData();
+      } catch (clearErr) {
+        console.warn('Failed to clear local data on auth reset:', clearErr);
+      }
     };
     const onRefreshed = () => {
       setTokenExpiryMs(getAccessTokenExpiryMs());
@@ -222,6 +257,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       window.removeEventListener('auth:refreshed', onRefreshed as EventListener);
     };
   }, []);
+
+  // Periodically refresh cached limits while authenticated and online
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let intervalId: number | undefined;
+    const refresh = async () => {
+      try {
+        if (!navigator.onLine) return;
+        const { fetchAndCacheMeLimits } = await import('../services/limitsService');
+        await fetchAndCacheMeLimits();
+      } catch {}
+    };
+
+    refresh();
+    intervalId = window.setInterval(refresh, 10 * 60 * 1000);
+    const onOnline = () => { void refresh(); };
+    window.addEventListener('online', onOnline);
+
+    return () => {
+      if (intervalId) window.clearInterval(intervalId);
+      window.removeEventListener('online', onOnline);
+    };
+  }, [isAuthenticated]);
 
   // Sliding session: refresh token on user activity
   useEffect(() => {

@@ -6,6 +6,7 @@ export const teamCreateSchema = z.object({
     .min(1, 'Team name is required')
     .max(100, 'Team name must be less than 100 characters')
     .trim(),
+  isOpponent: z.boolean().optional().default(false),
   homeKitPrimary: z.string()
     .regex(/^#[0-9A-F]{6}$/i, 'Home primary color must be a valid hex color')
     .optional(),
@@ -23,7 +24,7 @@ export const teamCreateSchema = z.object({
     .optional()
 });
 
-export const teamUpdateSchema = teamCreateSchema.partial();
+export const teamUpdateSchema = teamCreateSchema.omit({ isOpponent: true }).partial();
 
 // Player validation schemas
 export const playerCreateSchema = z.object({
@@ -40,7 +41,7 @@ export const playerCreateSchema = z.object({
     .max(10, 'Position code must be less than 10 characters')
     .optional(),
   dateOfBirth: z.string()
-    .regex(/^\d{2}-\d{2}-\d{4}$/, 'Date of birth must be in YYYY-MM-DD format')
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be in YYYY-MM-DD format')
     .optional(),
   notes: z.string()
     .max(1000, 'Notes must be less than 1000 characters')
@@ -136,15 +137,19 @@ export const matchUpdateSchema = z.object({
 
 // Event validation schemas
 export const eventCreateSchema = z.object({
+  id: z.string()
+    .uuid('Event ID must be a valid UUID')
+    .optional(),
   matchId: z.string()
     .uuid('Match ID must be a valid UUID'),
   kind: z.enum([
-    'goal', 'assist', 'key_pass', 'save', 'interception', 
-    'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal'
+    'goal', 'assist', 'key_pass', 'save', 'interception',
+    'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal',
+    'formation_change', 'yellow_card', 'red_card', 'corner', 'offside',
+    'shot_on_target', 'shot_off_target', 'clearance', 'block', 'cross', 'header'
   ]),
   teamId: z.string()
-    .uuid('Team ID must be a valid UUID')
-    .optional(),
+    .uuid('Team ID must be a valid UUID'),
   playerId: z.string()
     .uuid('Player ID must be a valid UUID')
     .nullable()
@@ -169,9 +174,14 @@ export const eventCreateSchema = z.object({
 });
 
 export const eventUpdateSchema = z.object({
+  matchId: z.string()
+    .uuid('Match ID must be a valid UUID')
+    .optional(),
   kind: z.enum([
-    'goal', 'assist', 'key_pass', 'save', 'interception', 
-    'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal'
+    'goal', 'assist', 'key_pass', 'save', 'interception',
+    'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal',
+    'formation_change', 'yellow_card', 'red_card', 'corner', 'offside',
+    'shot_on_target', 'shot_off_target', 'clearance', 'block', 'cross', 'header'
   ]).optional(),
   teamId: z.string().uuid().optional(),
   playerId: z.string().uuid().nullable().optional(),
@@ -220,22 +230,22 @@ const awardCreateBaseSchema = z.object({
 });
 
 export const awardCreateSchema = awardCreateBaseSchema
-.refine(data => !!(data.seasonId || data.seasonLabel), {
-  message: 'Provide either seasonId or seasonLabel',
-  path: ['seasonId']
-})
-.refine(data => !!(data.playerId || data.playerName), {
-  message: 'Provide either playerId or playerName',
-  path: ['playerId']
-})
-.refine(data => !(data.seasonId && data.seasonLabel), {
-  message: 'Provide only one of seasonId or seasonLabel',
-  path: ['seasonId']
-})
-.refine(data => !(data.playerId && data.playerName), {
-  message: 'Provide only one of playerId or playerName',
-  path: ['playerId']
-});
+  .refine(data => !!(data.seasonId || data.seasonLabel), {
+    message: 'Provide either seasonId or seasonLabel',
+    path: ['seasonId']
+  })
+  .refine(data => !!(data.playerId || data.playerName), {
+    message: 'Provide either playerId or playerName',
+    path: ['playerId']
+  })
+  .refine(data => !(data.seasonId && data.seasonLabel), {
+    message: 'Provide only one of seasonId or seasonLabel',
+    path: ['seasonId']
+  })
+  .refine(data => !(data.playerId && data.playerName), {
+    message: 'Provide only one of playerId or playerName',
+    path: ['playerId']
+  });
 
 export const awardUpdateSchema = awardCreateBaseSchema.partial();
 
@@ -259,22 +269,22 @@ const matchAwardCreateBaseSchema = z.object({
 });
 
 export const matchAwardCreateSchema = matchAwardCreateBaseSchema
-.refine(data => !!(data.matchId || (data.homeTeamName && data.awayTeamName && data.kickoffTime)), {
-  message: 'Provide either matchId or (homeTeamName, awayTeamName, kickoffTime)',
-  path: ['matchId']
-})
-.refine(data => !(data.matchId && (data.homeTeamName || data.awayTeamName || data.kickoffTime)), {
-  message: 'Provide only one of matchId or match natural keys',
-  path: ['matchId']
-})
-.refine(data => !!(data.playerId || data.playerName), {
-  message: 'Provide either playerId or playerName',
-  path: ['playerId']
-})
-.refine(data => !(data.playerId && data.playerName), {
-  message: 'Provide only one of playerId or playerName',
-  path: ['playerId']
-});
+  .refine(data => !!(data.matchId || (data.homeTeamName && data.awayTeamName && data.kickoffTime)), {
+    message: 'Provide either matchId or (homeTeamName, awayTeamName, kickoffTime)',
+    path: ['matchId']
+  })
+  .refine(data => !(data.matchId && (data.homeTeamName || data.awayTeamName || data.kickoffTime)), {
+    message: 'Provide only one of matchId or match natural keys',
+    path: ['matchId']
+  })
+  .refine(data => !!(data.playerId || data.playerName), {
+    message: 'Provide either playerId or playerName',
+    path: ['playerId']
+  })
+  .refine(data => !(data.playerId && data.playerName), {
+    message: 'Provide only one of playerId or playerName',
+    path: ['playerId']
+  });
 
 export const matchAwardUpdateSchema = matchAwardCreateBaseSchema.partial();
 
@@ -323,22 +333,114 @@ export const lineupUpdateSchema = z.object({
 });
 
 // Batch operation schemas
-export const eventBatchSchema = z.object({
-  create: z.array(eventCreateSchema).optional().default([]),
+const MAX_BATCH_ITEMS = 50;
+
+const eventBatchSchemaBase = z.object({
+  create: z.array(eventCreateSchema)
+    .max(MAX_BATCH_ITEMS, `Create operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([]),
   update: z.array(z.object({
     id: z.string().uuid('Event ID must be a valid UUID'),
     data: eventUpdateSchema
-  })).optional().default([]),
-  delete: z.array(z.string().uuid('Event ID must be a valid UUID')).optional().default([])
+  }))
+    .max(MAX_BATCH_ITEMS, `Update operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([]),
+  delete: z.array(z.string().uuid('Event ID must be a valid UUID'))
+    .max(MAX_BATCH_ITEMS, `Delete operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([])
 });
 
-export const lineupBatchSchema = z.object({
-  create: z.array(lineupCreateSchema).optional().default([]),
+const applyTotalBatchCap = <T extends z.ZodTypeAny>(schema: T) =>
+  (schema as any).superRefine((data: any, ctx: z.RefinementCtx) => {
+    const total = (data.create?.length || 0) + (data.update?.length || 0) + (data.delete?.length || 0);
+    if (total > MAX_BATCH_ITEMS) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [],
+        message: `Total batch operations cannot exceed ${MAX_BATCH_ITEMS}`
+      });
+    }
+  }) as T;
+
+export const eventBatchSchema = applyTotalBatchCap(eventBatchSchemaBase);
+
+const lineupBatchSchemaBase = z.object({
+  create: z.array(lineupCreateSchema)
+    .max(MAX_BATCH_ITEMS, `Create operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([]),
   update: z.array(z.object({
     id: z.string().uuid('Lineup ID must be a valid UUID'),
     data: lineupUpdateSchema
-  })).optional().default([]),
-  delete: z.array(z.string().uuid('Lineup ID must be a valid UUID')).optional().default([])
+  }))
+    .max(MAX_BATCH_ITEMS, `Update operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([]),
+  delete: z.array(z.string().uuid('Lineup ID must be a valid UUID'))
+    .max(MAX_BATCH_ITEMS, `Delete operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([])
+});
+
+export const lineupBatchSchema = applyTotalBatchCap(lineupBatchSchemaBase);
+
+export const eventBatchByMatchSchema = applyTotalBatchCap(eventBatchSchemaBase.extend({
+  matchId: z.string().uuid('Match ID must be a valid UUID')
+})).superRefine((data, ctx) => {
+  data.create.forEach((ev, index) => {
+    if (ev.matchId !== data.matchId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['create', index, 'matchId'],
+        message: 'matchId must match the batch matchId'
+      });
+    }
+  });
+});
+
+export const lineupBatchByMatchSchema = applyTotalBatchCap(lineupBatchSchemaBase.extend({
+  matchId: z.string().uuid('Match ID must be a valid UUID')
+})).superRefine((data, ctx) => {
+  data.create.forEach((lu, index) => {
+    if (lu.matchId !== data.matchId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['create', index, 'matchId'],
+        message: 'matchId must match the batch matchId'
+      });
+    }
+  });
+});
+
+// Match-specific validation schemas
+export const matchQuickEventSchema = z.object({
+  kind: z.enum([
+    'goal', 'assist', 'key_pass', 'save', 'interception',
+    'tackle', 'foul', 'penalty', 'free_kick', 'ball_out', 'own_goal',
+    'formation_change', 'yellow_card', 'red_card', 'corner', 'offside',
+    'shot_on_target', 'shot_off_target', 'clearance', 'block', 'cross', 'header'
+  ]),
+  teamId: z.string().uuid('Team ID must be a valid UUID'),
+  playerId: z.string().uuid('Player ID must be a valid UUID').nullable().optional(),
+  periodNumber: z.number().int().min(1).max(4).optional(),
+  clockMs: z.number().int().min(0).optional(),
+  notes: z.string().max(500, 'Notes must be less than 500 characters').optional(),
+  sentiment: z.number().int().min(-3).max(3).optional()
+});
+
+export const matchShareSchema = z.object({
+  expiresInMinutes: z.number().int().min(1).max(60 * 24 * 30).optional() // up to 30 days
+});
+
+export const lineupSubstitutionSchema = z.object({
+  playerOffId: z.string().uuid('playerOffId must be a valid UUID'),
+  playerOnId: z.string().uuid('playerOnId must be a valid UUID'),
+  position: z.string().min(1).max(10).trim(),
+  currentTime: z.number().min(0),
+  substitutionReason: z.string().max(100, 'Substitution reason must be less than 100 characters').optional()
 });
 
 // Player Teams validation schemas
@@ -376,43 +478,87 @@ export const playerTeamUpdateSchema = z.object({
   isActive: z.boolean().optional()
 });
 
-export const playerTeamBatchSchema = z.object({
-  create: z.array(playerTeamCreateSchema).optional().default([]),
+const playerTeamBatchSchemaBase = z.object({
+  create: z.array(playerTeamCreateSchema)
+    .max(MAX_BATCH_ITEMS, `Create operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([]),
   update: z.array(z.object({
     id: z.string().uuid('Player-team relationship ID must be a valid UUID'),
     data: playerTeamUpdateSchema
-  })).optional().default([]),
-  delete: z.array(z.string().uuid('Player-team relationship ID must be a valid UUID')).optional().default([])
+  }))
+    .max(MAX_BATCH_ITEMS, `Update operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([]),
+  delete: z.array(z.string().uuid('Player-team relationship ID must be a valid UUID'))
+    .max(MAX_BATCH_ITEMS, `Delete operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([])
 });
 
+export const playerTeamBatchSchema = applyTotalBatchCap(playerTeamBatchSchemaBase);
+
 // Awards batch operation schemas
-export const awardBatchSchema = z.object({
-  create: z.array(awardCreateSchema).optional().default([]),
+const awardBatchSchemaBase = z.object({
+  create: z.array(awardCreateSchema)
+    .max(MAX_BATCH_ITEMS, `Create operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([]),
   update: z.array(z.object({
     id: z.string().uuid('Award ID must be a valid UUID'),
     data: awardUpdateSchema
-  })).optional().default([]),
-  delete: z.array(z.string().uuid('Award ID must be a valid UUID')).optional().default([])
+  }))
+    .max(MAX_BATCH_ITEMS, `Update operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([]),
+  delete: z.array(z.string().uuid('Award ID must be a valid UUID'))
+    .max(MAX_BATCH_ITEMS, `Delete operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([])
 });
 
-export const matchAwardBatchSchema = z.object({
-  create: z.array(matchAwardCreateSchema).optional().default([]),
+export const awardBatchSchema = applyTotalBatchCap(awardBatchSchemaBase);
+
+const matchAwardBatchSchemaBase = z.object({
+  create: z.array(matchAwardCreateSchema)
+    .max(MAX_BATCH_ITEMS, `Create operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([]),
   update: z.array(z.object({
     id: z.string().uuid('Match Award ID must be a valid UUID'),
     data: matchAwardUpdateSchema
-  })).optional().default([]),
-  delete: z.array(z.string().uuid('Match Award ID must be a valid UUID')).optional().default([])
+  }))
+    .max(MAX_BATCH_ITEMS, `Update operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([]),
+  delete: z.array(z.string().uuid('Match Award ID must be a valid UUID'))
+    .max(MAX_BATCH_ITEMS, `Delete operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([])
 });
 
+export const matchAwardBatchSchema = applyTotalBatchCap(matchAwardBatchSchemaBase);
+
 // Players batch operation schemas
-export const playerBatchSchema = z.object({
-  create: z.array(playerCreateSchema).optional().default([]),
+const playerBatchSchemaBase = z.object({
+  create: z.array(playerCreateSchema)
+    .max(MAX_BATCH_ITEMS, `Create operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([]),
   update: z.array(z.object({
     id: z.string().uuid('Player ID must be a valid UUID'),
     data: playerUpdateSchema
-  })).optional().default([]),
-  delete: z.array(z.string().uuid('Player ID must be a valid UUID')).optional().default([])
+  }))
+    .max(MAX_BATCH_ITEMS, `Update operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([]),
+  delete: z.array(z.string().uuid('Player ID must be a valid UUID'))
+    .max(MAX_BATCH_ITEMS, `Delete operations cannot exceed ${MAX_BATCH_ITEMS}`)
+    .optional()
+    .default([])
 });
+
+export const playerBatchSchema = applyTotalBatchCap(playerBatchSchemaBase);
 
 // Default lineup validation schemas
 const formationPlayerSchema = z.object({
@@ -461,6 +607,45 @@ export const defaultLineupUpdateSchema = z.object({
       }
     )
     .optional()
+});
+
+export const defaultLineupValidateSchema = z.object({
+  formation: z.array(formationPlayerSchema)
+    .min(1, 'Formation must contain at least one player')
+    .max(11, 'Formation cannot contain more than 11 players')
+    .refine(
+      (formation) => {
+        const playerIds = formation.map(p => p.playerId);
+        return playerIds.length === new Set(playerIds).size;
+      },
+      { message: 'Formation cannot contain duplicate players' }
+    )
+});
+
+const formationChangePlayerSchema = z.object({
+  id: z.string().uuid('Player ID must be a valid UUID'),
+  name: z.string().max(100, 'Player name must be less than 100 characters').optional().default(''),
+  squadNumber: z.number().int().min(0).max(99).nullable().optional(),
+  preferredPosition: z.string().max(10, 'Position code must be less than 10 characters').nullable().optional(),
+  position: z.object({
+    x: z.number().min(0).max(100),
+    y: z.number().min(0).max(100)
+  })
+});
+
+export const matchFormationChangeSchema = z.object({
+  startMin: z.number().min(0).max(500),
+  formation: z.object({
+    players: z.array(formationChangePlayerSchema)
+      .min(1, 'Formation must contain at least one player')
+      .max(11, 'Formation cannot contain more than 11 players')
+      .refine(
+        (players) => players.length === new Set(players.map(p => p.id)).size,
+        { message: 'Formation cannot contain duplicate players' }
+      )
+  }),
+  reason: z.string().max(100, 'Reason must be less than 100 characters').nullable().optional(),
+  eventId: z.string().uuid('Event ID must be a valid UUID').optional()
 });
 
 // Match state management validation schemas

@@ -21,7 +21,7 @@ describe('Seasons API Integration Tests', () => {
         email: 'test@example.com',
         password: 'password123'
       });
-      authToken = loginResult.token;
+      authToken = loginResult.data.access_token;
     } catch (error) {
       console.warn('Could not authenticate test user. Some tests may be skipped.');
     }
@@ -44,19 +44,19 @@ describe('Seasons API Integration Tests', () => {
       if (!authToken) return;
 
       const seasonData: SeasonCreateRequest = {
-        name: `Test Season ${Date.now()}`,
+        label: `Test Season ${Date.now()}`,
         startDate: '2024-08-01T00:00:00.000Z',
         endDate: '2025-05-31T00:00:00.000Z',
-        isActive: true
+        isCurrent: true
       };
 
       const result = await seasonsApi.createSeason(seasonData);
-      
+
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
-      expect(result.data.label || result.data.name).toBe(seasonData.name);
+      expect(result.data.label).toBe(seasonData.label);
       expect(result.data.id).toBeDefined();
-      
+
       if (result.data.id) {
         createdSeasonIds.push(result.data.id);
       }
@@ -66,7 +66,7 @@ describe('Seasons API Integration Tests', () => {
       if (!authToken) return;
 
       const result = await seasonsApi.getSeasons();
-      
+
       expect(result).toBeDefined();
       expect(Array.isArray(result.data)).toBe(true);
       expect(typeof result.total).toBe('number');
@@ -78,24 +78,24 @@ describe('Seasons API Integration Tests', () => {
 
       // First create a season
       const seasonData: SeasonCreateRequest = {
-        name: `Get Test Season ${Date.now()}`,
+        label: `Get Test Season ${Date.now()}`,
         startDate: '2024-08-01T00:00:00.000Z',
         endDate: '2025-05-31T00:00:00.000Z',
-        isActive: false
+        isCurrent: false
       };
 
       const createResult = await seasonsApi.createSeason(seasonData);
       expect(createResult.data.id).toBeDefined();
-      
+
       if (createResult.data.id) {
         createdSeasonIds.push(createResult.data.id);
-        
+
         // Now get it by ID
         const getResult = await seasonsApi.getSeasonById(createResult.data.id);
-        
+
         expect(getResult.data).toBeDefined();
         expect(getResult.data.id).toBe(createResult.data.id);
-        expect(getResult.data.label || getResult.data.name).toBe(seasonData.name);
+        expect(getResult.data.label).toBe(seasonData.label);
       }
     }, TEST_TIMEOUT);
 
@@ -104,29 +104,29 @@ describe('Seasons API Integration Tests', () => {
 
       // First create a season
       const seasonData: SeasonCreateRequest = {
-        name: `Update Test Season ${Date.now()}`,
+        label: `Update Test Season ${Date.now()}`,
         startDate: '2024-08-01T00:00:00.000Z',
         endDate: '2025-05-31T00:00:00.000Z',
-        isActive: false
+        isCurrent: false
       };
 
       const createResult = await seasonsApi.createSeason(seasonData);
       expect(createResult.data.id).toBeDefined();
-      
+
       if (createResult.data.id) {
         createdSeasonIds.push(createResult.data.id);
-        
+
         // Update the season
         const updateData: SeasonUpdateRequest = {
-          name: `Updated Season ${Date.now()}`,
-          isActive: true
+          label: `Updated Season ${Date.now()}`,
+          isCurrent: true
         };
-        
+
         const updateResult = await seasonsApi.updateSeason(createResult.data.id, updateData);
-        
+
         expect(updateResult.data).toBeDefined();
-        expect(updateResult.data.label || updateResult.data.name).toBe(updateData.name);
-        expect(updateResult.data.isActive || updateResult.data.isCurrent).toBe(true);
+        expect(updateResult.data.label).toBe(updateData.label);
+        expect(updateResult.data.isCurrent).toBe(true);
       }
     }, TEST_TIMEOUT);
 
@@ -135,21 +135,21 @@ describe('Seasons API Integration Tests', () => {
 
       // First create a season
       const seasonData: SeasonCreateRequest = {
-        name: `Delete Test Season ${Date.now()}`,
+        label: `Delete Test Season ${Date.now()}`,
         startDate: '2024-08-01T00:00:00.000Z',
         endDate: '2025-05-31T00:00:00.000Z',
-        isActive: false
+        isCurrent: false
       };
 
       const createResult = await seasonsApi.createSeason(seasonData);
       expect(createResult.data.id).toBeDefined();
-      
+
       if (createResult.data.id) {
         // Delete the season
         const deleteResult = await seasonsApi.deleteSeason(createResult.data.id);
-        
+
         expect(deleteResult.success).toBe(true);
-        
+
         // Verify it's deleted by trying to get it
         try {
           await seasonsApi.getSeasonById(createResult.data.id);
@@ -167,10 +167,10 @@ describe('Seasons API Integration Tests', () => {
 
       const uniqueName = `Searchable Season ${Date.now()}`;
       const seasonData: SeasonCreateRequest = {
-        name: uniqueName,
+        label: uniqueName,
         startDate: '2024-08-01T00:00:00.000Z',
         endDate: '2025-05-31T00:00:00.000Z',
-        isActive: false
+        isCurrent: false
       };
 
       const createResult = await seasonsApi.createSeason(seasonData);
@@ -180,10 +180,10 @@ describe('Seasons API Integration Tests', () => {
 
       // Search for the season
       const searchResult = await seasonsApi.getSeasons({ search: uniqueName });
-      
+
       expect(searchResult.data.length).toBeGreaterThan(0);
-      const foundSeason = searchResult.data.find(s => 
-        (s.label || s.name) === uniqueName
+      const foundSeason = searchResult.data.find(s =>
+        s.label === uniqueName
       );
       expect(foundSeason).toBeDefined();
     }, TEST_TIMEOUT);
@@ -192,7 +192,7 @@ describe('Seasons API Integration Tests', () => {
       if (!authToken) return;
 
       const result = await seasonsApi.getSeasons({ page: 1, limit: 5 });
-      
+
       expect(result.page).toBe(1);
       expect(result.data.length).toBeLessThanOrEqual(5);
     }, TEST_TIMEOUT);
@@ -225,10 +225,10 @@ describe('Seasons API Integration Tests', () => {
       if (!authToken) return;
 
       const invalidSeasonData: SeasonCreateRequest = {
-        name: '', // Empty name should fail validation
+        label: '', // Empty label should fail validation
         startDate: '2024-08-01T00:00:00.000Z',
         endDate: '2025-05-31T00:00:00.000Z',
-        isActive: false
+        isCurrent: false
       };
 
       try {
@@ -243,10 +243,10 @@ describe('Seasons API Integration Tests', () => {
       if (!authToken) return;
 
       const invalidDateSeason: SeasonCreateRequest = {
-        name: `Invalid Date Season ${Date.now()}`,
+        label: `Invalid Date Season ${Date.now()}`,
         startDate: '2025-05-31T00:00:00.000Z', // End date before start date
         endDate: '2024-08-01T00:00:00.000Z',
-        isActive: false
+        isCurrent: false
       };
 
       try {

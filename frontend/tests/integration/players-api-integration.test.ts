@@ -21,7 +21,7 @@ describe('Players API Integration Tests', () => {
         email: 'test@example.com',
         password: 'password123'
       });
-      authToken = loginResult.token;
+      authToken = loginResult.data?.access_token || null;
     } catch (error) {
       console.warn('Could not authenticate test user. Some tests may be skipped.');
     }
@@ -46,19 +46,18 @@ describe('Players API Integration Tests', () => {
       const playerData: PlayerCreateRequest = {
         name: `Test Player ${Date.now()}`,
         dateOfBirth: '2000-01-15',
-        position: 'Forward',
-        kitNumber: 10,
-        email: `testplayer${Date.now()}@example.com`
+        preferredPosition: 'Forward',
+        squadNumber: 10
       };
 
       const result = await playersApi.createPlayer(playerData);
-      
+
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
       expect(result.data.name).toBe(playerData.name);
-      expect(result.data.position).toBe(playerData.position);
+      expect(result.data.preferredPosition).toBe(playerData.preferredPosition);
       expect(result.data.id).toBeDefined();
-      
+
       if (result.data.id) {
         createdPlayerIds.push(result.data.id);
       }
@@ -68,7 +67,7 @@ describe('Players API Integration Tests', () => {
       if (!authToken) return;
 
       const result = await playersApi.getPlayers();
-      
+
       expect(result).toBeDefined();
       expect(Array.isArray(result.data)).toBe(true);
       expect(typeof result.total).toBe('number');
@@ -82,23 +81,23 @@ describe('Players API Integration Tests', () => {
       const playerData: PlayerCreateRequest = {
         name: `Get Test Player ${Date.now()}`,
         dateOfBirth: '1995-06-20',
-        position: 'Midfielder',
-        kitNumber: 8
+        preferredPosition: 'Midfielder',
+        squadNumber: 8
       };
 
       const createResult = await playersApi.createPlayer(playerData);
       expect(createResult.data.id).toBeDefined();
-      
+
       if (createResult.data.id) {
         createdPlayerIds.push(createResult.data.id);
-        
+
         // Now get it by ID
         const getResult = await playersApi.getPlayerById(createResult.data.id);
-        
+
         expect(getResult.data).toBeDefined();
         expect(getResult.data.id).toBe(createResult.data.id);
         expect(getResult.data.name).toBe(playerData.name);
-        expect(getResult.data.position).toBe(playerData.position);
+        expect(getResult.data.preferredPosition).toBe(playerData.preferredPosition);
       }
     }, TEST_TIMEOUT);
 
@@ -109,29 +108,29 @@ describe('Players API Integration Tests', () => {
       const playerData: PlayerCreateRequest = {
         name: `Update Test Player ${Date.now()}`,
         dateOfBirth: '1998-03-10',
-        position: 'Defender',
-        kitNumber: 5
+        preferredPosition: 'Defender',
+        squadNumber: 5
       };
 
       const createResult = await playersApi.createPlayer(playerData);
       expect(createResult.data.id).toBeDefined();
-      
+
       if (createResult.data.id) {
         createdPlayerIds.push(createResult.data.id);
-        
+
         // Update the player
         const updateData: PlayerUpdateRequest = {
           name: `Updated Player ${Date.now()}`,
-          position: 'Goalkeeper',
-          kitNumber: 1
+          preferredPosition: 'Goalkeeper',
+          squadNumber: 1
         };
-        
+
         const updateResult = await playersApi.updatePlayer(createResult.data.id, updateData);
-        
+
         expect(updateResult.data).toBeDefined();
         expect(updateResult.data.name).toBe(updateData.name);
-        expect(updateResult.data.position).toBe(updateData.position);
-        expect(updateResult.data.kitNumber).toBe(updateData.kitNumber);
+        expect(updateResult.data.preferredPosition).toBe(updateData.preferredPosition);
+        expect(updateResult.data.squadNumber).toBe(updateData.squadNumber);
       }
     }, TEST_TIMEOUT);
 
@@ -142,19 +141,19 @@ describe('Players API Integration Tests', () => {
       const playerData: PlayerCreateRequest = {
         name: `Delete Test Player ${Date.now()}`,
         dateOfBirth: '1992-11-25',
-        position: 'Forward',
-        kitNumber: 9
+        preferredPosition: 'Forward',
+        squadNumber: 9
       };
 
       const createResult = await playersApi.createPlayer(playerData);
       expect(createResult.data.id).toBeDefined();
-      
+
       if (createResult.data.id) {
         // Delete the player
         const deleteResult = await playersApi.deletePlayer(createResult.data.id);
-        
+
         expect(deleteResult.success).toBe(true);
-        
+
         // Verify it's deleted by trying to get it
         try {
           await playersApi.getPlayerById(createResult.data.id);
@@ -174,8 +173,8 @@ describe('Players API Integration Tests', () => {
       const playerData: PlayerCreateRequest = {
         name: uniqueName,
         dateOfBirth: '1990-07-15',
-        position: 'Midfielder',
-        kitNumber: 7
+        preferredPosition: 'Midfielder',
+        squadNumber: 7
       };
 
       const createResult = await playersApi.createPlayer(playerData);
@@ -185,7 +184,7 @@ describe('Players API Integration Tests', () => {
 
       // Search for the player
       const searchResult = await playersApi.getPlayers({ search: uniqueName });
-      
+
       expect(searchResult.data.length).toBeGreaterThan(0);
       const foundPlayer = searchResult.data.find(p => p.name === uniqueName);
       expect(foundPlayer).toBeDefined();
@@ -194,11 +193,11 @@ describe('Players API Integration Tests', () => {
     it('should filter players by position', async () => {
       if (!authToken) return;
 
-      const result = await playersApi.getPlayers({ position: 'Forward' });
-      
+      const result = await playersApi.getPlayers({ preferredPosition: 'Forward' });
+
       // All returned players should be forwards (if any exist)
       result.data.forEach(player => {
-        expect(player.position).toBe('Forward');
+        expect(player.preferredPosition).toBe('Forward');
       });
     }, TEST_TIMEOUT);
 
@@ -206,7 +205,7 @@ describe('Players API Integration Tests', () => {
       if (!authToken) return;
 
       const result = await playersApi.getPlayers({ page: 1, limit: 5 });
-      
+
       expect(result.page).toBe(1);
       expect(result.data.length).toBeLessThanOrEqual(5);
     }, TEST_TIMEOUT);
@@ -241,7 +240,7 @@ describe('Players API Integration Tests', () => {
       const invalidPlayerData: PlayerCreateRequest = {
         name: '', // Empty name should fail validation
         dateOfBirth: '2000-01-01',
-        position: 'Forward'
+        preferredPosition: 'Forward'
       };
 
       try {
@@ -259,8 +258,8 @@ describe('Players API Integration Tests', () => {
       const firstPlayerData: PlayerCreateRequest = {
         name: `First Player ${Date.now()}`,
         dateOfBirth: '1995-01-01',
-        position: 'Forward',
-        kitNumber: 99
+        preferredPosition: 'Forward',
+        squadNumber: 99
       };
 
       const firstResult = await playersApi.createPlayer(firstPlayerData);
@@ -272,8 +271,8 @@ describe('Players API Integration Tests', () => {
       const secondPlayerData: PlayerCreateRequest = {
         name: `Second Player ${Date.now()}`,
         dateOfBirth: '1996-01-01',
-        position: 'Midfielder',
-        kitNumber: 99 // Same kit number
+        preferredPosition: 'Midfielder',
+        squadNumber: 99 // Same kit number
       };
 
       try {

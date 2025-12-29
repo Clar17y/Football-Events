@@ -34,7 +34,7 @@ router.get('/', authenticateToken, asyncHandler(async (req, res) => {
     }
   );
   
-  res.json(result);
+  return res.json(result);
 }));
 
 // POST /api/v1/teams - Create new team
@@ -44,15 +44,16 @@ router.post('/',
   asyncHandler(async (req, res) => {
     try {
       console.log('[TEAMS ROUTE] Raw request body:', JSON.stringify(req.body, null, 2));
-      const team = await teamService.createTeam(req.body, req.user!.id);
+      const team = await teamService.createTeam(req.body, req.user!.id, req.user!.role);
       console.log('[TEAMS ROUTE] Created team result:', JSON.stringify(team, null, 2));
-      res.status(201).json(team);
+      return res.status(201).json(team);
     } catch (error: any) {
       const apiError = extractApiError(error);
-      if (apiError) {
-        return res.status(apiError.statusCode).json({
+      if (apiError) {        return res.status(apiError.statusCode).json({
           error: apiError.error,
           message: apiError.message,
+          code: apiError.code,
+          details: apiError.details,
           field: apiError.field,
           constraint: apiError.constraint
         });

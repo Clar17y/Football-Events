@@ -13,6 +13,12 @@ interface OptionalEnv {
   NODE_ENV?: string;
   RATE_LIMIT_WINDOW_MS?: string;
   RATE_LIMIT_MAX_REQUESTS?: string;
+  // SSL/HTTPS configuration
+  SSL_ENABLED?: string;
+  SSL_KEY_PATH?: string;
+  SSL_CERT_PATH?: string;
+  SSL_CA_PATH?: string;
+  FORCE_HTTPS?: string;
 }
 
 export type Env = RequiredEnv & OptionalEnv;
@@ -44,6 +50,23 @@ export function validateEnv(): Env {
   }
   if (process.env['RATE_LIMIT_MAX_REQUESTS']) {
     result.RATE_LIMIT_MAX_REQUESTS = process.env['RATE_LIMIT_MAX_REQUESTS'];
+  }
+
+  // SSL configuration
+  if (process.env['SSL_ENABLED']) {
+    result.SSL_ENABLED = process.env['SSL_ENABLED'];
+  }
+  if (process.env['SSL_KEY_PATH']) {
+    result.SSL_KEY_PATH = process.env['SSL_KEY_PATH'];
+  }
+  if (process.env['SSL_CERT_PATH']) {
+    result.SSL_CERT_PATH = process.env['SSL_CERT_PATH'];
+  }
+  if (process.env['SSL_CA_PATH']) {
+    result.SSL_CA_PATH = process.env['SSL_CA_PATH'];
+  }
+  if (process.env['FORCE_HTTPS']) {
+    result.FORCE_HTTPS = process.env['FORCE_HTTPS'];
   }
 
   return result;

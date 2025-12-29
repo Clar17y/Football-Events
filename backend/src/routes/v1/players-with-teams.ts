@@ -26,7 +26,7 @@ const playerWithTeamsCreateSchema = z.object({
     .max(10, 'Position code must be less than 10 characters')
     .optional(),
   dateOfBirth: z.string()
-    .regex(/^\d{2}-\d{2}-\d{4}$/, 'Date of birth must be in YYYY-MM-DD format')
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be in YYYY-MM-DD format')
     .optional(),
   notes: z.string()
     .max(1000, 'Notes must be less than 1000 characters')
@@ -102,7 +102,7 @@ const playerWithTeamsUpdateSchema = z.object({
     .max(10, 'Position code must be less than 10 characters')
     .optional(),
   dateOfBirth: z.string()
-    .regex(/^\d{2}-\d{2}-\d{4}$/, 'Date of birth must be in YYYY-MM-DD format')
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be in YYYY-MM-DD format')
     .optional(),
   notes: z.string()
     .max(1000, 'Notes must be less than 1000 characters')
@@ -118,7 +118,10 @@ const playerWithTeamsUpdateSchema = z.object({
 
 // PUT /api/v1/players-with-teams/:id - Update player and manage team assignments
 router.put('/:id', authenticateToken, validateRequest(playerWithTeamsUpdateSchema), asyncHandler(async (req, res) => {
-  const { id } = req.params;
+  const id = req.params['id'];
+  if (!id) {
+    return res.status(400).json({ error: 'Player ID is required' });
+  }
   const { teamIds, startDate, isActive, ...playerData } = req.body;
   
   // Use today's date as default for new relationships and end dates
@@ -163,8 +166,8 @@ router.put('/:id', authenticateToken, validateRequest(playerWithTeamsUpdateSchem
       const currentTeamIds = currentRelationships.map(rel => rel.team_id);
       
       // Step 3: Determine changes needed
-      const teamsToAdd = teamIds.filter(teamId => !currentTeamIds.includes(teamId));
-      const teamsToRemove = currentTeamIds.filter(teamId => !teamIds.includes(teamId));
+      const teamsToAdd = teamIds.filter((teamId: string) => !currentTeamIds.includes(teamId));
+      const teamsToRemove = currentTeamIds.filter((teamId: string) => !teamIds.includes(teamId));
       
       console.log(`[PlayerTeamUpdate] Current teams: ${currentTeamIds}`);
       console.log(`[PlayerTeamUpdate] New teams: ${teamIds}`);
@@ -198,9 +201,9 @@ router.put('/:id', authenticateToken, validateRequest(playerWithTeamsUpdateSchem
           teamId,
           startDate: effectiveStartDate, // Use today's date as default
           isActive
-        };
+        } as const;
         
-        const playerTeam = await playerTeamService.createPlayerTeam(playerTeamData, req.user!.id, req.user!.role);
+        const playerTeam = await playerTeamService.createPlayerTeam({ ...playerTeamData, playerId: id }, req.user!.id, req.user!.role);
         newRelationships.push(playerTeam);
       }
       
@@ -208,7 +211,7 @@ router.put('/:id', authenticateToken, validateRequest(playerWithTeamsUpdateSchem
     });
     
     // Return combined result
-    res.status(200).json({
+    return res.status(200).json({
       ...result,
       message: `Player updated successfully. Added ${result.newRelationships.length} team(s), removed ${result.removedCount} team(s).`
     });

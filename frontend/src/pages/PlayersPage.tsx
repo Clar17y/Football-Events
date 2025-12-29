@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { 
-  IonPage, 
+import {
+  IonPage,
   IonContent,
   IonButton,
   IonIcon,
@@ -20,9 +20,9 @@ import {
   IonAlert,
   IonSpinner
 } from '@ionic/react';
-import { 
-  add, 
-  person, 
+import {
+  add,
+  person,
   ellipsisVertical,
   pencil,
   trash,
@@ -45,13 +45,13 @@ import GuestBanner from '../components/GuestBanner';
 import CreatePlayerModal from '../components/CreatePlayerModal';
 import TeamSelectionModal from '../components/TeamSelectionModal';
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu';
-import { usePlayers } from '../hooks/usePlayers';
+import { useLocalPlayers, useLocalTeams } from '../hooks/useLocalData';
+import { useInitialSync } from '../hooks/useInitialSync';
 import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
-import { teamsApi } from '../services/api/teamsApi';
+import { playersApi } from '../services/api/playersApi';
 import type { Player, Team } from '@shared/types';
 import './PageStyles.css';
 import './PlayersPage.css';
-import type { HTMLIonContentElement } from '@ionic/core/components';
 import useDeepLinkScrollHighlight from '../hooks/useDeepLinkScrollHighlight';
 
 interface PlayersPageProps {
@@ -63,40 +63,49 @@ interface PlayersPageProps {
 }
 
 const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter }) => {
-  const {
-    players,
-    loading,
-    error,
-    total,
-    loadPlayers,
-    deletePlayer,
-    refreshPlayers,
-    clearError
-  } = usePlayers();
+  // Trigger initial sync from server for authenticated users
+  useInitialSync();
 
-  // Local state
-  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
-  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
-  const [showContextMenu, setShowContextMenu] = useState(false);
-  const [contextMenuAnchor, setContextMenuAnchor] = useState<HTMLElement | null>(null);
-  const [teams, setTeams] = useState<Record<string, Team>>({});
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editPlayer, setEditPlayer] = useState<Player | null>(null);
-  const [showTeamModal, setShowTeamModal] = useState(false);
-  
-  // Team filtering state
+  // Local reactive data - auto-updates when IndexedDB changes
+  const [searchText, setSearchText] = useState('');
   const [selectedTeamFilter, setSelectedTeamFilter] = useState<string | null>(
     initialTeamFilter?.teamId || null
   );
   const [teamFilterName, setTeamFilterName] = useState<string>(
     initialTeamFilter?.teamName || ''
   );
-  // New multi-team filter state
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [selectedTeamNames, setSelectedTeamNames] = useState<string[]>([]);
   const [filterNoTeam, setFilterNoTeam] = useState<boolean>(false);
-  const contentRef = useRef<HTMLIonContentElement | null>(null);
+
+  // Reactive players query - auto-updates on IndexedDB changes
+  const { players, loading } = useLocalPlayers({
+    teamId: selectedTeamFilter || undefined,
+    teamIds: selectedTeamIds.length > 0 ? selectedTeamIds : undefined,
+    noTeam: filterNoTeam || undefined,
+    search: searchText.trim() || undefined,
+  });
+
+  // Reactive teams query for team assignments
+  const { teams: teamsArray } = useLocalTeams({ includeOpponents: true });
+  const teams: Record<string, Team> = React.useMemo(() => {
+    const map: Record<string, Team> = {};
+    teamsArray.forEach((t: any) => {
+      map[t.id] = { id: t.id, name: t.name, createdAt: t.createdAt, createdByUserId: t.createdByUserId, isDeleted: t.isDeleted } as Team;
+    });
+    return map;
+  }, [teamsArray]);
+
+  // Local UI state
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuAnchor, setContextMenuAnchor] = useState<HTMLElement | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editPlayer, setEditPlayer] = useState<Player | null>(null);
+  const [showTeamModal, setShowTeamModal] = useState(false);
+  const contentRef = useRef<any>(null);
 
   // Section collapse state
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
@@ -107,16 +116,10 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
     'forward': false
   });
 
-  // Debounced search functionality
-  const { searchText, setSearchText, showSpinner } = useDebouncedSearch({
-    delay: 300,
-    onSearch: async (searchTerm: string) => {
-      await loadPlayers({
-        search: searchTerm || undefined,
-        teamId: selectedTeamFilter || undefined
-      });
-    }
-  });
+  // Debounced search - just updates searchText state, reactive query does the rest
+  const onSearch = (term: string) => {
+    setSearchText(term);
+  };
 
   const navigate = (page: string) => {
     if (onNavigate) {
@@ -124,39 +127,15 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
     }
   };
 
-  // Load players on mount with initial team filter
-  useEffect(() => {
-    loadPlayers({
-      teamId: selectedTeamFilter || undefined,
-      teamIds: selectedTeamIds.length > 0 ? selectedTeamIds : undefined,
-      noTeam: filterNoTeam || undefined
-    });
-  }, [selectedTeamFilter, selectedTeamIds, filterNoTeam]); // Remove loadPlayers from dependencies
-
-  // Load teams for player team assignments
-  useEffect(() => {
-    const loadTeams = async () => {
-      try {
-        const response = await teamsApi.getTeams({ limit: 100 });
-        const teamsMap: Record<string, Team> = {};
-        response.data.forEach(team => {
-          teamsMap[team.id] = team;
-        });
-        setTeams(teamsMap);
-      } catch (error) {
-        console.error('Failed to load teams:', error);
-      }
-    };
-
-    loadTeams();
-  }, []);
-
-  // Handle refresh
+  // Handle refresh - with reactive hooks, just trigger sync
   const handleRefresh = async (event: CustomEvent) => {
-    await loadPlayers({
-      search: searchText.trim() || undefined,
-      teamId: selectedTeamFilter || undefined
-    });
+    // Trigger a cache refresh in the background
+    try {
+      const { refreshCache } = await import('../services/cacheService');
+      await refreshCache();
+    } catch (e) {
+      console.warn('Refresh failed:', e);
+    }
     event.detail.complete();
   };
 
@@ -241,7 +220,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
   // Handle context menu actions
   const handlePlayerContextAction = (action: string) => {
     if (!selectedPlayer) return;
-    
+
     switch (action) {
       case 'edit':
         handleEditPlayer(selectedPlayer);
@@ -271,13 +250,13 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
 
   const handleCloseCreateModal = () => {
     setCreateModalOpen(false);
-    refreshPlayers(); // Refresh the list after creating
+    // Data auto-updates reactively via useLiveQuery
   };
 
   const handleCloseEditModal = () => {
     setEditModalOpen(false);
     setEditPlayer(null);
-    refreshPlayers(); // Refresh the list after editing
+    // Data auto-updates reactively via useLiveQuery
   };
 
   // Deep-link: use shared hook to scroll/highlight players by ?playerId=...
@@ -295,9 +274,11 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
   // Handle delete confirmation
   const handleDeleteConfirm = async () => {
     if (selectedPlayer) {
-      const success = await deletePlayer(selectedPlayer.id);
-      if (success) {
+      try {
+        await playersApi.deletePlayer(selectedPlayer.id);
         setSelectedPlayer(null);
+      } catch (e) {
+        console.error('Failed to delete player:', e);
       }
     }
     setShowDeleteAlert(false);
@@ -309,7 +290,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
     const defenders = ['CB', 'RCB', 'LCB', 'SW', 'RB', 'LB', 'RWB', 'LWB', 'WB', 'FB'];
     const midfielders = ['CDM', 'RDM', 'LDM', 'CM', 'RCM', 'LCM', 'CAM', 'RAM', 'LAM', 'RM', 'LM', 'RW', 'LW', 'AM', 'DM', 'WM'];
     const forwards = ['RF', 'LF', 'CF', 'ST', 'SS'];
-    
+
     if (goalkeepers.includes(position)) return 'goalkeeper';
     if (defenders.includes(position)) return 'defender';
     if (midfielders.includes(position)) return 'midfielder';
@@ -320,18 +301,19 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
   // Group players by position category
   const groupPlayersByPosition = () => {
     const groups = {
-      'no-position': [] as Player[],
-      'goalkeeper': [] as Player[],
-      'defender': [] as Player[],
-      'midfielder': [] as Player[],
-      'forward': [] as Player[]
+      'no-position': [] as any[],
+      'goalkeeper': [] as any[],
+      'defender': [] as any[],
+      'midfielder': [] as any[],
+      'forward': [] as any[]
     };
 
     players.forEach(player => {
-      if (!player.preferredPosition) {
+      const pos = (player as any).preferred_pos || (player as any).preferredPosition;
+      if (!pos) {
         groups['no-position'].push(player);
       } else {
-        const category = getPositionCategory(player.preferredPosition);
+        const category = getPositionCategory(pos);
         groups[category].push(player);
       }
     });
@@ -358,7 +340,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
     const interceptions = player.stats?.interceptions || 0;
     const keyPasses = player.stats?.keyPasses || 0;
     const cleanSheets = player.stats?.cleanSheets || 0;
-    
+
     // Using real data for all event-based stats, only clean sheets still needs implementation
     switch (positionCategory) {
       case 'goalkeeper':
@@ -378,7 +360,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
             </IonChip>
           </>
         );
-      
+
       case 'defender':
         return (
           <>
@@ -396,7 +378,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
             </IonChip>
           </>
         );
-      
+
       case 'midfielder':
         return (
           <>
@@ -414,7 +396,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
             </IonChip>
           </>
         );
-      
+
       case 'forward':
         return (
           <>
@@ -432,7 +414,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
             </IonChip>
           </>
         );
-      
+
       default:
         // Players without position - show generic stats
         return (
@@ -454,77 +436,77 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
   const renderPlayerCard = (player: Player) => {
     const currentTeam = player.currentTeam ? teams[player.currentTeam] : null;
     const positionCategory = player.preferredPosition ? getPositionCategory(player.preferredPosition) : null;
-    
+
     return (
-        <IonCol size="12" sizeMd="6" sizeLg="4" key={player.id}>
-          <div className="player-card-wrapper">
+      <IonCol size="12" sizeMd="6" sizeLg="4" key={player.id}>
+        <div className="player-card-wrapper">
           <IonCard className={`player-card ${positionCategory ? `player-card-${positionCategory}` : 'player-card-default'}`}
             data-player-id={player.id}
             tabIndex={-1}
           >
-          {/* Position stripe */}
-          <div className="player-position-stripe"></div>
-          
-          <IonCardContent className="player-card-content">
-            <div className="player-header">
-              <div className="player-info">
-                <div className="player-name-section">
-                  {player.squadNumber && (
-                    <div className="player-jersey-number">
-                      {player.squadNumber}
-                    </div>
-                  )}
-                  <h3 className="player-name">{player.name}</h3>
-                </div>
-                {player.preferredPosition && (
-                  <p className="player-position">{player.preferredPosition}</p>
-                )}
-              </div>
-              <div className="player-actions">
-                <IonButton
-                  fill="clear"
-                  size="small"
-                  className="player-menu-button"
-                  onClick={(e) => handlePlayerEllipsesClick(e, player)}
-                >
-                  <IonIcon icon={ellipsisVertical} />
-                </IonButton>
-              </div>
-            </div>
+            {/* Position stripe */}
+            <div className="player-position-stripe"></div>
 
-            <div className="player-details">
-              {currentTeam && (
-                <div className="player-team-info">
-                  <IonChip className="player-team-chip" color="medium">
-                    <IonIcon icon={people} />
-                    <span>{currentTeam.name}</span>
-                  </IonChip>
+            <IonCardContent className="player-card-content">
+              <div className="player-header">
+                <div className="player-info">
+                  <div className="player-name-section">
+                    {player.squadNumber && (
+                      <div className="player-jersey-number">
+                        {player.squadNumber}
+                      </div>
+                    )}
+                    <h3 className="player-name">{player.name}</h3>
+                  </div>
+                  {player.preferredPosition && (
+                    <p className="player-position">{player.preferredPosition}</p>
+                  )}
                 </div>
-              )}
-              
-              <div className="player-stats">
-                {renderPositionSpecificStats(player)}
+                <div className="player-actions">
+                  <IonButton
+                    fill="clear"
+                    size="small"
+                    className="player-menu-button"
+                    onClick={(e) => handlePlayerEllipsesClick(e, player)}
+                  >
+                    <IonIcon icon={ellipsisVertical} />
+                  </IonButton>
+                </div>
               </div>
-            </div>
-          </IonCardContent>
+
+              <div className="player-details">
+                {currentTeam && (
+                  <div className="player-team-info">
+                    <IonChip className="player-team-chip" color="medium">
+                      <IonIcon icon={people} />
+                      <span>{currentTeam.name}</span>
+                    </IonChip>
+                  </div>
+                )}
+
+                <div className="player-stats">
+                  {renderPositionSpecificStats(player)}
+                </div>
+              </div>
+            </IonCardContent>
           </IonCard>
-          </div>
-        </IonCol>
+        </div>
+      </IonCol>
     );
   };
 
   // Render section header
   const renderSectionHeader = (sectionKey: string, title: string, count: number, icon: string) => {
     const isCollapsed = collapsedSections[sectionKey];
-    
+
     return (
       <div className="position-section-header" onClick={() => toggleSection(sectionKey)}>
         <div className="section-header-content">
           <IonIcon icon={icon} className="section-icon" />
           <h3 className="section-title">{title} ({count})</h3>
         </div>
-        <IonIcon 
-          icon={isCollapsed ? chevronDown : chevronUp} 
+        <IonIcon
+          icon={isCollapsed ? chevronDown : chevronUp}
           className="section-chevron"
         />
       </div>
@@ -534,15 +516,15 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
   // Render position section
   const renderPositionSection = (sectionKey: string, title: string, players: Player[], icon: string) => {
     if (players.length === 0) return null; // Don't show empty sections
-    
+
     const isCollapsed = collapsedSections[sectionKey];
-    
+
     return (
       <div key={sectionKey} className="position-section">
         {renderSectionHeader(sectionKey, title, players.length, icon)}
         {!isCollapsed && (
-      <IonGrid className="section-grid players-grid">
-        <IonRow>
+          <IonGrid className="section-grid players-grid">
+            <IonRow>
               {players.map(renderPlayerCard)}
             </IonRow>
           </IonGrid>
@@ -557,7 +539,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
       <IonCard className="player-card player-skeleton">
         {/* Position stripe for skeleton */}
         <div className="player-position-stripe"></div>
-        
+
         <IonCardContent className="player-skeleton-content">
           <div className="skeleton-header">
             <IonSkeletonText animated className="skeleton-jersey" />
@@ -573,7 +555,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
   return (
     <IonPage className="page" data-theme="player">
       <PageHeader onNavigate={navigate} />
-      
+
       <IonContent ref={contentRef}>
         <GuestBanner teamId={selectedTeamFilter || undefined} />
         <IonRefresher slot="fixed" onIonRefresh={handleRefresh}>
@@ -593,8 +575,8 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
             </div>
             <p className="players-subtitle">
               Manage individual player profiles and track their progress.
-              {total > 0 && (
-                <span className="players-count"> {total} player{total !== 1 ? 's' : ''} registered</span>
+              {players.length > 0 && (
+                <span className="players-count"> {players.length} player{players.length !== 1 ? 's' : ''} registered</span>
               )}
             </p>
           </div>
@@ -607,8 +589,8 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
               showClearButton="focus"
               className="players-search"
             />
-            {showSpinner && (
-              <div className={`search-loading ${showSpinner ? 'visible' : ''}`}>
+            {loading && (
+              <div className="search-loading visible">
                 <IonSpinner name="dots" />
               </div>
             )}
@@ -663,15 +645,15 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
               <p className="empty-subtitle">
                 {searchText && selectedTeamFilter
                   ? `No players found in "${teamFilterName}" matching "${searchText}". Try a different search term or clear filters.`
-                  : searchText 
-                  ? `No players found matching "${searchText}". Try a different search term.`
-                  : selectedTeamFilter
-                  ? `No players found in "${teamFilterName}". This team doesn't have any players assigned yet.`
-                  : 'Start building your team by adding your first player. Track their progress, manage positions, and celebrate their achievements.'
+                  : searchText
+                    ? `No players found matching "${searchText}". Try a different search term.`
+                    : selectedTeamFilter
+                      ? `No players found in "${teamFilterName}". This team doesn't have any players assigned yet.`
+                      : 'Start building your team by adding your first player. Track their progress, manage positions, and celebrate their achievements.'
                 }
               </p>
               {!searchText && !selectedTeamFilter && (
-                <IonButton 
+                <IonButton
                   expand="block"
                   color="indigo"
                   className="empty-action"
@@ -687,7 +669,7 @@ const PlayersPage: React.FC<PlayersPageProps> = ({ onNavigate, initialTeamFilter
 
         {/* Floating Action Button */}
         <IonFab vertical="bottom" horizontal="end" slot="fixed">
-          <IonFabButton 
+          <IonFabButton
             color="indigo"
             onClick={handleCreatePlayer}
           >

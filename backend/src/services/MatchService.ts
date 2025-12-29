@@ -1,18 +1,19 @@
 import { PrismaClient } from '@prisma/client';
-import { 
-  transformMatch, 
-  transformMatchCreateRequest, 
+import {
+  transformMatch,
+  transformMatchCreateRequest,
   transformMatchUpdateRequest,
-  transformMatches 
+  transformMatches
 } from '@shared/types';
-import type { 
-  Match, 
-  MatchCreateRequest, 
-  MatchUpdateRequest 
+import type {
+  Match,
+  MatchCreateRequest,
+  MatchUpdateRequest
 } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { NaturalKeyResolver, NaturalKeyResolverError } from '../utils/naturalKeyResolver';
 import { createOrRestoreSoftDeleted, SoftDeletePatterns } from '../utils/softDeleteUtils';
+import { QuotaService } from './QuotaService';
 
 export interface GetMatchesOptions {
   page: number;
@@ -41,10 +42,12 @@ export class MatchService {
 
   private prisma: PrismaClient;
   private nkr: NaturalKeyResolver;
+  private quotaService: QuotaService;
 
   constructor() {
     this.prisma = new PrismaClient();
     this.nkr = new NaturalKeyResolver(this.prisma);
+    this.quotaService = new QuotaService(this.prisma);
   }
 
   async getMatches(userId: string, userRole: string, options: GetMatchesOptions): Promise<PaginatedMatches> {
@@ -55,7 +58,7 @@ export class MatchService {
     const where: any = {
       is_deleted: false // Exclude soft-deleted matches
     };
-    
+
     if (search) {
       where.OR = [
         {
@@ -78,18 +81,18 @@ export class MatchService {
         }
       ];
     }
-    
+
     if (seasonId) {
       where.season_id = seasonId;
     }
-    
+
     if (teamId) {
       where.OR = [
         { home_team_id: teamId },
         { away_team_id: teamId }
       ];
     }
-    
+
     if (competition) {
       where.competition = {
         contains: competition,
@@ -97,25 +100,9 @@ export class MatchService {
       };
     }
 
-    // Non-admin users can only see matches involving their teams OR matches they created
+    // Non-admin users can only see matches they created
     if (userRole !== 'ADMIN') {
-      const userTeamIds = await this.getUserTeamIds(userId);
-      
-      const ownershipFilter = {
-        OR: [
-          { created_by_user_id: userId }, // Matches they created
-          { home_team_id: { in: userTeamIds } }, // Matches with their teams as home
-          { away_team_id: { in: userTeamIds } }  // Matches with their teams as away
-        ]
-      };
-
-      // Combine with existing where conditions
-      if (where.OR) {
-        where.AND = [{ OR: where.OR }, ownershipFilter];
-        delete where.OR;
-      } else {
-        Object.assign(where, ownershipFilter);
-      }
+      where.created_by_user_id = userId;
     }
 
     // Get matches and total count
@@ -179,19 +166,14 @@ export class MatchService {
   }
 
   async getMatchById(id: string, userId: string, userRole: string): Promise<Match | null> {
-    const where: any = { 
+    const where: any = {
       match_id: id,
-      is_deleted: false 
+      is_deleted: false
     };
 
-    // Non-admin users can only see matches they created or involving their teams
+    // Non-admin users can only see matches they created
     if (userRole !== 'ADMIN') {
-      const userTeamIds = await this.getUserTeamIds(userId);
-      where.OR = [
-        { created_by_user_id: userId },
-        { home_team_id: { in: userTeamIds } },
-        { away_team_id: { in: userTeamIds } }
-      ];
+      where.created_by_user_id = userId;
     }
 
     const match = await this.prisma.match.findFirst({
@@ -214,7 +196,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         },
         awayTeam: {
@@ -226,7 +208,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         }
       }
@@ -237,25 +219,44 @@ export class MatchService {
 
   async createMatch(data: MatchCreateRequest, userId: string, userRole: string): Promise<Match> {
     return withPrismaErrorHandling(async () => {
-      // Validate that user owns at least one of the teams (unless admin)
+      // Validate ownership of season and teams (unless admin)
       if (userRole !== 'ADMIN') {
-        const userTeamIds = await this.getUserTeamIds(userId);
-        const ownsHomeTeam = userTeamIds.includes(data.homeTeamId);
-        const ownsAwayTeam = userTeamIds.includes(data.awayTeamId);
-        
-        if (!ownsHomeTeam && !ownsAwayTeam) {
-          const error = new Error('Access denied: You must own at least one team to create a match') as any;
+        const [homeTeam, awayTeam, season] = await Promise.all([
+          this.prisma.team.findFirst({
+            where: { id: data.homeTeamId, created_by_user_id: userId, is_deleted: false },
+            select: { id: true }
+          }),
+          this.prisma.team.findFirst({
+            where: { id: data.awayTeamId, created_by_user_id: userId, is_deleted: false },
+            select: { id: true }
+          }),
+          this.prisma.seasons.findFirst({
+            where: { season_id: data.seasonId, created_by_user_id: userId, is_deleted: false },
+            select: { season_id: true }
+          })
+        ]);
+
+        if (!homeTeam || !awayTeam) {
+          const error = new Error('Access denied: You can only create matches using your own teams') as any;
+          error.statusCode = 403;
+          throw error;
+        }
+
+        if (!season) {
+          const error = new Error('Access denied: You can only create matches in your own seasons') as any;
           error.statusCode = 403;
           throw error;
         }
       }
 
+      await this.quotaService.assertCanCreateMatch({ userId, userRole, seasonId: data.seasonId });
+
       const match = await createOrRestoreSoftDeleted({
         prisma: this.prisma,
         model: 'match',
         uniqueConstraints: SoftDeletePatterns.matchConstraint(
-          data.homeTeamId, 
-          data.awayTeamId, 
+          data.homeTeamId,
+          data.awayTeamId,
           new Date(data.kickoffTime)
         ),
         createData: transformMatchCreateRequest(data, userId),
@@ -288,9 +289,9 @@ export class MatchService {
   async updateMatch(id: string, data: MatchUpdateRequest, userId: string, userRole: string): Promise<Match | null> {
     try {
       // First check if match exists and user has permission (only creator or admin)
-      const where: any = { 
+      const where: any = {
         match_id: id,
-        is_deleted: false 
+        is_deleted: false
       };
 
       // Non-admin users can only update matches they created
@@ -302,6 +303,39 @@ export class MatchService {
       const existingMatch = await this.prisma.match.findFirst({ where });
       if (!existingMatch) {
         return null; // Match not found or no permission
+      }
+
+      if (userRole !== 'ADMIN') {
+        const seasonId = data.seasonId ?? existingMatch.season_id;
+        const homeTeamId = data.homeTeamId ?? existingMatch.home_team_id;
+        const awayTeamId = data.awayTeamId ?? existingMatch.away_team_id;
+
+        const [homeTeam, awayTeam, season] = await Promise.all([
+          this.prisma.team.findFirst({
+            where: { id: homeTeamId, created_by_user_id: userId, is_deleted: false },
+            select: { id: true }
+          }),
+          this.prisma.team.findFirst({
+            where: { id: awayTeamId, created_by_user_id: userId, is_deleted: false },
+            select: { id: true }
+          }),
+          this.prisma.seasons.findFirst({
+            where: { season_id: seasonId, created_by_user_id: userId, is_deleted: false },
+            select: { season_id: true }
+          })
+        ]);
+
+        if (!homeTeam || !awayTeam) {
+          const error = new Error('Access denied: You can only use teams you own') as any;
+          error.statusCode = 403;
+          throw error;
+        }
+
+        if (!season) {
+          const error = new Error('Access denied: You can only use seasons you own') as any;
+          error.statusCode = 403;
+          throw error;
+        }
       }
 
       const prismaInput = transformMatchUpdateRequest(data);
@@ -359,9 +393,9 @@ export class MatchService {
   async deleteMatch(id: string, userId: string, userRole: string): Promise<boolean> {
     try {
       // First check if match exists and user has permission (only creator or admin)
-      const where: any = { 
+      const where: any = {
         match_id: id,
-        is_deleted: false 
+        is_deleted: false
       };
 
       // Non-admin users can only delete matches they created
@@ -413,27 +447,9 @@ export class MatchService {
       ]
     };
 
-    // Non-admin users can only see matches they created or involving their teams
+    // Non-admin users can only see matches they created
     if (userRole !== 'ADMIN') {
-      const userTeamIds = await this.getUserTeamIds(userId);
-      
-      // Check if user owns the requested team or if they created matches involving this team
-      const ownershipFilter = {
-        OR: [
-          { created_by_user_id: userId },
-          { 
-            AND: [
-              { OR: [{ home_team_id: teamId }, { away_team_id: teamId }] },
-              { OR: [
-                { home_team_id: { in: userTeamIds } },
-                { away_team_id: { in: userTeamIds } }
-              ]}
-            ]
-          }
-        ]
-      };
-
-      where.AND = [ownershipFilter];
+      where.created_by_user_id = userId;
     }
 
     const matches = await this.prisma.match.findMany({
@@ -457,7 +473,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         },
         awayTeam: {
@@ -469,7 +485,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         }
       }
@@ -484,14 +500,9 @@ export class MatchService {
       is_deleted: false
     };
 
-    // Non-admin users can only see matches they created or involving their teams
+    // Non-admin users can only see matches they created
     if (userRole !== 'ADMIN') {
-      const userTeamIds = await this.getUserTeamIds(userId);
-      where.OR = [
-        { created_by_user_id: userId },
-        { home_team_id: { in: userTeamIds } },
-        { away_team_id: { in: userTeamIds } }
-      ];
+      where.created_by_user_id = userId;
     }
 
     const matches = await this.prisma.match.findMany({
@@ -515,7 +526,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         },
         awayTeam: {
@@ -527,7 +538,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         }
       }
@@ -552,23 +563,9 @@ export class MatchService {
       ];
     }
 
-    // Non-admin users can only see matches they created or involving their teams
+    // Non-admin users can only see matches they created
     if (userRole !== 'ADMIN') {
-      const userTeamIds = await this.getUserTeamIds(userId);
-      const ownershipFilter = {
-        OR: [
-          { created_by_user_id: userId },
-          { home_team_id: { in: userTeamIds } },
-          { away_team_id: { in: userTeamIds } }
-        ]
-      };
-
-      if (where.OR) {
-        where.AND = [{ OR: where.OR }, ownershipFilter];
-        delete where.OR;
-      } else {
-        Object.assign(where, ownershipFilter);
-      }
+      where.created_by_user_id = userId;
     }
 
     const matches = await this.prisma.match.findMany({
@@ -593,7 +590,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         },
         awayTeam: {
@@ -605,7 +602,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         }
       }
@@ -630,23 +627,9 @@ export class MatchService {
       ];
     }
 
-    // Non-admin users can only see matches they created or involving their teams
+    // Non-admin users can only see matches they created
     if (userRole !== 'ADMIN') {
-      const userTeamIds = await this.getUserTeamIds(userId);
-      const ownershipFilter = {
-        OR: [
-          { created_by_user_id: userId },
-          { home_team_id: { in: userTeamIds } },
-          { away_team_id: { in: userTeamIds } }
-        ]
-      };
-
-      if (where.OR) {
-        where.AND = [{ OR: where.OR }, ownershipFilter];
-        delete where.OR;
-      } else {
-        Object.assign(where, ownershipFilter);
-      }
+      where.created_by_user_id = userId;
     }
 
     const matches = await this.prisma.match.findMany({
@@ -671,7 +654,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         },
         awayTeam: {
@@ -683,7 +666,7 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-              is_opponent: true
+            is_opponent: true
           }
         }
       }
@@ -721,7 +704,7 @@ export class MatchService {
           home_kit_primary: true,
           home_kit_secondary: true,
           logo_url: true,
-              is_opponent: true
+          is_opponent: true
         }
       }),
       this.prisma.team.findUnique({
@@ -732,7 +715,7 @@ export class MatchService {
           away_kit_primary: true,
           away_kit_secondary: true,
           logo_url: true,
-              is_opponent: true
+          is_opponent: true
         }
       })
     ]);
@@ -809,10 +792,11 @@ export class MatchService {
                     is_deleted: false
                   }
                 }
+              }
             }
           }
         }
-      }}),
+      }),
       this.prisma.event.findMany({
         where: { match_id: id, is_deleted: false },
         orderBy: [{ clock_ms: 'desc' }, { created_at: 'desc' }],
@@ -853,16 +837,42 @@ export class MatchService {
     const match = await this.getMatchById(matchId, userId, userRole);
     if (!match) return null;
 
-    if (userRole !== 'ADMIN') {
-      const canModify = await this.prisma.match.findFirst({
+    if (!eventData?.teamId) {
+      const error = new Error('Team ID is required for all events') as any;
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (eventData.teamId !== match.homeTeamId && eventData.teamId !== match.awayTeamId) {
+      const error = new Error('Team does not belong to this match') as any;
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (eventData.playerId) {
+      const playerTeam = await this.prisma.player_teams.findFirst({
         where: {
-          match_id: matchId,
-          created_by_user_id: userId,
-          is_deleted: false
+          team_id: eventData.teamId,
+          player_id: eventData.playerId,
+          is_active: true,
+          is_deleted: false,
+          player: { is_deleted: false }
         }
       });
-      if (!canModify) return null;
+
+      if (!playerTeam) {
+        const error = new Error('Player does not belong to the specified team') as any;
+        error.statusCode = 400;
+        throw error;
+      }
     }
+
+    await this.quotaService.assertCanCreateEvent({
+      userId,
+      userRole,
+      matchId,
+      kind: eventData.kind
+    });
 
     // Create the event
     const event = await this.prisma.event.create({
@@ -892,20 +902,6 @@ export class MatchService {
     };
   }
 
-  /**
-   * Get all team IDs that belong to a user
-   */
-  private async getUserTeamIds(userId: string): Promise<string[]> {
-    const teams = await this.prisma.team.findMany({
-      where: { 
-        created_by_user_id: userId,
-        is_deleted: false 
-      },
-      select: { id: true }
-    });
-
-    return teams.map(team => team.id);
-  }
 
   async createQuickStartMatch(payload: any, userId: string, userRole: string): Promise<Match> {
     const {
@@ -934,6 +930,7 @@ export class MatchService {
         resolvedMyTeamId = await this.nkr.resolveTeamByName(myTeamName, userId, userRole, { isOpponent: false });
       } catch (err: any) {
         if (err instanceof NaturalKeyResolverError && err.code === 'NOT_FOUND') {
+          await this.quotaService.assertCanCreateTeam({ userId, userRole, isOpponent: false });
           const created = await this.prisma.team.create({
             data: {
               name: String(myTeamName).trim(),
@@ -976,6 +973,7 @@ export class MatchService {
       resolvedOpponentTeamId = await this.nkr.resolveTeamByName(oppName, userId, userRole, { isOpponent: true });
     } catch (err: any) {
       if (err instanceof NaturalKeyResolverError && err.code === 'NOT_FOUND') {
+        await this.quotaService.assertCanCreateTeam({ userId, userRole, isOpponent: true });
         const createdOpp = await this.prisma.team.create({
           data: {
             name: oppName,
@@ -1034,6 +1032,7 @@ export class MatchService {
         if (current) {
           finalSeasonId = current.season_id;
         } else {
+          await this.quotaService.assertCanCreateSeason({ userId, userRole });
           // Auto-create based on current date (Aug 1 -> Jun 30 next year)
           const now = new Date();
           const m = now.getMonth();
@@ -1067,6 +1066,8 @@ export class MatchService {
         }
       }
     }
+
+    await this.quotaService.assertCanCreateMatch({ userId, userRole, seasonId: finalSeasonId! });
 
     // Create match (restore if soft-deleted with same unique constraint)
     const match = await createOrRestoreSoftDeleted({

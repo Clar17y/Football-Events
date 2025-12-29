@@ -218,7 +218,7 @@ export class AwardsService {
           ...data,
           seasonId: seasonId!,
           playerId: playerId!
-        }),
+        }, userId),
         userId,
         transformer: transformAward,
         primaryKeyField: 'award_id'
@@ -428,7 +428,7 @@ export class AwardsService {
           ...data,
           matchId: matchId!,
           playerId: playerId!
-        }),
+        }, userId),
         userId,
         transformer: transformMatchAward,
         primaryKeyField: 'match_award_id'

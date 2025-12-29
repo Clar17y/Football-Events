@@ -41,7 +41,8 @@
     "node_modules",
     "dist",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "../shared/tests/**/*"
   ],
   "references": [
     { "path": "../shared" }

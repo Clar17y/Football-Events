@@ -22,6 +22,9 @@ import StatisticsPage from './pages/StatisticsPage';
 import LiveMatchPage from './pages/LiveMatchPage';
 import LineupDemoPage from './pages/LineupDemoPage';
 import LineupManagementPage from './pages/LineupManagementPage';
+import LandingPage from './pages/LandingPage';
+import PricingPage from './pages/PricingPage';
+import SyncIssuesPage from './pages/SyncIssuesPage';
 // import MatchConsole from './pages/MatchConsole'; // Removed - will be redesigned
 import { syncService } from './services/syncService';
 import ImportPromptModal from './components/ImportPromptModal';
@@ -39,11 +42,11 @@ const AppRoutes: React.FC = () => {
   // On initial load and back/forward, parse URL path to set page state
   useEffect(() => {
     // Start background sync service
-    try { syncService.start(); } catch {}
+    try { syncService.start(); } catch { }
 
     // Set up cache refresh triggers for online/offline transitions
     // Requirements: 3.4, 3.5 - Trigger cache refresh on app load and when coming back online
-    try { setupCacheRefreshTriggers(); } catch {}
+    try { setupCacheRefreshTriggers(); } catch { }
 
     // Initial cache refresh if online and authenticated
     // Requirements: 3.4 - Call refreshCache() on app load when online and authenticated
@@ -79,20 +82,14 @@ const AppRoutes: React.FC = () => {
       setShowImportPrompt(true);
     };
 
-    // Clear outbox and resume sync after import completes
+    // Resume sync after import completes
     const onImportCompleted = async () => {
       console.log('[App] import:completed event received');
       try {
-        const { db } = await import('./db/indexedDB');
-        const { getGuestId } = await import('./utils/guest');
-        const guestId = getGuestId();
-        // Ensure outbox is cleared of guest items
-        await db.outbox.where('created_by_user_id').equals(guestId).delete();
-        console.log('[App] Guest outbox items cleared');
         // Trigger a sync attempt
-        syncService.flushOnce().catch(() => {});
+        syncService.flushOnce().catch(() => { });
       } catch (err) {
-        console.error('[App] Error clearing outbox after import:', err);
+        console.error('[App] Error after import:', err);
       }
     };
 
@@ -135,7 +132,7 @@ const AppRoutes: React.FC = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const teamId = urlParams.get('teamId');
     const teamName = urlParams.get('teamName');
-    
+
     if (teamId && teamName) {
       return {
         teamId: teamId,
@@ -201,7 +198,7 @@ const AppRoutes: React.FC = () => {
       case 'teams':
         return <TeamsPage onNavigate={handleNavigation} />;
       case 'players':
-        return <PlayersPage onNavigate={handleNavigation} initialTeamFilter={teamFilter} />;
+        return <PlayersPage onNavigate={handleNavigation} initialTeamFilter={teamFilter ?? undefined} />;
       case 'matches':
         return <MatchesPage onNavigate={handleNavigation} />;
       case 'awards':
@@ -221,9 +218,19 @@ const AppRoutes: React.FC = () => {
         return <LineupDemoPage />;
       case 'lineup-management':
         return <LineupManagementPage onNavigate={handleNavigation} />;
+      case 'pricing':
+        return <PricingPage onNavigate={handleNavigation} />;
+      case 'sync-issues':
+        return <SyncIssuesPage onNavigate={handleNavigation} />;
+      case 'dashboard':
+        // Guest dashboard: always show the main app interface
+        return <HomePage onNavigate={handleNavigation} />;
       case 'home':
       default:
-        return <HomePage onNavigate={handleNavigation} />;
+        // Show marketing landing page for guests, dashboard for authenticated users
+        return isAuthenticated
+          ? <HomePage onNavigate={handleNavigation} />
+          : <LandingPage onNavigate={handleNavigation} />;
     }
   };
 

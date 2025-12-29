@@ -32,11 +32,12 @@ export const PlayerPositionSchema = z.enum([
  */
 export const PlayerSchema = z.object({
   id: IdSchema,
-  full_name: z.string().min(1, 'Player name is required').max(100, 'Player name too long'),
-  jersey_number: z.number().int().min(1).max(99).optional(),
-  position: PlayerPositionSchema.optional(),
-  is_active: z.boolean(),
-  team_id: IdSchema.optional(),
+  name: z.string().min(1, 'Player name is required').max(100, 'Player name too long'),
+  squadNumber: z.number().int().min(1).max(99).optional(),
+  preferredPosition: z.string().optional(),
+  isActive: z.boolean(),
+  currentTeam: IdSchema.optional(),
+  createdAt: z.string(),
 });
 
 /**
@@ -45,10 +46,13 @@ export const PlayerSchema = z.object({
 export const TeamSchema = z.object({
   id: IdSchema,
   name: z.string().min(1, 'Team name is required').max(50, 'Team name too long'),
-  players: z.array(PlayerSchema),
-  color_primary: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex color').optional(),
-  color_secondary: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex color').optional(),
-  formation: z.string().regex(/^\d+-\d+(-\d+)*$/, 'Invalid formation format (e.g., 4-4-2)').optional(),
+  homeKitPrimary: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex color').optional(),
+  homeKitSecondary: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex color').optional(),
+  awayKitPrimary: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex color').optional(),
+  awayKitSecondary: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid hex color').optional(),
+  logoUrl: z.string().url().optional(),
+  isOpponent: z.boolean(),
+  createdAt: z.string(),
 });
 
 /**
@@ -59,14 +63,15 @@ export const EventKindSchema = z.enum([
   'assist',
   'key_pass',
   'save',
-  'ball_won',
-  'corner',
-  'free_kick',
-  'penalty',
+  'interception',
+  'tackle',
   'foul',
-  'ball_lost',
+  'penalty',
+  'free_kick',
+  'ball_out',
   'own_goal',
-  'ball_out'
+  'formation_change',
+  'corner'
 ]);
 
 /**
@@ -87,15 +92,15 @@ export const CoordinatesSchema = z.object({
  */
 export const EventPayloadSchema = z.object({
   kind: EventKindSchema,
-  match_id: IdSchema,
-  season_id: IdSchema,
-  team_id: IdSchema,
-  player_id: IdSchema,
-  period_number: z.number().int().positive('Period number must be positive'),
-  clock_ms: z.number().int().min(0, 'Clock time cannot be negative'),
+  matchId: IdSchema,
+  seasonId: IdSchema,
+  teamId: IdSchema,
+  playerId: IdSchema,
+  periodNumber: z.number().int().positive('Period number must be positive'),
+  clockMs: z.number().int().min(0, 'Clock time cannot be negative'),
   sentiment: SentimentSchema,
   notes: z.string().max(500, 'Notes too long (max 500 characters)').optional(),
-  created: TimestampSchema,
+  createdAt: z.string(),
   coordinates: CoordinatesSchema.optional(),
 });
 
@@ -104,39 +109,37 @@ export const EventPayloadSchema = z.object({
  */
 export const MatchEventSchema = EventPayloadSchema.extend({
   id: IdSchema,
-  metadata: z.object({
-    auto_detected: z.boolean().optional(),
-    confidence: z.number().min(0).max(1).optional(),
-    related_events: z.array(IdSchema).optional(),
-  }).optional(),
+  createdByUserId: z.string(),
+  isDeleted: z.boolean(),
+  updatedAt: z.string().optional(),
 });
 
 /**
  * Match status validation
  */
 export const MatchStatusSchema = z.enum([
-  'not_started',
-  'in_progress',
-  'half_time',
-  'extra_time',
-  'penalty_shootout',
-  'completed',
-  'abandoned',
-  'postponed'
+  'NOT_STARTED',
+  'IN_PROGRESS',
+  'HALF_TIME',
+  'EXTRA_TIME',
+  'PENALTY_SHOOTOUT',
+  'COMPLETED',
+  'ABANDONED',
+  'POSTPONED'
 ]);
 
 /**
  * Match settings validation schema
  */
 export const MatchSettingsSchema = z.object({
-  period_duration: z.number().int().min(1, 'Period duration must be at least 1 minute').max(120, 'Period duration too long'),
-  total_periods: z.number().int().min(1, 'Must have at least 1 period').max(4, 'Too many periods'),
-  half_time_duration: z.number().int().min(0, 'Half-time duration cannot be negative').max(30, 'Half-time too long'),
-  allow_extra_time: z.boolean(),
-  extra_time_duration: z.number().int().min(0).max(30),
-  allow_penalty_shootout: z.boolean(),
-  max_substitutions: z.number().int().min(0, 'Cannot have negative substitutions').max(11, 'Too many substitutions'),
-  track_injury_time: z.boolean(),
+  periodDuration: z.number().int().min(1, 'Period duration must be at least 1 minute').max(120, 'Period duration too long'),
+  totalPeriods: z.number().int().min(1, 'Must have at least 1 period').max(4, 'Too many periods'),
+  halfTimeDuration: z.number().int().min(0, 'Half-time duration cannot be negative').max(30, 'Half-time too long'),
+  allowExtraTime: z.boolean(),
+  extraTimeDuration: z.number().int().min(0).max(30),
+  allowPenaltyShootout: z.boolean(),
+  maxSubstitutions: z.number().int().min(0, 'Cannot have negative substitutions').max(11, 'Too many substitutions'),
+  trackInjuryTime: z.boolean(),
 });
 
 /**
@@ -144,32 +147,32 @@ export const MatchSettingsSchema = z.object({
  */
 export const MatchClockSchema = z.object({
   running: z.boolean(),
-  start_ts: TimestampSchema.nullable(),
-  offset_ms: z.number().int().min(0, 'Offset cannot be negative'),
-  current_period: z.number().int().positive('Current period must be positive'),
-  period_starts: z.record(z.string(), TimestampSchema),
+  startTs: z.number().nullable(),
+  offsetMs: z.number().int().min(0, 'Offset cannot be negative'),
+  currentPeriod: z.number().int().positive('Current period must be positive'),
+  periodStarts: z.record(z.string(), z.number()),
 });
 
 /**
  * Match result validation schema
  */
 export const MatchResultSchema = z.object({
-  home_score: z.number().int().min(0, 'Score cannot be negative'),
-  away_score: z.number().int().min(0, 'Score cannot be negative'),
-  went_to_extra_time: z.boolean(),
-  went_to_penalty_shootout: z.boolean(),
-  penalty_result: z.object({
-    home_penalties: z.number().int().min(0),
-    away_penalties: z.number().int().min(0),
+  homeScore: z.number().int().min(0, 'Score cannot be negative'),
+  awayScore: z.number().int().min(0, 'Score cannot be negative'),
+  wentToExtraTime: z.boolean(),
+  wentToPenaltyShootout: z.boolean(),
+  penaltyResult: z.object({
+    homePenalties: z.number().int().min(0),
+    awayPenalties: z.number().int().min(0),
     sequence: z.array(z.object({
-      team_id: IdSchema,
-      player_id: IdSchema,
+      teamId: IdSchema,
+      playerId: IdSchema,
       scored: z.boolean(),
       order: z.number().int().positive(),
     })),
   }).optional(),
   winner: z.enum(['home', 'away']).optional(),
-  final_status: MatchStatusSchema,
+  finalStatus: MatchStatusSchema,
 });
 
 /**
@@ -177,37 +180,28 @@ export const MatchResultSchema = z.object({
  */
 export const MatchSchema = z.object({
   id: IdSchema,
-  season_id: IdSchema,
-  home_team: TeamSchema,
-  away_team: TeamSchema,
-  date: TimestampSchema,
+  seasonId: IdSchema,
+  homeTeam: TeamSchema,
+  awayTeam: TeamSchema,
+  kickoffTime: z.string(),
   status: MatchStatusSchema,
   settings: MatchSettingsSchema,
-  current_period: z.number().int().positive(),
+  currentPeriod: z.number().int().positive(),
   clock: MatchClockSchema,
   result: MatchResultSchema.optional(),
+  homeScore: z.number().int().min(0),
+  awayScore: z.number().int().min(0),
+  createdAt: z.string(),
+  createdByUserId: z.string(),
+  isDeleted: z.boolean(),
   metadata: z.object({
     venue: OptionalStringSchema,
     weather: OptionalStringSchema,
     referee: OptionalStringSchema,
     competition: OptionalStringSchema,
-    match_type: z.enum(['league', 'cup', 'friendly', 'playoff']).optional(),
+    matchType: z.enum(['league', 'cup', 'friendly', 'playoff']).optional(),
     notes: OptionalStringSchema,
   }).optional(),
-});
-
-/**
- * Outbox event validation schema
- */
-export const OutboxEventSchema = z.object({
-  id: z.number().int().positive().optional(),
-  payload: EventPayloadSchema,
-  synced: z.boolean(),
-  created_at: TimestampSchema,
-  retry_count: z.number().int().min(0).optional(),
-  last_sync_attempt: TimestampSchema.optional(),
-  sync_error: OptionalStringSchema,
-  failed_at: TimestampSchema.optional(),
 });
 
 /**

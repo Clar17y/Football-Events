@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import EventModal from '../../../src/components/EventModal';
 import { MatchProvider } from '../../../src/contexts/MatchContext';
 import { ToastProvider } from '../../../src/contexts/ToastContext';
+import { DatabaseProvider } from '../../../src/contexts/DatabaseContext';
 import { db } from '../../../src/db/indexedDB';
 
 // Mock the database
@@ -26,20 +27,26 @@ import { useSpeechToText } from '../../../src/utils/useSpeechToText';
 
 // Test wrapper with required providers
 const TestWrapper = ({ children }: { children: React.ReactNode }) => (
-  <ToastProvider>
-    <MatchProvider>
-      {children}
-    </MatchProvider>
-  </ToastProvider>
+  <DatabaseProvider>
+    <ToastProvider>
+      <MatchProvider>
+        {children}
+      </MatchProvider>
+    </ToastProvider>
+  </DatabaseProvider>
 );
 
 const mockTeam = {
   id: 'team-1',
   name: 'Test Team',
+  createdAt: new Date().toISOString(),
+  createdByUserId: 'user-1',
+  isDeleted: false,
+  isOpponent: false,
   players: [
-    { id: 'player-1', full_name: 'John Doe', is_active: true },
-    { id: 'player-2', full_name: 'Jane Smith', is_active: true },
-    { id: 'anon', full_name: 'Anonymous', is_active: true }
+    { id: 'player-1', name: 'John Doe', isActive: true, createdAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false },
+    { id: 'player-2', name: 'Jane Smith', isActive: true, createdAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false },
+    { id: 'anon', name: 'Anonymous', isActive: true, createdAt: new Date().toISOString(), createdByUserId: 'user-1', isDeleted: false }
   ]
 };
 
@@ -135,7 +142,7 @@ describe('EventModal Component', () => {
 
   it('should show validation error when no player selected', async () => {
     const user = userEvent.setup();
-    
+
     render(
       <TestWrapper>
         <EventModal {...defaultProps} defaultPlayerId="" />
@@ -152,7 +159,7 @@ describe('EventModal Component', () => {
 
   it('should handle notes input', async () => {
     const user = userEvent.setup();
-    
+
     render(
       <TestWrapper>
         <EventModal {...defaultProps} />
@@ -190,7 +197,7 @@ describe('EventModal Component', () => {
   it('should call onDidDismiss when close button clicked', async () => {
     const user = userEvent.setup();
     const mockOnDidDismiss = vi.fn();
-    
+
     render(
       <TestWrapper>
         <EventModal {...defaultProps} onDidDismiss={mockOnDidDismiss} />
@@ -207,11 +214,11 @@ describe('EventModal Component', () => {
     const user = userEvent.setup();
     const mockOnEventSaved = vi.fn();
     const mockOnDidDismiss = vi.fn();
-    
+
     render(
       <TestWrapper>
-        <EventModal 
-          {...defaultProps} 
+        <EventModal
+          {...defaultProps}
           onEventSaved={mockOnEventSaved}
           onDidDismiss={mockOnDidDismiss}
         />
@@ -225,11 +232,10 @@ describe('EventModal Component', () => {
       expect(db.addEnhancedEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           kind: 'goal',
-          match_id: 'match-1',
-          season_id: 'season-1',
-          period_number: 1,
-          team_id: 'team-1',
-          player_id: 'player-1',
+          matchId: 'match-1',
+          periodNumber: 1,
+          teamId: 'team-1',
+          playerId: 'player-1',
           sentiment: 0,
           notes: ''
         })
@@ -248,7 +254,7 @@ describe('EventModal Component', () => {
 
   it('should save event with notes', async () => {
     const user = userEvent.setup();
-    
+
     render(
       <TestWrapper>
         <EventModal {...defaultProps} />
@@ -277,7 +283,7 @@ describe('EventModal Component', () => {
       success: false,
       error: 'Database error'
     });
-    
+
     render(
       <TestWrapper>
         <EventModal {...defaultProps} />
@@ -300,9 +306,9 @@ describe('EventModal Component', () => {
     const savePromise = new Promise(resolve => {
       resolvePromise = resolve;
     });
-    
+
     (db.addEnhancedEvent as Mock).mockReturnValue(savePromise);
-    
+
     render(
       <TestWrapper>
         <EventModal {...defaultProps} />
@@ -318,7 +324,7 @@ describe('EventModal Component', () => {
 
     // Resolve the promise
     resolvePromise!({ success: true, data: 'event-123' });
-    
+
     await waitFor(() => {
       expect(screen.queryByText('Saving...')).not.toBeInTheDocument();
     });
@@ -326,7 +332,7 @@ describe('EventModal Component', () => {
 
   it('should reset form after successful save', async () => {
     const user = userEvent.setup();
-    
+
     render(
       <TestWrapper>
         <EventModal {...defaultProps} />
@@ -358,7 +364,7 @@ describe('EventModal Component', () => {
       recognising: false,
       startDictation: mockStartDictation
     });
-    
+
     render(
       <TestWrapper>
         <EventModal {...defaultProps} />
@@ -377,7 +383,7 @@ describe('EventModal Component', () => {
       recognising: true,
       startDictation: vi.fn()
     });
-    
+
     render(
       <TestWrapper>
         <EventModal {...defaultProps} />

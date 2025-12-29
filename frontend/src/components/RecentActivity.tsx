@@ -22,7 +22,7 @@ import {
     ribbon,
     play,
     time,
-    refresh,
+    refresh as refreshIcon,
     chevronDown,
     chevronUp,
     footballOutline,
@@ -209,7 +209,7 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
                     <div className="activity-header">
                         <h2 className="section-title">Recent Activity</h2>
                         <IonButton fill="clear" size="small" disabled>
-                            <IonIcon icon={refresh} />
+                            <IonIcon icon={refreshIcon} />
                         </IonButton>
                     </div>
                     <IonList>
@@ -235,7 +235,7 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
                     <div className="activity-header">
                         <h2 className="section-title">Recent Activity</h2>
                         <IonButton fill="clear" size="small" onClick={refresh}>
-                            <IonIcon icon={refresh} />
+                            <IonIcon icon={refreshIcon} />
                         </IonButton>
                     </div>
                     <div className="activity-error">
@@ -258,7 +258,7 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
                     <div className="activity-header">
                         <h2 className="section-title">Recent Activity</h2>
                         <IonButton fill="clear" size="small" onClick={refresh}>
-                            <IonIcon icon={refresh} />
+                            <IonIcon icon={refreshIcon} />
                         </IonButton>
                     </div>
                     <div className="activity-placeholder">
@@ -288,7 +288,7 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
                 <div className="activity-header">
                     <h2 className="section-title">Recent Activity</h2>
                     <IonButton fill="clear" size="small" onClick={refresh} disabled={loading}>
-                        <IonIcon icon={refresh} />
+                        <IonIcon icon={refreshIcon} />
                     </IonButton>
                 </div>
 

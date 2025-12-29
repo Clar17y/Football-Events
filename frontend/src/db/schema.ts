@@ -1,12 +1,52 @@
 /**
  * Enhanced Database Schema for IndexedDB
  * 
- * This schema is based on the PostgreSQL database structure but optimized
- * for IndexedDB performance and offline-first functionality with bidirectional sync.
+ * This schema extends shared types from `@shared/types` with IndexedDB-specific
+ * fields for offline-first functionality and bidirectional sync.
+ * 
+ * CONVENTIONS:
+ * - All field names use camelCase (aligned with shared types)
+ * - All date/time fields use ISO strings (JSON-native)
+ * - Db* types extend shared types with sync metadata
+ * - Local-only types (sync metadata, settings) are defined here
  */
 
-import type { ID, Timestamp } from '../types/index';
+import type {
+  Player,
+  Team,
+  Match,
+  Event,
+  Season,
+  Lineup,
+  PlayerTeam,
+  MatchState,
+  MatchPeriod,
+  IsoDateTimeString,
+} from '@shared/types';
 import type { EventKind } from '../types/events';
+import type { GlobalStatsData } from '../types/globalStats';
+
+// ============================================================================
+// DATABASE OPERATION TYPES
+// ============================================================================
+
+/**
+ * Database operation result
+ */
+export interface DatabaseResult<T> {
+  /** Whether the operation was successful */
+  success: boolean;
+  /** Result data (if successful) */
+  data?: T;
+  /** Error message (if failed) */
+  error?: string;
+  /** Number of affected records */
+  affected_count?: number;
+}
+
+// ============================================================================
+// SYNC INFRASTRUCTURE TYPES
+// ============================================================================
 
 /**
  * Base interface for records that can be synced to server
@@ -14,258 +54,153 @@ import type { EventKind } from '../types/events';
 export interface SyncableRecord {
   /** Whether this record has been synced to server */
   synced: boolean;
-  /** Timestamp of last successful sync */
-  synced_at?: Timestamp;
+  /** ISO timestamp of last successful sync */
+  syncedAt?: IsoDateTimeString;
+}
+
+// ============================================================================
+// DATABASE ENTITY TYPES (Extend Shared Types)
+// ============================================================================
+
+/**
+ * IndexedDB Player type - extends shared Player with sync metadata
+ * Note: Uses ISO strings for dates (aligned with shared types)
+ * Includes legacy field aliases for backward compatibility during migration
+ */
+export interface DbPlayer extends Player, SyncableRecord {
+  /** @deprecated Use `name` instead - legacy alias for backward compatibility */
+  fullName?: string;
+  /** @deprecated Use `preferredPosition` instead - legacy alias */
+  preferredPos?: string;
+  /** @deprecated Use `dateOfBirth` instead - legacy alias */
+  dob?: string;
 }
 
 /**
- * Enhanced Event interface with auto-linking support
+ * IndexedDB Team type - extends shared Team with sync metadata
+ * Note: Uses ISO strings for dates (aligned with shared types)
+ * Includes legacy field aliases for backward compatibility during migration
  */
-export interface EnhancedEvent extends SyncableRecord {
-  /** UUID primary key */
-  id: ID;
-  /** Foreign key to matches table */
-  match_id: ID;
-  /** Server timestamp when event was created */
-  ts_server: Timestamp;
-  /** Match period number (1, 2, 3, 4 for quarters) */
-  period_number: number;
-  /** Game clock in milliseconds */
-  clock_ms: number;
-  /** Type of event (goal, assist, foul, etc.) */
-  kind: EventKind;
-  /** Foreign key to teams table */
-  team_id: ID;
-  /** Foreign key to players table */
-  player_id: ID;
-  /** Optional notes about the event */
-  notes?: string;
-  /** Sentiment rating from -4 to +4 */
-  sentiment: number;
+export interface DbTeam extends Team, SyncableRecord {
+  /** @deprecated Use `id` instead - legacy alias for backward compatibility */
+  teamId?: string;
+  /** @deprecated Use `homeKitPrimary` instead - legacy alias */
+  colorPrimary?: string;
+  /** @deprecated Use `homeKitSecondary` instead - legacy alias */
+  colorSecondary?: string;
+  /** @deprecated Use `awayKitPrimary` instead - legacy alias */
+  awayColorPrimary?: string;
+  /** @deprecated Use `awayKitSecondary` instead - legacy alias */
+  awayColorSecondary?: string;
+}
+
+/**
+ * IndexedDB Match type - extends shared Match with sync metadata
+ * Note: IndexedDB uses `matchId` as alias for `id` for legacy compatibility
+ */
+export interface DbMatch extends Match, SyncableRecord {
+  /** Primary key alias for IndexedDB (same as id) */
+  matchId: string;
+}
+
+/**
+ * IndexedDB Event type - extends shared Event with sync metadata and linking
+ * Note: Uses ISO strings for dates (aligned with shared types)
+ */
+export interface DbEvent extends Event, SyncableRecord {
   /** Array of linked event IDs (auto-generated) */
-  linked_events?: ID[];
-  /** Timestamp when auto-linking was performed */
-  auto_linked_at?: Timestamp;
-  /** Client timestamp when event was created locally */
-  created_at: Timestamp;
-  /** Client timestamp when event was last updated */
-  updated_at: Timestamp;
-  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
-  created_by_user_id: ID;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: ID;
-  is_deleted: boolean;
+  linkedEvents?: string[];
+  /** Timestamp when auto-linking was performed (ISO string) */
+  autoLinkedAt?: IsoDateTimeString;
 }
 
 /**
- * Enhanced Match interface aligned with PostgreSQL schema
+ * IndexedDB Season type - extends shared Season with sync metadata
+ * Note: Uses ISO strings for dates (aligned with shared types)
  */
-export interface EnhancedMatch extends SyncableRecord {
-  /** UUID primary key */
-  match_id: ID;
-  /** Legacy compatibility - alias for match_id */
-  id: ID;
-  /** Foreign key to seasons table */
-  season_id: ID;
-  /** Match kickoff timestamp */
-  kickoff_ts: Timestamp;
-  /** Competition name */
-  competition?: string;
-  /** Foreign key to home team */
-  home_team_id: ID;
-  /** Foreign key to away team */
-  away_team_id: ID;
-  /** Venue name */
-  venue?: string;
-  /** Match duration in minutes */
-  duration_mins: number;
-  /** Period format: 'half' or 'quarter' */
-  period_format: 'half' | 'quarter';
-  /** Home team's score */
-  home_score: number;
-  /** Away team's score */
-  away_score: number;
-  /** Match notes */
-  notes?: string;
-  /** Client timestamps */
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
-  created_by_user_id: ID;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: ID;
-  is_deleted: boolean;
+export type DbSeason = Season & SyncableRecord;
+
+/**
+ * IndexedDB Lineup type - extends shared Lineup with sync metadata
+ * Note: Uses ISO strings for dates (aligned with shared types)
+ */
+export type DbLineup = Lineup & SyncableRecord;
+
+/**
+ * IndexedDB PlayerTeam type - extends shared PlayerTeam with sync metadata
+ */
+export interface DbPlayerTeam extends PlayerTeam, SyncableRecord {
+  /** Whether this relationship is currently active */
+  isActive?: boolean;
 }
 
 /**
- * Enhanced Team interface
+ * IndexedDB MatchState type - local match state with sync metadata
+ * Note: Local match state may have different status values during live matches
+ * Uses timestamps (numbers) for performance-critical timer operations
  */
-export interface EnhancedTeam extends SyncableRecord {
-  /** UUID primary key */
-  team_id: ID;
-  /** Legacy compatibility - alias for team_id */
-  id: ID;
-  /** Team name (unique) */
-  name: string;
-  /** Primary team color */
-  color_primary?: string;
-  /** Secondary team color */
-  color_secondary?: string;
-  /** Client timestamps */
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
-  created_by_user_id: ID;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: ID;
-  is_deleted: boolean;
-}
-
-/**
- * Enhanced Player interface aligned with PostgreSQL schema
- */
-export interface EnhancedPlayer extends SyncableRecord {
-  /** UUID primary key */
-  id: ID;
-  /** Player's full name */
-  full_name: string;
-  /** Squad/jersey number */
-  squad_number?: number;
-  /** Preferred position code */
-  preferred_pos?: string;
-  /** Date of birth */
-  dob?: string; // ISO date string
-  /** Player notes */
-  notes?: string;
-  /** Current team (foreign key) */
-  current_team?: ID;
-  /** Client timestamps */
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
-  created_by_user_id: ID;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: ID;
-  is_deleted: boolean;
-}
-
-/**
- * Season interface
- */
-export interface EnhancedSeason extends SyncableRecord {
-  /** UUID primary key */
-  season_id: ID;
-  /** Season label (unique) */
-  label: string;
-  /** Client timestamps */
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
-  created_by_user_id: ID;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: ID;
-  is_deleted: boolean;
-}
-
-/**
- * Lineup interface for tracking player positions and substitutions
- */
-export interface EnhancedLineup extends SyncableRecord {
-  /** Composite key: match_id + player_id + start_min */
-  id: string; // Generated: `${match_id}-${player_id}-${start_min}`
-  /** Foreign key to matches */
-  match_id: ID;
-  /** Foreign key to players */
-  player_id: ID;
-  /** Start time in minutes */
-  start_min: number;
-  /** End time in minutes (null if still playing) */
-  end_min?: number;
-  /** Position code */
-  position: string;
-  /** Client timestamps */
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
-  created_by_user_id: ID;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: ID;
-  is_deleted: boolean;
-}
-
-/**
- * Match notes for period-specific observations
- */
-export interface EnhancedMatchNote {
-  /** UUID primary key */
-  match_note_id: ID;
-  /** Foreign key to matches */
-  match_id: ID;
-  /** Note content */
-  notes: string;
-  /** Period number (0 for general match notes) */
-  period_number: number;
-  /** Client timestamps */
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
-  created_by_user_id: ID;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: ID;
-  is_deleted: boolean;
-}
-
-/**
- * Match period for tracking match time segments
- */
-export interface LocalMatchPeriod extends SyncableRecord {
-  /** UUID primary key */
-  id: ID;
-  /** Foreign key to matches table */
-  match_id: ID;
-  /** Period number (1, 2, 3, 4 for quarters; 1, 2 for halves) */
-  period_number: number;
-  /** Period type */
-  period_type: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT';
-  /** When the period started (timestamp - preserves original) */
-  started_at: Timestamp;
-  /** When the period ended (timestamp - preserves original) */
-  ended_at?: Timestamp;
-  /** Duration in seconds */
-  duration_seconds?: number;
-  /** Client timestamps */
-  created_at: Timestamp;
-  updated_at: Timestamp;
-  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
-  created_by_user_id: ID;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: ID;
-  is_deleted: boolean;
-}
-
-/**
- * Match state for tracking current match status
- */
-export interface LocalMatchState extends SyncableRecord {
+export interface DbMatchState extends SyncableRecord {
   /** Match ID (primary key) */
-  match_id: ID;
+  matchId: string;
   /** Current match status */
   status: 'NOT_STARTED' | 'LIVE' | 'PAUSED' | 'COMPLETED';
   /** Current period ID (if match is live) */
-  current_period_id?: ID;
+  currentPeriodId?: string;
   /** Elapsed timer in milliseconds */
-  timer_ms: number;
-  /** Last updated timestamp */
-  last_updated_at: Timestamp;
-  /** Client timestamps */
-  created_at: Timestamp;
-  updated_at: Timestamp;
+  timerMs: number;
+  /** Last updated timestamp (number for timer precision) */
+  lastUpdatedAt: number;
+  /** Client timestamps (ISO strings for consistency) */
+  createdAt: IsoDateTimeString;
+  updatedAt?: IsoDateTimeString;
   /** USER AUTHENTICATION & SOFT DELETE FIELDS */
-  created_by_user_id: ID;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: ID;
-  is_deleted: boolean;
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
+
+/**
+ * IndexedDB MatchPeriod type - local match period with sync metadata
+ * Uses timestamps (numbers) for performance-critical timer operations
+ */
+export interface DbMatchPeriod extends SyncableRecord {
+  /** UUID primary key */
+  id: string;
+  /** Foreign key to matches table */
+  matchId: string;
+  /** Period number (1, 2, 3, 4 for quarters; 1, 2 for halves) */
+  periodNumber: number;
+  /** Period type */
+  periodType: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT';
+  /** When the period started (timestamp for timer precision) */
+  startedAt: number;
+  /** When the period ended (timestamp for timer precision) */
+  endedAt?: number;
+  /** Duration in seconds */
+  durationSeconds?: number;
+  /** Client timestamps (ISO strings for consistency) */
+  createdAt: IsoDateTimeString;
+  updatedAt?: IsoDateTimeString;
+  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
+}
+
+/**
+ * Cached global (platform-wide) statistics (single-row, read-only on client).
+ */
+export interface DbGlobalStats {
+  id: 'current';
+  data: GlobalStatsData;
+  lastUpdated: number;
+}
+
+// ============================================================================
+// LOCAL-ONLY TYPES (Not in Shared Types)
+// ============================================================================
 
 /**
  * Formation player position in a default lineup
@@ -280,253 +215,347 @@ export interface FormationPlayerPosition {
 /**
  * Default lineup for a team (stored locally)
  */
-export interface LocalDefaultLineup extends SyncableRecord {
+export interface DbDefaultLineup extends SyncableRecord {
   /** Unique ID */
-  id: ID;
+  id: string;
   /** Team ID this lineup belongs to */
-  team_id: ID;
+  teamId: string;
   /** Formation data - array of player positions */
   formation: FormationPlayerPosition[];
-  /** Client timestamps */
-  created_at: Timestamp;
-  updated_at: Timestamp;
+  /** Client timestamps (ISO strings for consistency) */
+  createdAt: IsoDateTimeString;
+  updatedAt?: IsoDateTimeString;
   /** USER AUTHENTICATION & SOFT DELETE FIELDS */
-  created_by_user_id: ID;
-  deleted_at?: Timestamp;
-  deleted_by_user_id?: ID;
-  is_deleted: boolean;
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 /**
- * Enhanced outbox for bidirectional sync
+ * Match notes for period-specific observations (local-only)
  */
-export interface EnhancedOutboxEvent {
-  /** Auto-generated ID */
-  id?: number;
-  /** Table name being synced */
-  table_name: string;
-  /** Record ID being synced */
-  record_id: ID;
-  /** Operation type */
-  operation: 'INSERT' | 'UPDATE' | 'DELETE';
-  /** Record data (for INSERT/UPDATE) */
-  data?: any;
-  /** Event payload for match events (legacy compatibility) */
-  payload?: any;
-  /** Whether the event has been synced to server */
-  synced: boolean;
-  /** When the event was created locally */
-  created_at: Timestamp;
-  /** Number of sync attempts */
-  retry_count: number;
-  /** Last sync attempt timestamp */
-  last_sync_attempt?: Timestamp;
-  /** Error message if sync failed */
-  sync_error?: string;
-  /** When sync failed (if applicable) */
-  failed_at?: Timestamp;
+export interface DbMatchNote {
+  /** UUID primary key */
+  matchNoteId: string;
+  /** Foreign key to matches */
+  matchId: string;
+  /** Note content */
+  notes: string;
+  /** Period number (0 for general match notes) */
+  periodNumber: number;
+  /** Client timestamps (ISO strings for consistency) */
+  createdAt: IsoDateTimeString;
+  updatedAt?: IsoDateTimeString;
+  /** USER AUTHENTICATION & SOFT DELETE FIELDS */
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 /**
- * Enhanced sync metadata for conflict resolution
+ * Sync metadata for conflict resolution (local-only)
  */
-export interface EnhancedSyncMetadata {
+export interface DbSyncMetadata {
   /** Auto-generated ID */
   id?: number;
   /** Table name */
-  table_name: string;
+  tableName: string;
   /** Record ID */
-  record_id: ID;
+  recordId: string;
   /** Last successful sync timestamp */
-  last_synced: Timestamp;
+  lastSynced: number;
   /** Server version/etag for conflict detection */
-  server_version?: string;
+  serverVersion?: string;
   /** Local version for conflict detection */
-  local_version: string;
+  localVersion: string;
   /** Conflict resolution strategy */
-  conflict_strategy?: 'server_wins' | 'client_wins' | 'merge' | 'manual';
+  conflictStrategy?: 'server_wins' | 'client_wins' | 'merge' | 'manual';
 }
+
+/**
+ * Per-record sync failure tracking (local-only).
+ *
+ * This prevents retry storms by allowing backoff and permanent quarantine.
+ */
+export interface DbSyncFailure {
+  /** Table name (e.g. 'teams') */
+  table: string;
+  /** Record primary key in that table */
+  recordId: string;
+  attemptCount: number;
+  lastAttemptAt: number;
+  nextRetryAt: number;
+  lastStatus?: number;
+  lastError?: string;
+  permanent: boolean;
+  reasonCode?: string;
+}
+
+/**
+ * Application settings (local-only)
+ */
+export interface DbSetting {
+  /** Setting key (primary key) */
+  key: string;
+  /** Setting value (JSON string) */
+  value: string;
+  /** When the setting was created (ISO string) */
+  createdAt: IsoDateTimeString;
+  /** When the setting was last updated (ISO string) */
+  updatedAt?: IsoDateTimeString;
+}
+
+// ============================================================================
+// LEGACY TYPE ALIASES (For Backward Compatibility During Migration)
+// ============================================================================
+
+/** @deprecated Use DbEvent instead */
+export type EnhancedEvent = DbEvent;
+
+/** @deprecated Use DbMatch instead */
+export type EnhancedMatch = DbMatch;
+
+/** @deprecated Use DbTeam instead */
+export type EnhancedTeam = DbTeam;
+
+/** @deprecated Use DbPlayer instead */
+export type EnhancedPlayer = DbPlayer;
+
+/** @deprecated Use DbSeason instead */
+export type EnhancedSeason = DbSeason;
+
+/** @deprecated Use DbLineup instead */
+export type EnhancedLineup = DbLineup;
+
+/** @deprecated Use DbMatchNote instead */
+export type EnhancedMatchNote = DbMatchNote;
+
+/** @deprecated Use DbMatchPeriod instead */
+export type LocalMatchPeriod = DbMatchPeriod;
+
+/** @deprecated Use DbMatchState instead */
+export type LocalMatchState = DbMatchState;
+
+/** @deprecated Use DbDefaultLineup instead */
+export type LocalDefaultLineup = DbDefaultLineup;
+
+/** @deprecated Use DbSyncMetadata instead */
+export type EnhancedSyncMetadata = DbSyncMetadata;
+
+// ============================================================================
+// DATABASE SCHEMA DEFINITION
+// ============================================================================
 
 /**
  * Complete database schema definition
  */
-export interface EnhancedDatabaseSchema {
+export interface DatabaseSchema {
   // Core tables
-  events: EnhancedEvent;
-  matches: EnhancedMatch;
-  teams: EnhancedTeam;
-  players: EnhancedPlayer;
-  seasons: EnhancedSeason;
-  lineup: EnhancedLineup;
-  match_notes: EnhancedMatchNote;
-  match_periods: LocalMatchPeriod;
-  match_state: LocalMatchState;
+  events: DbEvent;
+  matches: DbMatch;
+  teams: DbTeam;
+  players: DbPlayer;
+  seasons: DbSeason;
+  lineup: DbLineup;
+  playerTeams: DbPlayerTeam;
+  matchNotes: DbMatchNote;
+  matchPeriods: DbMatchPeriod;
+  matchState: DbMatchState;
+  defaultLineups: DbDefaultLineup;
+
+  // Global stats cache
+  globalStats: DbGlobalStats;
 
   // Sync infrastructure
-  outbox: EnhancedOutboxEvent;
-  sync_metadata: EnhancedSyncMetadata;
+  syncMetadata: DbSyncMetadata;
+  syncFailures: DbSyncFailure;
 
-  // Settings (keeping existing)
-  settings: {
-    key: string;
-    value: string;
-    created_at: Timestamp;
-  };
+  // Settings
+  settings: DbSetting;
 }
+
+// ============================================================================
+// INDEX DEFINITIONS
+// ============================================================================
 
 /**
  * Index definitions for optimal query performance
+ * NOTE: All field names use camelCase to align with interface definitions.
  */
 export const SCHEMA_INDEXES = {
   // Events table - optimized for linking and common queries
   events: [
-    'match_id',                           // Basic match filtering
-    'player_id',                          // Player performance queries
-    'team_id',                            // Team analysis
-    'kind',                               // Event type filtering
-    'sentiment',                          // Performance analysis
-    '[match_id+player_id]',              // Player events within a match
-    '[match_id+team_id]',                // Team events within a match
-    '[match_id+clock_ms]',               // Timeline queries (most common)
-    '[match_id+kind]',                   // Event type filtering per match
-    '[match_id+period_number]',          // Period-specific analysis
-    '[player_id+kind]',                  // Player event type analysis
-    '[player_id+sentiment]',             // Player performance tracking
-    '[team_id+period_number]',           // Team period analysis
-    'linked_events',                     // Multi-entry index for linked events
-    'ts_server',                         // Sync ordering
-    'updated_at',                        // Change tracking
-    'synced',                            // Sync status
-    '[synced+created_by_user_id]'       // Unsynced guest data
+    'matchId',                           // Basic match filtering
+    'playerId',                          // Player performance queries
+    'teamId',                            // Team analysis
+    'kind',                              // Event type filtering
+    'sentiment',                         // Performance analysis
+    '[matchId+playerId]',               // Player events within a match
+    '[matchId+teamId]',                 // Team events within a match
+    '[matchId+clockMs]',                // Timeline queries (most common)
+    '[matchId+kind]',                   // Event type filtering per match
+    '[matchId+periodNumber]',           // Period-specific analysis
+    '[playerId+kind]',                  // Player event type analysis
+    '[playerId+sentiment]',             // Player performance tracking
+    '[teamId+periodNumber]',            // Team period analysis
+    'linkedEvents',                     // Multi-entry index for linked events
+    'createdAt',                        // Sync ordering / Creation time
+    'updatedAt',                        // Change tracking
+    'synced',                           // Sync status
+    '[synced+createdByUserId]'          // Unsynced guest data
   ],
-  
+
   // Matches table
   matches: [
-    'season_id',                         // Season filtering
-    'home_team_id',                      // Team match history
-    'away_team_id',                      // Team match history
-    'kickoff_ts',                        // Date-based queries
-    'created_by_user_id',                // Guest/user scoping
-    'is_deleted',                        // Soft delete filtering
-    '[season_id+kickoff_ts]',           // Season timeline
-    '[home_team_id+kickoff_ts]',        // Team schedule
-    '[away_team_id+kickoff_ts]',        // Team schedule
-    'updated_at',                        // Change tracking
+    'seasonId',                          // Season filtering
+    'homeTeamId',                        // Team match history
+    'awayTeamId',                        // Team match history
+    'kickoffTime',                       // Date-based queries
+    'createdByUserId',                   // Guest/user scoping
+    'isDeleted',                         // Soft delete filtering
+    '[seasonId+kickoffTime]',           // Season timeline
+    '[homeTeamId+kickoffTime]',         // Team schedule
+    '[awayTeamId+kickoffTime]',         // Team schedule
+    'updatedAt',                         // Change tracking
     'synced',                            // Sync status
-    '[synced+created_by_user_id]'       // Unsynced guest data
+    '[synced+createdByUserId]'          // Unsynced guest data
   ],
-  
+
   // Players table
   players: [
-    'current_team',                      // Team roster queries
-    'full_name',                         // Name-based search
-    'squad_number',                      // Number-based lookup
-    'created_by_user_id',                // Guest/user scoping
-    'is_deleted',                        // Soft delete filtering
-    '[current_team+squad_number]',      // Unique team numbers
-    '[current_team+full_name]',         // Team roster with names
-    'updated_at',                        // Change tracking
+    'currentTeam',                       // Team roster queries
+    'name',                              // Name-based search
+    'squadNumber',                       // Number-based lookup
+    'createdByUserId',                   // Guest/user scoping
+    'isDeleted',                         // Soft delete filtering
+    '[currentTeam+squadNumber]',        // Unique team numbers
+    '[currentTeam+name]',               // Team roster with names
+    'updatedAt',                         // Change tracking
     'synced',                            // Sync status
-    '[synced+created_by_user_id]'       // Unsynced guest data
+    '[synced+createdByUserId]'          // Unsynced guest data
   ],
 
   // Teams table
   teams: [
     'name',                              // Name-based search
-    'created_by_user_id',                // Guest/user scoping
-    'is_deleted',                        // Soft delete filtering
-    'updated_at',                        // Change tracking
+    'createdByUserId',                   // Guest/user scoping
+    'isDeleted',                         // Soft delete filtering
+    'updatedAt',                         // Change tracking
     'synced',                            // Sync status
-    '[synced+created_by_user_id]'       // Unsynced guest data
+    '[synced+createdByUserId]'          // Unsynced guest data
   ],
 
   // Seasons table
   seasons: [
     'label',                             // Label-based search
-    'created_by_user_id',                // Guest/user scoping
-    'is_deleted',                        // Soft delete filtering
-    'updated_at',                        // Change tracking
+    'createdByUserId',                   // Guest/user scoping
+    'isDeleted',                         // Soft delete filtering
+    'updatedAt',                         // Change tracking
     'synced',                            // Sync status
-    '[synced+created_by_user_id]'       // Unsynced guest data
+    '[synced+createdByUserId]'          // Unsynced guest data
   ],
 
   // Lineup table
   lineup: [
-    'match_id',                          // Match lineup queries
-    'player_id',                         // Player match history
-    '[match_id+start_min]',             // Timeline-based queries
-    '[match_id+position]',              // Position-based analysis
-    '[player_id+match_id]',             // Player match participation
-    'updated_at',                        // Change tracking
+    'matchId',                           // Match lineup queries
+    'playerId',                          // Player match history
+    '[matchId+startMinute]',            // Timeline-based queries
+    '[matchId+position]',               // Position-based analysis
+    '[playerId+matchId]',               // Player match participation
+    'updatedAt',                         // Change tracking
     'synced',                            // Sync status
-    '[synced+created_by_user_id]'       // Unsynced guest data
+    '[synced+createdByUserId]'          // Unsynced guest data
   ],
-  
+
+  // Player teams table
+  playerTeams: [
+    'playerId',                          // Player team history
+    'teamId',                            // Team roster
+    '[playerId+teamId]',                // Unique player-team relationship
+    'startDate',                         // Date-based queries
+    'isActive',                          // Active relationships
+    'createdByUserId',                   // Guest/user scoping
+    'isDeleted',                         // Soft delete filtering
+    'synced',                            // Sync status
+    '[synced+createdByUserId]'          // Unsynced guest data
+  ],
+
   // Match notes table
-  match_notes: [
-    'match_id',                          // Match-specific notes
-    '[match_id+period_number]',         // Period-specific notes
-    'updated_at'                         // Change tracking
+  matchNotes: [
+    'matchId',                           // Match-specific notes
+    '[matchId+periodNumber]',           // Period-specific notes
+    'updatedAt'                          // Change tracking
   ],
-  
-  // Outbox table - sync optimization
-  outbox: [
-    'synced',                            // Unsynced items
-    'table_name',                        // Table-specific sync
-    'operation',                         // Operation-specific sync
-    'created_by_user_id',                // Source attribution (guest/import detection)
-    '[synced+created_at]',              // Sync queue ordering
-    '[table_name+synced]',              // Table-specific sync status
-    'retry_count',                       // Failed sync tracking
-    'last_sync_attempt'                  // Retry timing
-  ],
-  
+
   // Sync metadata table
-  sync_metadata: [
-    'table_name',                        // Table-specific metadata
-    'record_id',                         // Record-specific metadata
-    '[table_name+record_id]',           // Unique record tracking
-    '[table_name+last_synced]',         // Table sync status
-    'last_synced'                        // Global sync status
+  syncMetadata: [
+    'tableName',                         // Table-specific metadata
+    'recordId',                          // Record-specific metadata
+    '[tableName+recordId]',             // Unique record tracking
+    '[tableName+lastSynced]',           // Table sync status
+    'lastSynced'                         // Global sync status
   ],
-  
+
+  // Per-record sync failure tracking
+  syncFailures: [
+    'table',
+    'recordId',
+    '[table+recordId]',
+    'nextRetryAt',
+    'permanent',
+    'lastAttemptAt',
+    'reasonCode'
+  ],
+
   // Settings table
   settings: [
     'key',                               // Key-based lookup
-    'updated_at'                         // Change tracking
+    'updatedAt'                          // Change tracking
   ],
 
   // Match periods table
-  match_periods: [
-    'match_id',                          // Match-specific periods
-    'period_number',                     // Period ordering
-    '[match_id+period_number]',         // Unique period per match
-    'started_at',                        // Timeline ordering
-    'created_by_user_id',                // Guest/user scoping
-    'is_deleted',                        // Soft delete filtering
+  matchPeriods: [
+    'matchId',                           // Match-specific periods
+    'periodNumber',                      // Period ordering
+    '[matchId+periodNumber]',           // Unique period per match
+    'startedAt',                         // Timeline ordering
+    'createdByUserId',                   // Guest/user scoping
+    'isDeleted',                         // Soft delete filtering
     'synced',                            // Sync status
-    '[synced+created_by_user_id]',      // Unsynced guest data
-    '[match_id+synced]'                 // Match sync status
+    '[synced+createdByUserId]',         // Unsynced guest data
+    '[matchId+synced]'                  // Match sync status
   ],
 
   // Match state table
-  match_state: [
-    'match_id',                          // Primary key
+  matchState: [
+    'matchId',                           // Primary key
     'status',                            // Status filtering
-    'created_by_user_id',                // Guest/user scoping
+    'createdByUserId',                   // Guest/user scoping
     'synced',                            // Sync status
-    '[synced+created_by_user_id]'       // Unsynced guest data
+    '[synced+createdByUserId]'          // Unsynced guest data
   ],
 
   // Default lineups table
-  default_lineups: [
-    'team_id',                           // Primary lookup by team
-    'created_by_user_id',                // Guest/user scoping
-    'is_deleted',                        // Soft delete filtering
+  defaultLineups: [
+    'teamId',                            // Primary lookup by team
+    'createdByUserId',                   // Guest/user scoping
+    'isDeleted',                         // Soft delete filtering
     'synced',                            // Sync status
-    '[synced+created_by_user_id]'       // Unsynced guest data
+    '[synced+createdByUserId]'          // Unsynced guest data
+  ]
+  ,
+
+  // Global stats cache (single row)
+  globalStats: [
+    'lastUpdated'
   ]
 } as const;
+
+// ============================================================================
+// EVENT RELATIONSHIP DEFINITIONS
+// ============================================================================
 
 /**
  * Event relationship definitions for auto-linking
@@ -536,16 +565,16 @@ export const EVENT_RELATIONSHIPS = {
   'goal': ['assist', 'key_pass'],
   'assist': ['goal'],
   'key_pass': ['goal'],
-  
+
   'penalty': ['foul'],
   'foul': ['penalty', 'free_kick'],
-  
+
   'free_kick': ['foul'],
   'save': [],
-  
+
   'own_goal': [],
-  'interception': ['tackle'], // Add missing interception
-  'tackle': ['interception'], // Add missing tackle
+  'interception': ['tackle'],
+  'tackle': ['interception'],
   'corner': [],
   'ball_out': []
 } as const;
@@ -556,13 +585,13 @@ export const EVENT_RELATIONSHIPS = {
 export const LINKING_CONFIG = {
   /** Time window for auto-linking events (60 seconds) */
   TIME_WINDOW_MS: 60000,
-  
+
   /** Maximum number of events to link to a single event */
   MAX_LINKS_PER_EVENT: 5,
-  
+
   /** Whether to link events across different teams */
   CROSS_TEAM_LINKING: true,
-  
+
   /** Whether to perform retroactive linking when new events are added */
   RETROACTIVE_LINKING: true
 } as const;
@@ -573,17 +602,17 @@ export const LINKING_CONFIG = {
 export const SENTIMENT_SCALE = {
   /** Minimum sentiment value */
   MIN: -4,
-  
+
   /** Maximum sentiment value */
   MAX: 4,
-  
+
   /** Neutral sentiment value */
   NEUTRAL: 0,
-  
+
   /** Scale descriptions */
   DESCRIPTIONS: {
     '-4': 'Very Poor Performance',
-    '-3': 'Poor Performance', 
+    '-3': 'Poor Performance',
     '-2': 'Below Average',
     '-1': 'Slightly Below Average',
     '0': 'Average/Neutral',

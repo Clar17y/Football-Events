@@ -44,6 +44,9 @@ describe('DefaultLineupService', () => {
         findFirst: vi.fn(),
         findMany: vi.fn()
       },
+      player: {
+        findMany: vi.fn()
+      },
       player_teams: {
         findMany: vi.fn()
       },
@@ -56,9 +59,13 @@ describe('DefaultLineupService', () => {
       lineup: {
         create: vi.fn()
       },
+      live_formations: {
+        create: vi.fn()
+      },
       match: {
         findFirst: vi.fn()
       },
+      $transaction: vi.fn(),
       $disconnect: vi.fn()
     };
 
@@ -160,29 +167,39 @@ describe('DefaultLineupService', () => {
       const mockCreatedLineup = {
         id: 'lineup-123',
         team_id: mockTeamId,
-        formation_data: validFormation,
+        formation_data: validFormation as any,
         created_at: new Date(),
+        updated_at: null,
         created_by_user_id: mockUserId,
+        deleted_at: null,
+        deleted_by_user_id: null,
         is_deleted: false
       };
 
-      const { createOrRestoreSoftDeleted } = await import('../../src/utils/softDeleteUtils');
-      vi.mocked(createOrRestoreSoftDeleted).mockResolvedValue(mockCreatedLineup);
+      mockPrisma.default_lineups.findFirst
+        .mockResolvedValueOnce(null) // No existing lineup
+        .mockResolvedValueOnce(null); // No soft-deleted lineup
+      mockPrisma.default_lineups.create.mockResolvedValue(mockCreatedLineup);
 
       const result = await service.saveDefaultLineup(mockTeamId, validFormation, mockUserId);
 
-      expect(result).toEqual(mockCreatedLineup);
-      expect(createOrRestoreSoftDeleted).toHaveBeenCalledWith({
-        prisma: mockPrisma,
-        model: 'default_lineups',
-        uniqueConstraints: { team_id: mockTeamId, created_by_user_id: mockUserId },
-        createData: {
+      expect(result).toEqual({
+        id: mockCreatedLineup.id,
+        teamId: mockCreatedLineup.team_id,
+        formation: validFormation,
+        createdAt: mockCreatedLineup.created_at.toISOString(),
+        updatedAt: undefined,
+        createdByUserId: mockCreatedLineup.created_by_user_id,
+        deletedAt: undefined,
+        deletedByUserId: undefined,
+        isDeleted: mockCreatedLineup.is_deleted,
+      });
+      expect(mockPrisma.default_lineups.create).toHaveBeenCalledWith({
+        data: {
           team_id: mockTeamId,
           formation_data: validFormation,
-          created_by_user_id: mockUserId
+          created_by_user_id: mockUserId,
         },
-        userId: mockUserId,
-        transformer: expect.any(Function)
       });
     });
 
@@ -238,12 +255,12 @@ describe('DefaultLineupService', () => {
         id: mockLineup.id,
         teamId: mockLineup.team_id,
         formation: mockLineup.formation_data,
-        createdAt: mockLineup.created_at,
+        createdAt: mockLineup.created_at.toISOString(),
         updatedAt: undefined,
-        created_by_user_id: mockLineup.created_by_user_id,
-        deleted_at: undefined,
-        deleted_by_user_id: undefined,
-        is_deleted: mockLineup.is_deleted
+        createdByUserId: mockLineup.created_by_user_id,
+        deletedAt: undefined,
+        deletedByUserId: undefined,
+        isDeleted: mockLineup.is_deleted
       });
     });
 
@@ -337,6 +354,18 @@ describe('DefaultLineupService', () => {
     });
 
     it('should apply default lineup to match successfully', async () => {
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(mockPrisma));
+
+      mockPrisma.player.findMany.mockResolvedValue(
+        validFormation.map((fp) => ({
+          id: fp.playerId,
+          name: `Player ${fp.playerId}`,
+          squad_number: null,
+          preferred_pos: null,
+        }))
+      );
+      mockPrisma.live_formations.create.mockResolvedValue({});
+
       const mockLineupRecords = validFormation.map((player, index) => ({
         id: `lineup-record-${index}`,
         match_id: mockMatchId,
@@ -370,6 +399,13 @@ describe('DefaultLineupService', () => {
             created_by_user_id: mockUserId
           }
         });
+      });
+      expect(mockPrisma.live_formations.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          match_id: mockMatchId,
+          start_min: 0,
+          created_by_user_id: mockUserId,
+        }),
       });
     });
 

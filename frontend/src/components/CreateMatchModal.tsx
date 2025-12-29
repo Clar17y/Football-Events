@@ -156,19 +156,19 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
     if (editingMatch && isOpen) {
       const kickoffDate = dayjs(editingMatch.kickoffTime);
       const kickoffTime = dayjs(editingMatch.kickoffTime);
-      
+
       // Determine which team is "my team" and which is opponent
-      const isHomeMatch = editingMatch.homeTeam && !editingMatch.homeTeam.is_opponent;
+      const isHomeMatch = editingMatch.homeTeam && !editingMatch.homeTeam.isOpponent;
       const myTeam = isHomeMatch ? editingMatch.homeTeam : editingMatch.awayTeam;
       const opponentTeam = isHomeMatch ? editingMatch.awayTeam : editingMatch.homeTeam;
-      
+
       // Initialize opponent input text when editing so button enablement works
       setOpponentText(opponentTeam?.name || '');
 
       setFormData({
         myTeamId: myTeam?.id || '',
         opponentName: opponentTeam?.name || '',
-        isHome: isHomeMatch,
+        isHome: isHomeMatch ?? true,
         kickoffDate,
         kickoffTime,
         seasonId: editingMatch.seasonId,
@@ -180,11 +180,11 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
       });
     } else if (!editingMatch && isOpen) {
       // Reset form for new match
-      const defaultKickoffIso = preselectedDate 
+      const defaultKickoffIso = preselectedDate
         ? preselectedDate.toISOString()
         : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString();
       const defaultMiddayTime = dayjs().hour(12).minute(0).second(0).millisecond(0);
-      
+
       setFormData({
         myTeamId: '',
         opponentName: '',
@@ -357,7 +357,7 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
           showToast({ message: allowed.reason || 'Guest limit reached: 1 match', severity: 'error' });
           return;
         }
-      } catch {}
+      } catch { }
     }
 
     setLoading(true);
@@ -377,7 +377,7 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
         // Update existing match
         const updatePayload = {
           seasonId: formData.seasonId,
-          kickoffTime: new Date(kickoffDateTime),
+          kickoffTime: kickoffDateTime,
           competition: formData.competition || undefined,
           venue: formData.venue || undefined,
           durationMinutes: formData.durationMinutes,
@@ -388,14 +388,14 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
         if (!authApi.isAuthenticated()) {
           const { db } = await import('../db/indexedDB');
           await db.matches.update(editingMatch.id, {
-            season_id: updatePayload.seasonId,
-            kickoff_ts: (updatePayload.kickoffTime as Date).toISOString(),
+            seasonId: updatePayload.seasonId,
+            kickoffTime: updatePayload.kickoffTime,
             competition: updatePayload.competition,
             venue: updatePayload.venue,
-            duration_mins: updatePayload.durationMinutes,
-            period_format: updatePayload.periodFormat,
+            durationMinutes: updatePayload.durationMinutes,
+            periodFormat: updatePayload.periodFormat,
             notes: updatePayload.notes,
-            updated_at: Date.now()
+            updatedAt: new Date().toISOString()
           } as any);
           const updated = await db.matches.get(editingMatch.id);
           result = updated ? await (await import('../services/guestQuickMatch')).getLocalMatch(editingMatch.id) as any : editingMatch;
@@ -459,10 +459,10 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
               const opponentTeam: Team = {
                 id: opponentId,
                 name: opponentName,
-                createdAt: new Date(),
-                created_by_user_id: '',
-                is_deleted: false,
-                is_opponent: true
+                createdAt: new Date().toISOString(),
+                createdByUserId: '',
+                isDeleted: false,
+                isOpponent: true
               } as Team;
               if (isHomeSel) {
                 enriched.awayTeam = opponentTeam;

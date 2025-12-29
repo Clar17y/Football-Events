@@ -1,9 +1,24 @@
 /**
  * Frontend-friendly interfaces with camelCase naming and UI-optimized structure
  * These interfaces are designed for React components and form handling
+ * 
+ * CONVENTIONS:
+ * - All field names use camelCase (no underscores)
+ * - All date/time fields use ISO strings (JSON-native, no Date objects)
+ * - snake_case is only used at the Prisma/PostgreSQL boundary
  */
 
 import type { EventKind } from './prisma';
+
+// ============================================================================
+// TYPE ALIASES FOR ISO DATE STRINGS
+// ============================================================================
+
+/** ISO 8601 date-time string, e.g. "2025-12-17T12:34:56.789Z" */
+export type IsoDateTimeString = string;
+
+/** ISO 8601 date string, e.g. "2025-12-17" */
+export type IsoDateString = string;
 
 // ============================================================================
 // CORE ENTITIES - Frontend Interfaces
@@ -25,122 +40,122 @@ export interface Player {
   name: string;                    // mapped from full_name
   squadNumber?: number;            // mapped from squad_number
   preferredPosition?: string;      // mapped from preferred_pos
-  dateOfBirth?: Date;             // mapped from dob
+  dateOfBirth?: IsoDateString;     // mapped from dob
   notes?: string;
-  currentTeam?: string;           // mapped from current_team
-  stats?: PlayerStats;            // Player statistics
-  createdAt: Date;                // mapped from created_at
-  updatedAt?: Date;               // mapped from updated_at
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Date;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  currentTeam?: string;            // mapped from current_team
+  stats?: PlayerStats;             // Player statistics
+  createdAt: IsoDateTimeString;    // mapped from created_at
+  updatedAt?: IsoDateTimeString;   // mapped from updated_at
+  // Authentication and soft delete fields (camelCase)
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 export interface Team {
   id: string;
   name: string;
-  homeKitPrimary?: string;        // mapped from home_kit_primary
-  homeKitSecondary?: string;      // mapped from home_kit_secondary
-  awayKitPrimary?: string;        // mapped from away_kit_primary
-  awayKitSecondary?: string;      // mapped from away_kit_secondary
-  logoUrl?: string;               // mapped from logo_url
-  createdAt: Date;
-  updatedAt?: Date;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Date;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
-  // Visibility flags
-  is_opponent: boolean;
+  homeKitPrimary?: string;         // mapped from home_kit_primary
+  homeKitSecondary?: string;       // mapped from home_kit_secondary
+  awayKitPrimary?: string;         // mapped from away_kit_primary
+  awayKitSecondary?: string;       // mapped from away_kit_secondary
+  logoUrl?: string;                // mapped from logo_url
+  createdAt: IsoDateTimeString;
+  updatedAt?: IsoDateTimeString;
+  // Authentication and soft delete fields (camelCase)
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
+  // Visibility flags (camelCase)
+  isOpponent: boolean;
 }
 
 export interface Match {
-  id: string;                     // mapped from match_id
-  seasonId: string;               // mapped from season_id
-  kickoffTime: Date;              // mapped from kickoff_ts
+  id: string;                      // mapped from match_id
+  seasonId: string;                // mapped from season_id
+  kickoffTime: IsoDateTimeString;  // mapped from kickoff_ts
   competition?: string;
-  homeTeamId: string;             // mapped from home_team_id
-  awayTeamId: string;             // mapped from away_team_id
-  homeTeam?: Team;                // nested home team data
-  awayTeam?: Team;                // nested away team data
+  homeTeamId: string;              // mapped from home_team_id
+  awayTeamId: string;              // mapped from away_team_id
+  homeTeam?: Team;                 // nested home team data
+  awayTeam?: Team;                 // nested away team data
   venue?: string;
-  durationMinutes: number;        // mapped from duration_mins
-  periodFormat: string;           // mapped from period_format
-  homeScore: number;              // mapped from home_score
-  awayScore: number;              // mapped from away_score
+  durationMinutes: number;         // mapped from duration_mins
+  periodFormat: string;            // mapped from period_format
+  homeScore: number;               // mapped from home_score
+  awayScore: number;               // mapped from away_score
   // Deprecated: kept temporarily for compatibility in some UI components
-  ourScore?: number;              // mapped from our_score
-  opponentScore?: number;         // mapped from opponent_score
+  ourScore?: number;               // mapped from our_score
+  opponentScore?: number;          // mapped from opponent_score
   notes?: string;
-  createdAt: Date;
-  updatedAt?: Date;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Date;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  createdAt: IsoDateTimeString;
+  updatedAt?: IsoDateTimeString;
+  // Authentication and soft delete fields (camelCase)
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 export interface Event {
   id: string;
-  matchId: string;                // mapped from match_id
-  createdAt: Date;                // mapped from created_at
-  periodNumber?: number;          // mapped from period_number
-  clockMs?: number;               // mapped from clock_ms
+  matchId: string;                 // mapped from match_id
+  createdAt: IsoDateTimeString;    // mapped from created_at
+  periodNumber?: number;           // mapped from period_number
+  clockMs?: number;                // mapped from clock_ms
   kind: EventKind;
-  teamId?: string;                // mapped from team_id
-  playerId?: string;              // mapped from player_id
+  teamId?: string;                 // mapped from team_id
+  playerId?: string;               // mapped from player_id
   notes?: string;
   sentiment: number;
-  updatedAt?: Date;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Date;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  updatedAt?: IsoDateTimeString;
+  // Authentication and soft delete fields (camelCase)
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 export interface Season {
-  id: string;                     // mapped from season_id (for compatibility)
-  seasonId: string;               // mapped from season_id
+  id: string;                      // mapped from season_id (for compatibility)
+  seasonId: string;                // mapped from season_id
   label: string;
-  startDate?: string;             // mapped from start_date
-  endDate?: string;               // mapped from end_date
-  isCurrent: boolean;             // mapped from is_current
-  description?: string;           // mapped from description
-  createdAt: Date;
-  updatedAt?: Date;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Date;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  startDate?: IsoDateString;       // mapped from start_date
+  endDate?: IsoDateString;         // mapped from end_date
+  isCurrent: boolean;              // mapped from is_current
+  description?: string;            // mapped from description
+  createdAt: IsoDateTimeString;
+  updatedAt?: IsoDateTimeString;
+  // Authentication and soft delete fields (camelCase)
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 export interface Position {
-  code: string;                   // mapped from pos_code
-  longName: string;               // mapped from long_name
-  createdAt: Date;                // mapped from created_at
-  updatedAt?: Date;               // mapped from updated_at
+  code: string;                    // mapped from pos_code
+  longName: string;                // mapped from long_name
+  createdAt: IsoDateTimeString;    // mapped from created_at
+  updatedAt?: IsoDateTimeString;   // mapped from updated_at
 }
 
 export interface Lineup {
-  id: string;                     // UUID primary key
-  matchId: string;                // mapped from match_id
-  playerId: string;               // mapped from player_id
-  startMinute: number;            // mapped from start_min
-  endMinute?: number;             // mapped from end_min
-  position: string;               // position code reference
-  createdAt: Date;                // mapped from created_at
-  updatedAt?: Date;               // mapped from updated_at
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Date;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  id: string;                      // UUID primary key
+  matchId: string;                 // mapped from match_id
+  playerId: string;                // mapped from player_id
+  startMinute: number;             // mapped from start_min
+  endMinute?: number;              // mapped from end_min
+  position: string;                // position code reference
+  createdAt: IsoDateTimeString;    // mapped from created_at
+  updatedAt?: IsoDateTimeString;   // mapped from updated_at
+  // Authentication and soft delete fields (camelCase)
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 // ============================================================================
@@ -148,10 +163,12 @@ export interface Lineup {
 // ============================================================================
 
 export interface PlayerCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   name: string;
   squadNumber?: number;
   preferredPosition?: string;
-  dateOfBirth?: Date;
+  dateOfBirth?: IsoDateString;
   notes?: string;
   currentTeam?: string;
 }
@@ -160,20 +177,22 @@ export interface PlayerUpdateRequest {
   name?: string;
   squadNumber?: number;
   preferredPosition?: string;
-  dateOfBirth?: Date;
+  dateOfBirth?: IsoDateString;
   notes?: string;
   currentTeam?: string;
 }
 
 export interface TeamCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   name: string;
   homeKitPrimary?: string;
   homeKitSecondary?: string;
   awayKitPrimary?: string;
   awayKitSecondary?: string;
   logoUrl?: string;
-  // Visibility
-  is_opponent?: boolean;
+  // Visibility (camelCase)
+  isOpponent?: boolean;
 }
 
 export interface TeamUpdateRequest {
@@ -186,8 +205,10 @@ export interface TeamUpdateRequest {
 }
 
 export interface MatchCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   seasonId: string;
-  kickoffTime: Date;
+  kickoffTime: IsoDateTimeString;
   competition?: string;
   homeTeamId: string;
   awayTeamId: string;
@@ -199,7 +220,7 @@ export interface MatchCreateRequest {
 
 export interface MatchUpdateRequest {
   seasonId?: string;
-  kickoffTime?: Date;
+  kickoffTime?: IsoDateTimeString;
   competition?: string;
   homeTeamId?: string;
   awayTeamId?: string;
@@ -212,6 +233,8 @@ export interface MatchUpdateRequest {
 }
 
 export interface EventCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   matchId: string;
   periodNumber?: number;
   clockMs?: number;
@@ -234,17 +257,19 @@ export interface EventUpdateRequest {
 }
 
 export interface SeasonCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   label: string;
-  startDate: string;
-  endDate: string;
+  startDate: IsoDateString;
+  endDate: IsoDateString;
   isCurrent?: boolean;
   description?: string;
 }
 
 export interface SeasonUpdateRequest {
   label?: string;
-  startDate?: string;
-  endDate?: string;
+  startDate?: IsoDateString;
+  endDate?: IsoDateString;
   isCurrent?: boolean;
   description?: string;
 }
@@ -260,6 +285,8 @@ export interface PositionUpdateRequest {
 }
 
 export interface LineupCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   matchId: string;
   playerId: string;
   startMinute?: number;
@@ -280,13 +307,13 @@ export interface Award {
   playerId: string;
   category: string;
   notes?: string;
-  createdAt: Date;
-  updatedAt?: Date;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Date;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  createdAt: IsoDateTimeString;
+  updatedAt?: IsoDateTimeString;
+  // Authentication and soft delete fields (camelCase)
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 export interface AwardCreateRequest {
@@ -308,13 +335,13 @@ export interface MatchAward {
   playerId: string;
   category: string;
   notes?: string;
-  createdAt: Date;
-  updatedAt?: Date;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Date;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  createdAt: IsoDateTimeString;
+  updatedAt?: IsoDateTimeString;
+  // Authentication and soft delete fields (camelCase)
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 export interface MatchAwardCreateRequest {
@@ -334,29 +361,31 @@ export interface PlayerTeam {
   id: string;
   playerId: string;
   teamId: string;
-  startDate: Date;
-  endDate?: Date;
-  createdAt: Date;
-  updatedAt?: Date;
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Date;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  startDate: IsoDateString;
+  endDate?: IsoDateString;
+  createdAt: IsoDateTimeString;
+  updatedAt?: IsoDateTimeString;
+  // Authentication and soft delete fields (camelCase)
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 export interface PlayerTeamCreateRequest {
+  /** Optional client-generated UUID for local-first creation */
+  id?: string;
   playerId: string;
   teamId: string;
-  startDate: Date;
-  endDate?: Date;
+  startDate: IsoDateString;
+  endDate?: IsoDateString;
 }
 
 export interface PlayerTeamUpdateRequest {
   playerId?: string;
   teamId?: string;
-  startDate?: Date;
-  endDate?: Date;
+  startDate?: IsoDateString;
+  endDate?: IsoDateString;
 }
 
 // ============================================================================
@@ -365,6 +394,10 @@ export interface PlayerTeamUpdateRequest {
 
 export interface PlayerWithTeam extends Player {
   team?: Team;
+}
+
+export interface TeamWithPlayers extends Team {
+  players: Player[];
 }
 
 export interface MatchWithTeams extends Match {
@@ -411,37 +444,37 @@ export interface SeasonWithStats extends Season {
 
 export interface MatchState {
   id: string;
-  matchId: string;                    // mapped from match_id
+  matchId: string;                         // mapped from match_id
   status: 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED' | 'CANCELLED' | 'POSTPONED';
-  currentPeriod?: number;             // mapped from current_period
+  currentPeriod?: number;                  // mapped from current_period
   currentPeriodType?: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT'; // mapped from current_period_type
-  matchStartedAt?: Date;              // mapped from match_started_at
-  matchEndedAt?: Date;                // mapped from match_ended_at
-  totalElapsedSeconds: number;        // mapped from total_elapsed_seconds
-  createdAt: Date;                    // mapped from created_at
-  updatedAt?: Date;                   // mapped from updated_at
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Date;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  matchStartedAt?: IsoDateTimeString;      // mapped from match_started_at
+  matchEndedAt?: IsoDateTimeString;        // mapped from match_ended_at
+  totalElapsedSeconds: number;             // mapped from total_elapsed_seconds
+  createdAt: IsoDateTimeString;            // mapped from created_at
+  updatedAt?: IsoDateTimeString;           // mapped from updated_at
+  // Authentication and soft delete fields (camelCase)
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 export interface MatchPeriod {
   id: string;
-  matchId: string;                    // mapped from match_id
-  periodNumber: number;               // mapped from period_number
+  matchId: string;                         // mapped from match_id
+  periodNumber: number;                    // mapped from period_number
   periodType: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT'; // mapped from period_type
-  startedAt?: Date;                   // mapped from started_at
-  endedAt?: Date;                     // mapped from ended_at
-  durationSeconds?: number;           // mapped from duration_seconds
-  createdAt: Date;                    // mapped from created_at
-  updatedAt?: Date;                   // mapped from updated_at
-  // Authentication and soft delete fields
-  created_by_user_id: string;
-  deleted_at?: Date;
-  deleted_by_user_id?: string;
-  is_deleted: boolean;
+  startedAt?: IsoDateTimeString;           // mapped from started_at
+  endedAt?: IsoDateTimeString;             // mapped from ended_at
+  durationSeconds?: number;                // mapped from duration_seconds
+  createdAt: IsoDateTimeString;            // mapped from created_at
+  updatedAt?: IsoDateTimeString;           // mapped from updated_at
+  // Authentication and soft delete fields (camelCase)
+  createdByUserId: string;
+  deletedAt?: IsoDateTimeString;
+  deletedByUserId?: string;
+  isDeleted: boolean;
 }
 
 // Request types for match state operations

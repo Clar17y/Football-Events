@@ -21,14 +21,15 @@ export async function autoLinkEvents(newEvent: EnhancedEvent): Promise<void> {
     }
 
     // Define time window for linking (15 seconds before and after)
+    const clockMs = newEvent.clockMs ?? 0;
     const timeWindow = {
-      start: newEvent.clock_ms - LINKING_CONFIG.TIME_WINDOW_MS,
-      end: newEvent.clock_ms + LINKING_CONFIG.TIME_WINDOW_MS
+      start: clockMs - LINKING_CONFIG.TIME_WINDOW_MS,
+      end: clockMs + LINKING_CONFIG.TIME_WINDOW_MS
     };
 
     // Find candidate events within the time window
     const candidateEvents = await findCandidateEvents(
-      newEvent.match_id,
+      newEvent.matchId,
       timeWindow,
       relatedKinds,
       newEvent.id
@@ -56,7 +57,7 @@ async function findCandidateEvents(
   excludeEventId: ID
 ): Promise<EnhancedEvent[]> {
   const candidates = await db.events
-    .where('[match_id+clock_ms]')
+    .where('[matchId+clockMs]')
     .between(
       [matchId, timeWindow.start],
       [matchId, timeWindow.end],
@@ -66,7 +67,7 @@ async function findCandidateEvents(
     .and(event => 
       [...relatedKinds].includes(event.kind) && 
       event.id !== excludeEventId &&
-      (!event.linked_events || event.linked_events.length < LINKING_CONFIG.MAX_LINKS_PER_EVENT)
+      (!event.linkedEvents || event.linkedEvents.length < LINKING_CONFIG.MAX_LINKS_PER_EVENT)
     )
     .toArray();
 
@@ -77,7 +78,7 @@ async function findCandidateEvents(
  * Create bidirectional links between two events
  */
 async function linkEventsBidirectionally(eventId1: ID, eventId2: ID): Promise<void> {
-  const now = Date.now();
+  const now = new Date().toISOString();
   
   try {
     // Use transaction to ensure both updates succeed or fail together
@@ -85,23 +86,23 @@ async function linkEventsBidirectionally(eventId1: ID, eventId2: ID): Promise<vo
       // Update first event
       const event1 = await db.events.get(eventId1);
       if (event1) {
-        const updatedLinkedEvents1 = addToLinkedEvents(event1.linked_events || [], eventId2);
+        const updatedLinkedEvents1 = addToLinkedEvents(event1.linkedEvents || [], eventId2);
         await db.events.update(eventId1, {
-          linked_events: updatedLinkedEvents1,
-          auto_linked_at: now,
-          updated_at: now
-        });
+          linkedEvents: updatedLinkedEvents1,
+          autoLinkedAt: now,
+          updatedAt: now
+        } as any);
       }
       
       // Update second event
       const event2 = await db.events.get(eventId2);
       if (event2) {
-        const updatedLinkedEvents2 = addToLinkedEvents(event2.linked_events || [], eventId1);
+        const updatedLinkedEvents2 = addToLinkedEvents(event2.linkedEvents || [], eventId1);
         await db.events.update(eventId2, {
-          linked_events: updatedLinkedEvents2,
-          auto_linked_at: now,
-          updated_at: now
-        });
+          linkedEvents: updatedLinkedEvents2,
+          autoLinkedAt: now,
+          updatedAt: now
+        } as any);
       }
     });
 
@@ -134,28 +135,28 @@ function addToLinkedEvents(currentLinks: ID[], newEventId: ID): ID[] {
  * Remove a link between two events
  */
 export async function unlinkEvents(eventId1: ID, eventId2: ID): Promise<void> {
-  const now = Date.now();
+  const now = new Date().toISOString();
   
   try {
     await db.transaction('rw', db.events, async () => {
       // Remove eventId2 from eventId1's links
       const event1 = await db.events.get(eventId1);
-      if (event1 && event1.linked_events) {
-        const updatedLinks1 = event1.linked_events.filter(id => id !== eventId2);
+      if (event1 && event1.linkedEvents) {
+        const updatedLinks1 = event1.linkedEvents.filter(id => id !== eventId2);
         await db.events.update(eventId1, {
-          linked_events: updatedLinks1.length > 0 ? updatedLinks1 : undefined,
-          updated_at: now
-        });
+          linkedEvents: updatedLinks1.length > 0 ? updatedLinks1 : undefined,
+          updatedAt: now
+        } as any);
       }
       
       // Remove eventId1 from eventId2's links
       const event2 = await db.events.get(eventId2);
-      if (event2 && event2.linked_events) {
-        const updatedLinks2 = event2.linked_events.filter(id => id !== eventId1);
+      if (event2 && event2.linkedEvents) {
+        const updatedLinks2 = event2.linkedEvents.filter(id => id !== eventId1);
         await db.events.update(eventId2, {
-          linked_events: updatedLinks2.length > 0 ? updatedLinks2 : undefined,
-          updated_at: now
-        });
+          linkedEvents: updatedLinks2.length > 0 ? updatedLinks2 : undefined,
+          updatedAt: now
+        } as any);
       }
     });
 
@@ -172,16 +173,16 @@ export async function unlinkEvents(eventId1: ID, eventId2: ID): Promise<void> {
 export async function getLinkedEvents(eventId: ID): Promise<EnhancedEvent[]> {
   try {
     const event = await db.events.get(eventId);
-    if (!event || !event.linked_events || event.linked_events.length === 0) {
+    if (!event || !event.linkedEvents || event.linkedEvents.length === 0) {
       return [];
     }
 
     const linkedEvents = await db.events
       .where('id')
-      .anyOf(event.linked_events)
+      .anyOf(event.linkedEvents)
       .toArray();
 
-    return linkedEvents.sort((a, b) => a.clock_ms - b.clock_ms);
+    return linkedEvents.sort((a, b) => (a.clockMs ?? 0) - (b.clockMs ?? 0));
   } catch (error) {
     console.error(`Error getting linked events for ${eventId}:`, error);
     return [];
@@ -194,17 +195,17 @@ export async function getLinkedEvents(eventId: ID): Promise<EnhancedEvent[]> {
 export async function getEventsWithLinks(matchId: ID): Promise<(EnhancedEvent & { linkedEventDetails?: EnhancedEvent[] })[]> {
   try {
     const events = await db.events
-      .where('match_id')
+      .where('matchId')
       .equals(matchId)
       .toArray();
     
-    // Sort by clock_ms
-    events.sort((a, b) => a.clock_ms - b.clock_ms);
+    // Sort by clockMs
+    events.sort((a, b) => (a.clockMs ?? 0) - (b.clockMs ?? 0));
 
     // Populate linked event details
     const eventsWithLinks = await Promise.all(
       events.map(async (event) => {
-        if (event.linked_events && event.linked_events.length > 0) {
+        if (event.linkedEvents && event.linkedEvents.length > 0) {
           const linkedEventDetails = await getLinkedEvents(event.id);
           return { ...event, linkedEventDetails };
         }
@@ -226,31 +227,32 @@ export async function getEventsWithLinks(matchId: ID): Promise<(EnhancedEvent & 
 export async function retroactivelyLinkMatchEvents(matchId: ID): Promise<number> {
   try {
     const events = await db.events
-      .where('match_id')
+      .where('matchId')
       .equals(matchId)
       .toArray();
     
-    // Sort by clock_ms
-    events.sort((a, b) => a.clock_ms - b.clock_ms);
+    // Sort by clockMs
+    events.sort((a, b) => (a.clockMs ?? 0) - (b.clockMs ?? 0));
 
     let linksCreated = 0;
 
     for (const event of events) {
-      const relatedKinds = EVENT_RELATIONSHIPS[event.kind];
+      const relatedKinds = EVENT_RELATIONSHIPS[event.kind as keyof typeof EVENT_RELATIONSHIPS];
       if (!relatedKinds || relatedKinds.length === 0) continue;
 
       // Find events within linking window
+      const clockMs = event.clockMs ?? 0;
       const timeWindow = {
-        start: event.clock_ms - LINKING_CONFIG.TIME_WINDOW_MS,
-        end: event.clock_ms + LINKING_CONFIG.TIME_WINDOW_MS
+        start: clockMs - LINKING_CONFIG.TIME_WINDOW_MS,
+        end: clockMs + LINKING_CONFIG.TIME_WINDOW_MS
       };
 
       const candidates = events.filter(candidate => 
         candidate.id !== event.id &&
-        candidate.clock_ms >= timeWindow.start &&
-        candidate.clock_ms <= timeWindow.end &&
+        (candidate.clockMs ?? 0) >= timeWindow.start &&
+        (candidate.clockMs ?? 0) <= timeWindow.end &&
         (relatedKinds as readonly string[]).includes(candidate.kind) &&
-        (!event.linked_events || !event.linked_events.includes(candidate.id))
+        (!event.linkedEvents || !event.linkedEvents.includes(candidate.id))
       );
 
       // Link with candidates
@@ -280,13 +282,13 @@ export async function getMatchLinkingStats(matchId: ID): Promise<{
 }> {
   try {
     const events = await db.events
-      .where('match_id')
+      .where('matchId')
       .equals(matchId)
       .toArray();
 
     const totalEvents = events.length;
-    const linkedEvents = events.filter(e => e.linked_events && e.linked_events.length > 0).length;
-    const totalLinks = events.reduce((sum, e) => sum + (e.linked_events?.length || 0), 0) / 2; // Divide by 2 for bidirectional links
+    const linkedEvents = events.filter(e => e.linkedEvents && e.linkedEvents.length > 0).length;
+    const totalLinks = events.reduce((sum, e) => sum + (e.linkedEvents?.length || 0), 0) / 2; // Divide by 2 for bidirectional links
     const linkingPercentage = totalEvents > 0 ? (linkedEvents / totalEvents) * 100 : 0;
 
     // Event type breakdown
@@ -296,7 +298,7 @@ export async function getMatchLinkingStats(matchId: ID): Promise<{
         eventTypeBreakdown[event.kind] = { total: 0, linked: 0 };
       }
       eventTypeBreakdown[event.kind].total++;
-      if (event.linked_events && event.linked_events.length > 0) {
+      if (event.linkedEvents && event.linkedEvents.length > 0) {
         eventTypeBreakdown[event.kind].linked++;
       }
     }

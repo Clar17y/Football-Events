@@ -125,8 +125,12 @@ export class PositionCalculatorService {
         return a.z.position_code.localeCompare(b.z.position_code);
       });
 
-      const bestZone = withMetrics[0].z;
-      const confidence = withMetrics[0].conf;
+      const best = withMetrics[0];
+      if (!best) {
+        throw new Error('No position zones found for coordinates');
+      }
+      const bestZone = best.z;
+      const confidence = best.conf;
 
       return {
         position: bestZone.position_code,
@@ -204,6 +208,12 @@ export class PositionCalculatorService {
     for (let i = 0; i < players.length; i++) {
       const player = players[i];
       
+      // Skip undefined players
+      if (!player) {
+        errors.push(`Player ${i + 1}: Player data is missing`);
+        continue;
+      }
+      
       // Validate player structure
       if (!player.playerId || typeof player.playerId !== 'string') {
         errors.push(`Player ${i + 1}: Invalid player ID`);
@@ -272,8 +282,9 @@ export class PositionCalculatorService {
         const player1 = players[i];
         const player2 = players[j];
 
-        // Skip if either player has invalid coordinates
-        if (typeof player1.pitchX !== 'number' || typeof player1.pitchY !== 'number' ||
+        // Skip if either player is undefined or has invalid coordinates
+        if (!player1 || !player2 ||
+            typeof player1.pitchX !== 'number' || typeof player1.pitchY !== 'number' ||
             typeof player2.pitchX !== 'number' || typeof player2.pitchY !== 'number') {
           continue;
         }

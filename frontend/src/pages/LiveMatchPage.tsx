@@ -15,9 +15,9 @@ import {
   IonLabel,
   IonModal,
 } from '@ionic/react';
-import { 
-  chevronBackOutline, 
-  chevronForwardOutline, 
+import {
+  chevronBackOutline,
+  chevronForwardOutline,
   football,
   footballOutline,
   bodyOutline,
@@ -52,6 +52,10 @@ import type { MatchState, MatchPeriod, Event as MatchEvent } from '@shared/types
 import type { Match } from '@shared/types';
 import { getLocalMatch } from '../services/guestQuickMatch';
 import { authApi } from '../services/api/authApi';
+import { useInitialSync } from '../hooks/useInitialSync';
+import { useLocalEvents, useLocalMatchPeriods, useLocalMatchState } from '../hooks/useLocalData';
+import { useMeLimits } from '../hooks/useMeLimits';
+import { matchStateDataLayer, matchPeriodsDataLayer } from '../services/dataLayer';
 
 interface LiveMatchPageProps {
   onNavigate?: (pageOrUrl: string) => void;
@@ -59,9 +63,13 @@ interface LiveMatchPageProps {
 }
 
 const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) => {
+  // Trigger initial sync from server for authenticated users
+  useInitialSync();
+  const { allowedEventKinds, planType } = useMeLimits();
+  const allowedEventKindSet = useMemo(() => new Set(allowedEventKinds), [allowedEventKinds]);
+
   const [upcoming, setUpcoming] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | undefined>(matchId);
   const { isAuthenticated } = useAuth();
   const [viewerToken, setViewerToken] = useState<string | null>(null);
@@ -78,6 +86,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const [timerMs, setTimerMs] = useState<number>(0);
   const timerRef = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
+
+  // Local-first sources of truth (skip in viewer mode)
+  const { matchState: localMatchStateRecord } = useLocalMatchState(viewerToken ? undefined : selectedId);
+  const { periods: localPeriodRecords } = useLocalMatchPeriods(viewerToken ? undefined : selectedId);
+  const { events: localEventRecords } = useLocalEvents(viewerToken ? undefined : selectedId);
   const [viewerTeams, setViewerTeams] = useState<{ homeId?: string; awayId?: string; homeName?: string; awayName?: string } | null>(null);
   const [viewerSummary, setViewerSummary] = useState<{ competition?: string | null; venue?: string | null; periodFormat?: string | null; durationMinutes?: number | null } | null>(null);
   const [activeShareCode, setActiveShareCode] = useState<string | null>(null);
@@ -103,11 +116,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       const ps: MatchPeriod[] = localPeriods.map(p => ({
         id: p.id,
         matchId,
-        periodNumber: p.period_number,
-        periodType: p.period_type as any,
-        startedAt: new Date(p.started_at),
-        endedAt: p.ended_at ? new Date(p.ended_at) : undefined,
-        durationSeconds: p.duration_seconds
+        periodNumber: p.periodNumber,
+        periodType: p.periodType as any,
+        startedAt: new Date(p.startedAt).toISOString(),
+        endedAt: p.endedAt ? new Date(p.endedAt).toISOString() : undefined,
+        durationSeconds: p.durationSeconds,
+        createdAt: new Date(p.createdAt).toISOString(),
+        createdByUserId: p.createdByUserId,
+        isDeleted: p.isDeleted
       }));
       setPeriods(ps);
 
@@ -115,9 +131,10 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       const lastPeriod = ps.find(p => !p.endedAt) || ps[ps.length - 1];
 
       // Recalculate timer based on periods
-      let base = matchStateData.timer_ms || 0;
-      if (running && lastPeriod?.startedAt) {
-        base += Math.max(0, Date.now() - new Date(lastPeriod.startedAt).getTime());
+      let base = matchStateData.timerMs || 0;
+      const lastUpdatedAt = matchStateData.lastUpdatedAt || matchStateData.updatedAt || matchStateData.createdAt;
+      if (running && lastUpdatedAt) {
+        base += Math.max(0, Date.now() - Number(lastUpdatedAt));
       }
       setTimerMs(base);
 
@@ -145,11 +162,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       const hasViewer = params.has('view') || params.has('code');
       if (hasViewer) {
         setLoading(false);
-        setError(null);
         return;
       }
       setLoading(true);
-      setError(null);
       try {
         if (!isAuthenticated) {
           // Guest: load local matches for selection and optionally selected match
@@ -161,7 +176,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             const combined: Record<string, Match> = {} as any;
             [...up, ...recent].forEach((m: any) => { combined[m.id] = m; });
             setLocalMatches(Object.values(combined));
-          } catch {}
+          } catch { }
           if (selectedId) {
             const m = await getLocalMatch(selectedId);
             if (cancelled) return;
@@ -212,7 +227,8 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           }
         }
       } catch (e: any) {
-        if (!cancelled) setError(e?.message || 'Failed to load upcoming matches');
+        // Local-first: errors are rare, just log them
+        console.warn('Failed to load matches', e);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -255,42 +271,230 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     else if (c) { setViewerToken(c); setViewerParam('code'); }
   }, []);
 
+  // Local-first: reflect IndexedDB match_periods into UI periods (coach + guest)
+  useEffect(() => {
+    if (viewerToken) return;
+    if (!selectedId) { setPeriods([]); return; }
+    const ps: MatchPeriod[] = (localPeriodRecords || []).map((p: any) => ({
+      id: p.id,
+      matchId: selectedId,
+      periodNumber: p.periodNumber,
+      periodType: p.periodType as any,
+      startedAt: p.startedAt ? new Date(p.startedAt).toISOString() : undefined,
+      endedAt: p.endedAt ? new Date(p.endedAt).toISOString() : undefined,
+      durationSeconds: p.durationSeconds,
+      createdAt: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString(),
+      createdByUserId: p.createdByUserId || 'system',
+      isDeleted: p.isDeleted || false,
+    }));
+    setPeriods(ps);
+  }, [localPeriodRecords, selectedId, viewerToken]);
+
+  // Local-first: reflect IndexedDB match_state into UI matchState/timer (coach + guest)
+  useEffect(() => {
+    if (viewerToken) return;
+    if (!selectedId) {
+      setMatchState(null);
+      setTimerMs(0);
+      stopTicking();
+      return;
+    }
+
+    const status = (localMatchStateRecord?.status || 'NOT_STARTED') as any;
+    const open = (localPeriodRecords || []).find((p: any) => !p.endedAt);
+    const last = (localPeriodRecords || [])[localPeriodRecords.length - 1];
+    const periodNumber = open?.periodNumber || last?.periodNumber || 1;
+
+    const running = status === 'LIVE';
+    let base = Number(localMatchStateRecord?.timerMs || 0);
+    const lastUpdatedAt = localMatchStateRecord?.lastUpdatedAt || localMatchStateRecord?.updatedAt || localMatchStateRecord?.createdAt;
+    if (running && lastUpdatedAt) {
+      base += Math.max(0, Date.now() - Number(lastUpdatedAt));
+    }
+
+    setTimerMs(base);
+    setMatchState({
+      id: 'local-state',
+      matchId: selectedId,
+      status,
+      currentPeriod: periodNumber,
+      totalElapsedSeconds: Math.floor(base / 1000),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as any);
+
+    if (running) startTicking();
+    else stopTicking();
+  }, [localMatchStateRecord, localPeriodRecords, selectedId, viewerToken]);
+
   // Load server match state + periods when a match is selected (authorized only)
   useEffect(() => {
     let cancelled = false;
     const fetchLive = async () => {
-      if (!isAuthenticated || !selectedId || viewerToken) {
+      if (!selectedId || viewerToken) {
         setMatchState(null);
         setPeriods([]);
         return;
       }
+      if (!isAuthenticated) return;
       try {
-        const [stateResp, periodsResp] = await Promise.all([
+        const [stateResp, periodsResp, eventsResp] = await Promise.all([
           matchesApi.getMatchState(selectedId),
           matchesApi.getMatchPeriods(selectedId),
+          eventsApi.getByMatch(selectedId),
         ]);
         if (cancelled) return;
-        setMatchState(stateResp);
-        setPeriods(periodsResp);
         const base = computeBaseMs(stateResp, periodsResp);
-        setTimerMs(base);
-        if (stateResp.status === 'LIVE') {
-          startTicking();
-        } else {
-          stopTicking();
+
+        // Cache server live state into IndexedDB for offline join/reload.
+        // Skip if local state is currently unsynced to avoid overwriting local-first edits.
+        try {
+          const { db } = await import('../db/indexedDB');
+          const now = Date.now();
+
+          const localState = await db.matchState.get(selectedId).catch(() => undefined);
+          const canWriteState = !localState || localState.synced !== false;
+
+          const localPeriods = await db.matchPeriods
+            .where('matchId')
+            .equals(selectedId)
+            .toArray()
+            .catch(() => [] as any[]);
+          const localPeriodMap = new Map(localPeriods.map((p: any) => [p.id, p]));
+
+          const toLocalTs = (value: any): number | undefined => {
+            if (value == null) return undefined;
+            const d = new Date(value);
+            const t = d.getTime();
+            return Number.isFinite(t) ? t : undefined;
+          };
+
+          const periodsToUpsert = (periodsResp || [])
+            .filter((p: any) => {
+              const existing = localPeriodMap.get(p.id);
+              return !(existing && existing.synced === false);
+            })
+            .map((p: any) => {
+              const startedAt = toLocalTs(p.startedAt) ?? now;
+              const endedAt = toLocalTs(p.endedAt);
+              const createdAt = toLocalTs(p.createdAt) ?? startedAt;
+              const updatedAt = toLocalTs(p.updatedAt) ?? createdAt;
+              const deletedAt = toLocalTs(p.deletedAt);
+
+              return {
+                id: p.id,
+                matchId: selectedId,
+                periodNumber: p.periodNumber,
+                periodType: p.periodType,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                durationSeconds: p.durationSeconds,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                createdByUserId: p.createdByUserId || (stateResp as any).createdByUserId || 'server',
+                deletedAt: deletedAt,
+                deletedByUserId: p.deletedByUserId,
+                isDeleted: !!p.isDeleted,
+                synced: true,
+                syncedAt: now,
+              } as any;
+            });
+
+          if (periodsToUpsert.length > 0) {
+            await db.matchPeriods.bulkPut(periodsToUpsert);
+          }
+
+          if (canWriteState) {
+            const open = (periodsResp || []).find((p: any) => !p.endedAt && p.startedAt);
+            const localStatus: any =
+              stateResp.status === 'LIVE'
+                ? 'LIVE'
+                : stateResp.status === 'PAUSED'
+                  ? 'PAUSED'
+                  : stateResp.status === 'COMPLETED'
+                    ? 'COMPLETED'
+                    : 'NOT_STARTED';
+
+            await db.matchState.put({
+              matchId: selectedId,
+              status: localStatus,
+              currentPeriodId: open?.id,
+              timerMs: base,
+              lastUpdatedAt: now,
+              createdAt: toLocalTs((stateResp as any).createdAt) ?? now,
+              updatedAt: toLocalTs((stateResp as any).updatedAt) ?? now,
+              createdByUserId: (stateResp as any).createdByUserId || 'server',
+              deletedAt: toLocalTs((stateResp as any).deletedAt),
+              deletedByUserId: (stateResp as any).deletedByUserId,
+              isDeleted: !!(stateResp as any).isDeleted,
+              synced: true,
+              syncedAt: now,
+            } as any);
+          }
+
+          // Cache server events for this match into IndexedDB for offline join/reload.
+          try {
+            const localEvents = await db.events
+              .where('matchId')
+              .equals(selectedId)
+              .toArray()
+              .catch(() => [] as any[]);
+            const localEventMap = new Map(localEvents.map((e: any) => [e.id, e]));
+
+            const toLocalTs = (value: any): number | undefined => {
+              if (value == null) return undefined;
+              const d = new Date(value);
+              const t = d.getTime();
+              return Number.isFinite(t) ? t : undefined;
+            };
+
+            const eventsToUpsert = (eventsResp || [])
+              .filter((ev: any) => {
+                const existing = localEventMap.get(ev.id);
+                return !(existing && existing.synced === false);
+              })
+              .map((ev: any) => {
+                const createdAt = toLocalTs(ev.createdAt) ?? now;
+                const updatedAt = toLocalTs(ev.updatedAt) ?? createdAt;
+                const deletedAt = toLocalTs(ev.deletedAt);
+
+                return {
+                  id: ev.id,
+                  matchId: selectedId,
+                  periodNumber: ev.periodNumber ?? 1,
+                  clockMs: ev.clockMs ?? 0,
+                  kind: ev.kind,
+                  teamId: ev.teamId ?? '',
+                  playerId: ev.playerId ?? '',
+                  notes: ev.notes ?? undefined,
+                  sentiment: ev.sentiment ?? 0,
+                  createdAt: createdAt,
+                  updatedAt: updatedAt,
+                  createdByUserId: ev.createdByUserId || 'server',
+                  deletedAt: deletedAt,
+                  deletedByUserId: ev.deletedByUserId,
+                  isDeleted: !!ev.isDeleted,
+                  synced: true,
+                  syncedAt: now,
+                } as any;
+              });
+
+            if (eventsToUpsert.length > 0) {
+              await db.events.bulkPut(eventsToUpsert);
+            }
+          } catch {
+            // ignore event caching failures
+          }
+        } catch {
+          // ignore caching failures
         }
       } catch (e) {
-        if (!cancelled) {
-          // silently ignore for viewers; show read-only
-          setMatchState(null);
-          setPeriods([]);
-          stopTicking();
-        }
+        // ignore fetch failures - local-first UI continues from IndexedDB
       }
     };
     fetchLive();
     return () => { cancelled = true; };
-  }, [isAuthenticated, selectedId, viewerToken]);
+  }, [isAuthenticated, selectedId, upcoming, viewerToken]);
 
   // Viewer mode: load snapshot and open SSE
   useEffect(() => {
@@ -310,7 +514,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           const check = await viewerApi.checkToken(selectedId, { name: viewerParam!, value: viewerToken! });
           if (!check.ok && (check.status === 401 || check.status === 403)) {
             setViewerExpired(true);
-            try { (window as any).__toastApi?.current?.showError?.('Viewer link expired. Please ask the coach for a new link.'); } catch {}
+            try { (window as any).__toastApi?.current?.showError?.('Viewer link expired. Please ask the coach for a new link.'); } catch { }
             return; // do not retry
           }
           // Exponential backoff retry
@@ -336,10 +540,10 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                 totalElapsedSeconds: s.totalElapsedSeconds || 0,
                 matchStartedAt: undefined,
                 matchEndedAt: undefined,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-                created_by_user_id: '',
-                is_deleted: false,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                createdByUserId: '',
+                isDeleted: false,
               } as any);
               // Build initial feed
               const feedEvents: FeedItem[] = (data.events || []).map((ev: any) => ({
@@ -372,18 +576,18 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               if (s.status === 'LIVE') startTicking(); else stopTicking();
               prevStatusRef.current = s.status || null;
             }
-          } catch {}
+          } catch { }
         });
         es.addEventListener('event_created', (ev: MessageEvent) => {
           try {
             const d = JSON.parse(ev.data);
             const e = d.event;
             setEventFeed(prev => sortFeed([{ id: e.id, kind: 'event', label: labelForEvent(e.kind), createdAt: new Date(e.createdAt || Date.now()), periodNumber: e.periodNumber || undefined, periodType: e.periodType || inferPeriodType(new Date(e.createdAt || Date.now())), clockMs: e.clockMs || 0, teamId: e.teamId || undefined, playerId: e.playerId || undefined, sentiment: e.sentiment || 0, event: e }, ...prev]));
-          } catch {}
+          } catch { }
         });
         // formation_changed SSE is no longer used; we persist a formation_change event and handle via event_created
         es.addEventListener('event_deleted', (ev: MessageEvent) => {
-          try { const d = JSON.parse(ev.data); setEventFeed(prev => prev.filter(i => i.id !== d.id)); } catch {}
+          try { const d = JSON.parse(ev.data); setEventFeed(prev => prev.filter(i => i.id !== d.id)); } catch { }
         });
         es.addEventListener('period_started', (ev: MessageEvent) => {
           try {
@@ -405,7 +609,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             setTimerMs(expectedStartMs);
             startTicking();
             setEventFeed(prev => sortFeed([{ id: `ps-${d.period.id}`, kind: 'system', label: periodStartLabel(d.period), createdAt: new Date(), periodNumber: d.period.periodNumber }, ...prev]));
-          } catch {}
+          } catch { }
         });
         es.addEventListener('period_ended', (ev: MessageEvent) => {
           try {
@@ -431,11 +635,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             }
             stopTicking();
             setEventFeed(prev => sortFeed([{ id: `pe-${d.period.id}`, kind: 'system', label: periodEndLabel(d.period), createdAt: new Date(), periodNumber: d.period.periodNumber }, ...prev]));
-          } catch {}
+          } catch { }
         });
         es.addEventListener('state_changed', (ev: MessageEvent) => {
-          try { 
-            const d = JSON.parse(ev.data); 
+          try {
+            const d = JSON.parse(ev.data);
             setMatchState(prev => prev ? ({ ...prev, ...d }) as any : prev as any);
             if (typeof d.totalElapsedSeconds === 'number') {
               // Recompute base from totalElapsedSeconds and current ended periods
@@ -451,9 +655,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               if (d.status === 'COMPLETED') setEventFeed(prevFeed => sortFeed([{ id: `sys-${Date.now()}-ft`, kind: 'system', label: 'Full Time', createdAt: new Date(), periodNumber: d.currentPeriod }, ...prevFeed]));
             }
             prevStatusRef.current = d.status;
-          } catch {}
+          } catch { }
         });
-      } catch {}
+      } catch { }
     };
     const load = async () => {
       if (!selectedId || !viewerToken || !viewerParam) return;
@@ -466,11 +670,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         setMatchState({
           id: 'viewer', matchId: summary.matchId, status: summary.status,
           currentPeriod: summary.currentPeriod || undefined, currentPeriodType: summary.currentPeriodType || undefined,
-          createdAt: new Date(), is_deleted: false,
+          createdAt: new Date().toISOString(), isDeleted: false,
         } as any);
         setViewerTeams({ homeId: summary.homeTeam?.id, awayId: summary.awayTeam?.id, homeName: summary.homeTeam?.name, awayName: summary.awayTeam?.name });
         setViewerSummary({ competition: summary.competition, venue: summary.venue, periodFormat: (summary as any).periodFormat, durationMinutes: (summary as any).durationMinutes });
-      } catch {}
+      } catch { }
       openSSE();
     };
     load();
@@ -580,18 +784,18 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       try {
         const u = new URL(shareUrl, window.location.origin);
         shareUrl = u.href;
-      } catch {}
+      } catch { }
       try {
         await navigator.clipboard.writeText(shareUrl);
-        try { (window as any).__toastApi?.current?.showSuccess?.('Share link copied to clipboard'); } catch {}
+        try { (window as any).__toastApi?.current?.showSuccess?.('Share link copied to clipboard'); } catch { }
       } catch {
         // Fallback prompt
         const ok = window.prompt('Copy this share link:', shareUrl);
-        if (ok !== null) { try { (window as any).__toastApi?.current?.showSuccess?.('Share link ready'); } catch {} }
+        if (ok !== null) { try { (window as any).__toastApi?.current?.showSuccess?.('Share link ready'); } catch { } }
       }
       if (res.code) setActiveShareCode(res.code);
     } catch (e: any) {
-      try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to create share link'); } catch {}
+      try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to create share link'); } catch { }
     }
   };
 
@@ -600,9 +804,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       if (!selectedId) return;
       await matchesApi.revokeViewerToken(selectedId, activeShareCode || undefined);
       setActiveShareCode(null);
-      try { (window as any).__toastApi?.current?.showSuccess?.('Viewer link revoked'); } catch {}
+      try { (window as any).__toastApi?.current?.showSuccess?.('Viewer link revoked'); } catch { }
     } catch (e: any) {
-      try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to revoke link'); } catch {}
+      try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to revoke link'); } catch { }
     }
   };
 
@@ -697,99 +901,90 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     return null;
   };
 
-  // Handlers
+  // Handlers - all use local-first pattern (write to IndexedDB, background sync handles server)
   const handleKickOff = async () => {
     if (!selectedId) return;
     try {
-      if (!isAuthenticated) {
-        // Guest: local kickoff - write directly to match_periods and match_state tables
-        const now = new Date();
-        const { db } = await import('../db/indexedDB');
-        if (matchState?.status === 'PAUSED') {
-          // Start next regular period - timer starts at expected time (e.g., Q2 = 12:30)
-          const nextNum = (periods.filter(p => p.periodType === 'REGULAR').length) + 1;
-          const periodResult = await db.createMatchPeriod({
-            match_id: selectedId,
-            period_number: nextNum,
-            period_type: 'REGULAR',
-            started_at: now.getTime(),
-          });
-          if (!periodResult.success) throw new Error(periodResult.error);
-          const periodId = periodResult.data!;
+      const now = new Date();
 
-          await db.updateMatchState(selectedId, {
-            status: 'LIVE',
-            current_period_id: periodId,
-            timer_ms: getExpectedPeriodStartMs(nextNum),
-          });
-
-          const p = { id: periodId, periodNumber: nextNum, periodType: 'REGULAR' as any, startedAt: now } as any;
-          const updatedPeriods = [...periods, p];
-          setPeriods(updatedPeriods);
-          const st: any = { ...(matchState || {}), status: 'LIVE', currentPeriod: nextNum };
-          setMatchState(st);
-          // Start from expected period start time (not cumulative actual)
-          const expectedStartMs = getExpectedPeriodStartMs(nextNum);
-          setTimerMs(expectedStartMs);
-          startTicking();
-          pushSystem(`Kick Off — Period ${nextNum}`, nextNum);
-        } else {
-          // First kickoff - write directly to match_periods and match_state tables
-          const periodResult = await db.createMatchPeriod({
-            match_id: selectedId,
-            period_number: 1,
-            period_type: 'REGULAR',
-            started_at: now.getTime(),
-          });
-          if (!periodResult.success) throw new Error(periodResult.error);
-          const periodId = periodResult.data!;
-
-          await db.updateMatchState(selectedId, {
-            status: 'LIVE',
-            current_period_id: periodId,
-            timer_ms: 0,
-          });
-
-          const p1 = { id: periodId, periodNumber: 1, periodType: 'REGULAR' as any, startedAt: now } as any;
-          setPeriods([p1]);
-          const st: any = { id: 'local-state', matchId: selectedId, status: 'LIVE', currentPeriod: 1, totalElapsedSeconds: 0, createdAt: new Date(), updatedAt: new Date() };
-          setMatchState(st);
-          setTimerMs(0);
-          startTicking();
-          pushSystem('Match Kick Off', 1);
-          // Apply default lineups locally
-          try {
-            const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
-            if (hId) await defaultLineupsApi.applyDefaultToMatch(hId, selectedId);
-            if (aId) await defaultLineupsApi.applyDefaultToMatch(aId, selectedId);
-          } catch {}
-        }
-        return;
-      }
-      // Authenticated path
       if (matchState?.status === 'PAUSED') {
-        await matchesApi.startPeriod(selectedId, 'regular' as any);
-        const p = await matchesApi.getMatchPeriods(selectedId);
-        setPeriods(p);
-        const st = await matchesApi.resumeMatch(selectedId);
-        setMatchState(st);
-        const base = computeBaseMs(st, p);
-        setTimerMs(base);
+        // Start next regular period - timer starts at expected time (e.g., Q2 = 12:30)
+        const nextNum = (periods.filter(p => p.periodType === 'REGULAR').length) + 1;
+
+        // Create period via dataLayer (writes to IndexedDB with synced: false)
+        const period = await matchPeriodsDataLayer.create({
+          matchId: selectedId,
+          periodNumber: nextNum,
+          periodType: 'REGULAR',
+          startedAt: now.getTime(),
+        });
+
+        // Update match state via dataLayer
+        const expectedStartMs = getExpectedPeriodStartMs(nextNum);
+        await matchStateDataLayer.upsert(selectedId, {
+          status: 'LIVE',
+          currentPeriodId: period.id,
+          timerMs: expectedStartMs,
+        });
+
+        const p: MatchPeriod = {
+          id: period.id,
+          matchId: selectedId,
+          periodNumber: nextNum,
+          periodType: 'REGULAR',
+          startedAt: now.toISOString(),
+          createdAt: now.toISOString(),
+          createdByUserId: 'local',
+          isDeleted: false,
+        };
+        setPeriods(prev => [...prev, p]);
+        setMatchState(prev => prev ? ({ ...prev, status: 'LIVE', currentPeriod: nextNum } as any) : prev);
+        setTimerMs(expectedStartMs);
         startTicking();
-        const pn = st.currentPeriod || currentPeriodNumber();
-        pushSystem(`Kick Off — Period ${pn}`, pn);
+        pushSystem(`Kick Off — Period ${nextNum}`, nextNum);
       } else {
-        const state = await matchesApi.startMatch(selectedId);
-        setMatchState(state);
-        const p = await matchesApi.getMatchPeriods(selectedId);
-        setPeriods(p);
-        const base = computeBaseMs(state, p);
-        setTimerMs(base);
+        // First kickoff
+        const period = await matchPeriodsDataLayer.create({
+          matchId: selectedId,
+          periodNumber: 1,
+          periodType: 'REGULAR',
+          startedAt: now.getTime(),
+        });
+
+        await matchStateDataLayer.upsert(selectedId, {
+          status: 'LIVE',
+          currentPeriodId: period.id,
+          timerMs: 0,
+        });
+
+        const p1: MatchPeriod = {
+          id: period.id,
+          matchId: selectedId,
+          periodNumber: 1,
+          periodType: 'REGULAR',
+          startedAt: now.toISOString(),
+          createdAt: now.toISOString(),
+          createdByUserId: 'local',
+          isDeleted: false,
+        };
+        setPeriods([p1]);
+        setMatchState({
+          id: 'local-state',
+          matchId: selectedId,
+          status: 'LIVE',
+          currentPeriod: 1,
+          totalElapsedSeconds: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as any);
+        setTimerMs(0);
         startTicking();
-        const pn = 1;
-        pushSystem('Match Kick Off', pn);
+        pushSystem('Match Kick Off', 1);
+
+        // Apply default lineups (also local-first)
         try {
-          const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
+          const hId = currentMatch?.homeTeamId;
+          const aId = currentMatch?.awayTeamId;
           if (hId) await defaultLineupsApi.applyDefaultToMatch(hId, selectedId);
           if (aId) await defaultLineupsApi.applyDefaultToMatch(aId, selectedId);
         } catch (e) {
@@ -797,32 +992,19 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         }
       }
     } catch (e) {
-      // noop toast placeholder
       console.error('Kick off failed', e);
     }
   };
   const handlePause = async () => {
     if (!selectedId) return;
     try {
-      if (!isAuthenticated) {
-        const { db } = await import('../db/indexedDB');
-        await db.updateMatchState(selectedId, {
-          status: 'PAUSED',
-          timer_ms: timerMs,
-        });
-        setMatchState(prev => prev ? ({ ...prev, status: 'PAUSED' } as any) : prev);
-        stopTicking();
-        pushSystem('Paused', currentPeriodNumber());
-        return;
-      }
-      const state = await matchesApi.pauseMatch(selectedId);
-      setMatchState(state);
-      const p = await matchesApi.getMatchPeriods(selectedId);
-      setPeriods(p);
-      const base = computeBaseMs(state, p);
-      setTimerMs(base);
+      await matchStateDataLayer.upsert(selectedId, {
+        status: 'PAUSED',
+        timerMs: timerMs,
+      });
+      setMatchState(prev => prev ? ({ ...prev, status: 'PAUSED' } as any) : prev);
       stopTicking();
-      pushSystem('Paused', matchState?.currentPeriod || currentPeriodNumber());
+      pushSystem('Paused', currentPeriodNumber());
     } catch (e) {
       console.error('Pause failed', e);
     }
@@ -830,83 +1012,55 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handleResume = async () => {
     if (!selectedId) return;
     try {
-      if (!isAuthenticated) {
-        const { db } = await import('../db/indexedDB');
-        await db.updateMatchState(selectedId, {
-          status: 'LIVE',
-          timer_ms: timerMs,
-        });
-        setMatchState(prev => prev ? ({ ...prev, status: 'LIVE' } as any) : prev);
-        startTicking();
-        pushSystem('Resumed', currentPeriodNumber());
-        return;
-      }
-      const state = await matchesApi.resumeMatch(selectedId);
-      setMatchState(state);
-      const p = await matchesApi.getMatchPeriods(selectedId);
-      setPeriods(p);
-      const base = computeBaseMs(state, p);
-      setTimerMs(base);
+      await matchStateDataLayer.upsert(selectedId, {
+        status: 'LIVE',
+        timerMs: timerMs,
+      });
+      setMatchState(prev => prev ? ({ ...prev, status: 'LIVE' } as any) : prev);
       startTicking();
-      pushSystem('Resumed', state.currentPeriod || currentPeriodNumber());
+      pushSystem('Resumed', currentPeriodNumber());
     } catch (e) {
       console.error('Resume failed', e);
     }
   };
   const handleEndPeriod = async () => {
-      if (!selectedId || !currentOpenPeriod) return;
-      try {
-        if (!isAuthenticated) {
-          // Close local period - write directly to match_periods and match_state tables
-          const { db } = await import('../db/indexedDB');
-          const endedAt = new Date();
-          const periodNum = currentOpenPeriod.periodNumber;
-          // Calculate this period's duration (timerMs = expectedStart + periodElapsed)
-          const expectedStartMs = getExpectedPeriodStartMs(periodNum);
-          const thisPeriodDurationMs = Math.max(1000, timerMs - expectedStartMs);
+    if (!selectedId || !currentOpenPeriod) return;
+    try {
+      const endedAt = new Date();
+      const periodNum = currentOpenPeriod.periodNumber;
+      // Calculate this period's duration (timerMs = expectedStart + periodElapsed)
+      const expectedStartMs = getExpectedPeriodStartMs(periodNum);
+      const thisPeriodDurationMs = Math.max(1000, timerMs - expectedStartMs);
 
-          // End the period in the database
-          await db.endMatchPeriod(selectedId, currentOpenPeriod.id, endedAt.getTime());
+      // End the period via dataLayer
+      await matchPeriodsDataLayer.endPeriod(currentOpenPeriod.id, endedAt.getTime());
 
-          const updatedPeriods = periods.map(p => p.id === currentOpenPeriod.id ? ({ ...p, endedAt, durationSeconds: Math.round(thisPeriodDurationMs / 1000) } as any) : p);
-          setPeriods(updatedPeriods);
+      const updatedPeriods = periods.map(p =>
+        p.id === currentOpenPeriod.id
+          ? ({ ...p, endedAt, durationSeconds: Math.round(thisPeriodDurationMs / 1000) } as any)
+          : p
+      );
+      setPeriods(updatedPeriods);
 
-          // Compute total actual elapsed (for backend sync)
-          const totalActualMs = updatedPeriods.reduce((acc, p) => acc + (p.endedAt && p.durationSeconds ? p.durationSeconds * 1000 : 0), 0);
-          const expectedEndMs = getPerPeriodMs() * periodNum;
+      // Compute total actual elapsed (for backend sync)
+      const totalActualMs = updatedPeriods.reduce((acc, p) => acc + (p.endedAt && p.durationSeconds ? p.durationSeconds * 1000 : 0), 0);
+      const expectedEndMs = getPerPeriodMs() * periodNum;
 
-          // Update match state
-          await db.updateMatchState(selectedId, {
-            status: 'PAUSED',
-            current_period_id: undefined,
-            timer_ms: expectedEndMs,
-          });
+      // Update match state via dataLayer
+      await matchStateDataLayer.upsert(selectedId, {
+        status: 'PAUSED',
+        currentPeriodId: undefined,
+        timerMs: expectedEndMs,
+      });
 
-          setMatchState(prev => prev ? ({ ...prev, status: 'PAUSED', currentPeriod: periodNum, totalElapsedSeconds: Math.round(totalActualMs / 1000) } as any) : { id: 'local-state', matchId: selectedId, status: 'PAUSED', currentPeriod: periodNum, totalElapsedSeconds: Math.round(totalActualMs / 1000), createdAt: new Date(), updatedAt: new Date() } as any);
-          stopTicking();
-          setTimerMs(expectedEndMs);
-
-          const fmt = (currentMatch?.periodFormat || '').toLowerCase();
-          const n = currentOpenPeriod.periodNumber;
-          let txt = 'End of Period';
-          if (fmt.includes('half')) txt = n === 1 ? 'End of 1st Half' : 'End of 2nd Half';
-          else if (fmt.includes('quarter')) txt = `End of Q${n}`;
-          else if (currentOpenPeriod.periodType === 'EXTRA_TIME') txt = `End of ET${n}`;
-          pushSystem(txt, n);
-          return;
-        }
-      await matchesApi.endPeriod(selectedId, currentOpenPeriod.id);
-      // Fetch both updated periods AND match state
-      const [p, state] = await Promise.all([
-        matchesApi.getMatchPeriods(selectedId),
-        matchesApi.getMatchState(selectedId)
-      ]);
-      setPeriods(p);
-      setMatchState(state);
+      setMatchState(prev =>
+        prev
+          ? ({ ...prev, status: 'PAUSED', currentPeriod: periodNum, totalElapsedSeconds: Math.round(totalActualMs / 1000) } as any)
+          : ({ id: 'local-state', matchId: selectedId, status: 'PAUSED', currentPeriod: periodNum, totalElapsedSeconds: Math.round(totalActualMs / 1000), createdAt: new Date(), updatedAt: new Date() } as any)
+      );
       stopTicking();
-      // Don't reset to 0 - show cumulative time (frozen)
-      const cumulativeMs = computeBaseMs(state, p);
-      setTimerMs(cumulativeMs);
+      setTimerMs(expectedEndMs);
+
       const fmt = (currentMatch?.periodFormat || '').toLowerCase();
       const n = currentOpenPeriod.periodNumber;
       let txt = 'End of Period';
@@ -919,65 +1073,47 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     }
   };
   const handleStartNextPeriod = async (extraTime = false) => {
-      if (!selectedId) return;
-      try {
-        if (!isAuthenticated) {
-          const { db } = await import('../db/indexedDB');
-          const now = new Date();
-          const type = extraTime ? 'EXTRA_TIME' : 'REGULAR';
-          const nextNum = (periods.filter(p => p.periodType === (extraTime ? 'EXTRA_TIME' : 'REGULAR')).length) + 1;
+    if (!selectedId) return;
+    try {
+      const now = new Date();
+      const type = extraTime ? 'EXTRA_TIME' : 'REGULAR';
+      const nextNum = (periods.filter(p => p.periodType === (extraTime ? 'EXTRA_TIME' : 'REGULAR')).length) + 1;
 
-          // Create period in match_periods table
-          const periodResult = await db.createMatchPeriod({
-            match_id: selectedId,
-            period_number: nextNum,
-            period_type: type,
-            started_at: now.getTime(),
-          });
+      // Create period via dataLayer
+      const period = await matchPeriodsDataLayer.create({
+        matchId: selectedId,
+        periodNumber: nextNum,
+        periodType: type,
+        startedAt: now.getTime(),
+      });
 
-          if (!periodResult.success) {
-            throw new Error(periodResult.error || 'Failed to create period');
-          }
+      const p: MatchPeriod = {
+        id: period.id,
+        matchId: selectedId,
+        periodNumber: nextNum,
+        periodType: type,
+        startedAt: now.toISOString(),
+        createdAt: now.toISOString(),
+        createdByUserId: 'local',
+        isDeleted: false,
+      };
 
-          const periodId = periodResult.data!;
-          const p: MatchPeriod = {
-            id: periodId,
-            matchId: selectedId,
-            periodNumber: nextNum,
-            periodType: type as any,
-            startedAt: now,
-          };
+      setPeriods(prev => [...prev, p]);
+      setMatchState(prev => prev ? ({ ...prev, status: 'LIVE', currentPeriod: nextNum } as any) : prev);
 
-          const updatedPeriods = [...periods, p];
-          setPeriods(updatedPeriods);
-          setMatchState(prev => prev ? ({ ...prev, status: 'LIVE', currentPeriod: nextNum } as any) : prev);
+      // Start from expected period start time (not cumulative actual)
+      const expectedStartMs = getExpectedPeriodStartMs(nextNum);
+      setTimerMs(expectedStartMs);
 
-          // Start from expected period start time (not cumulative actual)
-          const expectedStartMs = getExpectedPeriodStartMs(nextNum);
-          setTimerMs(expectedStartMs);
+      // Update match state via dataLayer
+      await matchStateDataLayer.upsert(selectedId, {
+        status: 'LIVE',
+        currentPeriodId: period.id,
+        timerMs: expectedStartMs,
+      });
 
-          // Update match state in match_state table
-          await db.updateMatchState(selectedId, {
-            status: 'LIVE',
-            current_period_id: periodId,
-            timer_ms: expectedStartMs,
-          });
-
-          startTicking();
-          pushSystem(extraTime ? `Extra Time Kick Off — ET${nextNum}` : `Kick Off — Period ${nextNum}`, nextNum);
-          return;
-        }
-      const periodType = extraTime ? 'extra_time' : 'regular';
-      await matchesApi.startPeriod(selectedId, periodType as any);
-      const p = await matchesApi.getMatchPeriods(selectedId);
-      setPeriods(p);
-      const st = await matchesApi.resumeMatch(selectedId);
-      setMatchState(st);
-      // Continue from cumulative time
-      const base = computeBaseMs(st, p);
-      setTimerMs(base);
       startTicking();
-      pushSystem(extraTime ? `Extra Time Kick Off — ET${(p.filter(pp=>pp.periodType==='EXTRA_TIME').length)}` : `Kick Off — Period ${(p.filter(pp=>pp.periodType==='REGULAR').length)}`, st.currentPeriod || undefined);
+      pushSystem(extraTime ? `Extra Time Kick Off — ET${nextNum}` : `Kick Off — Period ${nextNum}`, nextNum);
     } catch (e) {
       console.error('Start next period failed', e);
     }
@@ -985,49 +1121,63 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const handleStartPenaltyShootout = async () => {
     if (!selectedId) return;
     try {
-      if (!isAuthenticated) {
-        pushSystem('Penalty Shootout', undefined);
-        try { const { addToOutbox } = await import('../db/utils'); await addToOutbox('match_commands', `cmd-${Date.now()}`, 'INSERT', { matchId: selectedId, cmd: 'start_period', periodType: 'penalty_shootout' }); } catch {}
-        return;
-      }
-      await matchesApi.startPeriod(selectedId, 'penalty_shootout' as any);
-      const p = await matchesApi.getMatchPeriods(selectedId);
-      setPeriods(p);
+      const now = new Date();
+
+      // Create penalty shootout period via dataLayer
+      const period = await matchPeriodsDataLayer.create({
+        matchId: selectedId,
+        periodNumber: 1,
+        periodType: 'PENALTY_SHOOTOUT',
+        startedAt: now.getTime(),
+      });
+
+      const p: MatchPeriod = {
+        id: period.id,
+        matchId: selectedId,
+        periodNumber: 1,
+        periodType: 'PENALTY_SHOOTOUT',
+        startedAt: now.toISOString(),
+        createdAt: now.toISOString(),
+        createdByUserId: 'local',
+        isDeleted: false,
+      };
+
+      setPeriods(prev => [...prev, p]);
       pushSystem('Penalty Shootout', undefined);
     } catch (e) {
       console.error('Start penalty shootout failed', e);
     }
   };
+
   const handleComplete = async () => {
     if (!selectedId) return;
     try {
-      if (!isAuthenticated) {
-        const { db } = await import('../db/indexedDB');
-        const endedAt = new Date();
+      const endedAt = new Date();
 
-        // End any open periods
-        const updatedPeriods = periods.map(p => {
+      // End any open periods via dataLayer
+      const updatedPeriods = await Promise.all(
+        periods.map(async p => {
           if (!p.endedAt && p.id) {
-            db.endMatchPeriod(selectedId, p.id, endedAt.getTime()).catch(console.error);
-            return { ...p, endedAt };
+            await matchPeriodsDataLayer.endPeriod(p.id, endedAt.getTime());
+            return { ...p, endedAt: endedAt.toISOString() };
           }
           return p;
-        });
-        setPeriods(updatedPeriods);
+        })
+      );
+      setPeriods(updatedPeriods);
 
-        // Update match state to COMPLETED
-        await db.updateMatchState(selectedId, {
-          status: 'COMPLETED',
-          current_period_id: undefined,
-          timer_ms: timerMs,
-        });
+      // Update match state to COMPLETED via dataLayer
+      await matchStateDataLayer.upsert(selectedId, {
+        status: 'COMPLETED',
+        currentPeriodId: undefined,
+        timerMs: timerMs,
+      });
 
-        setMatchState(prev => prev ? ({ ...prev, status: 'COMPLETED' } as any) : { id: 'local-state', matchId: selectedId, status: 'COMPLETED', currentPeriod: currentPeriodNumber(), createdAt: new Date(), updatedAt: new Date() } as any);
-        stopTicking();
-        return;
-      }
-      const state = await matchesApi.completeMatch(selectedId);
-      setMatchState(state);
+      setMatchState(prev =>
+        prev
+          ? ({ ...prev, status: 'COMPLETED' } as any)
+          : ({ id: 'local-state', matchId: selectedId, status: 'COMPLETED', currentPeriod: currentPeriodNumber(), createdAt: new Date(), updatedAt: new Date() } as any)
+      );
       stopTicking();
     } catch (e) {
       console.error('Complete failed', e);
@@ -1035,7 +1185,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   };
 
   // ========== Events Quick Add ==========
-  type QuickEventKind = 'goal' | 'assist' | 'key_pass' | 'save' | 'interception' | 'tackle' | 'foul' | 'penalty' | 'free_kick' | 'ball_out' | 'own_goal';
+  type QuickEventKind = 'goal' | 'assist' | 'key_pass' | 'save' | 'interception' | 'tackle' | 'foul' | 'penalty' | 'free_kick' | 'ball_out' | 'own_goal' | 'formation_change' | 'yellow_card' | 'red_card' | 'corner' | 'offside' | 'shot_on_target' | 'shot_off_target' | 'clearance' | 'block' | 'cross' | 'header';
   const [selectedTeam, setSelectedTeam] = useState<'home' | 'away'>('home');
   const [showLineupModal, setShowLineupModal] = useState(false);
   const [hasDefaultLineup, setHasDefaultLineup] = useState<Record<string, boolean>>({});
@@ -1051,6 +1201,8 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   const [rosterLoading, setRosterLoading] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [sentiment, setSentiment] = useState<number>(0);
+  const [addingEvent, setAddingEvent] = useState(false);
+  const addingEventRef = useRef(false);
   const [onPitchByTeam, setOnPitchByTeam] = useState<Record<string, Set<string>>>({});
   type FeedItem = {
     id: string;
@@ -1058,6 +1210,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     label: string;
     createdAt: Date;
     periodNumber?: number;
+    periodType?: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT';
     clockMs?: number;
     teamId?: string;
     playerId?: string | null;
@@ -1079,6 +1232,8 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     setPendingKind(kind);
     setSelectedPlayerId(null);
     setSentiment(0);
+    setAddingEvent(false);
+    addingEventRef.current = false;
     // Serve from cache if available; else fetch once and cache
     const cached = rosterCache[teamId];
     if (cached && cached.length) {
@@ -1101,7 +1256,10 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
 
   const confirmEventWithPicker = async () => {
     if (!selectedId || !pendingKind) { setShowPicker(false); return; }
+    if (addingEventRef.current) return;
     try {
+      addingEventRef.current = true;
+      setAddingEvent(true);
       const teamId = selectedTeam === 'home' ? currentMatch?.homeTeamId : currentMatch?.awayTeamId;
       const payload = {
         matchId: selectedId,
@@ -1118,16 +1276,16 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         const { db } = await import('../db/indexedDB');
         const result = await db.addEventToTable({
           kind: payload.kind,
-          match_id: payload.matchId,
-          team_id: payload.teamId,
-          player_id: payload.playerId,
-          clock_ms: payload.clockMs || 0,
-          period_number: payload.periodNumber,
+          matchId: payload.matchId,
+          teamId: payload.teamId,
+          playerId: payload.playerId,
+          clockMs: payload.clockMs || 0,
+          periodNumber: payload.periodNumber,
           sentiment: sentiment,
           notes: payload.notes,
         });
         if (!result.success) throw new Error(result.error || 'Failed to add event');
-        try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch {}
+        try { window.dispatchEvent(new CustomEvent('guest:changed')); } catch { }
         created = { id: result.data, ...payload, createdAt: new Date() };
       } else {
         created = await eventsApi.create(payload);
@@ -1141,6 +1299,8 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     } catch (e) {
       console.error('Failed to create event', e);
     } finally {
+      addingEventRef.current = false;
+      setAddingEvent(false);
       setShowPicker(false);
       setPendingKind(null);
     }
@@ -1179,17 +1339,17 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
   // ===== Timeline helpers =====
   const transformCreated = (ev: any): MatchEvent => ({
     id: ev.id,
-    matchId: ev.matchId || ev.match_id,
-    createdAt: new Date(ev.createdAt || ev.created_at || Date.now()),
+    matchId: ev.matchId,
+    createdAt: new Date(ev.createdAt || Date.now()).toISOString(),
     kind: ev.kind,
-    periodNumber: ev.periodNumber ?? ev.period_number ?? undefined,
-    clockMs: ev.clockMs ?? ev.clock_ms ?? undefined,
-    teamId: ev.teamId ?? ev.team_id ?? undefined,
-    playerId: ev.playerId ?? ev.player_id ?? undefined,
+    periodNumber: ev.periodNumber ?? undefined,
+    clockMs: ev.clockMs ?? undefined,
+    teamId: ev.teamId ?? undefined,
+    playerId: ev.playerId ?? undefined,
     notes: ev.notes,
     sentiment: typeof ev.sentiment === 'number' ? ev.sentiment : 0,
-    created_by_user_id: ev.created_by_user_id || 'system',
-    is_deleted: !!ev.is_deleted,
+    createdByUserId: ev.createdByUserId || 'system',
+    isDeleted: !!ev.isDeleted,
   });
   const sortFeed = (list: FeedItem[]) => list.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const minuteLabel = (ev: MatchEvent) => {
@@ -1213,7 +1373,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     }
     return { home, away };
   };
-  const labelForEvent = (k: string) => k.replace('_',' ').replace(/\b\w/g, c => c.toUpperCase());
+  const labelForEvent = (k: string) => k.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
   const pf = () => (currentMatch?.periodFormat || viewerSummary?.periodFormat || '').toLowerCase();
   const periodStartLabel = (p: any) => {
     const fmt = pf();
@@ -1262,19 +1422,22 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                 ) : (
                   <IonChip style={{ height: 20 }} color="tertiary"><IonLabel style={{ fontSize: 12 }}>—</IonLabel></IonChip>
                 )}
-                <IonIcon icon={{
-                  goal: footballOutline,
-                  own_goal: footballOutline,
-                  assist: swapHorizontalOutline,
-                  key_pass: navigateOutline,
-                  save: shieldCheckmarkOutline,
-                  interception: handLeftOutline,
-                  tackle: bodyOutline,
-                  foul: alertCircleOutline,
-                  penalty: flagOutline,
-                  free_kick: flashOutline,
-                  ball_out: exitOutline,
-                }[(item.event?.kind as any)] || optionsOutline} />
+                <IonIcon icon={(() => {
+                  const iconMap: Record<string, string> = {
+                    goal: footballOutline,
+                    own_goal: footballOutline,
+                    assist: swapHorizontalOutline,
+                    key_pass: navigateOutline,
+                    save: shieldCheckmarkOutline,
+                    interception: handLeftOutline,
+                    tackle: bodyOutline,
+                    foul: alertCircleOutline,
+                    penalty: flagOutline,
+                    free_kick: flashOutline,
+                    ball_out: exitOutline,
+                  };
+                  return iconMap[item.event?.kind || ''] || optionsOutline;
+                })()} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1 }}>
                     {item.kind === 'event' && item.event ? labelForEvent(item.event.kind) : item.label}
@@ -1308,82 +1471,72 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
     // Viewers get events from SSE snapshot - don't overwrite with empty data
     if (viewerToken) return;
     try {
-      if (!isAuthenticated) {
-          const { db } = await import('../db/indexedDB');
-          const res = await db.getMatchEvents(selectedId);
-          const arr = (res.success && res.data) ? res.data : [];
-          const feed: FeedItem[] = arr.map((e: any) => {
-            // Events from events table use period_number and clock_ms directly
-            return {
-              id: String(e.id || `local-${e.created_at || Date.now()}`),
-              kind: 'event',
-              label: labelForEvent(e.kind),
-              createdAt: new Date(e.created_at || Date.now()),
-              periodNumber: e.period_number || undefined,
-              clockMs: e.clock_ms || 0,
-              teamId: e.team_id,
-              playerId: e.player_id,
-              sentiment: e.sentiment || 0,
-              event: {
-                id: String(e.id || crypto.randomUUID()),
-                kind: e.kind,
-                createdAt: new Date(e.created_at || Date.now()),
-                clockMs: e.clock_ms || 0,
-                periodNumber: e.period_number || undefined,
-                teamId: e.team_id,
-                playerId: e.player_id,
-                notes: e.notes,
-                sentiment: e.sentiment || 0,
-              } as any
-            };
-          });
-          setEventFeed(sortFeed(feed));
-        } else {
-          const list = await eventsApi.getByMatch(selectedId);
-          const feed: FeedItem[] = (list as any as MatchEvent[]).map(ev => ({ 
-            id: ev.id,
-            kind: 'event',
-            label: labelForEvent(ev.kind),
-            createdAt: new Date(ev.createdAt),
-            periodNumber: ev.periodNumber ?? undefined,
-            periodType: inferPeriodType(new Date(ev.createdAt)),
-            clockMs: ev.clockMs ?? undefined,
-            teamId: ev.teamId ?? undefined,
-            playerId: ev.playerId ?? undefined,
-            sentiment: ev.sentiment,
-            event: ev 
-          }));
-          const systemFromPeriods: FeedItem[] = periods.flatMap((p: any) => {
-            const out: FeedItem[] = [];
-            if (p.startedAt) out.push({ id: `ps-${p.id}`, kind: 'system', label: periodStartLabel(p), createdAt: new Date(p.startedAt), periodNumber: p.periodNumber, periodType: p.periodType });
-            if (p.endedAt) out.push({ id: `pe-${p.id}`, kind: 'system', label: periodEndLabel(p), createdAt: new Date(p.endedAt), periodNumber: p.periodNumber, periodType: p.periodType });
-            return out;
-          });
-          setEventFeed(sortFeed([...feed, ...systemFromPeriods]));
-        }
-        // Preload roster names (works in guest via teamsApi fallback)
-        const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
-        const promises: Promise<any>[] = [];
-        if (hId) promises.push(teamsApi.getTeamPlayers(hId));
-        if (aId) promises.push(teamsApi.getTeamPlayers(aId));
-        const results = await Promise.all(promises);
-        const map: Record<string, string> = {};
-        results.forEach(res => (res?.data || []).forEach((p: any) => { map[p.id] = p.name; }));
-        setPlayerNameMap(map);
-      } catch (e) {
-        console.warn('Failed to load events', e);
-      }
-  }, [isAuthenticated, selectedId, viewerToken, currentMatch, periods]);
+      const feed: FeedItem[] = (localEventRecords || []).map((e: any) => {
+        const createdAt = new Date(e.createdAt || Date.now());
+        const ev: MatchEvent = {
+          id: String(e.id || crypto.randomUUID()),
+          matchId: selectedId,
+          createdAt,
+          kind: e.kind,
+          periodNumber: e.periodNumber || undefined,
+          clockMs: e.clockMs || 0,
+          teamId: e.teamId || undefined,
+          playerId: e.playerId || undefined,
+          notes: e.notes,
+          sentiment: typeof e.sentiment === 'number' ? e.sentiment : 0,
+          updatedAt: e.updatedAt ? new Date(e.updatedAt).toISOString() : undefined,
+          createdByUserId: e.createdByUserId,
+          deletedAt: e.deletedAt ? new Date(e.deletedAt).toISOString() : undefined,
+          deletedByUserId: e.deletedByUserId,
+          isDeleted: !!e.isDeleted,
+        } as any;
+
+        return {
+          id: ev.id,
+          kind: 'event',
+          label: labelForEvent(ev.kind),
+          createdAt,
+          periodNumber: ev.periodNumber ?? undefined,
+          periodType: inferPeriodType(createdAt),
+          clockMs: ev.clockMs ?? 0,
+          teamId: ev.teamId ?? undefined,
+          playerId: ev.playerId ?? undefined,
+          sentiment: ev.sentiment ?? 0,
+          event: ev,
+        };
+      });
+
+      const systemFromPeriods: FeedItem[] = periods.flatMap((p: any) => {
+        const out: FeedItem[] = [];
+        if (p.startedAt) out.push({ id: `ps-${p.id}`, kind: 'system', label: periodStartLabel(p), createdAt: new Date(p.startedAt), periodNumber: p.periodNumber, periodType: p.periodType });
+        if (p.endedAt) out.push({ id: `pe-${p.id}`, kind: 'system', label: periodEndLabel(p), createdAt: new Date(p.endedAt), periodNumber: p.periodNumber, periodType: p.periodType });
+        return out;
+      });
+
+      setEventFeed(sortFeed([...feed, ...systemFromPeriods]));
+      // Preload roster names (works in guest via teamsApi fallback)
+      const hId = currentMatch?.homeTeamId; const aId = currentMatch?.awayTeamId;
+      const promises: Promise<any>[] = [];
+      if (hId) promises.push(teamsApi.getTeamPlayers(hId));
+      if (aId) promises.push(teamsApi.getTeamPlayers(aId));
+      const results = await Promise.all(promises);
+      const map: Record<string, string> = {};
+      results.forEach(res => (res?.data || []).forEach((p: any) => { map[p.id] = p.name; }));
+      setPlayerNameMap(map);
+    } catch (e) {
+      console.warn('Failed to load events', e);
+    }
+  }, [currentMatch, localEventRecords, periods, selectedId, viewerToken]);
 
   // UseEffect to load events when dependencies change
   useEffect(() => {
     loadEvents();
-  }, [loadEvents, periods]);
+  }, [loadEvents]);
 
   // Prefetch current formation for selected match to make Team Changes modal instant
   useEffect(() => {
     if (selectedId && isAuthenticated) {
-      formationsApi.prefetch(selectedId).catch(() => {});
+      formationsApi.prefetch(selectedId).catch(() => { });
     }
   }, [selectedId, isAuthenticated]);
 
@@ -1401,7 +1554,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         if (hId) map[hId] = !!homeDL;
         if (aId) map[aId] = !!awayDL;
         setHasDefaultLineup(map);
-      } catch {}
+      } catch { }
     })();
   }, [currentMatch?.homeTeamId, currentMatch?.awayTeamId]);
 
@@ -1450,10 +1603,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                   <IonText>Loading upcoming matches…</IonText>
                 </div>
               )}
-              {error && (
-                <IonText color="danger">{error}</IonText>
-              )}
-              {!loading && !error && (currentMatch || viewerToken) && (
+              {!loading && (currentMatch || viewerToken) && (
                 <IonCard>
                   <IonCardContent>
                     <LiveHeader
@@ -1479,7 +1629,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                   </IonCardContent>
                 </IonCard>
               )}
-              {!loading && !error && !currentMatch && !viewerToken && (
+              {!loading && !currentMatch && !viewerToken && (
                 <IonCard>
                   <IonCardContent>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1507,60 +1657,60 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
 
           {/* Controls area (enabled only for authenticated users and not in viewer mode, hidden when completed) */}
           {!viewerToken && matchState?.status !== 'COMPLETED' && (
-          <IonRow>
-            <IonCol size="12">
-              <IonCard>
-                <IonCardContent>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-                      {/* Primary context-aware action */}
-                      {(() => {
-                        const regCount = regPeriodsCount(currentMatch);
-                        const extraEnded = periods.filter(p => p.periodType === 'EXTRA_TIME' && !!p.endedAt).length;
-                        const inPaused = matchState?.status === 'PAUSED';
-                        const inScheduled = matchState?.status === 'SCHEDULED' || !matchState;
-                        if (inScheduled) {
-                          return <IonButton disabled={!selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
-                        }
-                        if (inPaused) {
-                          if (!currentOpenPeriod) {
-                            if (endedRegularCount < regCount) {
-                              return <IonButton disabled={!selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
-                            }
-                            if (extraEnded < 2) {
-                              return <IonButton disabled={!selectedId} onClick={() => handleStartNextPeriod(true)}>Extra Time</IonButton>;
-                            }
-                            return <IonButton disabled={!selectedId} onClick={handleStartPenaltyShootout}>Penalty Shootout</IonButton>;
+            <IonRow>
+              <IonCol size="12">
+                <IonCard>
+                  <IonCardContent>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                        {/* Primary context-aware action */}
+                        {(() => {
+                          const regCount = regPeriodsCount(currentMatch);
+                          const extraEnded = periods.filter(p => p.periodType === 'EXTRA_TIME' && !!p.endedAt).length;
+                          const inPaused = matchState?.status === 'PAUSED';
+                          const inScheduled = matchState?.status === 'SCHEDULED' || !matchState;
+                          if (inScheduled) {
+                            return <IonButton disabled={!selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
                           }
-                        }
-                        if (matchState?.status === 'LIVE') {
-                          return <IonButton disabled={!selectedId || !currentOpenPeriod} onClick={handleEndPeriod}>End Period</IonButton>;
-                        }
-                        return null;
-                      })()}
+                          if (inPaused) {
+                            if (!currentOpenPeriod) {
+                              if (endedRegularCount < regCount) {
+                                return <IonButton disabled={!selectedId} onClick={handleKickOff}>Kick Off</IonButton>;
+                              }
+                              if (extraEnded < 2) {
+                                return <IonButton disabled={!selectedId} onClick={() => handleStartNextPeriod(true)}>Extra Time</IonButton>;
+                              }
+                              return <IonButton disabled={!selectedId} onClick={handleStartPenaltyShootout}>Penalty Shootout</IonButton>;
+                            }
+                          }
+                          if (matchState?.status === 'LIVE') {
+                            return <IonButton disabled={!selectedId || !currentOpenPeriod} onClick={handleEndPeriod}>End Period</IonButton>;
+                          }
+                          return null;
+                        })()}
 
-                      {/* Toggle Pause/Resume (only show one) */}
-                      {matchState?.status === 'LIVE' && (
-                        <IonButton onClick={handlePause} disabled={!selectedId}>Pause</IonButton>
-                      )}
-                      {matchState?.status === 'PAUSED' && currentOpenPeriod && (
-                        <IonButton onClick={handleResume} disabled={!selectedId}>Resume</IonButton>
-                      )}
+                        {/* Toggle Pause/Resume (only show one) */}
+                        {matchState?.status === 'LIVE' && (
+                          <IonButton onClick={handlePause} disabled={!selectedId}>Pause</IonButton>
+                        )}
+                        {matchState?.status === 'PAUSED' && currentOpenPeriod && (
+                          <IonButton onClick={handleResume} disabled={!selectedId}>Resume</IonButton>
+                        )}
 
-                      {/* End Period only visible when paused and a period is open */}
-                      {matchState?.status === 'PAUSED' && currentOpenPeriod && (
-                        <IonButton onClick={handleEndPeriod} disabled={!selectedId}>End Period</IonButton>
-                      )}
+                        {/* End Period only visible when paused and a period is open */}
+                        {matchState?.status === 'PAUSED' && currentOpenPeriod && (
+                          <IonButton onClick={handleEndPeriod} disabled={!selectedId}>End Period</IonButton>
+                        )}
 
-                      <IonButton disabled={matchState?.status === 'SCHEDULED'} color="success" onClick={handleComplete}>Complete</IonButton>
+                        <IonButton disabled={matchState?.status === 'SCHEDULED'} color="success" onClick={handleComplete}>Complete</IonButton>
+                      </div>
+                      {/* Guest mode can control offline match; viewer mode handled via viewerToken guard */}
                     </div>
-                    {/* Guest mode can control offline match; viewer mode handled via viewerToken guard */}
-                </div>
-              </IonCardContent>
-            </IonCard>
-          </IonCol>
-        </IonRow>
-        )}
+                  </IonCardContent>
+                </IonCard>
+              </IonCol>
+            </IonRow>
+          )}
         </IonGrid>
         {/* Events Quick Add (hidden when completed) */}
         {currentMatch && !viewerToken && matchState?.status !== 'COMPLETED' && (
@@ -1575,58 +1725,156 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
               </IonButton>
             </div>
 
-            {/* Attacking group (forwards color) */}
+
+            {/* Scoring group (goals/assists) - rose color */}
             <div className="event-grid event-section">
-              {(['goal','assist','key_pass'] as QuickEventKind[]).map(k => (
-                <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--rose" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
-                  <IonIcon slot="start" icon={{
-                    goal: footballOutline,
-                    own_goal: footballOutline,
-                    assist: swapHorizontalOutline || arrowForwardOutline,
-                    key_pass: navigateOutline || arrowForwardOutline,
-                  }[k as any] || footballOutline} />
-                  {k.replace('_',' ')}
-                </IonButton>
-              ))}
+              {(['goal', 'own_goal', 'assist'] as QuickEventKind[]).map(k => {
+                const iconMap: Record<string, string> = {
+                  goal: footballOutline,
+                  own_goal: footballOutline,
+                  assist: swapHorizontalOutline || arrowForwardOutline,
+                };
+                const allowed = allowedEventKindSet.has(k);
+                return (
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--rose${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
+                    <IonIcon slot="start" icon={iconMap[k] || footballOutline} />
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
+                  </IonButton>
+                );
+              })}
             </div>
 
-            {/* Defender group (defender color) */}
+            {/* Cards group - amber/warning color */}
             <div className="event-grid event-section">
-              {(['interception','tackle','foul'] as QuickEventKind[]).map(k => (
-                <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--indigo" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
-                  <IonIcon slot="start" icon={{
-                    interception: handLeftOutline || shieldOutline,
-                    tackle: bodyOutline,
-                    foul: alertCircleOutline,
-                  }[k as any] || shieldOutline} />
-                  {k.replace('_',' ')}
-                </IonButton>
-              ))}
+              {(['yellow_card', 'red_card'] as QuickEventKind[]).map(k => {
+                const allowed = allowedEventKindSet.has(k);
+                return (
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--amber${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
+                    <IonIcon slot="start" icon={alertCircleOutline} />
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
+                  </IonButton>
+                );
+              })}
             </div>
 
-            {/* Goalkeeper group (goalkeeper color) */}
+            {/* Shots group - indigo color */}
             <div className="event-grid event-section">
-              {(['save'] as QuickEventKind[]).map(k => (
-                <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--emerald" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
-                  <IonIcon slot="start" icon={shieldCheckmarkOutline} />
-                  {k.replace('_',' ')}
-                </IonButton>
-              ))}
+              {(['shot_on_target', 'shot_off_target'] as QuickEventKind[]).map(k => {
+                const allowed = allowedEventKindSet.has(k);
+                return (
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--indigo${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
+                    <IonIcon slot="start" icon={footballOutline} />
+                    {k.replace(/_/g, ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
+                  </IonButton>
+                );
+              })}
             </div>
 
-            {/* Other group (midfielder/amber) */}
+            {/* Set pieces & decisions - emerald color */}
             <div className="event-grid event-section">
-              {(['penalty','free_kick','ball_out','own_goal'] as QuickEventKind[]).map(k => (
-                <IonButton key={k} size="default" fill="solid" className="event-btn event-btn--amber" onClick={() => openPlayerPicker(k)} disabled={!canAddEvents}>
-                  <IonIcon slot="start" icon={{
-                    penalty: flagOutline,
-                    free_kick: flashOutline,
-                    ball_out: exitOutline,
-                    own_goal: footballOutline,
-                  }[k as any] || optionsOutline} />
-                  {k.replace('_',' ')}
-                </IonButton>
-              ))}
+              {(['corner', 'offside', 'penalty', 'free_kick'] as QuickEventKind[]).map(k => {
+                const iconMap: Record<string, string> = {
+                  corner: flagOutline,
+                  offside: flagOutline,
+                  penalty: flagOutline,
+                  free_kick: flashOutline,
+                };
+                const allowed = allowedEventKindSet.has(k);
+                return (
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--emerald${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
+                    <IonIcon slot="start" icon={iconMap[k] || flagOutline} />
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
+                  </IonButton>
+                );
+              })}
+            </div>
+
+            {/* Defensive actions - indigo color */}
+            <div className="event-grid event-section">
+              {(['tackle', 'interception', 'clearance', 'block', 'header', 'cross'] as QuickEventKind[]).map(k => {
+                const iconMap: Record<string, string> = {
+                  tackle: bodyOutline,
+                  interception: handLeftOutline || shieldOutline,
+                  clearance: shieldOutline,
+                  block: shieldOutline,
+                  header: bodyOutline,
+                  cross: arrowForwardOutline,
+                };
+                const allowed = allowedEventKindSet.has(k);
+                return (
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--indigo${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
+                    <IonIcon slot="start" icon={iconMap[k] || shieldOutline} />
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
+                  </IonButton>
+                );
+              })}
+            </div>
+
+            {/* Other - GK saves, fouls, ball out */}
+            <div className="event-grid event-section">
+              {(['save', 'key_pass', 'foul', 'ball_out'] as QuickEventKind[]).map(k => {
+                const iconMap: Record<string, string> = {
+                  save: shieldCheckmarkOutline,
+                  key_pass: navigateOutline || arrowForwardOutline,
+                  foul: alertCircleOutline,
+                  ball_out: exitOutline,
+                };
+                const allowed = allowedEventKindSet.has(k);
+                return (
+                  <IonButton
+                    key={k}
+                    size="default"
+                    fill={allowed ? 'solid' : 'outline'}
+                    className={`event-btn event-btn--amber${!allowed ? ' event-btn--locked' : ''}`}
+                    onClick={() => openPlayerPicker(k)}
+                    disabled={!canAddEvents || !allowed}
+                    style={!allowed ? { opacity: 0.5 } : undefined}
+                  >
+                    <IonIcon slot="start" icon={iconMap[k] || optionsOutline} />
+                    {k.replace('_', ' ')} {!allowed && <span style={{ fontSize: 10, marginLeft: 4, background: 'rgba(255,255,255,0.2)', padding: '1px 4px', borderRadius: 4 }}>Premium</span>}
+                  </IonButton>
+                );
+              })}
             </div>
 
             {!canAddEvents && (
@@ -1697,7 +1945,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
 
             {/* Sentiment selector */}
             <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', gap: 6 }}>
-              {[-3,-2,-1,0,1,2,3].map(v => (
+              {[-3, -2, -1, 0, 1, 2, 3].map(v => (
                 <IonButton key={v} size="small" fill={sentiment === v ? 'solid' : 'outline'} onClick={() => setSentiment(v)}>
                   {v}
                 </IonButton>
@@ -1705,7 +1953,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             </div>
 
             <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <IonButton onClick={confirmEventWithPicker} disabled={!pendingKind}>Add</IonButton>
+              <IonButton onClick={confirmEventWithPicker} disabled={!pendingKind || rosterLoading || addingEvent}>
+                {addingEvent ? 'Adding…' : 'Add'}
+              </IonButton>
               <IonButton fill="outline" onClick={() => setShowPicker(false)}>Cancel</IonButton>
             </div>
             <IonText color="medium" style={{ display: 'block', textAlign: 'center', marginTop: 4, fontSize: 12 }}>
@@ -1717,7 +1967,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
         {/* Sentiment/Undo Snackbar */}
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 12, display: snackbarOpen ? 'flex' : 'none', justifyContent: 'center' }}>
           <div style={{ background: 'var(--ion-color-step-50, rgba(0,0,0,.7))', color: '#fff', borderRadius: 9999, padding: '8px 12px', display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 12 }}>Event added{lastEventKind ? `: ${lastEventKind.replace('_',' ')}` : ''}</span>
+            <span style={{ fontSize: 12 }}>Event added{lastEventKind ? `: ${lastEventKind.replace('_', ' ')}` : ''}</span>
             <IonButton size="small" disabled={lastEventSentiment <= -3} onClick={() => handleSetSentiment(-1)}>-</IonButton>
             <IonButton size="small" fill="solid" disabled>{lastEventSentiment}</IonButton>
             <IonButton size="small" disabled={lastEventSentiment >= 3} onClick={() => handleSetSentiment(+1)}>+</IonButton>
@@ -1753,9 +2003,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
             <IonCardContent>
               <div style={{ fontWeight: 700, marginBottom: 8 }}>Live Timeline</div>
               {selectedId ? (
-                <LiveTimeline 
-                  feed={eventFeed as any} 
-                  currentMatch={currentMatch as any} 
+                <LiveTimeline
+                  feed={eventFeed as any}
+                  currentMatch={currentMatch as any}
                   playerNameMap={playerNameMap}
                   showDelete={!!(isAuthenticated && !viewerToken)}
                   onDelete={(item) => {
@@ -1766,9 +2016,9 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                           await eventsApi.delete(item.id);
                         }
                         setEventFeed(prev => prev.filter(i => i.id !== item.id));
-                        try { (window as any).__toastApi?.current?.showSuccess?.('Event deleted'); } catch {}
+                        try { (window as any).__toastApi?.current?.showSuccess?.('Event deleted'); } catch { }
                       } catch (e: any) {
-                        try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to delete event'); } catch {}
+                        try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to delete event'); } catch { }
                       }
                     })();
                   }}

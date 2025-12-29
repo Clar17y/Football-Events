@@ -5,12 +5,13 @@ import {
   transformEvents,
   safeTransformEvent
 } from '@shared/types';
-import { createOrRestoreSoftDeleted, UniqueConstraintBuilders } from '../utils/softDeleteUtils';
+import { createOrRestoreSoftDeleted } from '../utils/softDeleteUtils';
 import type { 
   Event, 
   EventCreateRequest,
   EventUpdateRequest
 } from '@shared/types';
+import { QuotaService } from './QuotaService';
 
 export interface GetEventsOptions {
   page: number;
@@ -49,9 +50,11 @@ export interface BatchEventResult {
 
 export class EventService {
   private prisma: PrismaClient;
+  private quotaService: QuotaService;
 
   constructor() {
     this.prisma = new PrismaClient();
+    this.quotaService = new QuotaService(this.prisma);
   }
 
   async getEvents(userId: string, userRole: string, options: GetEventsOptions): Promise<PaginatedEvents> {
@@ -179,24 +182,83 @@ export class EventService {
   }
 
   async createEvent(data: EventCreateRequest, userId: string, userRole: string): Promise<Event> {
+    if (!data.teamId) {
+      const error = new Error('Team ID is required for all events') as any;
+      error.statusCode = 400;
+      throw error;
+    }
+
     // Validate that user can create events for this match (only match creator or admin)
+    const matchWhere: any = { match_id: data.matchId, is_deleted: false };
     if (userRole !== 'ADMIN') {
-      const canCreateEvents = await this.canUserModifyMatch(data.matchId, userId);
-      if (!canCreateEvents) {
-        const error = new Error('Access denied: You can only create events for matches you created') as any;
-        error.statusCode = 403;
+      matchWhere.created_by_user_id = userId;
+    }
+
+    const match = await this.prisma.match.findFirst({
+      where: matchWhere,
+      select: { home_team_id: true, away_team_id: true }
+    });
+
+    if (!match) {
+      const error = new Error('Match not found or access denied') as any;
+      error.statusCode = 403;
+      throw error;
+    }
+
+    if (data.teamId !== match.home_team_id && data.teamId !== match.away_team_id) {
+      const error = new Error('Team does not belong to this match') as any;
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (data.playerId) {
+      const playerTeam = await this.prisma.player_teams.findFirst({
+        where: {
+          team_id: data.teamId,
+          player_id: data.playerId,
+          is_active: true,
+          is_deleted: false,
+          player: { is_deleted: false }
+        }
+      });
+
+      if (!playerTeam) {
+        const error = new Error('Player does not belong to the specified team') as any;
+        error.statusCode = 400;
         throw error;
       }
     }
 
     // Transform the request data
-    const prismaInput = transformEventCreateRequest(data);
+    const prismaInput = transformEventCreateRequest(data, userId);
     
     // Add user ownership
     const eventData = {
       ...prismaInput,
       created_by_user_id: userId
     };
+
+    // If the client provides an ID, treat creation as idempotent for local-first sync:
+    // return the existing event instead of creating duplicates.
+    let existingById: any | null = null;
+    if (data.id) {
+      existingById = await this.prisma.event.findUnique({ where: { id: data.id } });
+      if (existingById && !existingById.is_deleted) {
+        if (existingById.match_id !== data.matchId) {
+          const error = new Error('Event ID already exists for a different match') as any;
+          error.statusCode = 409;
+          throw error;
+        }
+        return transformEvent(existingById);
+      }
+    }
+
+    await this.quotaService.assertCanCreateEvent({
+      userId,
+      userRole,
+      matchId: data.matchId,
+      kind: data.kind
+    });
 
     // Create unique constraint for event (match + team + player + kind + clock)
     const uniqueConstraints: any = { match_id: data.matchId };
@@ -205,15 +267,39 @@ export class EventService {
     if (data.kind) uniqueConstraints.kind = data.kind;
     if (data.clockMs !== undefined) uniqueConstraints.clock_ms = data.clockMs;
 
-    // Use the soft delete utility to create or restore
-    const createdEvent = await createOrRestoreSoftDeleted({
-      prisma: this.prisma,
-      model: 'event',
-      uniqueConstraints,
-      createData: eventData,
-      userId: userId,
-      transformer: (rawEvent: any) => rawEvent
-    });
+    let createdEvent: any;
+
+    if (data.id) {
+      if (existingById && existingById.is_deleted) {
+        // Restore by ID (avoid attempting to update the primary key field)
+        const { id: _id, ...rest } = eventData as any;
+        createdEvent = await this.prisma.event.update({
+          where: { id: data.id },
+          data: {
+            ...rest,
+            is_deleted: false,
+            deleted_at: null,
+            deleted_by_user_id: null,
+            updated_at: new Date(),
+            created_by_user_id: userId,
+          }
+        });
+      } else {
+        createdEvent = await this.prisma.event.create({
+          data: eventData as any,
+        });
+      }
+    } else {
+      // Use the soft delete utility to create or restore (natural-key based)
+      createdEvent = await createOrRestoreSoftDeleted({
+        prisma: this.prisma,
+        model: 'event',
+        uniqueConstraints,
+        createData: eventData,
+        userId: userId,
+        transformer: (rawEvent: any) => rawEvent
+      });
+    }
 
     // Get the event with includes for proper transformation
     const eventWithIncludes = await this.prisma.event.findUnique({
@@ -307,11 +393,58 @@ export class EventService {
       }
 
       // Validate that user can modify events for this match (only match creator or admin)
+      const matchWhere: any = { match_id: existingEvent.match_id, is_deleted: false };
       if (userRole !== 'ADMIN') {
-        const canModifyEvents = await this.canUserModifyMatch(existingEvent.match_id, userId);
-        if (!canModifyEvents) {
-          return null; // Access denied - return null to indicate not found
+        matchWhere.created_by_user_id = userId;
+      }
+      const match = await this.prisma.match.findFirst({
+        where: matchWhere,
+        select: { home_team_id: true, away_team_id: true }
+      });
+      if (!match) {
+        return null; // Match not found or access denied
+      }
+
+      const teamId = data.teamId ?? existingEvent.team_id;
+      if (!teamId) {
+        const error = new Error('Team ID is required for all events') as any;
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (teamId !== match.home_team_id && teamId !== match.away_team_id) {
+        const error = new Error('Team does not belong to this match') as any;
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const playerId = data.playerId === null ? null : (data.playerId ?? existingEvent.player_id);
+      if (playerId) {
+        const playerTeam = await this.prisma.player_teams.findFirst({
+          where: {
+            team_id: teamId,
+            player_id: playerId,
+            is_active: true,
+            is_deleted: false,
+            player: { is_deleted: false }
+          }
+        });
+
+        if (!playerTeam) {
+          const error = new Error('Player does not belong to the specified team') as any;
+          error.statusCode = 400;
+          throw error;
         }
+      }
+
+      if (data.kind !== undefined && data.kind !== existingEvent.kind) {
+        await this.quotaService.assertCanUpdateEventKind({
+          userId,
+          userRole,
+          matchId: existingEvent.match_id,
+          existingKind: existingEvent.kind as any,
+          nextKind: data.kind
+        });
       }
 
       // Update existing event
@@ -581,15 +714,13 @@ export class EventService {
 
   private isCompleteEventData(data: EventUpdateRequest): boolean {
     // Check if we have the minimum required fields to create an event
-    return !!(data.matchId && data.kind);
+    return !!(data.matchId && data.kind && data.teamId);
   }
 
   /**
    * Get all match IDs that a user can access (matches they created or involving their teams)
    */
   private async getAccessibleMatchIds(userId: string): Promise<string[]> {
-    const userTeamIds = await this.getUserTeamIds(userId);
-    
     const matches = await this.prisma.match.findMany({
       where: {
         is_deleted: false,
@@ -614,21 +745,6 @@ export class EventService {
     });
 
     return !!match;
-  }
-
-  /**
-   * Get all team IDs that belong to a user
-   */
-  private async getUserTeamIds(userId: string): Promise<string[]> {
-    const teams = await this.prisma.team.findMany({
-      where: { 
-        created_by_user_id: userId,
-        is_deleted: false 
-      },
-      select: { id: true }
-    });
-
-    return teams.map(team => team.id);
   }
 
   async disconnect(): Promise<void> {

@@ -4,13 +4,13 @@ import { PrismaClient } from '@prisma/client';
  * Generic utility functions for soft delete restoration
  */
 
-export interface SoftDeleteRestoreOptions<T> {
+export interface SoftDeleteRestoreOptions<T, TInput = any> {
   prisma: PrismaClient;
   model: string;
   uniqueConstraints: Record<string, any>;
-  createData: T;
+  createData: TInput;
   userId: string;
-  transformer?: (data: any) => any;
+  transformer?: (data: any) => T;
   preserveOriginalOwnership?: boolean;
   primaryKeyField?: string; // Allow custom primary key field (defaults to 'id')
 }
@@ -25,8 +25,8 @@ export interface SoftDeleteRestoreResult<T> {
  * @param options Configuration for the restore operation
  * @returns Object indicating if restoration occurred and the resulting entity
  */
-export async function findAndRestoreSoftDeleted<T>(
-  options: SoftDeleteRestoreOptions<T>
+export async function findAndRestoreSoftDeleted<T, TInput = any>(
+  options: SoftDeleteRestoreOptions<T, TInput>
 ): Promise<SoftDeleteRestoreResult<T>> {
   const { 
     prisma, 
@@ -121,8 +121,8 @@ export function isSoftDeleteConstraintViolation(
  * @param options Configuration for the operation
  * @returns The created or restored entity
  */
-export async function createOrRestoreSoftDeleted<T>(
-  options: SoftDeleteRestoreOptions<T>
+export async function createOrRestoreSoftDeleted<T, TInput = any>(
+  options: SoftDeleteRestoreOptions<T, TInput>
 ): Promise<T> {
   const { prisma, model, createData, userId, transformer } = options;
 
@@ -212,8 +212,8 @@ export const SoftDeletePatterns = {
    */
   playerConstraint: (name: string, squadNumber?: number, currentTeam?: string) => {
     const constraints: Record<string, any> = { name };
-    if (squadNumber !== undefined) constraints.squad_number = squadNumber;
-    if (currentTeam) constraints.current_team = currentTeam;
+    if (squadNumber !== undefined) constraints['squad_number'] = squadNumber;
+    if (currentTeam) constraints['current_team'] = currentTeam;
     return constraints;
   },
 

@@ -22,9 +22,17 @@
     "jsxImportSource": "react",
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["../shared/*"]
+      "@shared/*": [
+        "../shared/*"
+      ]
     }
   },
-  "include": ["src/**/*", "vite.config.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "vite.config.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

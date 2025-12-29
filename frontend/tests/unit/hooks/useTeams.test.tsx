@@ -63,17 +63,19 @@ describe('useTeams Hook', () => {
           id: 'team-1',
           name: 'Test Team 1',
           homeKitPrimary: '#FF0000',
-          createdAt: new Date(),
-          created_by_user_id: 'user-1',
-          is_deleted: false
+          createdAt: new Date().toISOString(),
+          createdByUserId: 'user-1',
+          isDeleted: false,
+          isOpponent: false,
         },
         {
           id: 'team-2',
           name: 'Test Team 2',
           awayKitPrimary: '#0000FF',
-          createdAt: new Date(),
-          created_by_user_id: 'user-1',
-          is_deleted: false
+          createdAt: new Date().toISOString(),
+          createdByUserId: 'user-1',
+          isDeleted: false,
+          isOpponent: true,
         }
       ];
 
@@ -106,7 +108,7 @@ describe('useTeams Hook', () => {
     });
 
     it('should handle loading state correctly', async () => {
-      mockTeamsApi.getTeams.mockImplementation(() => 
+      mockTeamsApi.getTeams.mockImplementation(() =>
         new Promise(resolve => setTimeout(() => resolve({ data: [], total: 0, page: 1, hasMore: false }), 100))
       );
 
@@ -177,9 +179,10 @@ describe('useTeams Hook', () => {
         id: 'team-new',
         name: 'New Team',
         homeKitPrimary: '#FF0000',
-        createdAt: new Date(),
-        created_by_user_id: 'user-1',
-        is_deleted: false
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'user-1',
+        isDeleted: false,
+        isOpponent: false,
       };
 
       mockTeamsApi.createTeam.mockResolvedValue({
@@ -235,9 +238,10 @@ describe('useTeams Hook', () => {
       const existingTeam: Team = {
         id: 'team-1',
         name: 'Original Team',
-        createdAt: new Date(),
-        created_by_user_id: 'user-1',
-        is_deleted: false
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'user-1',
+        isDeleted: false,
+        isOpponent: false,
       };
 
       const updateData: TeamUpdateRequest = {
@@ -314,9 +318,10 @@ describe('useTeams Hook', () => {
       const teamToDelete: Team = {
         id: 'team-1',
         name: 'Team to Delete',
-        createdAt: new Date(),
-        created_by_user_id: 'user-1',
-        is_deleted: false
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'user-1',
+        isDeleted: false,
+        isOpponent: false,
       };
 
       mockTeamsApi.deleteTeam.mockResolvedValue({
@@ -405,7 +410,7 @@ describe('useTeams Hook', () => {
       // Set an error first
       act(() => {
         // Simulate an error state
-        result.current.loadTeams().catch(() => {});
+        result.current.loadTeams().catch(() => { });
       });
 
       act(() => {

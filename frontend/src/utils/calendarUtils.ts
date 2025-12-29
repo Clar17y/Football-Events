@@ -279,9 +279,9 @@ function createMatchIndicator(
     awayKitPrimary: homeSource?.awayKitPrimary || '#f59e0b',
     awayKitSecondary: homeSource?.awayKitSecondary || '#d97706',
     createdAt: match.createdAt,
-    created_by_user_id: match.created_by_user_id,
-    is_deleted: match.is_deleted,
-    is_opponent: typeof homeSource?.is_opponent === 'boolean' ? homeSource.is_opponent : false
+    createdByUserId: match.createdByUserId,
+    isDeleted: match.isDeleted,
+    isOpponent: typeof homeSource?.isOpponent === 'boolean' ? homeSource.isOpponent : false
   };
 
   const awayTeam: Team = {
@@ -292,21 +292,21 @@ function createMatchIndicator(
     awayKitPrimary: awaySource?.awayKitPrimary || '#2dd4bf',
     awayKitSecondary: awaySource?.awayKitSecondary || '#0d9488',
     createdAt: match.createdAt,
-    created_by_user_id: match.created_by_user_id,
-    is_deleted: match.is_deleted,
-    is_opponent: typeof awaySource?.is_opponent === 'boolean' ? awaySource.is_opponent : true
+    createdByUserId: match.createdByUserId,
+    isDeleted: match.isDeleted,
+    isOpponent: typeof awaySource?.isOpponent === 'boolean' ? awaySource.isOpponent : true
   };
 
   // Determine whether this is a home game for YOUR TEAM.
-  // Prefer is_opponent flags; fallback to primaryTeamId compare when flags are unknown.
+  // Prefer isOpponent flags; fallback to primaryTeamId compare when flags are unknown.
   let isHome: boolean;
-  if (homeSource?.is_opponent === true) {
+  if (homeSource?.isOpponent === true) {
     isHome = false; // home is opponent -> our team is away
-  } else if (awaySource?.is_opponent === true) {
+  } else if (awaySource?.isOpponent === true) {
     isHome = true; // away is opponent -> our team is home
-  } else if (homeSource?.is_opponent === false) {
+  } else if (homeSource?.isOpponent === false) {
     isHome = true;
-  } else if (awaySource?.is_opponent === false) {
+  } else if (awaySource?.isOpponent === false) {
     isHome = false;
   } else {
     isHome = primaryTeamId ? match.homeTeamId === primaryTeamId : true;

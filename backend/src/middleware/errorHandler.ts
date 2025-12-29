@@ -4,6 +4,8 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 export interface ApiError extends Error {
   statusCode?: number;
   code?: string;
+  details?: any;
+  apiError?: any;
 }
 
 export const errorHandler = (
@@ -12,15 +14,43 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ) => {
-  console.error('API Error:', {
-    message: error.message,
-    stack: error.stack,
-    url: req.url,
-    method: req.method,
-    body: req.body,
-    params: req.params,
-    query: req.query
-  });
+  const code = error.apiError?.code || error.code;
+  const isQuota = code === 'QUOTA_EXCEEDED' || code === 'FEATURE_LOCKED';
+
+  const bodyForLog = (() => {
+    try {
+      if (req.body == null) return undefined;
+      const json = JSON.stringify(req.body);
+      const MAX = 500;
+      if (json.length <= MAX) return json;
+      return `${json.slice(0, MAX)}…[truncated ${json.length - MAX} chars]`;
+    } catch {
+      return '[unserializable body]';
+    }
+  })();
+
+  if (isQuota) {
+    console.warn('Quota denied:', {
+      code,
+      message: error.message,
+      details: error.apiError?.details || error.details,
+      url: req.url,
+      method: req.method,
+      userId: req.user?.id,
+    });
+  } else {
+    console.error('API Error:', {
+      message: error.message,
+      stack: error.stack,
+      url: req.url,
+      method: req.method,
+      params: req.params,
+      query: req.query,
+      userId: req.user?.id,
+      // Avoid logging attacker-controlled payloads; keep only a short preview for debugging.
+      body: bodyForLog,
+    });
+  }
 
   // Prisma errors
   if (error instanceof PrismaClientKnownRequestError) {
@@ -62,9 +92,27 @@ export const errorHandler = (
 
   // Custom API errors
   if (error.statusCode) {
+    if (isQuota && error.statusCode === 402) {
+      // Some clients/backoff strategies respect Retry-After; quota errors often won't change until upgrade.
+      res.setHeader('Retry-After', '3600'); // 1 hour
+    }
+
+    // Prefer structured ApiError shape when available (e.g. from withPrismaErrorHandling)
+    if (error.apiError) {
+      return res.status(error.statusCode).json({
+        error: error.apiError.error || 'API Error',
+        message: error.apiError.message || error.message,
+        code: error.apiError.code || error.code,
+        details: error.apiError.details || error.details,
+        field: error.apiError.field,
+        constraint: error.apiError.constraint
+      });
+    }
     return res.status(error.statusCode).json({
       error: error.name || 'API Error',
-      message: error.message
+      message: error.message,
+      code: error.code || (error.statusCode === 403 ? 'ACCESS_DENIED' : error.statusCode === 400 ? 'INVALID_PAYLOAD' : undefined),
+      details: error.details
     });
   }
 

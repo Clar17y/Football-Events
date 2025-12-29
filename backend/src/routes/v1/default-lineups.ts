@@ -7,7 +7,8 @@ import { validateUUID } from '../../middleware/uuidValidation';
 import { authenticateToken } from '../../middleware/auth';
 import { 
   defaultLineupCreateSchema, 
-  defaultLineupUpdateSchema
+  defaultLineupUpdateSchema,
+  defaultLineupValidateSchema
 } from '../../validation/schemas';
 
 const router = Router();
@@ -19,7 +20,7 @@ router.post('/', authenticateToken, validateRequest(defaultLineupCreateSchema), 
     const { teamId, formation } = req.body;
     const defaultLineup = await defaultLineupService.saveDefaultLineup(teamId, formation, req.user!.id);
     
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       data: defaultLineup,
       message: 'Default lineup saved successfully'
@@ -166,18 +167,8 @@ router.post('/:teamId/apply-to-match',
 );
 
 // POST /api/v1/default-lineups/validate - Validate formation data without saving
-router.post('/validate', authenticateToken, asyncHandler(async (req, res) => {
-  const { formation } = req.body;
-  
-  if (!formation) {
-    return res.status(400).json({
-      success: false,
-      error: 'Validation Error',
-      message: 'Formation data is required for validation'
-    });
-  }
-  
-  const validation = defaultLineupService.validateFormation(formation);
+router.post('/validate', authenticateToken, validateRequest(defaultLineupValidateSchema), asyncHandler(async (req, res) => {
+  const validation = defaultLineupService.validateFormation(req.body.formation);
   
   return res.json({
     success: true,

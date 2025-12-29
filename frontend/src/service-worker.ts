@@ -1,45 +1,81 @@
-// Minimal service worker without workbox dependencies
-// TODO: Add workbox dependencies and restore full functionality
+/// <reference lib="webworker" />
 
-// Skip waiting and claim clients immediately
-(self as any).skipWaiting();
-(self as any).clients.claim();
+import { clientsClaim } from 'workbox-core';
+import { CacheableResponsePlugin } from 'workbox-cacheable-response';
+import { ExpirationPlugin } from 'workbox-expiration';
+import { NavigationRoute, registerRoute } from 'workbox-routing';
+import { cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from 'workbox-precaching';
+import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies';
 
-// Basic cache name
-const CACHE_NAME = 'grassroots-pwa-v1';
+declare const self: ServiceWorkerGlobalScope & {
+  __WB_MANIFEST: Array<unknown>;
+};
 
-// Install event - basic setup
-self.addEventListener('install', (event: any) => {
-  console.log('Service Worker installing');
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(() => {
-      console.log('Cache opened');
-    })
-  );
+const APP_SHELL_URL = '/index.html';
+
+self.addEventListener('message', (event) => {
+  const data = event.data as any;
+  if (data?.type === 'SKIP_WAITING' || data === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+clientsClaim();
+
+cleanupOutdatedCaches();
+precacheAndRoute(self.__WB_MANIFEST);
+
+const appShellStrategy = new StaleWhileRevalidate({
+  cacheName: 'app-shell',
+  plugins: [
+    new CacheableResponsePlugin({ statuses: [200] }),
+    new ExpirationPlugin({ maxEntries: 1, maxAgeSeconds: 24 * 60 * 60 }),
+  ],
 });
 
-// Activate event - cleanup old caches
-self.addEventListener('activate', (event: any) => {
-  console.log('Service Worker activating');
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-});
+registerRoute(
+  new NavigationRoute(
+    async ({ event }) => {
+      try {
+        const response = await appShellStrategy.handle({
+          event,
+          request: new Request(APP_SHELL_URL, { cache: 'reload' }),
+        });
+        if (response) return response;
+      } catch (err) {
+        console.warn('[sw] app-shell strategy failed', err);
+      }
 
-// Fetch event - basic network-first strategy
-self.addEventListener('fetch', (event: any) => {
-  event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request);
-    })
-  );
-});
+      const precached = await matchPrecache(APP_SHELL_URL);
+      if (precached) return precached;
+
+      return fetch(APP_SHELL_URL);
+    },
+    {
+      denylist: [/^\/api(\/|$)/, /\/[^/?]+\.[^/]+$/],
+    }
+  )
+);
+
+registerRoute(
+  ({ url }) => url.origin === 'https://fonts.googleapis.com',
+  new StaleWhileRevalidate({
+    cacheName: 'google-fonts-styles',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 24 * 60 * 60 }),
+    ],
+  }),
+  'GET'
+);
+
+registerRoute(
+  ({ url }) => url.origin === 'https://fonts.gstatic.com',
+  new CacheFirst({
+    cacheName: 'google-fonts-webfonts',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 365 * 24 * 60 * 60 }),
+    ],
+  }),
+  'GET'
+);

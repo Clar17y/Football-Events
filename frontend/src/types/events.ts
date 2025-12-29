@@ -1,29 +1,20 @@
-/**
- * Event-specific type definitions for match events
- * 
- * This file contains all types related to match events, including
- * event kinds, payloads, and metadata.
- */
-
 import type { ID, Timestamp } from './index';
-import { 
-  football, 
-  ribbon, 
-  key, 
-  shieldCheckmark, 
-  checkmarkCircle, 
-  flagOutline, 
-  medal, 
-  warning, 
-  closeCircle, 
-  sad, 
-  removeCircle 
+import type { EventKind, Event as SharedEvent } from '@shared/types';
+import {
+  football,
+  ribbon,
+  key,
+  shieldCheckmark,
+  checkmarkCircle,
+  flagOutline,
+  medal,
+  warning,
+  closeCircle,
+  sad,
+  removeCircle
 } from 'ionicons/icons';
 
-/**
- * All possible event types in a football match
- */
-// Import EventKind from shared types to ensure consistency
+// Re-export EventKind for consumers of this module
 export type { EventKind } from '@shared/types';
 
 /**
@@ -43,11 +34,9 @@ export interface EventMetadata {
   description?: string;
 }
 
-
 /**
  * Default event configurations
  */
-// Update EVENT_METADATA to include all EventKind values from shared types
 export const EVENT_METADATA: Partial<Record<EventKind, EventMetadata>> = {
   // Positive events
   goal: {
@@ -150,23 +139,23 @@ export const EVENT_METADATA: Partial<Record<EventKind, EventMetadata>> = {
   }
 };
 
-// Import Event from shared types for consistency
-export type { Event as MatchEvent } from '@shared/types';
+/** Re-export Shared Event as MatchEvent */
+export type MatchEvent = SharedEvent;
 
 /**
- * Event payload for database storage
+ * Event payload for database storage (standardized camelCase)
  */
 export interface EventPayload {
   kind: EventKind;
-  match_id: ID;
-  season_id: ID;
-  team_id: ID;
-  player_id: ID;
-  period_number: number;
-  clock_ms: number;
+  matchId: ID;
+  seasonId: ID;
+  teamId: ID;
+  playerId: ID;
+  periodNumber: number;
+  clockMs: number;
   sentiment: number;
   notes?: string;
-  created: Timestamp;
+  createdAt: string;
   coordinates?: {
     x: number;
     y: number;
@@ -180,7 +169,7 @@ export interface EventDisplay {
   kind: EventKind;
   team: string;
   player: string;
-  timestamp: number; // clock_ms
+  timestamp: number; // clockMs
   metadata: EventMetadata;
 }
 
@@ -188,30 +177,30 @@ export interface EventDisplay {
  * Event statistics
  */
 export interface EventStats {
-  total_events: number;
-  events_by_kind: Record<EventKind, number>;
-  events_by_team: Record<ID, number>;
-  events_by_player: Record<ID, number>;
-  events_by_period: Record<number, number>;
+  totalEvents: number;
+  eventsByKind: Record<EventKind, number>;
+  eventsByTeam: Record<ID, number>;
+  eventsByPlayer: Record<ID, number>;
+  eventsByPeriod: Record<number, number>;
 }
 
 /**
  * Helper functions for event categorization
  */
 export const getEventsByCategory = (category: EventCategory): EventKind[] => {
-  return Object.values(EVENT_METADATA)
-    .filter(meta => meta.category === category)
+  return (Object.values(EVENT_METADATA) as EventMetadata[])
+    .filter(meta => meta?.category === category)
     .map(meta => meta.kind);
 };
 
-export const getEventMetadata = (kind: EventKind): EventMetadata => {
+export const getEventMetadata = (kind: EventKind): EventMetadata | undefined => {
   return EVENT_METADATA[kind];
 };
 
 export const isPositiveEvent = (kind: EventKind): boolean => {
-  return EVENT_METADATA[kind].category === 'positive';
+  return EVENT_METADATA[kind]?.category === 'positive';
 };
 
 export const isNegativeEvent = (kind: EventKind): boolean => {
-  return EVENT_METADATA[kind].category === 'negative';
+  return EVENT_METADATA[kind]?.category === 'negative';
 };

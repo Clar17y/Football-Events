@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { DatabaseStatus } from '../components/DatabaseStatus';
-import { 
-  IonPage, 
-  IonContent, 
-  IonHeader, 
-  IonToolbar, 
+import {
+  IonPage,
+  IonContent,
+  IonHeader,
+  IonToolbar,
   IonTitle,
   IonCard,
   IonCardContent,
@@ -17,11 +17,11 @@ import {
   IonLabel,
   IonButtons
 } from '@ionic/react';
-import { 
-  trophy, 
-  people, 
-  person, 
-  calendar, 
+import {
+  trophy,
+  people,
+  person,
+  calendar,
   statsChart,
   play,
   ribbon,
@@ -61,7 +61,7 @@ interface HomePageProps {
 const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const { user } = useAuth();
   const { showInfo } = useToast();
-  const { stats, loading, error, fromCache } = useGlobalStats();
+  const { stats, loading, error, fromCache, lastUpdated } = useGlobalStats();
 
   // Quick Start state
   const [teams, setTeams] = useState<Team[]>([]);
@@ -99,7 +99,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       if (parsed.teamId) setMyTeamId(parsed.teamId);
       if (parsed.durationMinutes) setDurationMinutes(parsed.durationMinutes);
       if (parsed.periodFormat) setPeriodFormat(parsed.periodFormat);
-    } catch {}
+    } catch { }
   });
 
   useEffect(() => {
@@ -198,24 +198,24 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
   // Generate quick stats from API data or show loading/fallback
   const quickStats = [
-    { 
-      label: 'Active Teams', 
-      value: loading ? '...' : (stats?.active_teams?.toString() || '0'), 
+    {
+      label: 'Active Teams',
+      value: loading ? '...' : (stats?.active_teams?.toString() || '0'),
       color: 'success' as const
     },
-    { 
-      label: 'Total Players', 
-      value: loading ? '...' : (stats?.total_players?.toString() || '0'), 
+    {
+      label: 'Total Players',
+      value: loading ? '...' : (stats?.total_players?.toString() || '0'),
       color: 'warning' as const
     },
-    { 
-      label: 'Matches Played', 
-      value: loading ? '...' : (stats?.matches_played?.toString() || '0'), 
+    {
+      label: 'Matches Played',
+      value: loading ? '...' : (stats?.matches_played?.toString() || '0'),
       color: 'primary' as const
     },
-    { 
-      label: 'Live Now', 
-      value: loading ? '...' : (stats?.active_matches?.toString() || '0'), 
+    {
+      label: 'Live Now',
+      value: loading ? '...' : (stats?.active_matches?.toString() || '0'),
       color: 'danger' as const
     }
   ];
@@ -225,7 +225,12 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       <IonHeader>
         <IonToolbar className="home-toolbar">
           <IonTitle className="home-title">
-            <div className="title-container">
+            <div
+              className="title-container"
+              onClick={() => navigate(user ? 'home' : 'home')}
+              style={{ cursor: 'pointer' }}
+              title={user ? 'Go to Dashboard' : 'Back to Home'}
+            >
               <IonIcon icon={football} className="title-icon" />
               <span>MatchMaster</span>
             </div>
@@ -234,11 +239,11 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             <OfflineSyncIndicator />
             <ImportGuestDataButton />
             <ThemeToggle />
-            <UserProfile />
+            <UserProfile onNavigate={navigate} />
           </IonButtons>
         </IonToolbar>
       </IonHeader>
-      
+
       <IonContent className="home-content">
         <GuestBanner />
         {/* Hero Section */}
@@ -248,7 +253,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               {user ? `Welcome back, ${user.first_name || 'Coach'}!` : 'Welcome to MatchMaster!'}
             </h1>
             <p className="hero-subtitle">
-              {user 
+              {user
                 ? 'Manage your teams, track player progress, and create memorable moments'
                 : 'The ultimate grassroots football management platform. Sign in to unlock full team management features!'
               }
@@ -264,20 +269,26 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               </IonChip>
             ))}
           </div>
-          
+
+          {fromCache && lastUpdated && (
+            <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--grassroots-text-tertiary)', marginTop: '0.5rem' }}>
+              Last updated: {new Date(lastUpdated).toLocaleString()}
+            </div>
+          )}
+
           {/* Call to action for non-authenticated users */}
           {!user && (
             <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-              <IonButton 
-                color="primary" 
+              <IonButton
+                color="primary"
                 size="default"
                 onClick={() => navigate('login')}
               >
                 Sign In to Get Started
               </IonButton>
               <div style={{ marginTop: '0.5rem' }}>
-                <IonButton 
-                  fill="clear" 
+                <IonButton
+                  fill="clear"
                   size="small"
                   onClick={() => navigate('register')}
                 >
@@ -286,13 +297,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               </div>
             </div>
           )}
-          
-          {/* Show cache/error status for debugging */}
-          {fromCache && (
-            <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--grassroots-text-tertiary)', marginTop: '0.5rem' }}>
-              Showing cached data
-            </div>
-          )}
+
           {error && (
             <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--grassroots-danger)', marginTop: '0.5rem' }}>
               Using offline data
@@ -359,7 +364,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
                           {/* Opponent */}
                           <div className="form-row">
-                            <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block'}}>Opponent Team</label>
+                            <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>Opponent Team</label>
                             <Autocomplete
                               freeSolo
                               options={opponentOptions}
@@ -424,7 +429,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
                           {/* Kickoff */}
                           <div className="form-row">
-                            <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block'}}>Kickoff</label>
+                            <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>Kickoff</label>
                             <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="en-gb">
                               <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: '1fr 1fr' }}>
                                 <DatePicker
@@ -491,7 +496,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                             >
                               Start Live Match
                             </IonButton>
-                            
+
                           </div>
 
                           <CreateTeamModal
@@ -518,15 +523,15 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               {navigationCards.map((card, index) => (
                 <IonCol size="12" sizeMd="6" sizeLg="4" key={index}>
                   <div className="nav-card-wrapper">
-                    <IonCard 
+                    <IonCard
                       className={`nav-card nav-card-${card.color}`}
                       button={card.route !== '#'}
                       onClick={() => {
                         if (card.route === '#') return;
-                        
+
                         // Convert route to page name
                         const pageName = card.route.replace('/', '');
-                        
+
                         // Check if route requires authentication (align with AppRoutes)
                         // Only 'awards' and 'statistics' require auth; others are guest-accessible
                         const protectedRoutes = ['awards', 'statistics'];
@@ -540,8 +545,8 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                     >
                       <IonCardContent className="nav-card-content">
                         <div className="nav-card-header">
-                          <IonIcon 
-                            icon={card.icon} 
+                          <IonIcon
+                            icon={card.icon}
                             className="nav-card-icon"
                             color={card.color}
                           />

@@ -2,8 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { 
   transformPlayerTeam, 
   transformPlayerTeamCreateRequest, 
-  transformPlayerTeamUpdateRequest,
-  transformPlayerTeams 
+  transformPlayerTeamUpdateRequest
 } from '@shared/types';
 import type { 
   PlayerTeam, 
@@ -13,6 +12,7 @@ import type {
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { createOrRestoreSoftDeleted, SoftDeletePatterns } from '../utils/softDeleteUtils';
 import { NaturalKeyResolver } from '../utils/naturalKeyResolver';
+import { QuotaService } from './QuotaService';
 
 // Extend shared interfaces to include service-specific fields
 export interface PlayerTeamCreateRequest extends SharedPlayerTeamCreateRequest {
@@ -61,10 +61,12 @@ export interface BatchPlayerTeamResult {
 export class PlayerTeamService {
   private prisma: PrismaClient;
   private naturalKeyResolver: NaturalKeyResolver;
+  private quotaService: QuotaService;
 
   constructor() {
     this.prisma = new PrismaClient();
     this.naturalKeyResolver = new NaturalKeyResolver(this.prisma);
+    this.quotaService = new QuotaService(this.prisma);
   }
 
   async getPlayerTeams(userId: string, userRole: string, options: GetPlayerTeamsOptions): Promise<PaginatedPlayerTeams> {
@@ -212,8 +214,8 @@ export class PlayerTeamService {
         const userTeamIds = await this.getUserTeamIds(userId);
         const userPlayerIds = await this.getUserPlayerIds(userId);
         
-        if (!userTeamIds.includes(teamId) && !userPlayerIds.includes(playerId)) {
-          const error = new Error('Access denied: You can only create relationships for teams you own or players you created') as any;
+        if (!userTeamIds.includes(teamId) || !userPlayerIds.includes(playerId)) {
+          const error = new Error('Access denied: You can only create relationships for teams and players you own') as any;
           error.statusCode = 403;
           throw error;
         }
@@ -238,6 +240,17 @@ export class PlayerTeamService {
         const error = new Error('Team not found') as any;
         error.statusCode = 404;
         throw error;
+      }
+
+      // Quotas apply to active assignments only
+      const isActive = resolvedInput.isActive ?? true;
+      if (isActive) {
+        await this.quotaService.assertCanAddPlayerToTeam({
+          userId,
+          userRole,
+          teamId,
+          teamIsOpponent: !!team.is_opponent
+        });
       }
 
       // Check for overlapping active relationships before creating/restoring
@@ -310,6 +323,22 @@ export class PlayerTeamService {
       const existingPlayerTeam = await this.prisma.player_teams.findFirst({ where });
       if (!existingPlayerTeam) {
         return null; // Not found or no permission
+      }
+
+      // Enforce plan quotas when re-activating a relationship
+      if (data.isActive === true && existingPlayerTeam.is_active === false) {
+        const team = await this.prisma.team.findFirst({
+          where: { id: existingPlayerTeam.team_id, is_deleted: false },
+          select: { is_opponent: true }
+        });
+        if (team) {
+          await this.quotaService.assertCanAddPlayerToTeam({
+            userId,
+            userRole,
+            teamId: existingPlayerTeam.team_id,
+            teamIsOpponent: !!team.is_opponent
+          });
+        }
       }
 
       // Transform the request using shared transformer
@@ -653,14 +682,12 @@ export class PlayerTeamService {
         userRole
       );
       
+      const { playerName, teamName, ...rest } = request;
       return {
-        ...request,
+        ...rest,
         playerId: resolved.playerId,
-        teamId: resolved.teamId,
-        // Remove natural key fields to avoid confusion
-        playerName: undefined,
-        teamName: undefined
-      };
+        teamId: resolved.teamId
+      } as PlayerTeamCreateRequest;
     } else {
       // Validate that we have both playerId and teamId for UUID-based requests
       if (!request.playerId || !request.teamId) {
@@ -668,78 +695,6 @@ export class PlayerTeamService {
       }
       return request;
     }
-  }
-
-  /**
-   * Resolve natural keys to UUIDs for batch operations (kept for potential future use)
-   */
-  private async resolveNaturalKeysForBatch(createRequests: PlayerTeamCreateRequest[], userId: string, userRole: string): Promise<PlayerTeamCreateRequest[]> {
-    const resolved: PlayerTeamCreateRequest[] = [];
-    
-    // Separate requests that need natural key resolution from those that don't
-    const naturalKeyRequests: Array<{ index: number; playerName: string; teamName: string }> = [];
-    
-    for (let i = 0; i < createRequests.length; i++) {
-      const request = createRequests[i];
-      
-      if (NaturalKeyResolver.hasNaturalKeys(request)) {
-        // Validate that we have both playerName and teamName
-        if (!request.playerName || !request.teamName) {
-          throw new Error(`Natural key resolution requires both playerName and teamName. Request ${i} is missing required fields.`);
-        }
-        
-        naturalKeyRequests.push({
-          index: i,
-          playerName: request.playerName,
-          teamName: request.teamName
-        });
-      } else {
-        // Validate that we have both playerId and teamId for UUID-based requests
-        if (!request.playerId || !request.teamId) {
-          throw new Error(`UUID-based request requires both playerId and teamId. Request ${i} is missing required fields.`);
-        }
-      }
-    }
-    
-    // Resolve natural keys in batch if any exist
-    let resolvedKeys: Array<{ playerId: string; teamId: string }> = [];
-    if (naturalKeyRequests.length > 0) {
-      const keyRequests = naturalKeyRequests.map(req => ({
-        playerName: req.playerName,
-        teamName: req.teamName
-      }));
-      
-      const resolvedPlayerTeamKeys = await this.naturalKeyResolver.resolveMultiplePlayerTeamKeys(keyRequests, userId, userRole);
-      resolvedKeys = resolvedPlayerTeamKeys.map(resolved => ({
-        playerId: resolved.playerId,
-        teamId: resolved.teamId
-      }));
-    }
-    
-    // Build the resolved requests array
-    let naturalKeyIndex = 0;
-    for (let i = 0; i < createRequests.length; i++) {
-      const request = createRequests[i];
-      
-      if (NaturalKeyResolver.hasNaturalKeys(request)) {
-        // Use resolved UUIDs
-        const resolvedKey = resolvedKeys[naturalKeyIndex];
-        resolved.push({
-          ...request,
-          playerId: resolvedKey.playerId,
-          teamId: resolvedKey.teamId,
-          // Remove natural key fields to avoid confusion
-          playerName: undefined,
-          teamName: undefined
-        });
-        naturalKeyIndex++;
-      } else {
-        // Use existing UUIDs
-        resolved.push(request);
-      }
-    }
-    
-    return resolved;
   }
 
   async disconnect(): Promise<void> {

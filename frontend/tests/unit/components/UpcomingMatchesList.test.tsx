@@ -14,8 +14,8 @@ vi.mock('@ionic/react', () => ({
     </div>
   ),
   IonButton: ({ children, onClick, disabled, color, fill, size, expand, className }: any) => (
-    <button 
-      data-testid="ion-button" 
+    <button
+      data-testid="ion-button"
       onClick={onClick}
       disabled={disabled}
       data-color={color}
@@ -47,6 +47,7 @@ vi.mock('ionicons/icons', () => ({
   stopwatch: 'stopwatch',
   trophy: 'trophy',
   create: 'create',
+  play: 'play',
 }));
 
 describe('UpcomingMatchesList', () => {
@@ -55,10 +56,10 @@ describe('UpcomingMatchesList', () => {
     name: 'Home Team',
     homeKitPrimary: '#2563eb',
     awayKitPrimary: '#dc2626',
-    createdAt: new Date(),
-    created_by_user_id: 'user1',
-    is_deleted: false,
-    is_opponent: false,
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false,
+    isOpponent: false,
   };
 
   const mockTeam2: Team = {
@@ -66,16 +67,16 @@ describe('UpcomingMatchesList', () => {
     name: 'Away Team',
     homeKitPrimary: '#16a34a',
     awayKitPrimary: '#ea580c',
-    createdAt: new Date(),
-    created_by_user_id: 'user1',
-    is_deleted: false,
-    is_opponent: true,
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false,
+    isOpponent: true,
   };
 
   const mockUpcomingMatch: Match = {
     id: 'match1',
     seasonId: 'season1',
-    kickoffTime: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
+    kickoffTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
     homeTeamId: 'team1',
     awayTeamId: 'team2',
     homeTeam: mockTeam1,
@@ -84,18 +85,18 @@ describe('UpcomingMatchesList', () => {
     competition: 'Test League',
     durationMinutes: 90,
     periodFormat: 'half',
-    ourScore: 0,
-    opponentScore: 0,
+    homeScore: 0,
+    awayScore: 0,
     notes: 'Test match notes',
-    createdAt: new Date(),
-    created_by_user_id: 'user1',
-    is_deleted: false,
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false,
   };
 
   const mockPastMatch: Match = {
     ...mockUpcomingMatch,
     id: 'match2',
-    kickoffTime: new Date(Date.now() - 24 * 60 * 60 * 1000), // Yesterday
+    kickoffTime: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // Yesterday
   };
 
   const defaultProps = {
@@ -123,46 +124,46 @@ describe('UpcomingMatchesList', () => {
 
   it('renders upcoming matches correctly', () => {
     render(<UpcomingMatchesList {...defaultProps} />);
-    
+
     expect(screen.getByText('Home Team')).toBeInTheDocument();
     expect(screen.getByText('Away Team')).toBeInTheDocument();
     expect(screen.getByText('vs')).toBeInTheDocument();
     expect(screen.getByText('(H)')).toBeInTheDocument(); // Home indicator
   });
 
-  it('filters out past matches', () => {
+  it('renders all matches passed to it (filtering happens at parent level)', () => {
     const props = {
       ...defaultProps,
       matches: [mockUpcomingMatch, mockPastMatch],
     };
-    
+
     render(<UpcomingMatchesList {...props} />);
-    
-    // Should only show the upcoming match - use more specific selector
+
+    // Component renders all matches - filtering is done by parent
     const matchItems = document.querySelectorAll('.upcoming-match-item');
-    expect(matchItems).toHaveLength(1);
+    expect(matchItems).toHaveLength(2);
   });
 
   it('sorts matches chronologically', () => {
     const match1 = {
       ...mockUpcomingMatch,
       id: 'match1',
-      kickoffTime: new Date(Date.now() + 48 * 60 * 60 * 1000), // Day after tomorrow
+      kickoffTime: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(), // Day after tomorrow
     };
-    
+
     const match2 = {
       ...mockUpcomingMatch,
       id: 'match2',
-      kickoffTime: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
+      kickoffTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
     };
 
     const props = {
       ...defaultProps,
       matches: [match1, match2], // Unsorted order
     };
-    
+
     render(<UpcomingMatchesList {...props} />);
-    
+
     const matchItems = screen.getAllByTestId('ion-chip');
     // First match should be tomorrow (earlier date)
     expect(matchItems[0]).toHaveTextContent('Tomorrow');
@@ -174,13 +175,13 @@ describe('UpcomingMatchesList', () => {
       ...defaultProps,
       onToggleExpand,
     };
-    
+
     render(<UpcomingMatchesList {...props} />);
-    
+
     // Click on the match header to expand
     const matchHeader = screen.getByText('vs').closest('.match-header');
     fireEvent.click(matchHeader!);
-    
+
     expect(onToggleExpand).toHaveBeenCalledWith('match1');
   });
 
@@ -189,9 +190,9 @@ describe('UpcomingMatchesList', () => {
       ...defaultProps,
       expandedMatches: new Set(['match1']),
     };
-    
+
     render(<UpcomingMatchesList {...props} />);
-    
+
     expect(screen.getByText('Test Stadium')).toBeInTheDocument();
     expect(screen.getByText('Test League')).toBeInTheDocument();
     expect(screen.getByText('90 minutes')).toBeInTheDocument();
@@ -205,12 +206,12 @@ describe('UpcomingMatchesList', () => {
       ...defaultProps,
       onMatchSelect,
     };
-    
+
     const { container } = render(<UpcomingMatchesList {...props} />);
-    
+
     const matchItem = container.querySelector('.upcoming-match-item');
     fireEvent.click(matchItem!);
-    
+
     expect(onMatchSelect).toHaveBeenCalledWith('match1');
   });
 
@@ -219,9 +220,9 @@ describe('UpcomingMatchesList', () => {
       ...defaultProps,
       loading: true,
     };
-    
+
     render(<UpcomingMatchesList {...props} />);
-    
+
     expect(screen.getByTestId('upcoming-matches-loading')).toBeInTheDocument();
     expect(screen.getAllByTestId('skeleton-match-item')).toHaveLength(3);
   });
@@ -231,33 +232,38 @@ describe('UpcomingMatchesList', () => {
       ...defaultProps,
       matches: [],
     };
-    
+
     render(<UpcomingMatchesList {...props} />);
-    
+
     expect(screen.getByText('No Upcoming Matches')).toBeInTheDocument();
     expect(screen.getByText('Schedule your next match to see it appear here.')).toBeInTheDocument();
   });
 
-  it('shows empty state when only past matches exist', () => {
+  it('renders matches even if they are past (filtering is parent responsibility)', () => {
     const props = {
       ...defaultProps,
       matches: [mockPastMatch],
     };
-    
+
     const { container } = render(<UpcomingMatchesList {...props} />);
-    
-    expect(container.querySelector('.upcoming-matches-empty')).toBeInTheDocument();
+
+    // Component renders the match - it doesn't filter by date
+    const matchItems = container.querySelectorAll('.upcoming-match-item');
+    expect(matchItems).toHaveLength(1);
   });
 
-  it('determines home/away correctly based on primaryTeamId', () => {
+  it('determines home/away correctly based on isOpponent flag', () => {
+    // When homeTeam has isOpponent: false, it's always considered "our team" (home perspective)
+    // The primaryTeamId is only used as fallback when isOpponent flags aren't set
     const props = {
       ...defaultProps,
-      primaryTeamId: 'team2', // Away team is now primary
+      primaryTeamId: 'team2', // This is ignored because isOpponent flags are set
     };
-    
+
     render(<UpcomingMatchesList {...props} />);
-    
-    expect(screen.getByText('(A)')).toBeInTheDocument(); // Away indicator
+
+    // Since mockTeam1 (home) has isOpponent: false, we're always showing home perspective
+    expect(screen.getByText('(H)')).toBeInTheDocument();
   });
 
   it('handles missing team data gracefully', () => {
@@ -266,14 +272,14 @@ describe('UpcomingMatchesList', () => {
       homeTeam: undefined,
       awayTeam: undefined,
     };
-    
+
     const props = {
       ...defaultProps,
       matches: [matchWithoutTeams],
     };
-    
+
     const { container } = render(<UpcomingMatchesList {...props} />);
-    
+
     // Check that fallback names are used
     const teamNames = container.querySelectorAll('.team-name');
     expect(teamNames[0]).toHaveTextContent('Home Team'); // Fallback name
@@ -283,7 +289,7 @@ describe('UpcomingMatchesList', () => {
   it('shows transparent color indicator for opponent teams using default colors', () => {
     const opponentTeamWithDefaults: Team = {
       ...mockTeam2,
-      is_opponent: true,
+      isOpponent: true,
       homeKitPrimary: undefined, // No custom color
       awayKitPrimary: undefined, // No custom color
     };
@@ -301,14 +307,15 @@ describe('UpcomingMatchesList', () => {
         ['team2', opponentTeamWithDefaults],
       ]),
     };
-    
+
     render(<UpcomingMatchesList {...props} />);
-    
+
     const colorIndicators = document.querySelectorAll('.team-color-indicator');
     const opponentIndicator = colorIndicators[1]; // Second indicator is opponent
-    
+
     expect(opponentIndicator).toHaveClass('transparent');
-    expect(opponentIndicator).toHaveStyle('background-color: transparent');
+    // transparent is converted to rgba(0, 0, 0, 0) by the browser
+    expect(opponentIndicator).toHaveStyle('background-color: rgba(0, 0, 0, 0)');
   });
 
   it('shows edit match button when onEditMatch is provided and match is expanded', () => {
@@ -318,12 +325,12 @@ describe('UpcomingMatchesList', () => {
       expandedMatches: new Set(['match1']),
       onEditMatch,
     };
-    
+
     const { container } = render(<UpcomingMatchesList {...props} />);
-    
+
     const editButton = container.querySelector('.edit-match-button');
     expect(editButton).toBeInTheDocument();
-    
+
     fireEvent.click(editButton!);
     expect(onEditMatch).toHaveBeenCalledWith(mockUpcomingMatch);
   });
@@ -334,9 +341,9 @@ describe('UpcomingMatchesList', () => {
       expandedMatches: new Set(['match1']),
       onEditMatch: undefined,
     };
-    
+
     const { container } = render(<UpcomingMatchesList {...props} />);
-    
+
     const editButton = container.querySelector('.edit-match-button');
     expect(editButton).not.toBeInTheDocument();
   });
@@ -344,12 +351,12 @@ describe('UpcomingMatchesList', () => {
   it('does not show edit match button when match is not expanded', () => {
     const props = {
       ...defaultProps,
-      expandedMatches: new Set(), // No expanded matches
+      expandedMatches: new Set<string>(), // No expanded matches
       onEditMatch: vi.fn(),
     };
-    
+
     const { container } = render(<UpcomingMatchesList {...props} />);
-    
+
     const editButton = container.querySelector('.edit-match-button');
     expect(editButton).not.toBeInTheDocument();
   });

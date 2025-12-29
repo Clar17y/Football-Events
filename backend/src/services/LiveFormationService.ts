@@ -2,6 +2,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { LineupService } from './LineupService';
 import { PositionCalculatorService } from './PositionCalculatorService';
+import { QuotaService } from './QuotaService';
 
 export type FormationData = {
   players: Array<{
@@ -17,11 +18,13 @@ export class LiveFormationService {
   private prisma: PrismaClient;
   private lineupService: LineupService;
   private positionCalc: PositionCalculatorService;
+  private quotaService: QuotaService;
 
   constructor() {
     this.prisma = new PrismaClient();
     this.lineupService = new LineupService();
     this.positionCalc = new PositionCalculatorService();
+    this.quotaService = new QuotaService(this.prisma);
   }
 
   async getCurrentFormation(matchId: string, userId: string, userRole: string): Promise<FormationData | null> {
@@ -49,8 +52,8 @@ export class LiveFormationService {
     const players = current.map(lu => ({
       id: lu.player.id,
       name: lu.player.name,
-      squadNumber: lu.player.squadNumber,
-      preferredPosition: lu.player.preferredPosition || undefined,
+      squadNumber: lu.player.squadNumber ?? null,
+      preferredPosition: lu.player.preferredPosition ?? null,
       position: {
         x: (lu as any).pitchX ?? 0,
         y: (lu as any).pitchY ?? 0,
@@ -63,6 +66,8 @@ export class LiveFormationService {
     matchId: string;
     startMin: number; // current minute
     formation: FormationData;
+    /** Optional client-generated UUID for local-first idempotency */
+    eventId?: string;
     userId: string;
     userRole: string;
     reason?: string | null;
@@ -72,18 +77,78 @@ export class LiveFormationService {
   }> {
     return withPrismaErrorHandling(async () => {
       console.log('[LiveFormationService] applyFormationChange:start', params.matchId, params.startMin, params.reason);
-      const { matchId, startMin, formation, userId, userRole, reason } = params;
+      const { matchId, startMin, formation, eventId, userId, userRole, reason } = params;
 
       // Authorization via match ownership
       const matchWhere: any = { match_id: matchId, is_deleted: false };
       if (userRole !== 'ADMIN') matchWhere.created_by_user_id = userId;
-      const match = await this.prisma.match.findFirst({ where: matchWhere });
+      const match = await this.prisma.match.findFirst({
+        where: matchWhere,
+        select: { match_id: true, home_team_id: true, away_team_id: true }
+      });
       if (!match) {
         const error = new Error('Match not found or access denied');
         (error as any).code = 'MATCH_ACCESS_DENIED';
         (error as any).statusCode = 403;
         throw error;
       }
+
+      const teams = await this.prisma.team.findMany({
+        where: {
+          id: { in: [match.home_team_id, match.away_team_id] },
+          is_deleted: false
+        },
+        select: { id: true, name: true, is_opponent: true }
+      });
+      const primaryTeam = teams.find(t => !t.is_opponent);
+      const formationTeamId = primaryTeam?.id || match.home_team_id;
+      const formationTeamName = primaryTeam?.name;
+
+      const formationPlayerIds = formation.players.map(p => p.id).filter(Boolean);
+      if (formationPlayerIds.length > 0) {
+        const playerTeams = await this.prisma.player_teams.findMany({
+          where: {
+            team_id: formationTeamId,
+            player_id: { in: formationPlayerIds },
+            is_active: true,
+            is_deleted: false,
+            player: { is_deleted: false }
+          },
+          select: { player_id: true }
+        });
+        const validIds = new Set(playerTeams.map(pt => pt.player_id));
+        const invalid = formationPlayerIds.filter(id => !validIds.has(id));
+        if (invalid.length > 0) {
+          const error = new Error(`Players not found in team: ${invalid.join(', ')}`);
+          (error as any).code = 'INVALID_TEAM_PLAYERS';
+          (error as any).statusCode = 400;
+          throw error;
+        }
+      }
+
+      // Idempotency for local-first sync retries: if we've already persisted the formation_change event,
+      // treat this call as a success and avoid applying the formation twice.
+      if (eventId) {
+        try {
+          const existing = await this.prisma.event.findUnique({ where: { id: eventId } });
+          if (existing && !existing.is_deleted) {
+            if (existing.match_id !== matchId || existing.kind !== ('formation_change' as any)) {
+              const error = new Error('eventId already exists for a different event') as any;
+              error.statusCode = 409;
+              throw error;
+            }
+            const active = await this.prisma.live_formations.findFirst({
+              where: { match_id: matchId, end_min: null },
+              orderBy: [{ start_min: 'desc' }]
+            });
+            return { liveFormationId: active?.id || '', substitutions: [] };
+          }
+        } catch {
+          // ignore lookup errors; proceed to apply change
+        }
+      }
+
+      await this.quotaService.assertCanApplyFormationChange({ userId, userRole, matchId });
 
       // Capture current active lineup players to compute substitutions
       const currentActive = await this.prisma.lineup.findMany({
@@ -101,11 +166,20 @@ export class LiveFormationService {
       const inPlayers = ins.map(id => ({ id, name: formation.players.find(p => p.id === id)?.name || null }));
       const maxPairs = Math.max(outPlayers.length, inPlayers.length);
       for (let i = 0; i < maxPairs; i++) {
-        subs.push({ out: outPlayers[i], in: inPlayers[i] });
+        const outPlayer = outPlayers[i];
+        const inPlayer = inPlayers[i];
+        if (outPlayer || inPlayer) {
+          const sub: { out?: { id: string; name?: string | null }; in?: { id: string; name?: string | null } } = {};
+          if (outPlayer) sub.out = outPlayer;
+          if (inPlayer) sub.in = inPlayer;
+          subs.push(sub);
+        }
       }
 
       // Transaction: end active snapshot and lineups, create new snapshot and lineups
-      const result = await this.prisma.$transaction(async (tx) => {
+      let result: any;
+      try {
+        result = await this.prisma.$transaction(async (tx) => {
         // Capture current active formation snapshot (if any) for timeline
         const activeBefore = await tx.live_formations.findFirst({
           where: { match_id: matchId, end_min: null },
@@ -131,7 +205,7 @@ export class LiveFormationService {
         if (existing) {
           await tx.live_formations.update({
             where: { id: existing.id },
-            data: { end_min: start, substitution_reason: reason || existing.substitution_reason || undefined }
+            data: { end_min: start, substitution_reason: reason || existing.substitution_reason || null }
           });
         }
 
@@ -149,7 +223,7 @@ export class LiveFormationService {
         // End current lineup rows
         await tx.lineup.updateMany({
           where: { match_id: matchId, end_min: null, is_deleted: false },
-          data: { end_min: Number(start), updated_at: new Date(), substitution_reason: reason || undefined }
+          data: { end_min: Number(start), updated_at: new Date(), substitution_reason: reason || null }
         });
 
         // Create new lineup rows from formation
@@ -232,8 +306,10 @@ export class LiveFormationService {
           };
           const event = await tx.event.create({
             data: {
+              ...(eventId ? { id: eventId } : {}),
               match_id: matchId,
               kind: 'formation_change' as any,
+              team_id: formationTeamId,
               period_number: activePeriod?.period_number || null,
               clock_ms: Math.round(Number(start) * 60000),
               notes: JSON.stringify(notesPayload),
@@ -247,8 +323,8 @@ export class LiveFormationService {
             sseHub.broadcast(matchId, 'event_created', { event: {
               id: event.id,
               kind: 'formation_change',
-              teamId: null,
-              teamName: undefined,
+              teamId: formationTeamId,
+              teamName: formationTeamName,
               playerId: null,
               playerName: undefined,
               periodType: activePeriod?.period_type,
@@ -265,6 +341,16 @@ export class LiveFormationService {
 
         return { created, start, activeBefore };
       });
+      } catch (error: any) {
+        if (eventId && error?.code === 'P2002') {
+          const active = await this.prisma.live_formations.findFirst({
+            where: { match_id: matchId, end_min: null },
+            orderBy: [{ start_min: 'desc' }]
+          });
+          return { liveFormationId: active?.id || '', substitutions: [] };
+        }
+        throw error;
+      }
 
       // subs already prepared
 

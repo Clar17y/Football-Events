@@ -1,0 +1,175 @@
+# Implementation Plan
+
+- [x] 0. Preflight - Repo-wide snake_case audit
+  - [x] 0.1 Audit for snake_case field usage (property access + string keys)
+    - Run a baseline search to find any `snake_case` field names that TypeScript may not catch (e.g., `Dexie.where('match_id')`, JSON fixtures, string-key lookups)
+    - PowerShell (from repo root):
+      - `$paths = (Get-ChildItem -Path frontend,shared -Recurse -File -Include *.ts,*.tsx,*.js,*.jsx,*.json -ErrorAction SilentlyContinue).FullName`
+      - `Select-String -Path $paths -Pattern 'match_id','team_id','player_id','season_id','kickoff_ts','created_at','updated_at','deleted_at','synced_at','is_deleted','table_name','record_id'`
+    - Review results and note hotspots to update during the migration.
+
+- [x] 1. Update Schema & Type Definitions
+  - [x] 1.1 Update `frontend/src/db/schema.ts` interfaces to camelCase
+    - Convert all interface fields from snake_case to camelCase
+    - Update SyncableRecord, EnhancedEvent, EnhancedMatch, EnhancedTeam, EnhancedPlayer, EnhancedSeason, EnhancedLineup, EnhancedMatchNote, LocalMatchPeriod, LocalMatchState, LocalDefaultLineup, EnhancedOutboxEvent, EnhancedSyncMetadata
+    - _Requirements: 1.1_
+  - [x] 1.2 Update `SCHEMA_INDEXES` in schema.ts to camelCase
+    - Convert all index field names from snake_case to camelCase
+    - Update composite indexes like `[match_id+player_id]` to `[matchId+playerId]`
+    - _Requirements: 1.2_
+  - [x] 1.3 Write property test for schema field naming
+    - **Property 1: Schema Field Names Follow camelCase**
+    - **Validates: Requirements 1.1, 1.2**
+
+- [x] 2. Update Database Layer
+  - [x] 2.1 Bump database version in `frontend/src/db/indexedDB.ts`
+    - Add version 11 with new camelCase indexes
+    - This triggers automatic clearing of old snake_case data
+    - _Requirements: 1.3_
+  - [x] 2.2 Update all method implementations in indexedDB.ts
+    - Update field access: `.match_id` → `.matchId`, `.team_id` → `.teamId`, etc.
+    - Update methods: addEnhancedEvent, getEnhancedMatchEvents, addEventToTable, getPlayersByTeam, getAllTeams, createMatchPeriod, endMatchPeriod, getMatchPeriods, updateMatchState, getMatchState
+    - _Requirements: 2.1, 2.2, 2.3_
+  - [x] 2.3 Update `frontend/src/db/eventLinking.ts`
+    - Update field references in auto-linking logic
+    - _Requirements: 2.1_
+  - [x] 2.4 Update `frontend/src/db/utils.ts`
+    - Update any direct field access
+    - _Requirements: 2.1_
+  - [x] 2.5 Update `frontend/src/db/migrations.ts`
+    - Update any field references in migration logic
+    - _Requirements: 2.1_
+
+- [x] 3. Checkpoint - Verify schema and DB layer compile
+  - Ensure all tests pass, ask the user if questions arise.
+  - [x] 3.1 Dexie schema parity check (SCHEMA_INDEXES ↔ stores())
+    - Verify `frontend/src/db/schema.ts` `SCHEMA_INDEXES` matches `frontend/src/db/indexedDB.ts` `this.version(11).stores({ ... })`
+    - Ensure both sides use camelCase (including composite indexes like `[matchId+playerId]`) and no snake_case remains in any store/index strings.
+
+- [x] 4. Update Transform Layer
+  - [x] 4.1 Update `frontend/src/db/transforms/teams.ts`
+    - Update dbToTeam, teamWriteToDb, serverTeamToDb, dbTeamToServerPayload
+    - Change `t.color_primary` → `t.colorPrimary`, etc.
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 4.2 Update `frontend/src/db/transforms/players.ts`
+    - Update dbToPlayer, playerWriteToDb, serverPlayerToDb, dbPlayerToServerPayload
+    - Change `p.full_name` → `p.fullName`, etc.
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 4.3 Update `frontend/src/db/transforms/seasons.ts`
+    - Update all transform functions
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 4.4 Update `frontend/src/db/transforms/matches.ts`
+    - Update all transform functions
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 4.5 Update `frontend/src/db/transforms/events.ts`
+    - Update all transform functions
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 4.6 Update `frontend/src/db/transforms/lineups.ts`
+    - Update all transform functions
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 4.7 Update `frontend/src/db/transforms/matchState.ts`
+    - Update all transform functions
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 4.8 Update `frontend/src/db/transforms/playerTeams.ts`
+    - Update all transform functions
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 4.9 Update `frontend/src/db/transforms/defaultLineups.ts`
+    - Update all transform functions
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 4.10 Update `frontend/src/db/transforms/index.ts`
+    - Verify exports are correct
+    - _Requirements: 3.1_
+  - [x] 4.11 Write property test for transform round-trip
+    - **Property 3: Transform Round-Trip Consistency**
+    - **Validates: Requirements 3.1, 3.2, 7.2**
+
+- [x] 5. Checkpoint - Verify transform layer compiles
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 6. Update Service Layer
+  - [x] 6.1 Update `frontend/src/services/cacheService.ts`
+    - Update field access: `synced_at` → `syncedAt`, `created_at` → `createdAt`
+    - Update cleanupOldTemporalData and other methods
+    - _Requirements: 4.1_
+  - [x] 6.2 Update `frontend/src/services/syncService.ts`
+    - Update field access: `is_deleted` → `isDeleted`, `synced_at` → `syncedAt`
+    - Update processSoftDeletes and sync progress tracking
+    - _Requirements: 4.2_
+  - [x] 6.3 Update `frontend/src/services/dataLayer.ts`
+    - Update all field references when constructing DB records
+    - _Requirements: 4.1, 4.2_
+  - [x] 6.4 Update `frontend/src/services/api/teamsApi.ts`
+    - Update query construction and filter conditions
+    - _Requirements: 4.3_
+  - [x] 6.5 Update `frontend/src/services/api/playersApi.ts`
+    - Update query construction and filter conditions
+    - _Requirements: 4.3_
+  - [x] 6.6 Update `frontend/src/services/api/seasonsApi.ts`
+    - Update query construction and filter conditions
+    - _Requirements: 4.3_
+  - [x] 6.7 Update `frontend/src/services/api/matchesApi.ts
+    - Update query construction and filter conditions
+    - _Requirements: 4.3_
+  - [x] 6.8 Update `frontend/src/services/api/eventsApi.ts`
+    - Update query construction and filter conditions
+    - _Requirements: 4.3_
+  - [x] 6.9 Update `frontend/src/services/api/lineupsApi.ts`
+    - Update query construction and filter conditions
+    - _Requirements: 4.3_
+  - [x] 6.10 Update `frontend/src/services/api/defaultLineupsApi.ts`
+    - Update query construction and filter conditions
+    - _Requirements: 4.3_
+  - [x] 6.11 Update `frontend/src/services/importService.ts`
+    - Update field references
+    - _Requirements: 4.1_
+  - [x] 6.12 Update `frontend/src/services/guestQuickMatch.ts`
+    - Update field references
+    - _Requirements: 4.1_
+  - [x] 6.13 Update `frontend/src/services/realTimeService.ts`
+    - Update field references
+    - _Requirements: 4.1_
+
+- [x] 7. Checkpoint - Verify service layer compiles
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 8. Update Components & Hooks
+  - [x] 8.1 Update `frontend/src/pages/LiveMatchPage.tsx`
+    - Update any direct snake_case field access
+    - _Requirements: 5.1_
+  - [x] 8.2 Update `frontend/src/pages/HomePage.tsx`
+    - Update any direct snake_case field access
+    - _Requirements: 5.1_
+  - [x] 8.3 Update `frontend/src/contexts/MatchContext.tsx`
+    - Update any direct snake_case field access
+    - _Requirements: 5.1_
+  - [x] 8.4 Update `frontend/src/hooks/useLocalData.ts`
+    - Update field references
+    - _Requirements: 5.2_
+  - [x] 8.5 Update `frontend/src/utils/guestQuota.ts`
+    - Update field references
+    - _Requirements: 5.3_
+  - [x] 8.6 Update `frontend/src/utils/calendarUtils.ts`
+
+    - Update field references
+    - _Requirements: 5.3_
+
+- [x] 9. TypeScript Verification
+  - [x] 9.1 Run TypeScript compilation
+    - Execute `cd frontend && npx tsc --noEmit`
+    - Fix all type errors (migration-related errors fixed; remaining errors are pre-existing)
+    - _Requirements: 6.1, 6.2_
+  - [x] 9.2 Run production build
+    - Execute `cd frontend && npm run build`
+    - Verify successful build (completed with warnings about chunk sizes)
+    - _Requirements: 6.3_
+
+- [x] 10. Update Existing Tests
+  - [x] 10.1 Update test files with snake_case references
+    - Search for and update any test files using old field names
+    - _Requirements: 6.2_
+  - [x] 10.2 Write property test for database CRUD round-trip
+    - **Property 4: Database CRUD Round-Trip**
+    - **Validates: Requirements 7.2, 7.3, 7.4**
+
+- [ ] 11. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

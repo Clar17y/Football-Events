@@ -13,10 +13,10 @@ import {
 } from '@shared/types';
 import { SchemaTestUserHelper } from './test-user-helper';
 
-// Helper function for timestamp validation
-const expectValidTimestamp = (timestamp: Date | undefined) => {
-  expect(timestamp).toBeInstanceOf(Date);
-  expect(timestamp!.getTime()).toBeGreaterThan(0);
+// Helper function for timestamp validation (ISO string format)
+const expectValidTimestamp = (timestamp: string | undefined) => {
+  expect(typeof timestamp).toBe('string');
+  expect(new Date(timestamp!).getTime()).toBeGreaterThan(0);
 };
 
 describe('Lineup Entity Schema Alignment', () => {
@@ -148,13 +148,13 @@ describe('Lineup Entity Schema Alignment', () => {
         startMinute: 0,
         endMinute: 45,
         position: testPositionCode,
-        createdAt: expect.any(Date),
+        createdAt: expect.any(String),
         updatedAt: undefined,
-        // Authorization and soft delete fields
-        created_by_user_id: testUserId,
-        deleted_at: undefined,
-        deleted_by_user_id: undefined,
-        is_deleted: false
+        // Authorization and soft delete fields (camelCase)
+        createdByUserId: testUserId,
+        deletedAt: undefined,
+        deletedByUserId: undefined,
+        isDeleted: false
       });
 
       expectValidTimestamp(frontendLineup.createdAt);

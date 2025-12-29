@@ -60,18 +60,18 @@ export async function getGuestDataSummary(): Promise<GuestDataSummary> {
       db.matches.toArray(),
       db.events.toArray(),
       db.lineup.toArray(),
-      db.match_periods.toArray(),
-      db.match_state.toArray(),
+      db.matchPeriods.toArray(),
+      db.matchState.toArray(),
     ]);
 
-    const seasons = allSeasons.filter(s => isGuestId(s.created_by_user_id)).length;
-    const teams = allTeams.filter(t => isGuestId(t.created_by_user_id)).length;
-    const players = allPlayers.filter(p => isGuestId(p.created_by_user_id)).length;
-    const matches = allMatches.filter(m => isGuestId(m.created_by_user_id)).length;
-    const events = allEvents.filter(e => isGuestId(e.created_by_user_id)).length;
-    const lineups = allLineups.filter(l => isGuestId(l.created_by_user_id)).length;
-    const matchPeriods = allMatchPeriods.filter(p => isGuestId(p.created_by_user_id)).length;
-    const matchStates = allMatchStates.filter(s => isGuestId(s.created_by_user_id)).length;
+    const seasons = allSeasons.filter(s => isGuestId(s.createdByUserId)).length;
+    const teams = allTeams.filter(t => isGuestId(t.createdByUserId)).length;
+    const players = allPlayers.filter(p => isGuestId(p.createdByUserId)).length;
+    const matches = allMatches.filter(m => isGuestId(m.createdByUserId)).length;
+    const events = allEvents.filter(e => isGuestId(e.createdByUserId)).length;
+    const lineups = allLineups.filter(l => isGuestId(l.createdByUserId)).length;
+    const matchPeriods = allMatchPeriods.filter(p => isGuestId(p.createdByUserId)).length;
+    const matchStates = allMatchStates.filter(s => isGuestId(s.createdByUserId)).length;
 
     return {
       seasons,
@@ -116,7 +116,7 @@ export interface ImportError {
  * Full import orchestrator: imports seasons, teams, players, matches, events, lineups, match periods, and match state.
  * 
  * Key changes from legacy implementation:
- * - Reads events from events table (not outbox) - Requirements: 1.2
+ * - Reads events from events table - Requirements: 1.2
  * - Reads match periods from match_periods table with preserved timestamps - Requirements: 1.3
  * - Reads match state from match_state table - Requirements: 1.4
  * - Uses new period import endpoint for periods with timestamp preservation
@@ -153,7 +153,7 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
   };
 
   // Get ALL guest data from local tables (any created_by_user_id starting with "guest-")
-  // Requirements: 1.2 - Read events from events table (not outbox)
+  // Requirements: 1.2 - Read events from events table
   // Requirements: 1.3 - Read match periods from match_periods table with preserved timestamps
   // Requirements: 1.4 - Read match state from match_state table
   const [
@@ -172,29 +172,29 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
     db.matches.toArray(),
     db.events.toArray(),
     db.lineup.toArray(),
-    db.match_periods.toArray(),
-    db.match_state.toArray(),
+    db.matchPeriods.toArray(),
+    db.matchState.toArray(),
   ]);
 
-  const seasons = allSeasons.filter(s => isGuestId(s.created_by_user_id));
-  const teams = allTeams.filter(t => isGuestId(t.created_by_user_id));
-  const players = allPlayers.filter(p => isGuestId(p.created_by_user_id));
-  const matches = allMatches.filter(m => isGuestId(m.created_by_user_id));
-  // Requirements: 1.2 - Read events from events table (not outbox)
-  const events = allEvents.filter(e => isGuestId(e.created_by_user_id));
-  const lineups = allLineups.filter(l => isGuestId(l.created_by_user_id));
+  const seasons = allSeasons.filter(s => isGuestId(s.createdByUserId));
+  const teams = allTeams.filter(t => isGuestId(t.createdByUserId));
+  const players = allPlayers.filter(p => isGuestId(p.createdByUserId));
+  const matches = allMatches.filter(m => isGuestId(m.createdByUserId));
+  // Requirements: 1.2 - Read events from events table
+  const events = allEvents.filter(e => isGuestId(e.createdByUserId));
+  const lineups = allLineups.filter(l => isGuestId(l.createdByUserId));
   // Requirements: 1.3 - Read match periods from match_periods table with preserved timestamps
-  const matchPeriods = allMatchPeriods.filter(p => isGuestId(p.created_by_user_id));
+  const matchPeriods = allMatchPeriods.filter(p => isGuestId(p.createdByUserId));
   // Requirements: 1.4 - Read match state from match_state table
-  const matchStates = allMatchStates.filter(s => isGuestId(s.created_by_user_id));
+  const matchStates = allMatchStates.filter(s => isGuestId(s.createdByUserId));
 
   console.log(`[Import] Found guest data - Seasons: ${seasons.length}, Teams: ${teams.length}, Players: ${players.length}, Matches: ${matches.length}, Events: ${events.length}, Periods: ${matchPeriods.length}, States: ${matchStates.length}`);
 
   // Get all guest IDs for later cleanup
   const guestIds = new Set<string>();
   [...seasons, ...teams, ...players, ...matches, ...events, ...lineups, ...matchPeriods, ...matchStates].forEach(item => {
-    if (isGuestId(item.created_by_user_id)) {
-      guestIds.add(item.created_by_user_id);
+    if (isGuestId(item.createdByUserId)) {
+      guestIds.add(item.createdByUserId);
     }
   });
 
@@ -203,9 +203,9 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
 
   const bump = (step: string) => progress?.({ step, done, total: Math.max(1, total) });
 
-  // Determine primary team (most frequent home team, excluding is_opponent)
+  // Determine primary team (most frequent home team, excluding isOpponent)
   // Note: primaryLocalTeam is available for future use if needed
-  const primaryTeams = teams.filter((t: any) => !t.is_opponent);
+  const primaryTeams = teams.filter((t: any) => !t.isOpponent);
   void (primaryTeams.length > 0 ? primaryTeams[0].id : null); // Suppress unused variable warning
 
   // Import seasons with proper year-based naming
@@ -221,36 +221,36 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
       }
       const res = await seasonsApi.createSeason({
         label,
-        startDate: (s as any).start_date || new Date().toISOString().slice(0, 10),
-        endDate: (s as any).end_date || new Date().toISOString().slice(0, 10),
-        isCurrent: !!(s as any).is_current,
-        description: (s as any).description
+        startDate: s.startDate || new Date().toISOString().slice(0, 10),
+        endDate: s.endDate || new Date().toISOString().slice(0, 10),
+        isCurrent: !!s.isCurrent,
+        description: s.description
       });
-      const localId = (s as any).season_id || (s as any).id;
-      const serverId = (res.data as any)?.id || (res.data as any)?.season_id;
+      const localId = s.seasonId || s.id;
+      const serverId = (res.data as any)?.id || (res.data as any)?.seasonId;
       if (serverId) {
         seasonMap.set(localId, serverId);
       }
       importedCounts.seasons++;
     } catch (err) {
-      errors.push({ table: 'seasons', recordId: s.season_id || (s as any).id, error: String(err) });
+      errors.push({ table: 'seasons', recordId: s.seasonId, error: String(err) });
     }
     done++;
   }
 
-  // Import teams with colors and is_opponent flag
+  // Import teams with colors and isOpponent flag
   const teamMap = new Map<string, string>(); // local -> server
   for (const t of teams) {
     bump(`Importing team ${t.name}`);
     try {
       const teamData: any = {
         name: t.name,
-        homeKitPrimary: (t as any).color_primary,
-        homeKitSecondary: (t as any).color_secondary,
-        awayKitPrimary: (t as any).away_color_primary,
-        awayKitSecondary: (t as any).away_color_secondary,
-        logoUrl: (t as any).logo_url,
-        isOpponent: !!(t as any).is_opponent,
+        homeKitPrimary: t.homeKitPrimary,
+        homeKitSecondary: t.homeKitSecondary,
+        awayKitPrimary: t.awayKitPrimary,
+        awayKitSecondary: t.awayKitSecondary,
+        logoUrl: t.logoUrl,
+        isOpponent: !!t.isOpponent,
       };
       const res = await teamsApi.createTeam(teamData);
       teamMap.set(t.id as any, res.data.id);
@@ -264,22 +264,23 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
   // Import players with team assignment mapping
   const playerMap = new Map<string, string>(); // local -> server
   for (const p of players) {
-    bump(`Importing player ${p.full_name}`);
+    const playerName = p.name || '';
+    bump(`Importing player ${playerName}`);
     try {
-      const serverTeamId = p.current_team ? teamMap.get(p.current_team as any) : undefined;
+      const serverTeamId = p.currentTeam ? teamMap.get(p.currentTeam as any) : undefined;
       let res;
       if (serverTeamId) {
         res = await playersApi.createPlayerWithTeam({
-          name: p.full_name,
-          squadNumber: p.squad_number,
-          preferredPosition: p.preferred_pos,
+          name: playerName,
+          squadNumber: p.squadNumber,
+          preferredPosition: p.preferredPosition,
           teamId: serverTeamId
         } as any);
       } else {
         res = await playersApi.createPlayer({
-          name: p.full_name,
-          squadNumber: p.squad_number,
-          preferredPosition: p.preferred_pos
+          name: playerName,
+          squadNumber: p.squadNumber,
+          preferredPosition: p.preferredPosition
         } as any);
       }
       playerMap.set(p.id as any, res.data.id);
@@ -290,18 +291,18 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
     done++;
   }
 
-  // Import default lineups from default_lineups table
-  const allDefaultLineups = await db.default_lineups.filter((dl: any) => !dl.is_deleted).toArray();
-  const guestDefaultLineups = allDefaultLineups.filter((dl: any) => isGuestId(dl.created_by_user_id));
-  
+  // Import default lineups from defaultLineups table
+  const allDefaultLineups = await db.defaultLineups.filter((dl: any) => !dl.isDeleted).toArray();
+  const guestDefaultLineups = allDefaultLineups.filter((dl: any) => isGuestId(dl.createdByUserId));
+
   for (const defaultLineup of guestDefaultLineups) {
-    const serverTeamId = teamMap.get(defaultLineup.team_id);
-    
+    const serverTeamId = teamMap.get(defaultLineup.teamId);
+
     if (!serverTeamId) {
-      console.warn(`[Import] Skipping default lineup - no server team ID for local team ${defaultLineup.team_id}`);
+      console.warn(`[Import] Skipping default lineup - no server team ID for local team ${defaultLineup.teamId}`);
       continue;
     }
-    
+
     bump(`Importing default lineup for team`);
     try {
       if (defaultLineup.formation && Array.isArray(defaultLineup.formation)) {
@@ -310,7 +311,7 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
           ...p,
           playerId: playerMap.get(p.playerId) || p.playerId
         }));
-        
+
         await defaultLineupsApi.saveDefaultLineup({
           teamId: serverTeamId,
           formation: mappedFormation
@@ -318,7 +319,7 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
         console.log(`[Import] Successfully imported default lineup for team ${serverTeamId}`);
       }
     } catch (err) {
-      console.error(`[Import] Failed to import default lineup for team ${defaultLineup.team_id}:`, err);
+      console.error(`[Import] Failed to import default lineup for team ${defaultLineup.teamId}:`, err);
       errors.push({ table: 'default_lineups', recordId: defaultLineup.id, error: String(err) });
     }
   }
@@ -326,14 +327,14 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
   // Import matches using regular creation (not quickStart) to avoid duplicate opponents
   const matchMap = new Map<string, string>(); // local match -> server match id
   for (const m of matches) {
-    const home = await db.teams.get(m.home_team_id);
-    const away = await db.teams.get(m.away_team_id);
+    const home = await db.teams.get(m.homeTeamId);
+    const away = await db.teams.get(m.awayTeamId);
     const homeName = home?.name || 'Home';
     const awayName = away?.name || 'Away';
 
     // Map local team IDs to server team IDs
-    const serverHomeTeamId = teamMap.get(m.home_team_id);
-    const serverAwayTeamId = teamMap.get(m.away_team_id);
+    const serverHomeTeamId = teamMap.get(m.homeTeamId);
+    const serverAwayTeamId = teamMap.get(m.awayTeamId);
 
     if (!serverHomeTeamId || !serverAwayTeamId) {
       console.warn(`[Import] Skipping match ${homeName} vs ${awayName} - missing team mappings`);
@@ -345,9 +346,9 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
     bump(`Importing match ${homeName} vs ${awayName}`);
     try {
       // Map local season ID to server season ID
-      const serverSeasonId = seasonMap.get(m.season_id);
+      const serverSeasonId = seasonMap.get(m.seasonId);
       if (!serverSeasonId) {
-        console.warn(`[Import] Skipping match ${homeName} vs ${awayName} - missing season mapping for ${m.season_id}`);
+        console.warn(`[Import] Skipping match ${homeName} vs ${awayName} - missing season mapping for ${m.seasonId}`);
         errors.push({ table: 'matches', recordId: m.id, error: 'Missing season mapping' });
         done++;
         continue;
@@ -356,24 +357,24 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
       // Use the regular matches API endpoint instead of quickStart to avoid duplicate opponents
       const response = await apiClient.post<any>('/matches', {
         seasonId: serverSeasonId,
-        kickoffTime: m.kickoff_ts,
+        kickoffTime: m.kickoffTime,
         homeTeamId: serverHomeTeamId,
         awayTeamId: serverAwayTeamId,
         competition: m.competition,
         venue: m.venue,
-        durationMinutes: m.duration_mins,
-        periodFormat: m.period_format || 'quarter',
+        durationMinutes: m.durationMinutes,
+        periodFormat: m.periodFormat || 'quarter',
         notes: m.notes,
       });
-      const serverId = response.data.id || response.data.match_id;
+      const serverId = response.data.id || response.data.matchId;
       matchMap.set(m.id as any, serverId);
       importedCounts.matches++;
       console.log(`[Import] Created match ${serverId} (local: ${m.id}, home: ${homeName}, away: ${awayName})`);
 
       // Requirements: 1.3 - Import match periods from match_periods table with preserved timestamps
       // Get periods for this match from the match_periods table
-      const periodsForMatch = matchPeriods.filter(p => p.match_id === m.id);
-      
+      const periodsForMatch = matchPeriods.filter(p => p.matchId === m.id);
+
       if (periodsForMatch.length > 0) {
         // Start the match on server first
         try {
@@ -385,20 +386,20 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
 
         // Import periods using the new import endpoint with preserved timestamps
         for (const period of periodsForMatch) {
-          bump(`Importing period ${period.period_number} for match`);
+          bump(`Importing period ${period.periodNumber} for match`);
           try {
             // Use the period import endpoint to preserve timestamps
             await apiClient.post(`/matches/${serverId}/periods/import`, {
-              periodNumber: period.period_number,
-              periodType: period.period_type || 'REGULAR',
-              startedAt: new Date(period.started_at).toISOString(),
-              endedAt: period.ended_at ? new Date(period.ended_at).toISOString() : undefined,
-              durationSeconds: period.duration_seconds,
+              periodNumber: period.periodNumber,
+              periodType: period.periodType || 'REGULAR',
+              startedAt: new Date(period.startedAt).toISOString(),
+              endedAt: period.endedAt ? new Date(period.endedAt).toISOString() : undefined,
+              durationSeconds: period.durationSeconds,
             });
             importedCounts.matchPeriods++;
-            console.log(`[Import] Imported period ${period.period_number} for match ${serverId} with preserved timestamps`);
+            console.log(`[Import] Imported period ${period.periodNumber} for match ${serverId} with preserved timestamps`);
           } catch (err) {
-            console.error(`[Import] Failed to import period ${period.period_number}:`, err);
+            console.error(`[Import] Failed to import period ${period.periodNumber}:`, err);
             errors.push({ table: 'match_periods', recordId: period.id, error: String(err) });
           }
           done++;
@@ -407,76 +408,22 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
 
       // Requirements: 1.4 - Handle match state to trigger completion on server if needed
       // Get match state from match_state table
-      const matchState = matchStates.find(s => s.match_id === m.id);
-      
+      const matchState = matchStates.find(s => s.matchId === m.id);
+
       if (matchState) {
         importedCounts.matchStates++;
-        
+
         // If match was completed, complete it on server
         if (matchState.status === 'COMPLETED') {
           try {
             await matchesApi.completeMatch(serverId, {
-              home: m.home_score || 0,
-              away: m.away_score || 0
+              home: m.homeScore || 0,
+              away: m.awayScore || 0
             });
-            console.log(`[Import] Completed match ${serverId} with score ${m.home_score}-${m.away_score}`);
+            console.log(`[Import] Completed match ${serverId} with score ${m.homeScore}-${m.awayScore}`);
           } catch (err) {
             console.error(`[Import] Failed to complete match ${serverId}:`, err);
-            errors.push({ table: 'match_state', recordId: matchState.match_id, error: String(err) });
-          }
-        }
-      } else {
-        // Fallback: Check legacy local_live_state settings for backwards compatibility
-        const liveStateRec = await db.settings.get(`local_live_state:${m.id}`);
-        if (liveStateRec?.value) {
-          try {
-            const liveState = JSON.parse(liveStateRec.value);
-            const legacyPeriods = liveState.periods || [];
-            const status = liveState.status;
-
-            // If match was started but no periods in new table, use legacy periods
-            if ((status === 'LIVE' || status === 'COMPLETED' || legacyPeriods.length > 0) && periodsForMatch.length === 0) {
-              try {
-                await matchesApi.startMatch(serverId);
-                console.log(`[Import] Started match ${serverId} (from legacy state)`);
-              } catch (err) {
-                console.error(`[Import] Failed to start match ${serverId}:`, err);
-              }
-
-              // Start/end periods from legacy state
-              for (let i = 0; i < legacyPeriods.length; i++) {
-                const p = legacyPeriods[i];
-                try {
-                  const serverPeriod = await matchesApi.startPeriod(serverId, p.periodType || 'regular');
-                  console.log(`[Import] Started period ${i + 1} for match ${serverId} (legacy)`);
-                  if (p.endedAt) {
-                    try {
-                      await matchesApi.endPeriod(serverId, serverPeriod.id);
-                      console.log(`[Import] Ended period ${i + 1} for match ${serverId} (legacy)`);
-                    } catch (err) {
-                      console.error(`[Import] Failed to end period ${i + 1}:`, err);
-                    }
-                  }
-                } catch (err) {
-                  console.error(`[Import] Failed to start period ${i + 1}:`, err);
-                }
-              }
-            }
-
-            // If match was completed, complete it
-            if (status === 'COMPLETED') {
-              try {
-                await matchesApi.completeMatch(serverId, {
-                  home: m.home_score || 0,
-                  away: m.away_score || 0
-                });
-                console.log(`[Import] Completed match ${serverId} with score ${m.home_score}-${m.away_score} (legacy)`);
-              } catch (err) {
-                console.error(`[Import] Failed to complete match ${serverId}:`, err);
-              }
-            }
-          } catch (err) {
-            console.error(`[Import] Failed to process legacy live state for match ${serverId}:`, err);
+            errors.push({ table: 'match_state', recordId: matchState.matchId, error: String(err) });
           }
         }
       }
@@ -487,11 +434,11 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
     done++;
   }
 
-  // Requirements: 1.2 - Import events from events table (not outbox) with ID mapping
+  // Requirements: 1.2 - Import events from events table with ID mapping
   for (const e of events) {
-    const serverMatchId = matchMap.get(e.match_id);
+    const serverMatchId = matchMap.get(e.matchId);
     if (!serverMatchId) {
-      console.warn(`[Import] Skipping event - no server match ID for local match ${e.match_id}`);
+      console.warn(`[Import] Skipping event - no server match ID for local match ${e.matchId}`);
       errors.push({ table: 'events', recordId: e.id, error: 'No server match ID' });
       done++;
       continue;
@@ -505,7 +452,7 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
           const notesData = JSON.parse(e.notes || '{}');
           const formation = notesData.formation;
           const reason = notesData.reason;
-          
+
           if (formation && formation.players) {
             // Map local player IDs to server player IDs in the formation
             const mappedFormation = {
@@ -514,10 +461,10 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
                 id: playerMap.get(p.id) || p.id, // Use mapped ID if available
               }))
             };
-            
-            // Calculate startMin from clock_ms
-            const startMin = Math.floor((e.clock_ms || 0) / 60000);
-            
+
+            // Calculate startMin from clockMs
+            const startMin = Math.floor((e.clockMs || 0) / 60000);
+
             await apiClient.post(`/matches/${serverMatchId}/formation-changes`, {
               startMin,
               formation: mappedFormation,
@@ -535,15 +482,15 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
         done++;
         continue;
       }
-      
+
       // Regular events - use events API
-      const serverTeamId = e.team_id ? teamMap.get(e.team_id) : undefined;
-      const serverPlayerId = e.player_id ? playerMap.get(e.player_id) : undefined;
+      const serverTeamId = e.teamId ? teamMap.get(e.teamId) : undefined;
+      const serverPlayerId = e.playerId ? playerMap.get(e.playerId) : undefined;
       await eventsApi.create({
         matchId: serverMatchId,
         kind: e.kind,
-        periodNumber: e.period_number,
-        clockMs: e.clock_ms,
+        periodNumber: e.periodNumber,
+        clockMs: e.clockMs,
         teamId: serverTeamId,
         playerId: serverPlayerId,
         notes: e.notes,
@@ -562,8 +509,8 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
 
   // Import lineups
   for (const lineup of lineups) {
-    const serverMatchId = matchMap.get(lineup.match_id);
-    const serverPlayerId = playerMap.get(lineup.player_id);
+    const serverMatchId = matchMap.get(lineup.matchId);
+    const serverPlayerId = playerMap.get(lineup.playerId);
     if (!serverMatchId || !serverPlayerId) {
       errors.push({ table: 'lineup', recordId: lineup.id, error: 'Missing match or player mapping' });
       continue;
@@ -573,8 +520,8 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
       await lineupsApi.create({
         matchId: serverMatchId,
         playerId: serverPlayerId,
-        startMinute: lineup.start_min,
-        endMinute: lineup.end_min,
+        startMinute: lineup.startMinute,
+        endMinute: lineup.endMinute,
         position: lineup.position,
       });
       importedCounts.lineups++;
@@ -585,14 +532,14 @@ export async function runImport(progress?: (p: { step: string; done: number; tot
   }
 
   progress?.({ step: 'Cleaning up local guest data', done, total });
-  
+
   // Requirements: 1.5 - Clean up ALL guest data from all local tables to avoid duplicates
   await cleanupGuestData(db, guestIds, matches.map(m => m.id));
 
   progress?.({ step: 'Import complete!', done: total, total });
   console.log('[Import] Import completed successfully. All local data cleaned up.');
   console.log(`[Import] Summary - Seasons: ${importedCounts.seasons}, Teams: ${importedCounts.teams}, Players: ${importedCounts.players}, Matches: ${importedCounts.matches}, Events: ${importedCounts.events}, Periods: ${importedCounts.matchPeriods}, States: ${importedCounts.matchStates}, Lineups: ${importedCounts.lineups}`);
-  
+
   if (errors.length > 0) {
     console.warn(`[Import] ${errors.length} errors occurred during import:`, errors);
   }
@@ -629,35 +576,32 @@ async function cleanupGuestData(
     // Delete all records with guest-formatted IDs from all tables
     const guestIdArray = Array.from(guestIds);
     for (const guestId of guestIdArray) {
-      // Core tables with created_by_user_id index
-      await db.teams.where('created_by_user_id').equals(guestId).delete();
-      await db.players.where('created_by_user_id').equals(guestId).delete();
-      await db.seasons.where('created_by_user_id').equals(guestId).delete();
-      
-      // Events table doesn't have standalone created_by_user_id index, filter in memory
-      const guestEvents = await db.events.filter((e: any) => e.created_by_user_id === guestId).toArray();
+      // Core tables with createdByUserId index
+      await db.teams.where('createdByUserId').equals(guestId).delete();
+      await db.players.where('createdByUserId').equals(guestId).delete();
+      await db.seasons.where('createdByUserId').equals(guestId).delete();
+
+      // Events table - filter by createdByUserId
+      const guestEvents = await db.events.filter((e: any) => e.createdByUserId === guestId).toArray();
       if (guestEvents.length > 0) {
         const eventIds = guestEvents.map((e: any) => e.id);
         await db.events.bulkDelete(eventIds);
         console.log(`[Import] Deleted ${eventIds.length} events for guest ${guestId}`);
       }
-      
-      // Lineup table doesn't have standalone created_by_user_id index, filter in memory
-      const guestLineups = await db.lineup.filter((l: any) => l.created_by_user_id === guestId).toArray();
+
+      // Lineup table - filter by createdByUserId
+      const guestLineups = await db.lineup.filter((l: any) => l.createdByUserId === guestId).toArray();
       if (guestLineups.length > 0) {
         const lineupIds = guestLineups.map((l: any) => l.id);
         await db.lineup.bulkDelete(lineupIds);
         console.log(`[Import] Deleted ${lineupIds.length} lineup entries for guest ${guestId}`);
       }
-      
-      // Requirements: 1.5 - Clear match_periods records where created_by_user_id starts with 'guest-'
-      await db.match_periods.where('created_by_user_id').equals(guestId).delete();
-      
-      // Requirements: 1.5 - Clear match_state records where created_by_user_id starts with 'guest-'
-      await db.match_state.where('created_by_user_id').equals(guestId).delete();
-      
-      // Legacy outbox cleanup (for backwards compatibility during migration period)
-      await db.outbox.where('created_by_user_id').equals(guestId).delete();
+
+      // Clear matchPeriods records for guest
+      await db.matchPeriods.where('createdByUserId').equals(guestId).delete();
+
+      // Clear matchState records for guest
+      await db.matchState.where('createdByUserId').equals(guestId).delete();
     }
 
     // CRITICAL: Delete ALL local matches to prevent ID conflicts
@@ -671,49 +615,16 @@ async function cleanupGuestData(
       }
     }
 
-    // Clean up legacy live state settings (for backwards compatibility)
-    const settings = await db.settings.toArray();
-    for (const s of settings) {
-      if (s.key.startsWith('local_live_state:') || s.key.startsWith('default_lineup:')) {
-        await db.settings.delete(s.key);
-        console.log(`[Import] Deleted legacy setting ${s.key}`);
-      }
-    }
-    
-    // Clean up default_lineups table for guest users
+
+
+    // Clean up defaultLineups table for guest users
     for (const guestId of guestIdArray) {
-      const guestDefaultLineups = await db.default_lineups.filter((dl: any) => dl.created_by_user_id === guestId).toArray();
+      const guestDefaultLineups = await db.defaultLineups.filter((dl: any) => dl.createdByUserId === guestId).toArray();
       if (guestDefaultLineups.length > 0) {
         const ids = guestDefaultLineups.map((dl: any) => dl.id);
-        await db.default_lineups.bulkDelete(ids);
+        await db.defaultLineups.bulkDelete(ids);
         console.log(`[Import] Deleted ${ids.length} default lineups for guest ${guestId}`);
       }
-    }
-
-    // Clear temp outbox items (created by guest mode without user ID)
-    try {
-      const tempUserDeleted = await db.outbox.where('created_by_user_id').equals('temp-user-id').delete();
-      if (tempUserDeleted > 0) {
-        console.log(`[Import] Deleted ${tempUserDeleted} outbox items with temp-user-id`);
-      }
-    } catch (err) {
-      console.error('[Import] Failed to delete temp-user-id outbox items:', err);
-    }
-
-    // Also clean up any match_commands that might be lingering in outbox
-    try {
-      const allOutbox = await db.outbox.toArray();
-      const matchCommandIds = allOutbox
-        .filter((item: any) => item.table_name === 'match_commands')
-        .map((item: any) => item.id)
-        .filter((id: any): id is number => id !== undefined);
-
-      if (matchCommandIds.length > 0) {
-        await db.outbox.bulkDelete(matchCommandIds);
-        console.log(`[Import] Deleted ${matchCommandIds.length} match_commands from outbox`);
-      }
-    } catch (err) {
-      console.error('[Import] Failed to delete match_commands from outbox:', err);
     }
 
     console.log('[Import] Guest data cleanup completed');

@@ -62,24 +62,24 @@ const UpcomingMatchesList: React.FC<UpcomingMatchesListProps> = ({
     const { dateStr, timeStr } = formatMatchDateTime(new Date(match.kickoffTime), 'upcoming');
     const { ourTeamColor, opponentTeamColor, opponentUsingDefaults } = getMatchColors(match, primaryTeamId);
 
-    // Get team names with fallbacks - use is_opponent flag to determine which is ours
+    // Get team names with fallbacks - use isOpponent flag to determine which is ours
     const homeTeamName = match.homeTeam?.name || 'Home Team';
     const awayTeamName = match.awayTeam?.name || 'Away Team';
     
-    // Determine our team and opponent based on is_opponent flag
+    // Determine our team and opponent based on isOpponent flag
     let ourTeamName: string;
     let opponentTeamName: string;
     
-    if (match.homeTeam && !match.homeTeam.is_opponent) {
+    if (match.homeTeam && !match.homeTeam.isOpponent) {
       // Our team is home
       ourTeamName = homeTeamName;
       opponentTeamName = awayTeamName;
-    } else if (match.awayTeam && !match.awayTeam.is_opponent) {
+    } else if (match.awayTeam && !match.awayTeam.isOpponent) {
       // Our team is away
       ourTeamName = awayTeamName;
       opponentTeamName = homeTeamName;
     } else {
-      // Fallback to old logic if is_opponent flags are not available
+      // Fallback to old logic if isOpponent flags are not available
       ourTeamName = isHome ? homeTeamName : awayTeamName;
       opponentTeamName = isHome ? awayTeamName : homeTeamName;
     }

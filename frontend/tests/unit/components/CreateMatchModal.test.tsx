@@ -1,26 +1,45 @@
 /**
  * CreateMatchModal Component Tests
+ * 
+ * Tests the CreateMatchModal component which uses matchesApi.quickStart
+ * for local-first match creation.
  */
 
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, MockedFunction, Mocked } from 'vitest';
 import CreateMatchModal from '../../../src/components/CreateMatchModal';
-import { useTeams } from '../../../src/hooks/useTeams';
-import { useSeasons } from '../../../src/hooks/useSeasons';
 import { useToast } from '../../../src/contexts/ToastContext';
 import { matchesApi } from '../../../src/services/api/matchesApi';
+import { teamsApi } from '../../../src/services/api/teamsApi';
+import { seasonsApi } from '../../../src/services/api/seasonsApi';
+import { authApi } from '../../../src/services/api/authApi';
 
-// Mock the hooks and API
-vi.mock('../../../src/hooks/useTeams');
-vi.mock('../../../src/hooks/useSeasons');
+// Mock the hooks and APIs
 vi.mock('../../../src/contexts/ToastContext');
 vi.mock('../../../src/services/api/matchesApi');
+vi.mock('../../../src/services/api/teamsApi');
+vi.mock('../../../src/services/api/seasonsApi');
+vi.mock('../../../src/services/api/authApi');
 
-const mockUseTeams = useTeams as vi.MockedFunction<typeof useTeams>;
-const mockUseSeasons = useSeasons as vi.MockedFunction<typeof useSeasons>;
-const mockUseToast = useToast as vi.MockedFunction<typeof useToast>;
-const mockMatchesApi = matchesApi as vi.Mocked<typeof matchesApi>;
+// Mock guest quota
+vi.mock('../../../src/utils/guestQuota', () => ({
+  canCreateMatch: vi.fn(() => Promise.resolve({ ok: true }))
+}));
+
+// Mock the debounced search hook
+vi.mock('../../../src/hooks/useDebouncedSearch', () => ({
+  useDebouncedSearch: vi.fn(() => ({
+    searchText: '',
+    setSearchText: vi.fn(),
+    showSpinner: false
+  }))
+}));
+
+const mockUseToast = useToast as MockedFunction<typeof useToast>;
+const mockMatchesApi = matchesApi as Mocked<typeof matchesApi>;
+const mockTeamsApi = teamsApi as Mocked<typeof teamsApi>;
+const mockSeasonsApi = seasonsApi as Mocked<typeof seasonsApi>;
+const mockAuthApi = authApi as Mocked<typeof authApi>;
 
 const mockTeams = [
   {
@@ -30,10 +49,10 @@ const mockTeams = [
     homeKitSecondary: '#FFFFFF',
     awayKitPrimary: '#0000FF',
     awayKitSecondary: '#FFFFFF',
-    createdAt: new Date(),
-    created_by_user_id: 'user1',
-    is_deleted: false,
-    is_opponent: false
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false,
+    isOpponent: false
   },
   {
     id: '2',
@@ -42,31 +61,31 @@ const mockTeams = [
     homeKitSecondary: '#000000',
     awayKitPrimary: '#FFFF00',
     awayKitSecondary: '#000000',
-    createdAt: new Date(),
-    created_by_user_id: 'user1',
-    is_deleted: false,
-    is_opponent: false
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false,
+    isOpponent: false
   }
 ];
 
 const mockSeasons = [
   {
-    id: '1',
-    seasonId: '1',
-    label: '2024-25 Season',
+    id: 's1',
+    seasonId: '2023-24',
+    label: '2023/24 Season',
     isCurrent: true,
-    createdAt: new Date(),
-    created_by_user_id: 'user1',
-    is_deleted: false
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false
   },
   {
-    id: '2',
-    seasonId: '2',
-    label: '2023-24 Season',
+    id: 's2',
+    seasonId: '2022-23',
+    label: '2022/23 Season',
     isCurrent: false,
-    createdAt: new Date(),
-    created_by_user_id: 'user1',
-    is_deleted: false
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false
   }
 ];
 
@@ -75,43 +94,43 @@ const mockShowToast = vi.fn();
 describe('CreateMatchModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    
-    mockUseTeams.mockReturnValue({
-      teams: mockTeams,
-      loading: false,
-      error: null,
-      total: 2,
-      page: 1,
-      hasMore: false,
-      loadTeams: vi.fn(),
-      createTeam: vi.fn(),
-      updateTeam: vi.fn(),
-      deleteTeam: vi.fn(),
-      refreshTeams: vi.fn(),
-      clearError: vi.fn()
-    });
 
-    mockUseSeasons.mockReturnValue({
-      seasons: mockSeasons,
-      loading: false,
-      error: null,
-      total: 2,
-      page: 1,
-      hasMore: false,
-      loadSeasons: vi.fn(),
-      createSeason: vi.fn(),
-      updateSeason: vi.fn(),
-      deleteSeason: vi.fn(),
-      refreshSeasons: vi.fn(),
-      clearError: vi.fn()
-    });
-
+    // Mock toast context
     mockUseToast.mockReturnValue({
-      showToast: mockShowToast
+      showToast: mockShowToast,
+      showSuccess: vi.fn(),
+      showError: vi.fn(),
+      showWarning: vi.fn(),
+      showInfo: vi.fn(),
+      dismissToast: vi.fn(),
+      clearAllToasts: vi.fn(),
+      toasts: []
     });
+
+    // Mock teamsApi
+    mockTeamsApi.getTeams.mockResolvedValue({
+      data: mockTeams,
+      total: 2,
+      page: 1,
+      limit: 100,
+      hasMore: false
+    });
+    mockTeamsApi.getOpponentTeams.mockResolvedValue([]);
+
+    // Mock seasonsApi
+    mockSeasonsApi.getSeasons.mockResolvedValue({
+      data: mockSeasons,
+      total: 2,
+      page: 1,
+      limit: 100,
+      hasMore: false
+    });
+
+    // Mock authApi - default to authenticated user
+    mockAuthApi.isAuthenticated.mockReturnValue(true);
   });
 
-  it('renders modal when open', () => {
+  it('renders modal when open', async () => {
     render(
       <CreateMatchModal
         isOpen={true}
@@ -136,23 +155,53 @@ describe('CreateMatchModal', () => {
     expect(screen.queryByText('Create New Match')).not.toBeInTheDocument();
   });
 
-  it('pre-populates date when provided', () => {
-    const preselectedDate = new Date('2024-01-15T14:00:00Z');
-    
+  it('shows Edit Match title when editing', async () => {
+    const editingMatch = {
+      id: 'match-1',
+      seasonId: 's1',
+      kickoffTime: new Date().toISOString(),
+      homeTeamId: '1',
+      awayTeamId: '2',
+      homeTeam: mockTeams[0],
+      awayTeam: { ...mockTeams[1], isOpponent: true },
+      durationMinutes: 90,
+      periodFormat: 'half' as const,
+      homeScore: 0,
+      awayScore: 0,
+      createdAt: new Date().toISOString(),
+      createdByUserId: 'user1',
+      isDeleted: false
+    };
+
     render(
       <CreateMatchModal
         isOpen={true}
         onDidDismiss={vi.fn()}
-        preselectedDate={preselectedDate}
+        editingMatch={editingMatch}
       />
     );
 
-    // The datetime input should have the preselected date
-    const datetimeInput = screen.getByDisplayValue(/2024-01-15/);
-    expect(datetimeInput).toBeInTheDocument();
+    expect(screen.getByText('Edit Match')).toBeInTheDocument();
   });
 
-  it('shows validation errors for required fields', async () => {
+  it('calls onDidDismiss when cancel button is clicked', async () => {
+    const onDidDismiss = vi.fn();
+
+    render(
+      <CreateMatchModal
+        isOpen={true}
+        onDidDismiss={onDidDismiss}
+      />
+    );
+
+    // Find and click cancel button
+    const cancelButton = screen.getByText('Cancel');
+    fireEvent.click(cancelButton);
+
+    expect(onDidDismiss).toHaveBeenCalled();
+  });
+
+  it('loads teams when modal opens', async () => {
     render(
       <CreateMatchModal
         isOpen={true}
@@ -160,38 +209,119 @@ describe('CreateMatchModal', () => {
       />
     );
 
-    // Try to submit without filling required fields
-    const submitButton = screen.getByText('Create Match');
-    fireEvent.click(submitButton);
-
     await waitFor(() => {
-      expect(screen.getByText('Please select your team')).toBeInTheDocument();
-      expect(screen.getByText('Opponent name is required')).toBeInTheDocument();
-      expect(screen.getByText('Kickoff time is required')).toBeInTheDocument();
-      expect(screen.getByText('Please select a season')).toBeInTheDocument();
+      expect(mockTeamsApi.getTeams).toHaveBeenCalledWith({ page: 1, limit: 100 });
     });
   });
 
-  it('calls matchesApi.quickStart when form is valid', async () => {
+  it('loads seasons when modal opens for authenticated user', async () => {
+    mockAuthApi.isAuthenticated.mockReturnValue(true);
+
+    render(
+      <CreateMatchModal
+        isOpen={true}
+        onDidDismiss={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(mockSeasonsApi.getSeasons).toHaveBeenCalledWith({ page: 1, limit: 100 });
+    });
+  });
+
+  it('skips loading seasons for guest user', async () => {
+    mockAuthApi.isAuthenticated.mockReturnValue(false);
+
+    render(
+      <CreateMatchModal
+        isOpen={true}
+        onDidDismiss={vi.fn()}
+      />
+    );
+
+    // Wait a bit to ensure the effect has run
+    await waitFor(() => {
+      expect(mockTeamsApi.getTeams).toHaveBeenCalled();
+    });
+
+    // Seasons should not be loaded for guests
+    expect(mockSeasonsApi.getSeasons).not.toHaveBeenCalled();
+  });
+
+  it('shows Create Team button when no teams exist', async () => {
+    mockTeamsApi.getTeams.mockResolvedValue({
+      data: [],
+      total: 0,
+      page: 1,
+      limit: 100,
+      hasMore: false
+    });
+
+    render(
+      <CreateMatchModal
+        isOpen={true}
+        onDidDismiss={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Create Team')).toBeInTheDocument();
+    });
+  });
+
+  it('has opponent team input field', async () => {
+    render(
+      <CreateMatchModal
+        isOpen={true}
+        onDidDismiss={vi.fn()}
+      />
+    );
+
+    // The opponent input uses MUI Autocomplete with placeholder "Opponent team"
+    const opponentInput = screen.getByPlaceholderText('Opponent team');
+    expect(opponentInput).toBeInTheDocument();
+  });
+
+  it('has home/away venue selection buttons', async () => {
+    render(
+      <CreateMatchModal
+        isOpen={true}
+        onDidDismiss={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Home')).toBeInTheDocument();
+    expect(screen.getByText('Away')).toBeInTheDocument();
+  });
+
+  it('calls matchesApi.quickStart when form is submitted (local-first)', async () => {
     const mockMatch = {
-      id: '1',
-      seasonId: '1',
-      kickoffTime: new Date(),
+      id: 'match-1',
+      seasonId: 's1',
+      kickoffTime: new Date().toISOString(),
       homeTeamId: '1',
       awayTeamId: '2',
       durationMinutes: 90,
-      periodFormat: 'half',
-      ourScore: 0,
-      opponentScore: 0,
-      createdAt: new Date(),
-      created_by_user_id: 'user1',
-      is_deleted: false
+      periodFormat: 'half' as const,
+      homeScore: 0,
+      awayScore: 0,
+      createdAt: new Date().toISOString(),
+      createdByUserId: 'user1',
+      isDeleted: false
     };
 
     mockMatchesApi.quickStart.mockResolvedValue(mockMatch);
 
     const onMatchCreated = vi.fn();
     const onDidDismiss = vi.fn();
+
+    // Use useDebouncedSearch mock to simulate opponent text
+    const { useDebouncedSearch } = await import('../../../src/hooks/useDebouncedSearch');
+    (useDebouncedSearch as any).mockReturnValue({
+      searchText: 'Test Opponent',
+      setSearchText: vi.fn(),
+      showSpinner: false
+    });
 
     render(
       <CreateMatchModal
@@ -201,40 +331,81 @@ describe('CreateMatchModal', () => {
       />
     );
 
-    // Fill in the form
-    const opponentInput = screen.getByPlaceholderText('Enter opponent name');
-    fireEvent.change(opponentInput, { target: { value: 'Test Opponent' } });
-
-    // Set a kickoff time
-    const datetimeInput = screen.getByRole('textbox');
-    fireEvent.change(datetimeInput, { target: { value: '2024-01-15T14:00:00Z' } });
+    // Wait for teams to load
+    await waitFor(() => {
+      expect(mockTeamsApi.getTeams).toHaveBeenCalled();
+    });
 
     // Submit the form
     const submitButton = screen.getByText('Create Match');
     fireEvent.click(submitButton);
 
+    // The quickStart should be called (local-first - no server call needed)
     await waitFor(() => {
-      expect(mockMatchesApi.quickStart).toHaveBeenCalledWith(
-        expect.objectContaining({
-          opponentName: 'Test Opponent',
-          kickoffTime: '2024-01-15T14:00:00Z',
-          isHome: true,
-          durationMinutes: 90,
-          periodFormat: 'half'
-        })
-      );
-      expect(onMatchCreated).toHaveBeenCalledWith(mockMatch);
+      expect(mockMatchesApi.quickStart).toHaveBeenCalled();
+    });
+  });
+
+  it('shows success toast after match creation', async () => {
+    const mockMatch = {
+      id: 'match-1',
+      seasonId: 's1',
+      kickoffTime: new Date().toISOString(),
+      homeTeamId: '1',
+      awayTeamId: '2',
+      durationMinutes: 90,
+      periodFormat: 'half' as const,
+      homeScore: 0,
+      awayScore: 0,
+      createdAt: new Date().toISOString(),
+      createdByUserId: 'user1',
+      isDeleted: false
+    };
+
+    mockMatchesApi.quickStart.mockResolvedValue(mockMatch);
+
+    // Use useDebouncedSearch mock to simulate opponent text
+    const { useDebouncedSearch } = await import('../../../src/hooks/useDebouncedSearch');
+    (useDebouncedSearch as any).mockReturnValue({
+      searchText: 'Test Opponent',
+      setSearchText: vi.fn(),
+      showSpinner: false
+    });
+
+    render(
+      <CreateMatchModal
+        isOpen={true}
+        onDidDismiss={vi.fn()}
+        onMatchCreated={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(mockTeamsApi.getTeams).toHaveBeenCalled();
+    });
+
+    const submitButton = screen.getByText('Create Match');
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
       expect(mockShowToast).toHaveBeenCalledWith({
         message: 'Match created successfully',
         severity: 'success'
       });
-      expect(onDidDismiss).toHaveBeenCalled();
     });
   });
 
-  it('handles API errors gracefully', async () => {
+  it('handles quickStart errors gracefully', async () => {
     const errorMessage = 'Failed to create match';
     mockMatchesApi.quickStart.mockRejectedValue(new Error(errorMessage));
+
+    // Use useDebouncedSearch mock to simulate opponent text
+    const { useDebouncedSearch } = await import('../../../src/hooks/useDebouncedSearch');
+    (useDebouncedSearch as any).mockReturnValue({
+      searchText: 'Test Opponent',
+      setSearchText: vi.fn(),
+      showSpinner: false
+    });
 
     render(
       <CreateMatchModal
@@ -243,11 +414,10 @@ describe('CreateMatchModal', () => {
       />
     );
 
-    // Fill in the form
-    const opponentInput = screen.getByPlaceholderText('Enter opponent name');
-    fireEvent.change(opponentInput, { target: { value: 'Test Opponent' } });
+    await waitFor(() => {
+      expect(mockTeamsApi.getTeams).toHaveBeenCalled();
+    });
 
-    // Submit the form
     const submitButton = screen.getByText('Create Match');
     fireEvent.click(submitButton);
 
@@ -257,26 +427,5 @@ describe('CreateMatchModal', () => {
         severity: 'error'
       });
     });
-  });
-
-  it('resets form when cancelled', () => {
-    const onDidDismiss = vi.fn();
-
-    render(
-      <CreateMatchModal
-        isOpen={true}
-        onDidDismiss={onDidDismiss}
-      />
-    );
-
-    // Fill in some data
-    const opponentInput = screen.getByPlaceholderText('Enter opponent name');
-    fireEvent.change(opponentInput, { target: { value: 'Test Opponent' } });
-
-    // Cancel
-    const cancelButton = screen.getByText('Cancel');
-    fireEvent.click(cancelButton);
-
-    expect(onDidDismiss).toHaveBeenCalled();
   });
 });

@@ -1,7 +1,7 @@
 import * as jwt from 'jsonwebtoken';
 
 // Separate viewer token config from user auth tokens
-const VIEWER_JWT_SECRET = process.env.VIEWER_JWT_SECRET || process.env.JWT_SECRET || 'viewer-token-secret-change-me';
+const VIEWER_JWT_SECRET = process.env['VIEWER_JWT_SECRET'] || process.env['JWT_SECRET'] || 'viewer-token-secret-change-me';
 const VIEWER_ISSUER = 'grassroots-pwa';
 const VIEWER_AUDIENCE = 'grassroots-viewers';
 

@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { HTMLIonContentElement } from '@ionic/core/components';
 import useDeepLinkScrollHighlight from '../hooks/useDeepLinkScrollHighlight';
-import { 
-  IonPage, 
+import {
+  IonPage,
   IonContent,
   IonButton,
   IonIcon,
@@ -23,9 +22,9 @@ import {
   IonAlert,
   IonSpinner
 } from '@ionic/react';
-import { 
-  add, 
-  calendar, 
+import {
+  add,
+  calendar,
   ellipsisVertical,
   pencil,
   trash,
@@ -39,8 +38,9 @@ import PageHeader from '../components/PageHeader';
 import GuestBanner from '../components/GuestBanner';
 import CreateSeasonModal from '../components/CreateSeasonModal';
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu';
-import { useSeasons } from '../hooks/useSeasons';
-import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
+import { useLocalSeasons } from '../hooks/useLocalData';
+import { useInitialSync } from '../hooks/useInitialSync';
+import { seasonsApi } from '../services/api/seasonsApi';
 import { matchesApi } from '../services/api/matchesApi';
 import type { Season } from '@shared/types';
 import './PageStyles.css';
@@ -51,15 +51,21 @@ interface SeasonsPageProps {
 }
 
 const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
-  const {
-    seasons,
-    loading,
-    error,
-    total,
-    loadSeasons,
-    deleteSeason,
-    clearError
-  } = useSeasons();
+  // Trigger initial sync from server for authenticated users
+  useInitialSync();
+
+  // Reactive data from IndexedDB
+  const { seasons: allSeasons, loading } = useLocalSeasons();
+
+  // Local search state
+  const [searchText, setSearchText] = useState('');
+
+  // Filter seasons based on search
+  const seasons = searchText
+    ? allSeasons.filter(season =>
+      season.label.toLowerCase().includes(searchText.toLowerCase())
+    )
+    : allSeasons;
 
   const [selectedSeason, setSelectedSeason] = useState<Season | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -69,37 +75,26 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
   const [contextMenuAnchor, setContextMenuAnchor] = useState<HTMLElement | null>(null);
   const [matchCounts, setMatchCounts] = useState<Record<string, number>>({});
 
-  // Debounced search functionality
-  const { searchText, setSearchText, showSpinner } = useDebouncedSearch({
-    delay: 300,
-    onSearch: async (searchTerm: string) => {
-      await loadSeasons({ search: searchTerm || undefined });
-    }
-  });
-
-  useEffect(() => {
-    loadSeasons();
-  }, [loadSeasons]);
-
   // Load match counts for all seasons
   useEffect(() => {
     const loadMatchCounts = async () => {
       if (seasons.length > 0) {
         const counts: Record<string, number> = {};
-        
-        // Load match counts for all seasons in parallel
+
         await Promise.all(
           seasons.map(async (season) => {
+            const seasonId = season.id;
+            if (!seasonId) return;
             try {
-              const matches = await matchesApi.getMatchesBySeason(season.id);
-              counts[season.id] = matches.length;
+              const matches = await matchesApi.getMatchesBySeason(seasonId);
+              counts[seasonId] = matches.length;
             } catch (error) {
-              console.error(`Failed to load matches for season ${season.id}:`, error);
-              counts[season.id] = 0;
+              console.error(`Failed to load matches for season ${seasonId}:`, error);
+              counts[seasonId] = 0;
             }
           })
         );
-        
+
         setMatchCounts(counts);
       }
     };
@@ -107,7 +102,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
     loadMatchCounts();
   }, [seasons]);
 
-  const contentRef = useRef<HTMLIonContentElement | null>(null);
+  const contentRef = useRef<any>(null);
 
   const navigate = (page: string) => {
     if (onNavigate) {
@@ -115,8 +110,14 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
     }
   };
 
+  // Handle refresh - trigger cache refresh in background
   const handleRefresh = async (event: CustomEvent) => {
-    await loadSeasons();
+    try {
+      const { refreshCache } = await import('../services/cacheService');
+      await refreshCache();
+    } catch (e) {
+      console.warn('Refresh failed:', e);
+    }
     event.detail.complete();
   };
 
@@ -155,7 +156,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
 
   const handleSeasonAction = (action: string) => {
     if (!selectedSeason) return;
-    
+
     switch (action) {
       case 'edit':
         setShowEditModal(true);
@@ -172,7 +173,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
 
   const handleDeleteSeason = async () => {
     if (selectedSeason) {
-      await deleteSeason(selectedSeason.id);
+      await seasonsApi.deleteSeason(selectedSeason.id);
       setSelectedSeason(null);
     }
     setShowDeleteAlert(false);
@@ -186,11 +187,11 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
     return `${startFormatted} - ${endFormatted}`;
   };
 
-  const renderSeasonCard = (season: Season) => {
+  const renderSeasonCard = (season: any) => {
     const isActive = season.isCurrent;
     const statusColor = isActive ? 'success' : 'medium';
     const matchCount = matchCounts[season.id] ?? 0;
-    
+
     return (
       <IonCol size="12" sizeMd="6" sizeLg="4" key={season.id}>
         <IonCard className={`season-card ${isActive ? 'season-card-active' : 'season-card-inactive'}`}
@@ -199,7 +200,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
         >
           {/* Season status indicator */}
           <div className={`season-status-bar ${isActive ? 'active' : 'inactive'}`}></div>
-          
+
           <IonCardHeader>
             <div className="season-card-header">
               <div className="season-info">
@@ -209,8 +210,8 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
                   <span>{formatDateRange(season.startDate ?? '', season.endDate ?? '')}</span>
                 </div>
               </div>
-              <IonButton 
-                fill="clear" 
+              <IonButton
+                fill="clear"
                 size="small"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -225,7 +226,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
               </IonButton>
             </div>
           </IonCardHeader>
-          
+
           <IonCardContent>
             <div className="season-stats">
               <IonChip color={statusColor} className="status-chip">
@@ -250,9 +251,9 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
       <p className="empty-subtitle">
         Create your first season to start organizing matches and tracking progress.
       </p>
-      <IonButton 
-        expand="block" 
-        color="primary" 
+      <IonButton
+        expand="block"
+        color="primary"
         className="empty-action"
         onClick={() => setShowCreateModal(true)}
       >
@@ -290,7 +291,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
         additionalButtons={
           <IonButton
             fill="clear"
-            onClick={() => loadSeasons()}
+            onClick={handleRefresh as any}
             style={{ color: 'white' }}
             disabled={loading}
           >
@@ -316,10 +317,10 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
               <h1 className="seasons-main-title">Seasons</h1>
             </div>
             <p className="seasons-subtitle">
-              {total > 0 ? `${total} season${total !== 1 ? 's' : ''}` : 'Manage your football seasons'}
+              {allSeasons.length > 0 ? `${allSeasons.length} season${allSeasons.length !== 1 ? 's' : ''}` : 'Manage your football seasons'}
             </p>
           </div>
-          
+
           <div className="search-container">
             <IonSearchbar
               value={searchText}
@@ -328,8 +329,8 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
               showClearButton="focus"
               className="seasons-search"
             />
-            {showSpinner && (
-              <div className={`search-loading ${showSpinner ? 'visible' : ''}`}>
+            {loading && (
+              <div className="search-loading visible">
                 <IonSpinner name="dots" />
               </div>
             )}
@@ -351,7 +352,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
         </div>
 
         <IonFab vertical="bottom" horizontal="end" slot="fixed">
-          <IonFabButton 
+          <IonFabButton
             color="primary"
             onClick={() => setShowCreateModal(true)}
           >
@@ -396,7 +397,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
           isOpen={showCreateModal}
           onDidDismiss={() => {
             setShowCreateModal(false);
-            loadSeasons();
+            // Reactive data updates automatically from IndexedDB
           }}
         />
 
@@ -406,7 +407,7 @@ const SeasonsPage: React.FC<SeasonsPageProps> = ({ onNavigate }) => {
           onDidDismiss={() => {
             setShowEditModal(false);
             setSelectedSeason(null);
-            loadSeasons();
+            // Reactive data updates automatically from IndexedDB
           }}
           editSeason={selectedSeason}
           mode="edit"

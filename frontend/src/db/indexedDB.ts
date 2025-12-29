@@ -1,87 +1,81 @@
 import Dexie, { Table } from 'dexie';
-import type { 
-  StoredMatch, 
-  StoredTeam, 
-  StoredPlayer, 
-  StoredSeason,
-  StoredEvent,
-  StoredLineup,
-  StoredPlayerTeam,
-  StoredSetting,
-  DatabaseResult
-} from '../types/database';
-import type { EventPayload } from '../types/events';
+// DatabaseResult type for database operations
+import type { DatabaseResult } from './schema';
 import type { ID } from '../types/index';
-import { validateOrThrow, OutboxEventSchema, EventPayloadSchema } from '../schemas/validation';
-import type { 
-  Event, 
-  Match, 
-  Team, 
-  Player, 
+import type {
+  Event,
+  Match,
+  Team,
+  Player,
   Season,
-  Lineup,
   PlayerTeam
-} from '../../../shared/types/frontend';
-import type { EnhancedEvent, EnhancedMatch, EnhancedTeam, EnhancedPlayer, EnhancedSeason, EnhancedLineup, LocalMatchPeriod, LocalMatchState, LocalDefaultLineup } from './schema';
+} from '@shared/types';
+import type {
+  DbEvent,
+  DbMatch,
+  DbTeam,
+  DbPlayer,
+  DbSeason,
+  DbLineup,
+  DbPlayerTeam,
+  DbMatchNote,
+  DbMatchPeriod,
+  DbMatchState,
+  DbDefaultLineup,
+  DbGlobalStats,
+  DbSyncMetadata,
+  DbSyncFailure,
+  DbSetting,
+  // Legacy type aliases for backward compatibility
+  EnhancedEvent,
+  EnhancedMatch,
+  EnhancedTeam,
+  EnhancedPlayer,
+  EnhancedSeason,
+  EnhancedLineup,
+  EnhancedMatchNote,
+  LocalMatchPeriod,
+  LocalMatchState,
+  LocalDefaultLineup
+} from './schema';
 
-// Define IndexedDB-specific types with authentication fields
-interface OutboxEvent {
-  id?: number;
-  table_name: string;
-  record_id: string;
-  operation: 'INSERT' | 'UPDATE' | 'DELETE';
-  data?: any;
-  synced: number; // Use number (0/1) instead of boolean for IndexedDB compatibility
-  created_at: number;
-  retry_count: number;
-  last_sync_attempt?: number;
-  sync_error?: string;
-  failed_at?: number;
-  created_by_user_id: string;
-}
-
-interface SyncMetadata {
-  id?: number;
-  table_name: string;
-  record_id: string;
-  last_synced: number;
-  server_version?: string;
-  local_version: string;
-}
+type SyncMetadata = DbSyncMetadata;
+type SyncFailure = DbSyncFailure;
 
 import { SCHEMA_INDEXES } from './schema';
 import { autoLinkEvents } from './eventLinking';
 import { runMigrations } from './migrations';
-import { addToOutbox } from './utils';
 import { performanceMonitor } from './performance';
 import { getGuestId, isGuest } from '../utils/guest';
+import { getCurrentUserId } from '../utils/network';
 import { canAddEvent } from '../utils/guestQuota';
 
 /**
  * Enhanced IndexedDB database with proper typing and validation
  */
 export class GrassrootsDB extends Dexie {
-  // Database tables using enhanced types for compatibility
-  public events!: Table<EnhancedEvent, string>;
-  public matches!: Table<EnhancedMatch, string>;
-  public teams!: Table<EnhancedTeam, string>;
-  public players!: Table<EnhancedPlayer, string>;
-  public seasons!: Table<EnhancedSeason, string>;
-  public lineup!: Table<EnhancedLineup, string>;
-  public player_teams!: Table<PlayerTeam, string>;
-  public match_periods!: Table<LocalMatchPeriod, string>;
-  public match_state!: Table<LocalMatchState, string>;
-  public default_lineups!: Table<LocalDefaultLineup, string>;
-  public outbox!: Table<OutboxEvent, number>;
-  public sync_metadata!: Table<SyncMetadata, number>;
-  public settings!: Table<StoredSetting, string>;
+  // Database tables using Db* types from schema.ts
+  public events!: Table<DbEvent, string>;
+  public matches!: Table<DbMatch, string>;
+  public teams!: Table<DbTeam, string>;
+  public players!: Table<DbPlayer, string>;
+  public seasons!: Table<DbSeason, string>;
+  public lineup!: Table<DbLineup, string>;
+  public playerTeams!: Table<DbPlayerTeam, string>;
+  public matchNotes!: Table<DbMatchNote, string>;
+  public matchPeriods!: Table<DbMatchPeriod, string>;
+  public matchState!: Table<DbMatchState, string>;
+  public defaultLineups!: Table<DbDefaultLineup, string>;
+  public globalStats!: Table<DbGlobalStats, string>;
+  public syncMetadata!: Table<DbSyncMetadata, number>;
+  public syncFailures!: Table<SyncFailure, [string, string]>;
+  public settings!: Table<DbSetting, string>;
 
   constructor() {
     super('grassroots_db');
-    
+
     // Version 1: Initial schema (legacy)
     this.version(1).stores({
-      outbox: '++id, synced, created_at, retry_count, last_sync_attempt',
       matches: 'id, season_id, home_team_id, away_team_id, date, status, created_at',
       teams: 'id, name, created_at',
       players: 'id, team_id, full_name, jersey_number, is_active, created_at',
@@ -91,7 +85,6 @@ export class GrassrootsDB extends Dexie {
 
     // Version 2: Add performance indexes (legacy)
     this.version(2).stores({
-      outbox: '++id, synced, created_at, retry_count, last_sync_attempt, [synced+created_at]',
       matches: 'id, season_id, home_team_id, away_team_id, date, status, created_at, [season_id+date]',
       teams: 'id, name, created_at',
       players: 'id, team_id, full_name, jersey_number, is_active, created_at, [team_id+is_active], [team_id+jersey_number]',
@@ -107,14 +100,12 @@ export class GrassrootsDB extends Dexie {
       players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
       seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
       lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
-      player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
-      outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
-      sync_metadata: `++id, ${SCHEMA_INDEXES.sync_metadata.join(', ')}`,
+      playerTeams: `id, ${SCHEMA_INDEXES.playerTeams.join(', ')}`,
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
       settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
     });
 
-    // Version 5: Add indexes for created_by_user_id and is_deleted on teams/matches
-    // This enables guest-mode counts and filtering by creator without full scans
+    // Version 5: Add indexes for createdByUserId and isDeleted on teams/matches
     this.version(5).stores({
       events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
       matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
@@ -122,13 +113,12 @@ export class GrassrootsDB extends Dexie {
       players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
       seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
       lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
-      player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
-      outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
-      sync_metadata: `++id, ${SCHEMA_INDEXES.sync_metadata.join(', ')}`,
+      playerTeams: `id, ${SCHEMA_INDEXES.playerTeams.join(', ')}`,
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
       settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
     });
 
-    // Version 6: Add created_by_user_id / is_deleted indexes for seasons (missed previously)
+    // Version 6: Add createdByUserId / isDeleted indexes for seasons
     this.version(6).stores({
       events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
       matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
@@ -136,13 +126,12 @@ export class GrassrootsDB extends Dexie {
       players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
       seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
       lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
-      player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
-      outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
-      sync_metadata: `++id, ${SCHEMA_INDEXES.sync_metadata.join(', ')}`,
+      playerTeams: `id, ${SCHEMA_INDEXES.playerTeams.join(', ')}`,
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
       settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
     });
 
-    // Version 7: Add composite event indexes used in utils ([match_id+player_id], [match_id+team_id])
+    // Version 7: Add composite event indexes
     this.version(7).stores({
       events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
       matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
@@ -150,13 +139,16 @@ export class GrassrootsDB extends Dexie {
       players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
       seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
       lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
-      player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
-      outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
-      sync_metadata: `++id, ${SCHEMA_INDEXES.sync_metadata.join(', ')}`,
-      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
+      playerTeams: `id, ${SCHEMA_INDEXES.playerTeams.join(', ')}`,
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
+      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`,
+      matchNotes: `matchNoteId, ${SCHEMA_INDEXES.matchNotes.join(', ')}`,
+      matchPeriods: `id, ${SCHEMA_INDEXES.matchPeriods.join(', ')}`,
+      matchState: `matchId, ${SCHEMA_INDEXES.matchState.join(', ')}`,
+      defaultLineups: `id, ${SCHEMA_INDEXES.defaultLineups.join(', ')}`
     });
 
-    // Version 8: Add created_by_user_id index on outbox for import detection
+    // Version 8: Legacy version (outbox removed)
     this.version(8).stores({
       events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
       matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
@@ -165,8 +157,7 @@ export class GrassrootsDB extends Dexie {
       seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
       lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
       player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
-      outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
-      sync_metadata: `++id, ${SCHEMA_INDEXES.sync_metadata.join(', ')}`,
+      sync_metadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
       settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
     });
 
@@ -179,10 +170,9 @@ export class GrassrootsDB extends Dexie {
       seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
       lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
       player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
-      match_periods: `id, ${SCHEMA_INDEXES.match_periods.join(', ')}`,
-      match_state: `match_id, ${SCHEMA_INDEXES.match_state.join(', ')}`,
-      outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
-      sync_metadata: `++id, ${SCHEMA_INDEXES.sync_metadata.join(', ')}`,
+      match_periods: `id, ${SCHEMA_INDEXES.matchPeriods.join(', ')}`,
+      match_state: `match_id, ${SCHEMA_INDEXES.matchState.join(', ')}`,
+      sync_metadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
       settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
     }).upgrade(async (trans) => {
       // Initialize synced field to false for all existing records
@@ -236,12 +226,96 @@ export class GrassrootsDB extends Dexie {
       seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
       lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
       player_teams: `id, player_id, team_id, start_date, is_active, created_at, updated_at`,
-      match_periods: `id, ${SCHEMA_INDEXES.match_periods.join(', ')}`,
-      match_state: `match_id, ${SCHEMA_INDEXES.match_state.join(', ')}`,
-      default_lineups: `id, ${SCHEMA_INDEXES.default_lineups.join(', ')}`,
-      outbox: `++id, ${SCHEMA_INDEXES.outbox.join(', ')}`,
-      sync_metadata: `++id, ${SCHEMA_INDEXES.sync_metadata.join(', ')}`,
+      match_periods: `id, ${SCHEMA_INDEXES.matchPeriods.join(', ')}`,
+      match_state: `match_id, ${SCHEMA_INDEXES.matchState.join(', ')}`,
+      default_lineups: `id, ${SCHEMA_INDEXES.defaultLineups.join(', ')}`,
+      sync_metadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
       settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`
+    });
+
+    // Version 12: camelCase store names - must match class property names
+    // Bumping version auto-clears old snake_case stores since there are no active users
+    this.version(12).stores({
+      events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
+      matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
+      teams: `id, ${SCHEMA_INDEXES.teams.join(', ')}`,
+      players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
+      seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
+      lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
+      playerTeams: `id, playerId, teamId, startDate, isActive, createdAt, updatedAt`,
+      matchNotes: `matchNoteId, ${SCHEMA_INDEXES.matchNotes.join(', ')}`,
+      matchPeriods: `id, ${SCHEMA_INDEXES.matchPeriods.join(', ')}`,
+      matchState: `matchId, ${SCHEMA_INDEXES.matchState.join(', ')}`,
+      defaultLineups: `id, ${SCHEMA_INDEXES.defaultLineups.join(', ')}`,
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
+      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`,
+      // Explicitly delete old snake_case stores
+      player_teams: null,
+      match_notes: null,
+      match_periods: null,
+      match_state: null,
+      default_lineups: null,
+      sync_metadata: null
+    });
+
+    // Version 13: Sync state is tracked on entity tables via synced/syncedAt fields
+    this.version(13).stores({
+      events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
+      matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
+      teams: `id, ${SCHEMA_INDEXES.teams.join(', ')}`,
+      players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
+      seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
+      lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
+      playerTeams: `id, playerId, teamId, startDate, isActive, createdAt, updatedAt`,
+      matchNotes: `matchNoteId, ${SCHEMA_INDEXES.matchNotes.join(', ')}`,
+      matchPeriods: `id, ${SCHEMA_INDEXES.matchPeriods.join(', ')}`,
+      matchState: `matchId, ${SCHEMA_INDEXES.matchState.join(', ')}`,
+      defaultLineups: `id, ${SCHEMA_INDEXES.defaultLineups.join(', ')}`,
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
+      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`,
+      // Legacy table cleanup
+      outbox: null
+    });
+
+    // Version 14: Add per-record sync failure tracking for backoff/quarantine
+    this.version(14).stores({
+      events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
+      matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
+      teams: `id, ${SCHEMA_INDEXES.teams.join(', ')}`,
+      players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
+      seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
+      lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
+      playerTeams: `id, playerId, teamId, startDate, isActive, createdAt, updatedAt`,
+      matchNotes: `matchNoteId, ${SCHEMA_INDEXES.matchNotes.join(', ')}`,
+      matchPeriods: `id, ${SCHEMA_INDEXES.matchPeriods.join(', ')}`,
+      matchState: `matchId, ${SCHEMA_INDEXES.matchState.join(', ')}`,
+      defaultLineups: `id, ${SCHEMA_INDEXES.defaultLineups.join(', ')}`,
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
+      syncFailures: '&[table+recordId], table, recordId, nextRetryAt, permanent, lastAttemptAt, reasonCode',
+      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`,
+      // Legacy table cleanup
+      outbox: null
+    });
+
+    // Version 15: Add global stats cache table (single row)
+    this.version(15).stores({
+      events: `id, ${SCHEMA_INDEXES.events.join(', ')}`,
+      matches: `id, ${SCHEMA_INDEXES.matches.join(', ')}`,
+      teams: `id, ${SCHEMA_INDEXES.teams.join(', ')}`,
+      players: `id, ${SCHEMA_INDEXES.players.join(', ')}`,
+      seasons: `id, ${SCHEMA_INDEXES.seasons.join(', ')}`,
+      lineup: `id, ${SCHEMA_INDEXES.lineup.join(', ')}`,
+      playerTeams: `id, playerId, teamId, startDate, isActive, createdAt, updatedAt`,
+      matchNotes: `matchNoteId, ${SCHEMA_INDEXES.matchNotes.join(', ')}`,
+      matchPeriods: `id, ${SCHEMA_INDEXES.matchPeriods.join(', ')}`,
+      matchState: `matchId, ${SCHEMA_INDEXES.matchState.join(', ')}`,
+      defaultLineups: `id, ${SCHEMA_INDEXES.defaultLineups.join(', ')}`,
+      globalStats: `id, ${SCHEMA_INDEXES.globalStats.join(', ')}`,
+      syncMetadata: `++id, ${SCHEMA_INDEXES.syncMetadata.join(', ')}`,
+      syncFailures: '&[table+recordId], table, recordId, nextRetryAt, permanent, lastAttemptAt, reasonCode',
+      settings: `key, ${SCHEMA_INDEXES.settings.join(', ')}`,
+      // Legacy table cleanup
+      outbox: null
     });
 
     // Hook for auto-linking events
@@ -253,37 +327,6 @@ export class GrassrootsDB extends Dexie {
         });
       });
     });
-
-    // Hook for outbox tracking - only for authenticated users (guests don't need outbox)
-    this.events.hook('creating', (primKey, obj, trans) => {
-      trans.on('complete', () => {
-        // Skip outbox for guests - they sync everything on sign-up via synced:false flag
-        if (isGuest()) return;
-        addToOutbox('events', obj.id, 'INSERT', obj).catch(error => {
-          console.warn('Failed to add event to outbox:', error);
-        });
-      });
-    });
-
-    this.events.hook('updating', (modifications, primKey, obj, trans) => {
-      trans.on('complete', () => {
-        // Skip outbox for guests
-        if (isGuest()) return;
-        addToOutbox('events', primKey, 'UPDATE', { ...obj, ...modifications }).catch(error => {
-          console.warn('Failed to add event update to outbox:', error);
-        });
-      });
-    });
-
-    this.events.hook('deleting', (primKey, obj, trans) => {
-      trans.on('complete', () => {
-        // Skip outbox for guests
-        if (isGuest()) return;
-        addToOutbox('events', primKey, 'DELETE').catch(error => {
-          console.warn('Failed to add event deletion to outbox:', error);
-        });
-      });
-    });
   }
 
   /**
@@ -292,16 +335,16 @@ export class GrassrootsDB extends Dexie {
   async initialize(): Promise<void> {
     try {
       console.log('Initializing enhanced database...');
-      
+
       // Open the database
       await this.open();
-      
+
       await runMigrations(this);
-      
+
       console.log('Database initialization completed successfully');
     } catch (error) {
       console.error('Database initialization failed:', error);
-      
+
       // Handle constraint errors by resetting the database
       if (error instanceof Error && error.name === 'ConstraintError' && error.message.includes('already exists')) {
         console.log('Constraint error detected - resetting database...');
@@ -323,7 +366,7 @@ export class GrassrootsDB extends Dexie {
         await this.resetDatabase();
         return;
       }
-      
+
       throw error;
     }
   }
@@ -334,17 +377,17 @@ export class GrassrootsDB extends Dexie {
   async resetDatabase(): Promise<void> {
     try {
       console.log('Resetting database...');
-      
+
       // Close current connection
       this.close();
-      
+
       // Delete the database
       await Dexie.delete('grassroots_db');
-      
+
       // Reinitialize
       await this.open();
       await runMigrations(this);
-      
+
       console.log('Database reset completed successfully');
     } catch (error) {
       console.error('Database reset failed:', error);
@@ -357,62 +400,61 @@ export class GrassrootsDB extends Dexie {
    */
   async addEnhancedEvent(eventData: {
     kind: string;
-    match_id: string;
-    period_number: number;
-    clock_ms: number;
-    team_id: string;
-    player_id: string;
+    matchId: string;
+    periodNumber: number;
+    clockMs: number;
+    teamId: string;
+    playerId: string;
     sentiment: number;
     notes?: string;
-    created_by_user_id?: string; // Optional for now, will be required when auth is implemented
+    createdByUserId?: string; // Optional for now, will be required when auth is implemented
   }): Promise<DatabaseResult<string>> {
     try {
       // Validate required fields
-      if (!eventData.kind || !eventData.match_id ||
-          !eventData.team_id || !eventData.player_id) {
+      if (!eventData.kind || !eventData.matchId ||
+        !eventData.teamId || !eventData.playerId) {
         return {
           success: false,
-          error: 'Missing required fields: kind, match_id, team_id, player_id are required',
+          error: 'Missing required fields: kind, matchId, teamId, playerId are required',
           affected_count: 0
         };
       }
 
       // Validate data types
-      if (typeof eventData.period_number !== 'number' || 
-          typeof eventData.clock_ms !== 'number' || 
-          typeof eventData.sentiment !== 'number') {
+      if (typeof eventData.periodNumber !== 'number' ||
+        typeof eventData.clockMs !== 'number' ||
+        typeof eventData.sentiment !== 'number') {
         return {
           success: false,
-          error: 'Invalid data types: period_number, clock_ms, and sentiment must be numbers',
+          error: 'Invalid data types: periodNumber, clockMs, and sentiment must be numbers',
           affected_count: 0
         };
       }
 
-      const now = Date.now();
-      const eventId = `event-${now}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      const event: EnhancedEvent = {
+      const nowMs = Date.now();
+      const nowIso = new Date(nowMs).toISOString();
+      const eventId = globalThis.crypto?.randomUUID?.() ?? `event-${nowMs}-${Math.random().toString(36).substr(2, 9)}`;
+
+      const event: DbEvent = {
         id: eventId,
-        // Schema-required properties
-        match_id: eventData.match_id,
-        ts_server: now,
-        period_number: eventData.period_number,
-        clock_ms: eventData.clock_ms,
+        // Schema-required properties (camelCase)
+        matchId: eventData.matchId,
+        periodNumber: eventData.periodNumber,
+        clockMs: eventData.clockMs,
         kind: eventData.kind as any, // EventKind
-        team_id: eventData.team_id,
-        player_id: eventData.player_id,
+        teamId: eventData.teamId,
+        playerId: eventData.playerId,
         sentiment: eventData.sentiment,
         notes: eventData.notes,
-        created_at: now,
-        updated_at: now,
-        created_by_user_id: eventData.created_by_user_id || (isGuest() ? getGuestId() : 'authenticated-user'),
-        is_deleted: false,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        createdByUserId: eventData.createdByUserId || (isGuest() ? getGuestId() : getCurrentUserId()),
+        isDeleted: false,
         synced: false,
-        // Note: EnhancedEvent uses snake_case properties only
       };
 
       await this.events.add(event);
-      
+
       return {
         success: true,
         data: eventId,
@@ -433,12 +475,12 @@ export class GrassrootsDB extends Dexie {
   async getEnhancedMatchEvents(matchId: string): Promise<DatabaseResult<EnhancedEvent[]>> {
     try {
       const events = await this.events
-        .where('match_id')
+        .where('matchId')
         .equals(matchId)
         .toArray();
-      
-      // Sort by clock_ms
-      events.sort((a, b) => a.clock_ms - b.clock_ms);
+
+      // Sort by clockMs (handle undefined values)
+      events.sort((a, b) => (a.clockMs ?? 0) - (b.clockMs ?? 0));
 
       return {
         success: true,
@@ -460,7 +502,7 @@ export class GrassrootsDB extends Dexie {
   async deleteEnhancedEvent(eventId: string): Promise<DatabaseResult<void>> {
     try {
       await this.events.delete(eventId);
-      
+
       return {
         success: true,
         affected_count: 1
@@ -482,40 +524,41 @@ export class GrassrootsDB extends Dexie {
    */
   async addEventToTable(payload: {
     kind: string;
-    match_id: string;
-    team_id?: string; // Optional for formation_change events
-    player_id?: string | null;
+    matchId: string;
+    teamId: string;
+    playerId?: string | null;
     minute?: number;
     second?: number;
-    clock_ms?: number;
+    clockMs?: number;
     period?: number;
-    period_number?: number;
+    periodNumber?: number;
     sentiment?: number;
     notes?: string;
     data?: any;
-    created_by_user_id?: string;
+    createdAt?: string;
+    createdByUserId?: string;
+    isDeleted?: boolean;
   }): Promise<DatabaseResult<string>> {
     try {
-      // Validate required fields (team_id is optional for formation_change events)
-      if (!payload.kind || !payload.match_id) {
+      // Validate required fields
+      if (!payload.kind || !payload.matchId) {
         return {
           success: false,
-          error: 'Missing required fields: kind and match_id are required',
+          error: 'Missing required fields: kind and matchId are required',
           affected_count: 0
         };
       }
-      // team_id is required for most events, but optional for formation_change
-      if (!payload.team_id && payload.kind !== 'formation_change') {
+      if (!payload.teamId) {
         return {
           success: false,
-          error: 'Missing required field: team_id is required for non-formation events',
+          error: 'Missing required field: teamId is required for events',
           affected_count: 0
         };
       }
 
       // Enforce guest quota for non-scoring events
       try {
-        const quota = await canAddEvent(payload.match_id, payload.kind);
+        const quota = await canAddEvent(payload.matchId, payload.kind);
         if (!quota.ok) {
           return {
             success: false,
@@ -527,28 +570,28 @@ export class GrassrootsDB extends Dexie {
         console.warn('Quota check failed:', e);
       }
 
-      const now = Date.now();
-      const eventId = `event-${now}-${Math.random().toString(36).substr(2, 9)}`;
+      const nowMs = Date.now();
+      const nowIso = new Date(nowMs).toISOString();
+      const eventId = globalThis.crypto?.randomUUID?.() ?? `event-${nowMs}-${Math.random().toString(36).substr(2, 9)}`;
 
-      // Calculate clock_ms if not provided
-      const clockMs = payload.clock_ms ??
+      // Calculate clockMs if not provided
+      const clockMs = payload.clockMs ??
         ((payload.minute ?? 0) * 60000 + (payload.second ?? 0) * 1000);
 
-      const event: EnhancedEvent = {
+      const event: DbEvent = {
         id: eventId,
-        match_id: payload.match_id,
-        ts_server: now,
-        period_number: payload.period_number ?? payload.period ?? 1,
-        clock_ms: clockMs,
+        matchId: payload.matchId,
+        periodNumber: payload.periodNumber ?? payload.period ?? 1,
+        clockMs: clockMs,
         kind: payload.kind as any,
-        team_id: payload.team_id || '', // Empty string for formation_change events
-        player_id: payload.player_id ?? '',
+        teamId: payload.teamId,
+        playerId: payload.playerId ?? '',
         sentiment: payload.sentiment ?? 0,
         notes: payload.notes || (payload.data?.notes as string) || '',
-        created_at: now,
-        updated_at: now,
-        created_by_user_id: payload.created_by_user_id || (isGuest() ? getGuestId() : 'authenticated-user'),
-        is_deleted: false,
+        createdAt: payload.createdAt || nowIso,
+        updatedAt: nowIso,
+        createdByUserId: payload.createdByUserId || (isGuest() ? getGuestId() : getCurrentUserId()),
+        isDeleted: payload.isDeleted ?? false,
         synced: false, // Mark as unsynced
       };
 
@@ -569,207 +612,40 @@ export class GrassrootsDB extends Dexie {
   }
 
   /**
-   * Add an event to the outbox with validation
-   * @deprecated Use addEventToTable instead for new offline-first architecture
-   */
-  async addEvent(payload: any): Promise<DatabaseResult<number>> {
-    try {
-      // Basic validation - check for required fields
-      if (!payload || typeof payload !== 'object') {
-        return {
-          success: false,
-          error: 'Invalid payload: must be an object',
-          affected_count: 0
-        };
-      }
-
-      // Check for some basic required fields
-      if (!payload.kind && !payload.match_id && !payload.team_id) {
-        return {
-          success: false,
-          error: 'Invalid payload: missing required fields (kind, match_id, or team_id)',
-          affected_count: 0
-        };
-      }
-
-      // Enforce guest quota for non-scoring events
-      try {
-        const kind = payload.kind;
-        const matchId = payload.match_id;
-        const quota = await canAddEvent(String(matchId || ''), String(kind || ''));
-        if (!quota.ok) {
-          return {
-            success: false,
-            error: quota.reason,
-            affected_count: 0
-          };
-        }
-      } catch {}
-
-      const outboxEvent: Omit<OutboxEvent, 'id'> = {
-        table_name: 'events',
-        record_id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        operation: 'INSERT',
-        data: payload,
-        synced: 0, // Use 0 instead of false for IndexedDB compatibility
-        created_at: Date.now(),
-        retry_count: 0,
-        created_by_user_id: payload.created_by_user_id || (isGuest() ? getGuestId() : 'authenticated-user')
-      };
-
-      const id = await this.outbox.add(outboxEvent);
-      
-      return {
-        success: true,
-        data: id,
-        affected_count: 1
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-        affected_count: 0
-      };
-    }
-  }
-
-  /**
-   * Get unsynced events from outbox
-   */
-  async getUnsyncedEvents(): Promise<DatabaseResult<OutboxEvent[]>> {
-    try {
-      const events = await this.outbox
-        .where('synced')
-        .equals(0) // Use 0 instead of false for IndexedDB compatibility
-        .filter(event => (event.retry_count || 0) < 3) // Exclude events with high retry count
-        .sortBy('created_at');
-
-      return {
-        success: true,
-        data: events || [], // Ensure we always return an array
-        affected_count: events ? events.length : 0
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to get unsynced events',
-        affected_count: 0,
-        data: [] // Ensure we return an empty array on error
-      };
-    }
-  }
-
-
-  /**
-   * Mark event as synced
-   */
-  async markEventSynced(id: number): Promise<DatabaseResult<void>> {
-    try {
-      const result = await this.outbox.update(id, { 
-        synced: 1, // Use 1 instead of true for IndexedDB compatibility
-        last_sync_attempt: Date.now()
-      });
-
-      if (result === 0) {
-        return {
-          success: false,
-          error: 'Event not found',
-          affected_count: 0
-        };
-      }
-
-      return {
-        success: true,
-        affected_count: 1
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to mark event as synced',
-        affected_count: 0
-      };
-    }
-  }
-
-  /**
-   * Mark event sync as failed and increment retry count
-   */
-  async markEventSyncFailed(id: number, error: string): Promise<DatabaseResult<void>> {
-    try {
-      const event = await this.outbox.get(id);
-      if (!event) {
-        return {
-          success: false,
-          error: 'Event not found',
-          affected_count: 0
-        };
-      }
-
-      await this.outbox.update(id, {
-        retry_count: (event.retry_count || 0) + 1,
-        last_sync_attempt: Date.now(),
-        sync_error: error,
-        failed_at: Date.now(),
-        synced: 0 // Ensure it stays unsynced (use 0 instead of false)
-      });
-
-      return {
-        success: true,
-        affected_count: 1
-      };
-    } catch (err) {
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : 'Failed to mark event sync as failed',
-        affected_count: 0
-      };
-    }
-  }
-
-  /**
-   * Delete an event from the outbox
-   */
-  async deleteEvent(id: number): Promise<DatabaseResult<void>> {
-    try {
-      await this.outbox.delete(id);
-      
-      return {
-        success: true,
-        affected_count: 1
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to delete event',
-        affected_count: 0
-      };
-    }
-  }
-
-  /**
    * Add or update a team
    */
-  async upsertTeam(team: Omit<EnhancedTeam, 'created_at' | 'updated_at'>): Promise<DatabaseResult<string>> {
+  async upsertTeam(team: Omit<DbTeam, 'createdAt' | 'updatedAt'>): Promise<DatabaseResult<string>> {
     try {
-      const now = Date.now();
-      const existingTeam = await this.teams.get(team.team_id);
-      
+      const nowIso = new Date().toISOString();
+      // Support both id and teamId for backward compatibility
+      const teamId = team.id || team.teamId;
+      if (!teamId) {
+        return {
+          success: false,
+          error: 'Team ID is required',
+          affected_count: 0
+        };
+      }
+      const existingTeam = await this.teams.get(teamId);
+
       if (existingTeam) {
-        await this.teams.update(team.team_id, {
+        await this.teams.update(teamId, {
           ...team,
-          updated_at: now
+          id: teamId,
+          updatedAt: nowIso
         });
       } else {
         await this.teams.add({
           ...team,
-          created_at: now,
-          updated_at: now
-        });
+          id: teamId,
+          createdAt: nowIso,
+          updatedAt: nowIso
+        } as DbTeam);
       }
 
       return {
         success: true,
-        data: team.team_id,
+        data: teamId,
         affected_count: 1
       };
     } catch (error) {
@@ -784,23 +660,22 @@ export class GrassrootsDB extends Dexie {
   /**
    * Add or update a player
    */
-  async upsertPlayer(player: Omit<StoredPlayer, 'created_at' | 'updated_at'>): Promise<DatabaseResult<string>> {
+  async upsertPlayer(player: Omit<DbPlayer, 'createdAt' | 'updatedAt'>): Promise<DatabaseResult<string>> {
     try {
-      const now = Date.now();
+      const nowIso = new Date().toISOString();
       const existingPlayer = await this.players.get(player.id);
-      
+
+      const dbPlayer: DbPlayer = {
+        ...player,
+        createdAt: existingPlayer?.createdAt ?? nowIso,
+        updatedAt: nowIso,
+        synced: player.synced ?? false,
+      };
+
       if (existingPlayer) {
-        await this.players.update(player.id, {
-          ...player,
-          updated_at: now
-        });
+        await this.players.update(player.id, dbPlayer);
       } else {
-        await this.players.add({
-          ...player,
-          created_at: now,
-          updated_at: now,
-          synced: false
-        });
+        await this.players.add(dbPlayer);
       }
 
       return {
@@ -822,22 +697,23 @@ export class GrassrootsDB extends Dexie {
    */
   async getAllTeams(): Promise<DatabaseResult<Team[]>> {
     try {
-      const enhancedTeams = await this.teams.orderBy('name').toArray();
-      // Transform Enhanced types to frontend types
-      const teams: Team[] = enhancedTeams.map(team => ({
-        id: team.team_id || team.id,
+      const dbTeams = await this.teams.orderBy('name').toArray();
+      // DbTeam extends Team, so we can return directly (with legacy field fallbacks)
+      const teams: Team[] = dbTeams.map(team => ({
+        id: team.id,
         name: team.name,
-        homeKitPrimary: team.color_primary,
-        homeKitSecondary: team.color_secondary,
-        awayKitPrimary: team.color_primary,
-        awayKitSecondary: team.color_secondary,
-        logoUrl: undefined,
-        createdAt: new Date(team.created_at),
-        updatedAt: team.updated_at ? new Date(team.updated_at) : undefined,
-        created_by_user_id: team.created_by_user_id,
-        deleted_at: team.deleted_at ? new Date(team.deleted_at) : undefined,
-        deleted_by_user_id: team.deleted_by_user_id,
-        is_deleted: team.is_deleted
+        homeKitPrimary: team.homeKitPrimary || team.colorPrimary,
+        homeKitSecondary: team.homeKitSecondary || team.colorSecondary,
+        awayKitPrimary: team.awayKitPrimary || team.awayColorPrimary,
+        awayKitSecondary: team.awayKitSecondary || team.awayColorSecondary,
+        logoUrl: team.logoUrl,
+        createdAt: team.createdAt,
+        updatedAt: team.updatedAt,
+        createdByUserId: team.createdByUserId,
+        deletedAt: team.deletedAt,
+        deletedByUserId: team.deletedByUserId,
+        isDeleted: team.isDeleted,
+        isOpponent: team.isOpponent
       }));
       return {
         success: true,
@@ -854,37 +730,48 @@ export class GrassrootsDB extends Dexie {
   }
 
   /**
-   * Get players for a specific team
+   * Get players for a specific team using player_teams junction table
    */
   async getPlayersByTeam(teamId: ID): Promise<DatabaseResult<Player[]>> {
     try {
       console.log('[getPlayersByTeam] Querying players for team:', teamId);
-      const allPlayers = await this.players.toArray();
-      console.log('[getPlayersByTeam] All players in DB:', allPlayers.map(p => ({ id: p.id, name: p.full_name, current_team: p.current_team })));
-      
-      const enhancedPlayers = await this.players
-        .where('current_team')
+
+      // Get active player-team relationships for this team
+      const playerTeamRelations = await this.playerTeams
+        .where('teamId')
         .equals(teamId)
-        .and(p => !p.is_deleted)
-        .sortBy('squad_number');
-      
+        .filter((pt: any) => !pt.isDeleted && pt.isActive !== false)
+        .toArray();
+
+      console.log('[getPlayersByTeam] Found player-team relations:', playerTeamRelations.length);
+
+      // Get the player IDs from the relationships
+      const playerIds = playerTeamRelations.map((pt: any) => pt.playerId);
+
+      // Fetch the actual player records
+      const enhancedPlayers = await this.players
+        .where('id')
+        .anyOf(playerIds)
+        .filter(p => !p.isDeleted)
+        .sortBy('squadNumber');
+
       console.log('[getPlayersByTeam] Found players:', enhancedPlayers.length);
 
-      // Transform Enhanced types to frontend types
+      // DbPlayer extends Player, so we can return directly (with legacy field fallbacks)
       const players: Player[] = enhancedPlayers.map(player => ({
         id: player.id,
-        name: player.full_name,
-        squadNumber: player.squad_number,
-        preferredPosition: player.preferred_pos,
-        dateOfBirth: player.dob ? new Date(player.dob) : undefined,
+        name: player.name || player.fullName || '',
+        squadNumber: player.squadNumber,
+        preferredPosition: player.preferredPosition || player.preferredPos,
+        dateOfBirth: player.dateOfBirth || player.dob,
         notes: player.notes,
-        currentTeam: player.current_team,
-        createdAt: new Date(player.created_at),
-        updatedAt: player.updated_at ? new Date(player.updated_at) : undefined,
-        created_by_user_id: player.created_by_user_id,
-        deleted_at: player.deleted_at ? new Date(player.deleted_at) : undefined,
-        deleted_by_user_id: player.deleted_by_user_id,
-        is_deleted: player.is_deleted
+        currentTeam: player.currentTeam,
+        createdAt: player.createdAt,
+        updatedAt: player.updatedAt,
+        createdByUserId: player.createdByUserId,
+        deletedAt: player.deletedAt,
+        deletedByUserId: player.deletedByUserId,
+        isDeleted: player.isDeleted
       }));
 
       return {
@@ -906,12 +793,12 @@ export class GrassrootsDB extends Dexie {
    */
   async getMatchEvents(matchId: ID): Promise<DatabaseResult<EnhancedEvent[]>> {
     try {
-      // Read from events table (not outbox) - events are stored directly in the events table
+      // Read from events table - events are stored directly in the events table
       const events = await this.events
-        .where('match_id')
+        .where('matchId')
         .equals(matchId)
-        .and(e => !e.is_deleted)
-        .sortBy('created_at');
+        .and(e => !e.isDeleted)
+        .sortBy('createdAt');
 
       return {
         success: true,
@@ -930,35 +817,36 @@ export class GrassrootsDB extends Dexie {
   /**
    * Create a new match period
    */
-  async createMatchPeriod(period: Partial<LocalMatchPeriod>): Promise<DatabaseResult<string>> {
+  async createMatchPeriod(period: Partial<DbMatchPeriod>): Promise<DatabaseResult<string>> {
     try {
-      if (!period.match_id || !period.period_number) {
+      if (!period.matchId || !period.periodNumber) {
         return {
           success: false,
-          error: 'Missing required fields: match_id and period_number are required',
+          error: 'Missing required fields: matchId and periodNumber are required',
           affected_count: 0
         };
       }
 
-      const now = Date.now();
-      const id = period.id || `period-${now}-${Math.random().toString(36).substr(2, 9)}`;
+      const nowMs = Date.now();
+      const nowIso = new Date(nowMs).toISOString();
+      const id = period.id || `period-${nowMs}-${Math.random().toString(36).substr(2, 9)}`;
 
-      const matchPeriod: LocalMatchPeriod = {
+      const matchPeriod: DbMatchPeriod = {
         id,
-        match_id: period.match_id,
-        period_number: period.period_number,
-        period_type: period.period_type || 'REGULAR',
-        started_at: period.started_at || now,
-        ended_at: period.ended_at,
-        duration_seconds: period.duration_seconds,
-        created_at: now,
-        updated_at: now,
-        created_by_user_id: period.created_by_user_id || (isGuest() ? getGuestId() : 'authenticated-user'),
-        is_deleted: false,
+        matchId: period.matchId,
+        periodNumber: period.periodNumber,
+        periodType: period.periodType || 'REGULAR',
+        startedAt: period.startedAt || nowMs,
+        endedAt: period.endedAt,
+        durationSeconds: period.durationSeconds,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        createdByUserId: period.createdByUserId || (isGuest() ? getGuestId() : getCurrentUserId()),
+        isDeleted: false,
         synced: false,
       };
 
-      await this.match_periods.add(matchPeriod);
+      await this.matchPeriods.add(matchPeriod);
 
       return {
         success: true,
@@ -979,7 +867,7 @@ export class GrassrootsDB extends Dexie {
    */
   async endMatchPeriod(matchId: string, periodId: string, endedAt?: number): Promise<DatabaseResult<void>> {
     try {
-      const period = await this.match_periods.get(periodId);
+      const period = await this.matchPeriods.get(periodId);
       if (!period) {
         return {
           success: false,
@@ -989,12 +877,13 @@ export class GrassrootsDB extends Dexie {
       }
 
       const endTime = endedAt || Date.now();
-      const durationSeconds = Math.floor((endTime - period.started_at) / 1000);
+      const durationSeconds = Math.floor((endTime - period.startedAt) / 1000);
+      const nowIso = new Date().toISOString();
 
-      await this.match_periods.update(periodId, {
-        ended_at: endTime,
-        duration_seconds: durationSeconds,
-        updated_at: Date.now(),
+      await this.matchPeriods.update(periodId, {
+        endedAt: endTime,
+        durationSeconds: durationSeconds,
+        updatedAt: nowIso,
         synced: false
       });
 
@@ -1014,13 +903,13 @@ export class GrassrootsDB extends Dexie {
   /**
    * Get all periods for a match
    */
-  async getMatchPeriods(matchId: string): Promise<DatabaseResult<LocalMatchPeriod[]>> {
+  async getMatchPeriods(matchId: string): Promise<DatabaseResult<DbMatchPeriod[]>> {
     try {
-      const periods = await this.match_periods
-        .where('match_id')
+      const periods = await this.matchPeriods
+        .where('matchId')
         .equals(matchId)
-        .and(p => !p.is_deleted)
-        .sortBy('period_number');
+        .and(p => !p.isDeleted)
+        .sortBy('periodNumber');
 
       return {
         success: true,
@@ -1040,40 +929,41 @@ export class GrassrootsDB extends Dexie {
   /**
    * Update or create match state
    */
-  async updateMatchState(matchId: string, updates: Partial<LocalMatchState>): Promise<DatabaseResult<void>> {
+  async updateMatchState(matchId: string, updates: Partial<DbMatchState>): Promise<DatabaseResult<void>> {
     try {
       if (!matchId) {
         return {
           success: false,
-          error: 'match_id is required',
+          error: 'matchId is required',
           affected_count: 0
         };
       }
 
-      const existing = await this.match_state.get(matchId);
-      const now = Date.now();
+      const existing = await this.matchState.get(matchId);
+      const nowMs = Date.now();
+      const nowIso = new Date(nowMs).toISOString();
 
       if (existing) {
-        await this.match_state.update(matchId, {
+        await this.matchState.update(matchId, {
           ...updates,
-          last_updated_at: now,
-          updated_at: now,
+          lastUpdatedAt: nowMs,
+          updatedAt: nowIso,
           synced: false
         });
       } else {
-        const newState: LocalMatchState = {
-          match_id: matchId,
+        const newState: DbMatchState = {
+          matchId: matchId,
           status: updates.status || 'NOT_STARTED',
-          current_period_id: updates.current_period_id,
-          timer_ms: updates.timer_ms || 0,
-          last_updated_at: now,
-          created_at: now,
-          updated_at: now,
-          created_by_user_id: updates.created_by_user_id || (isGuest() ? getGuestId() : 'authenticated-user'),
-          is_deleted: false,
+          currentPeriodId: updates.currentPeriodId,
+          timerMs: updates.timerMs || 0,
+          lastUpdatedAt: nowMs,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          createdByUserId: updates.createdByUserId || (isGuest() ? getGuestId() : getCurrentUserId()),
+          isDeleted: false,
           synced: false,
         };
-        await this.match_state.add(newState);
+        await this.matchState.add(newState);
       }
 
       return {
@@ -1092,9 +982,9 @@ export class GrassrootsDB extends Dexie {
   /**
    * Get match state
    */
-  async getMatchState(matchId: string): Promise<DatabaseResult<LocalMatchState | undefined>> {
+  async getMatchState(matchId: string): Promise<DatabaseResult<DbMatchState | undefined>> {
     try {
-      const state = await this.match_state.get(matchId);
+      const state = await this.matchState.get(matchId);
 
       return {
         success: true,
@@ -1117,16 +1007,19 @@ export class GrassrootsDB extends Dexie {
     try {
       await Promise.all([
         this.events.clear(),
-        this.outbox.clear(),
         this.matches.clear(),
         this.teams.clear(),
         this.players.clear(),
         this.seasons.clear(),
         this.lineup.clear(),
-        this.match_periods.clear(),
-        this.match_state.clear(),
+        this.playerTeams.clear(),
+        this.matchNotes.clear(),
+        this.matchPeriods.clear(),
+        this.matchState.clear(),
+        this.defaultLineups.clear(),
         this.settings.clear(),
-        this.sync_metadata.clear()
+        this.syncMetadata.clear(),
+        this.syncFailures.clear()
       ]);
 
       return {
@@ -1165,35 +1058,132 @@ export class GrassrootsDB extends Dexie {
    * Get database statistics
    */
   async getStats(): Promise<DatabaseResult<{
-    outbox_count: number;
-    unsynced_count: number;
     teams_count: number;
     players_count: number;
     matches_count: number;
+    events_count: number;
+    unsynced_events_count: number;
   }>> {
     try {
-      const [outboxCount, unsyncedCount, teamsCount, playersCount, matchesCount] = await Promise.all([
-        this.outbox.count(),
-        this.outbox.where('synced').equals(0).count(),
+      const [teamsCount, playersCount, matchesCount, eventsCount, unsyncedEventsCount] = await Promise.all([
         this.teams.count(),
         this.players.count(),
-        this.matches.count()
+        this.matches.count(),
+        this.events.count(),
+        this.events.filter(e => e.synced === false).count()
       ]);
 
       return {
         success: true,
         data: {
-          outbox_count: outboxCount,
-          unsynced_count: unsyncedCount,
           teams_count: teamsCount,
           players_count: playersCount,
-          matches_count: matchesCount
+          matches_count: matchesCount,
+          events_count: eventsCount,
+          unsynced_events_count: unsyncedEventsCount
         }
       };
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get stats'
+      };
+    }
+  }
+
+  /**
+   * Get all unsynced records from a specific table
+   * Generic method to query any syncable table for records where synced === false
+   * 
+   * @param tableName - Name of the table to query (must be a syncable table)
+   * @returns DatabaseResult with array of unsynced records
+   * 
+   * _Requirements: 3.2, 4.2_
+   */
+  async getUnsyncedRecords<T extends { synced: boolean }>(
+    tableName: 'events' | 'matches' | 'teams' | 'players' | 'seasons' | 'lineup' | 'playerTeams' | 'matchPeriods' | 'matchState' | 'defaultLineups'
+  ): Promise<DatabaseResult<T[]>> {
+    try {
+      const table = this[tableName] as unknown as Table<T, string>;
+      if (!table) {
+        return {
+          success: false,
+          error: `Table '${tableName}' not found`,
+          affected_count: 0,
+          data: []
+        };
+      }
+
+      // Query for records where synced === false
+      const unsyncedRecords = await table
+        .filter((record: T) => record.synced === false)
+        .toArray();
+
+      return {
+        success: true,
+        data: unsyncedRecords,
+        affected_count: unsyncedRecords.length
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : `Failed to get unsynced records from ${tableName}`,
+        affected_count: 0,
+        data: []
+      };
+    }
+  }
+
+  /**
+   * Mark a record as synced in a specific table
+   * Generic method to set synced: true and syncedAt on any syncable table
+   * 
+   * @param tableName - Name of the table containing the record
+   * @param id - ID of the record to mark as synced
+   * @returns DatabaseResult indicating success/failure
+   * 
+   * _Requirements: 3.3, 4.3_
+   */
+  async markRecordSynced(
+    tableName: 'events' | 'matches' | 'teams' | 'players' | 'seasons' | 'lineup' | 'playerTeams' | 'matchPeriods' | 'matchState' | 'defaultLineups',
+    id: string
+  ): Promise<DatabaseResult<void>> {
+    try {
+      const table = this[tableName] as Table<any, string>;
+      if (!table) {
+        return {
+          success: false,
+          error: `Table '${tableName}' not found`,
+          affected_count: 0
+        };
+      }
+
+      // Generate ISO timestamp for syncedAt
+      const syncedAt = new Date().toISOString();
+
+      // Update the record with synced: true and syncedAt
+      const updateCount = await table.update(id, {
+        synced: true,
+        syncedAt: syncedAt
+      });
+
+      if (updateCount === 0) {
+        return {
+          success: false,
+          error: `Record with id '${id}' not found in table '${tableName}'`,
+          affected_count: 0
+        };
+      }
+
+      return {
+        success: true,
+        affected_count: 1
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : `Failed to mark record as synced in ${tableName}`,
+        affected_count: 0
       };
     }
   }
@@ -1205,6 +1195,18 @@ export const db = new GrassrootsDB();
 // Note: Database initialization is now handled by DatabaseContext
 // to prevent blocking the app on module load
 
-// Export types for use in other files
-export type { OutboxEvent, StoredTeam, StoredPlayer, DatabaseResult };
-
+// Re-export types from schema for convenience
+export type {
+  DatabaseResult,
+  DbTeam,
+  DbPlayer,
+  DbMatch,
+  DbEvent,
+  DbSeason,
+  DbLineup,
+  DbPlayerTeam,
+  DbMatchPeriod,
+  DbMatchState,
+  DbDefaultLineup,
+  DbGlobalStats
+} from './schema';

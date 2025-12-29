@@ -133,15 +133,15 @@ describe('Player Schema Alignment Tests', () => {
         name: 'John Doe',
         squadNumber: 10,
         preferredPosition: 'GK',
-        dateOfBirth: new Date('2010-05-15'),
+        dateOfBirth: '2010-05-15',
         notes: 'Excellent striker with good finishing',
-        createdAt: createdPlayer.created_at,
+        createdAt: createdPlayer.created_at.toISOString(),
         updatedAt: undefined,
-        // Authorization and soft delete fields
-        created_by_user_id: testUserId,
-        deleted_at: undefined,
-        deleted_by_user_id: undefined,
-        is_deleted: false
+        // Authorization and soft delete fields (camelCase)
+        createdByUserId: testUserId,
+        deletedAt: undefined,
+        deletedByUserId: undefined,
+        isDeleted: false
       });
     });
 

@@ -105,14 +105,14 @@ describe('PlayerTeam Schema Alignment Tests', () => {
         id: prismaPlayerTeam.id,
         playerId: testPlayerId,
         teamId: testTeamId,
-        startDate: new Date('2024-01-01'),
-        endDate: new Date('2024-12-31'),
-        createdAt: prismaPlayerTeam.created_at,
+        startDate: '2024-01-01',
+        endDate: '2024-12-31',
+        createdAt: prismaPlayerTeam.created_at.toISOString(),
         updatedAt: undefined,
-        created_by_user_id: testUserId,
-        deleted_at: undefined,
-        deleted_by_user_id: undefined,
-        is_deleted: false,
+        createdByUserId: testUserId,
+        deletedAt: undefined,
+        deletedByUserId: undefined,
+        isDeleted: false,
       });
     });
 

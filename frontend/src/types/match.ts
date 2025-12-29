@@ -1,10 +1,6 @@
-/**
- * Match-specific type definitions
- * 
- * This file contains types related to match management,
- * clock functionality, and match state.
- */
-
+import type {
+  Match as SharedMatch
+} from '@shared/types';
 import type { ID, Timestamp, Team } from './index';
 import type { MatchEvent } from './events';
 
@@ -15,13 +11,13 @@ export interface MatchClock {
   /** Whether the clock is currently running */
   running: boolean;
   /** Wall-clock timestamp when the current period started */
-  start_ts: Timestamp | null;
+  startTs: Timestamp | null;
   /** Total paused time in milliseconds */
-  offset_ms: number;
+  offsetMs: number;
   /** Current period number */
-  current_period: number;
+  currentPeriod: number;
   /** Period start times for tracking */
-  period_starts: Record<number, Timestamp>;
+  periodStarts: Record<number, Timestamp>;
 }
 
 /**
@@ -31,7 +27,7 @@ export interface MatchContextState {
   /** Current match clock */
   clock: MatchClock;
   /** Current match information */
-  current_match: Match | null;
+  currentMatch: Match | null;
   /** All events for the current match */
   events: MatchEvent[];
   /** Match settings */
@@ -53,7 +49,7 @@ export interface MatchContextActions {
   /** End the current period */
   endPeriod: () => void;
   /** Add an event to the match */
-  addEvent: (event: Omit<MatchEvent, 'id' | 'created'>) => Promise<MatchEvent>;
+  addEvent: (event: Omit<MatchEvent, 'id' | 'createdAt'>) => Promise<MatchEvent>;
   /** Update an existing event */
   updateEvent: (id: ID, updates: Partial<MatchEvent>) => Promise<void>;
   /** Delete an event */
@@ -65,80 +61,70 @@ export interface MatchContextActions {
 }
 
 /**
- * Complete match information
+ * Complete Match information (extended for frontend use)
  */
-export interface Match {
-  /** Unique identifier for the match */
-  id: ID;
-  /** Season this match belongs to */
-  season_id: ID;
-  /** Home team */
-  home_team: Team;
-  /** Away team */
-  away_team: Team;
-  /** Match date and time */
-  date: Timestamp;
+export interface Match extends SharedMatch {
   /** Current match status */
   status: MatchStatus;
   /** Match settings */
   settings: MatchSettings;
   /** Current period */
-  current_period: number;
+  currentPeriod: number;
   /** Match clock state */
   clock: MatchClock;
   /** Match result (if completed) */
   result?: MatchResult;
-  /** Match metadata */
+  /** Metadata and sync fields */
   metadata?: MatchMetadata;
 }
 
 /**
  * Match status enumeration
  */
-export type MatchStatus = 
-  | 'not_started'
-  | 'in_progress'
-  | 'half_time'
-  | 'extra_time'
-  | 'penalty_shootout'
-  | 'completed'
-  | 'abandoned'
-  | 'postponed';
+export type MatchStatus =
+  | 'NOT_STARTED'
+  | 'IN_PROGRESS'
+  | 'HALF_TIME'
+  | 'EXTRA_TIME'
+  | 'PENALTY_SHOOTOUT'
+  | 'COMPLETED'
+  | 'ABANDONED'
+  | 'POSTPONED';
 
 /**
  * Match settings and configuration
  */
 export interface MatchSettings {
   /** Match duration per period in minutes */
-  period_duration: number;
+  periodDuration: number;
   /** Number of periods (usually 2 for halves) */
-  total_periods: number;
+  totalPeriods: number;
   /** Half-time duration in minutes */
-  half_time_duration: number;
+  halfTimeDuration: number;
   /** Whether extra time is allowed */
-  allow_extra_time: boolean;
+  allowExtraTime: boolean;
   /** Extra time duration per period in minutes */
-  extra_time_duration: number;
+  extraTimeDuration: number;
   /** Whether penalty shootout is allowed */
-  allow_penalty_shootout: boolean;
+  allowPenaltyShootout: boolean;
   /** Maximum number of substitutions allowed per team */
-  max_substitutions: number;
+  maxSubstitutions: number;
   /** Whether to track injury time */
-  track_injury_time: boolean;
+  trackInjuryTime: boolean;
 }
 
 /**
  * Default match settings
  */
 export const DEFAULT_MATCH_SETTINGS: MatchSettings = {
-  period_duration: 45, // 45 minutes per half
-  total_periods: 2,
-  half_time_duration: 15,
-  allow_extra_time: false,
-  extra_time_duration: 15,
-  allow_penalty_shootout: false,
-  max_substitutions: 5,
-  track_injury_time: true,
+  periodDuration: 45, // 45 minutes per half
+  totalPeriods: 2,
+  halfTimeDuration: 15,
+  allowExtraTime: false,
+  extraTimeDuration: 15,
+  allowPenaltyShootout: false,
+  maxSubstitutions: 5,
+  trackInjuryTime: true,
 };
 
 /**
@@ -146,19 +132,19 @@ export const DEFAULT_MATCH_SETTINGS: MatchSettings = {
  */
 export interface MatchResult {
   /** Home team score */
-  home_score: number;
+  homeScore: number;
   /** Away team score */
-  away_score: number;
+  awayScore: number;
   /** Whether the match went to extra time */
-  went_to_extra_time: boolean;
+  wentToExtraTime: boolean;
   /** Whether the match went to penalty shootout */
-  went_to_penalty_shootout: boolean;
+  wentToPenaltyShootout: boolean;
   /** Penalty shootout result (if applicable) */
-  penalty_result?: PenaltyShootoutResult;
+  penaltyResult?: PenaltyShootoutResult;
   /** Match winner (if not a draw) */
   winner?: 'home' | 'away';
   /** Final match status */
-  final_status: MatchStatus;
+  finalStatus: MatchStatus;
 }
 
 /**
@@ -166,9 +152,9 @@ export interface MatchResult {
  */
 export interface PenaltyShootoutResult {
   /** Home team penalty goals */
-  home_penalties: number;
+  homePenalties: number;
   /** Away team penalty goals */
-  away_penalties: number;
+  awayPenalties: number;
   /** Penalty sequence details */
   sequence: PenaltyAttempt[];
 }
@@ -178,9 +164,9 @@ export interface PenaltyShootoutResult {
  */
 export interface PenaltyAttempt {
   /** Team taking the penalty */
-  team_id: ID;
+  teamId: ID;
   /** Player taking the penalty */
-  player_id: ID;
+  playerId: ID;
   /** Whether the penalty was scored */
   scored: boolean;
   /** Order in the sequence */
@@ -200,7 +186,7 @@ export interface MatchMetadata {
   /** Competition/tournament */
   competition?: string;
   /** Match importance/type */
-  match_type?: 'league' | 'cup' | 'friendly' | 'playoff';
+  matchType?: 'league' | 'cup' | 'friendly' | 'playoff';
   /** Additional notes */
   notes?: string;
 }
@@ -212,21 +198,21 @@ export interface Substitution {
   /** Unique identifier */
   id: ID;
   /** Match this substitution belongs to */
-  match_id: ID;
+  matchId: ID;
   /** Team making the substitution */
-  team_id: ID;
+  teamId: ID;
   /** Player coming off */
-  player_off_id: ID;
+  playerOffId: ID;
   /** Player coming on */
-  player_on_id: ID;
+  playerOnId: ID;
   /** Time of substitution (match clock in ms) */
-  clock_ms: number;
+  clockMs: number;
   /** Period when substitution occurred */
-  period_number: number;
+  periodNumber: number;
   /** Reason for substitution */
   reason?: 'tactical' | 'injury' | 'performance' | 'disciplinary';
   /** When the substitution was recorded */
-  created: Timestamp;
+  createdAt: string;
 }
 
 /**
@@ -234,30 +220,30 @@ export interface Substitution {
  */
 export interface MatchStatistics {
   /** Basic match info */
-  match_id: ID;
+  matchId: ID;
   /** Team statistics */
-  team_stats: Record<ID, TeamMatchStats>;
+  teamStats: Record<ID, TeamMatchStats>;
   /** Player statistics */
-  player_stats: Record<ID, PlayerMatchStats>;
+  playerStats: Record<ID, PlayerMatchStats>;
   /** Overall match stats */
-  match_summary: MatchSummaryStats;
+  matchSummary: MatchSummaryStats;
 }
 
 /**
  * Team statistics for a match
  */
 export interface TeamMatchStats {
-  team_id: ID;
+  teamId: ID;
   goals: number;
   shots: number;
-  shots_on_target: number;
-  possession_percentage: number;
+  shotsOnTarget: number;
+  possessionPercentage: number;
   passes: number;
-  pass_accuracy: number;
+  passAccuracy: number;
   corners: number;
   fouls: number;
-  yellow_cards: number;
-  red_cards: number;
+  yellowCards: number;
+  redCards: number;
   substitutions: number;
 }
 
@@ -265,18 +251,18 @@ export interface TeamMatchStats {
  * Player statistics for a match
  */
 export interface PlayerMatchStats {
-  player_id: ID;
-  team_id: ID;
-  minutes_played: number;
+  playerId: ID;
+  teamId: ID;
+  minutesPlayed: number;
   goals: number;
   assists: number;
   shots: number;
   passes: number;
-  pass_accuracy: number;
+  passAccuracy: number;
   tackles: number;
   fouls: number;
-  yellow_cards: number;
-  red_cards: number;
+  yellowCards: number;
+  redCards: number;
   rating: number; // Average sentiment
 }
 
@@ -284,11 +270,11 @@ export interface PlayerMatchStats {
  * Overall match summary statistics
  */
 export interface MatchSummaryStats {
-  total_events: number;
-  total_goals: number;
-  total_fouls: number;
-  total_cards: number;
-  match_duration: number; // in minutes
-  most_active_player: ID;
-  most_active_team: ID;
+  totalEvents: number;
+  totalGoals: number;
+  totalFouls: number;
+  totalCards: number;
+  matchDuration: number; // in minutes
+  mostActivePlayer: ID;
+  mostActiveTeam: ID;
 }

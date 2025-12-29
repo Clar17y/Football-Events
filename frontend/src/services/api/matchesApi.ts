@@ -6,13 +6,13 @@
  */
 
 import apiClient from './baseApi';
-import { createLocalQuickMatch } from '../guestQuickMatch';
-import { addToOutbox } from '../../db/utils';
 import { isOnline, shouldUseOfflineFallback, getCurrentUserId } from '../../utils/network';
 import { db } from '../../db/indexedDB';
+import { dbToMatch, dbToMatches, dbToMatchState, dbToMatchPeriod } from '../../db/transforms';
 import type { Match, MatchUpdateRequest } from '@shared/types';
 import type { MatchState, MatchPeriod } from '@shared/types';
-import type { LocalMatchState, LocalMatchPeriod } from '../../db/schema';
+import type { DbMatch, DbMatchState, DbMatchPeriod } from '../../db/schema';
+import { teamsDataLayer, seasonsDataLayer, matchesDataLayer } from '../dataLayer';
 
 /**
  * Show offline toast notification
@@ -26,48 +26,6 @@ function showOfflineToast(message: string): void {
   }
 }
 
-/**
- * Transform local LocalMatchState to API MatchState format
- */
-function transformToApiMatchState(localState: LocalMatchState): MatchState {
-  return {
-    id: localState.match_id,
-    matchId: localState.match_id,
-    status: localState.status === 'NOT_STARTED' ? 'SCHEDULED' : localState.status,
-    currentPeriod: undefined, // Will be set from period data if available
-    currentPeriodType: undefined,
-    matchStartedAt: localState.status !== 'NOT_STARTED' ? new Date(localState.created_at) : undefined,
-    matchEndedAt: localState.status === 'COMPLETED' ? new Date(localState.updated_at) : undefined,
-    totalElapsedSeconds: Math.floor(localState.timer_ms / 1000),
-    createdAt: new Date(localState.created_at),
-    updatedAt: new Date(localState.updated_at),
-    created_by_user_id: localState.created_by_user_id,
-    deleted_at: localState.deleted_at ? new Date(localState.deleted_at) : undefined,
-    deleted_by_user_id: localState.deleted_by_user_id,
-    is_deleted: localState.is_deleted,
-  };
-}
-
-/**
- * Transform local LocalMatchPeriod to API MatchPeriod format
- */
-function transformToApiMatchPeriod(localPeriod: LocalMatchPeriod): MatchPeriod {
-  return {
-    id: localPeriod.id,
-    matchId: localPeriod.match_id,
-    periodNumber: localPeriod.period_number,
-    periodType: localPeriod.period_type,
-    startedAt: localPeriod.started_at ? new Date(localPeriod.started_at) : undefined,
-    endedAt: localPeriod.ended_at ? new Date(localPeriod.ended_at) : undefined,
-    durationSeconds: localPeriod.duration_seconds,
-    createdAt: new Date(localPeriod.created_at),
-    updatedAt: new Date(localPeriod.updated_at),
-    created_by_user_id: localPeriod.created_by_user_id,
-    deleted_at: localPeriod.deleted_at ? new Date(localPeriod.deleted_at) : undefined,
-    deleted_by_user_id: localPeriod.deleted_by_user_id,
-    is_deleted: localPeriod.is_deleted,
-  };
-}
 
 export interface QuickStartPayload {
   myTeamId?: string;
@@ -98,87 +56,215 @@ export interface MatchesListParams {
 export const matchesApi = {
   /**
    * Get a single match by ID
+   * Local-first: always reads from IndexedDB
    */
   async getMatch(id: string): Promise<Match> {
-    const response = await apiClient.get<Match>(`/matches/${id}`);
-    return response.data as unknown as Match;
+    // Local-first: always read from IndexedDB
+    const match = await db.matches.get(id);
+    if (!match || (match as any).isDeleted) {
+      throw new Error('Match not found');
+    }
+
+    // Get team info for the match
+    const [homeTeam, awayTeam] = await Promise.all([
+      db.teams.get((match as any).homeTeamId),
+      db.teams.get((match as any).awayTeamId)
+    ]);
+
+    // Use centralized transform and add team data
+    const baseMatch = dbToMatch(match as DbMatch);
+    return {
+      ...baseMatch,
+      homeTeam: homeTeam ? { id: homeTeam.id, name: homeTeam.name, isOpponent: !!(homeTeam as any).isOpponent } as any : undefined,
+      awayTeam: awayTeam ? { id: awayTeam.id, name: awayTeam.name, isOpponent: !!(awayTeam as any).isOpponent } as any : undefined,
+    };
   },
   /**
-   * Quick-start a match
+   * Quick-start a match - LOCAL-FIRST
+   * 
+   * This method follows the local-first architecture:
+   * 1. Creates opponent team (if needed) in IndexedDB with synced: false
+   * 2. Creates/finds season in IndexedDB with synced: false
+   * 3. Creates match in IndexedDB with synced: false
+   * 4. Returns immediately - syncService handles server sync
+   * 
+   * Requirements: Local-first architecture - all writes go to IndexedDB first
    */
   async quickStart(payload: QuickStartPayload): Promise<Match> {
-    try {
-      const response = await apiClient.post<Match>('/matches/quick-start', payload);
-      return response.data as unknown as Match;
-    } catch (e) {
-      // Authenticated but offline: create locally and enqueue quick-start outbox
-      const local = await createLocalQuickMatch(payload as any);
-      await addToOutbox('matches', local.id, 'INSERT', { ...payload, quickStart: true } as any, 'offline');
-      return (await import('../../services/guestQuickMatch')).getLocalMatch(local.id) as unknown as Match;
+    const userId = getCurrentUserId();
+
+    // 1) Ensure season exists (use provided or find/create default)
+    let seasonId = payload.seasonId;
+    if (!seasonId) {
+      // Try to find an existing current season
+      const allSeasons = await db.seasons.filter(s => !s.isDeleted).toArray();
+      const currentSeason = allSeasons.find(s => s.isCurrent);
+
+      if (currentSeason) {
+        seasonId = currentSeason.id;
+      } else {
+        // Create a default season for the current year
+        const year = new Date().getFullYear();
+        const seasonLabel = `${year}-${year + 1} Season`;
+
+        // Check if a season with this label already exists
+        const existingSeason = allSeasons.find(s => s.label === seasonLabel);
+        if (existingSeason) {
+          seasonId = existingSeason.id;
+        } else {
+          const newSeason = await seasonsDataLayer.create({
+            label: seasonLabel,
+            startDate: `${year}-08-01`,
+            endDate: `${year + 1}-07-31`,
+            isCurrent: true,
+            description: 'Auto-created season',
+          });
+          seasonId = newSeason.id;
+        }
+      }
     }
+
+    // 2) Ensure our team exists (use provided id or find by name)
+    let ourTeamId = payload.myTeamId;
+    if (!ourTeamId && payload.myTeamName) {
+      // Search by name
+      const existingTeam = await db.teams
+        .filter(t => !t.isDeleted && t.name === payload.myTeamName)
+        .first();
+
+      if (existingTeam) {
+        ourTeamId = existingTeam.id;
+      } else {
+        const newTeam = await teamsDataLayer.create({
+          name: payload.myTeamName,
+          isOpponent: false,
+        });
+        ourTeamId = newTeam.id;
+      }
+    }
+
+    if (!ourTeamId) {
+      // Fallback: create a default team
+      const newTeam = await teamsDataLayer.create({
+        name: 'My Team',
+        isOpponent: false,
+      });
+      ourTeamId = newTeam.id;
+    }
+
+    // 3) Ensure opponent team exists (by name)
+    const opponentName = payload.opponentName?.trim() || 'Opponent';
+    let opponentTeam = await db.teams
+      .filter(t => !t.isDeleted && t.name === opponentName && t.isOpponent === true)
+      .first();
+
+    if (!opponentTeam) {
+      // Also check for any team with this name (might not be marked as opponent yet)
+      opponentTeam = await db.teams
+        .filter(t => !t.isDeleted && t.name === opponentName)
+        .first();
+    }
+
+    if (!opponentTeam) {
+      opponentTeam = await teamsDataLayer.create({
+        name: opponentName,
+        isOpponent: true,
+      });
+    }
+
+    // 4) Determine home/away team IDs
+    const homeTeamId = payload.isHome ? ourTeamId : opponentTeam.id;
+    const awayTeamId = payload.isHome ? opponentTeam.id : ourTeamId;
+
+    // 5) Create the match locally
+    const kickoffTime = payload.kickoffTime || new Date().toISOString();
+    const match = await matchesDataLayer.create({
+      seasonId,
+      kickoffTime,
+      homeTeamId,
+      awayTeamId,
+      competition: payload.competition,
+      venue: payload.venue,
+      durationMinutes: payload.durationMinutes ?? 60,
+      periodFormat: (payload.periodFormat === 'quarter' || payload.periodFormat === 'half')
+        ? payload.periodFormat
+        : 'quarter',
+      notes: payload.notes,
+    });
+
+    // 6) Return the match with team info for immediate UI update
+    const homeTeam = await db.teams.get(homeTeamId);
+    const awayTeam = await db.teams.get(awayTeamId);
+
+    const result: Match = {
+      id: match.id,
+      seasonId: match.seasonId,
+      kickoffTime: match.kickoffTime,
+      competition: match.competition,
+      homeTeamId: match.homeTeamId,
+      awayTeamId: match.awayTeamId,
+      venue: match.venue,
+      durationMinutes: match.durationMinutes ?? 60,
+      periodFormat: match.periodFormat as any,
+      homeScore: match.homeScore ?? 0,
+      awayScore: match.awayScore ?? 0,
+      notes: match.notes,
+      createdAt: match.createdAt,
+      updatedAt: match.updatedAt,
+      createdByUserId: match.createdByUserId,
+      isDeleted: match.isDeleted ?? false,
+      homeTeam: homeTeam ? {
+        id: homeTeam.id,
+        name: homeTeam.name,
+        isOpponent: homeTeam.isOpponent ?? false,
+        createdAt: homeTeam.createdAt,
+        createdByUserId: homeTeam.createdByUserId,
+        isDeleted: homeTeam.isDeleted ?? false,
+      } as any : undefined,
+      awayTeam: awayTeam ? {
+        id: awayTeam.id,
+        name: awayTeam.name,
+        isOpponent: awayTeam.isOpponent ?? false,
+        createdAt: awayTeam.createdAt,
+        createdByUserId: awayTeam.createdByUserId,
+        isDeleted: awayTeam.isDeleted ?? false,
+      } as any : undefined,
+    };
+
+    // Trigger data:changed event for any listeners
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
+
+    return result;
   },
   /**
    * Get matches by season ID
+   * Local-first: always reads from IndexedDB
    */
   async getMatchesBySeason(seasonId: string): Promise<Match[]> {
-    const { authApi } = await import('./authApi');
-    if (!authApi.isAuthenticated()) {
-      // Guest fallback: query local matches by season
-      const { db } = await import('../../db/indexedDB');
-      const matches = await db.matches
-        .where('season_id')
-        .equals(seasonId)
-        .and((m: any) => !m.is_deleted)
-        .toArray();
-      return matches.map((m: any) => ({
-        id: m.id,
-        matchId: m.match_id || m.id,
-        homeTeamId: m.home_team_id,
-        awayTeamId: m.away_team_id,
-        kickoffTime: m.kickoff_ts,
-        seasonId: m.season_id,
-        competition: m.competition,
-        venue: m.venue,
-        notes: m.notes
-      })) as Match[];
-    }
-    const response = await apiClient.get(`/matches/season/${seasonId}`);
-    return response.data as Match[];
+    // Local-first: always read from IndexedDB
+    const matches = await db.matches
+      .where('seasonId')
+      .equals(seasonId)
+      .filter((m: any) => !m.isDeleted)
+      .toArray();
+    return dbToMatches(matches as DbMatch[]);
   },
 
   /**
    * Get matches by team ID
+   * Local-first: always reads from IndexedDB
    */
   async getMatchesByTeam(teamId: string): Promise<Match[]> {
-    const { authApi } = await import('./authApi');
-    if (!authApi.isAuthenticated()) {
-      // Guest fallback: query local matches where team is home or away
-      const { db } = await import('../../db/indexedDB');
-      const matches = await db.matches
-        .filter((m: any) => !m.is_deleted && (m.home_team_id === teamId || m.away_team_id === teamId))
-        .toArray();
-      return matches.map((m: any) => ({
-        id: m.id,
-        matchId: m.match_id || m.id,
-        homeTeamId: m.home_team_id,
-        awayTeamId: m.away_team_id,
-        kickoffTime: m.kickoff_ts,
-        seasonId: m.season_id,
-        competition: m.competition,
-        venue: m.venue,
-        durationMinutes: m.duration_mins,
-        periodFormat: m.period_format,
-        homeScore: m.home_score || 0,
-        awayScore: m.away_score || 0,
-        notes: m.notes
-      })) as Match[];
-    }
-    const response = await apiClient.get(`/matches/team/${teamId}`);
-    return response.data as Match[];
+    // Local-first: always read from IndexedDB
+    const matches = await db.matches
+      .filter((m: any) => !m.isDeleted && (m.homeTeamId === teamId || m.awayTeamId === teamId))
+      .toArray();
+    return dbToMatches(matches as DbMatch[]);
   },
 
   /**
    * Get paginated list of matches with optional filtering
+   * Local-first: always reads from IndexedDB
    */
   async getMatches(params: MatchesListParams = {}): Promise<{
     data: Match[];
@@ -192,191 +278,124 @@ export const matchesApi = {
     };
   }> {
     const { page = 1, limit = 25, search, seasonId, teamId, competition } = params;
-    const { authApi } = await import('./authApi');
-    if (!authApi.isAuthenticated()) {
-      const { db } = await import('../../db/indexedDB');
-      const teams = await db.teams.toArray();
-      const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
-      let rows = await db.matches.toArray();
-      rows = rows.filter((m: any) => m && !m.is_deleted);
-      if (seasonId) rows = rows.filter((m: any) => m.season_id === seasonId);
-      if (teamId) rows = rows.filter((m: any) => m.home_team_id === teamId || m.away_team_id === teamId);
-      if (competition) rows = rows.filter((m: any) => (m.competition || '').toLowerCase().includes(competition.toLowerCase()));
-      if (search && search.trim()) {
-        const term = search.trim().toLowerCase();
-        rows = rows.filter((m: any) => {
-          const home = teamMap.get(m.home_team_id);
-          const away = teamMap.get(m.away_team_id);
-          return (
-            (m.competition || '').toLowerCase().includes(term) ||
-            (home?.name || '').toLowerCase().includes(term) ||
-            (away?.name || '').toLowerCase().includes(term)
-          );
-        });
-      }
-      rows.sort((a: any, b: any) => new Date(a.kickoff_ts).getTime() - new Date(b.kickoff_ts).getTime());
-      const total = rows.length;
-      const start = (page - 1) * limit;
-      const paged = rows.slice(start, start + limit);
-      const data: Match[] = paged.map((m: any) => {
-        const home = teamMap.get(m.home_team_id);
-        const away = teamMap.get(m.away_team_id);
-        return {
-          id: m.id,
-          seasonId: m.season_id,
-          kickoffTime: new Date(m.kickoff_ts),
-          competition: m.competition,
-          homeTeamId: m.home_team_id,
-          awayTeamId: m.away_team_id,
-          homeTeam: home ? { id: home.id, name: home.name, is_opponent: !!home.is_opponent, createdAt: new Date(home.created_at), created_by_user_id: home.created_by_user_id, is_deleted: !!home.is_deleted } as any : undefined,
-          awayTeam: away ? { id: away.id, name: away.name, is_opponent: !!away.is_opponent, createdAt: new Date(away.created_at), created_by_user_id: away.created_by_user_id, is_deleted: !!away.is_deleted } as any : undefined,
-          venue: m.venue,
-          durationMinutes: m.duration_mins,
-          periodFormat: m.period_format,
-          homeScore: m.home_score || 0,
-          awayScore: m.away_score || 0,
-          notes: m.notes,
-          createdAt: new Date(m.created_at),
-          updatedAt: m.updated_at ? new Date(m.updated_at) : undefined,
-          created_by_user_id: m.created_by_user_id,
-          deleted_at: m.deleted_at ? new Date(m.deleted_at) : undefined,
-          deleted_by_user_id: m.deleted_by_user_id,
-          is_deleted: !!m.is_deleted,
-        } as Match;
+
+    // Local-first: always read from IndexedDB
+    const teams = await db.teams.toArray();
+    const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
+    let rows = await db.matches.toArray();
+    rows = rows.filter((m: any) => m && !m.isDeleted);
+    if (seasonId) rows = rows.filter((m: any) => m.seasonId === seasonId);
+    if (teamId) rows = rows.filter((m: any) => m.homeTeamId === teamId || m.awayTeamId === teamId);
+    if (competition) rows = rows.filter((m: any) => (m.competition || '').toLowerCase().includes(competition.toLowerCase()));
+    if (search && search.trim()) {
+      const term = search.trim().toLowerCase();
+      rows = rows.filter((m: any) => {
+        const home = teamMap.get(m.homeTeamId);
+        const away = teamMap.get(m.awayTeamId);
+        return (
+          (m.competition || '').toLowerCase().includes(term) ||
+          (home?.name || '').toLowerCase().includes(term) ||
+          (away?.name || '').toLowerCase().includes(term)
+        );
       });
-      return {
-        data,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit) || 1,
-          hasNext: start + limit < total,
-          hasPrev: start > 0
-        }
-      };
     }
-    const queryParams = new URLSearchParams({ page: String(page), limit: String(limit) });
-    if (search && search.trim()) queryParams.append('search', search.trim());
-    if (seasonId) queryParams.append('seasonId', seasonId);
-    if (teamId) queryParams.append('teamId', teamId);
-    if (competition) queryParams.append('competition', competition);
-    const response = await apiClient.get(`/matches?${queryParams.toString()}`);
-    return response.data;
+    rows.sort((a: any, b: any) => new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime());
+    const total = rows.length;
+    const start = (page - 1) * limit;
+    const paged = rows.slice(start, start + limit);
+    const data: Match[] = paged.map((m: any) => {
+      const home = teamMap.get(m.homeTeamId);
+      const away = teamMap.get(m.awayTeamId);
+      const baseMatch = dbToMatch(m as DbMatch);
+      return {
+        ...baseMatch,
+        homeTeam: home ? { id: home.id, name: home.name, isOpponent: !!home.isOpponent, createdAt: new Date(home.createdAt), createdByUserId: home.createdByUserId, isDeleted: !!home.isDeleted } as any : undefined,
+        awayTeam: away ? { id: away.id, name: away.name, isOpponent: !!away.isOpponent, createdAt: new Date(away.createdAt), createdByUserId: away.createdByUserId, isDeleted: !!away.isDeleted } as any : undefined,
+      };
+    });
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+        hasNext: start + limit < total,
+        hasPrev: start > 0
+      }
+    };
   },
 
   /**
    * Upcoming matches
+   * Local-first: always reads from IndexedDB
    */
   async getUpcoming(limit: number = 10, teamId?: string): Promise<Match[]> {
-    const { authApi } = await import('./authApi');
-    if (!authApi.isAuthenticated()) {
-      const { db } = await import('../../db/indexedDB');
-      const teams = await db.teams.toArray();
-      const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
-      let rows = await db.matches.toArray();
-      const now = Date.now();
-      rows = rows.filter((m: any) => !m.is_deleted && new Date(m.kickoff_ts).getTime() >= now);
-      if (teamId) rows = rows.filter((m: any) => m.home_team_id === teamId || m.away_team_id === teamId);
-      rows.sort((a: any, b: any) => new Date(a.kickoff_ts).getTime() - new Date(b.kickoff_ts).getTime());
-      return rows.slice(0, limit).map((m: any) => ({
-        id: m.id,
-        seasonId: m.season_id,
-        kickoffTime: new Date(m.kickoff_ts),
-        competition: m.competition,
-        homeTeamId: m.home_team_id,
-        awayTeamId: m.away_team_id,
-        homeTeam: teamMap.get(m.home_team_id) ? { id: m.home_team_id, name: teamMap.get(m.home_team_id).name, is_opponent: !!teamMap.get(m.home_team_id).is_opponent } as any : undefined,
-        awayTeam: teamMap.get(m.away_team_id) ? { id: m.away_team_id, name: teamMap.get(m.away_team_id).name, is_opponent: !!teamMap.get(m.away_team_id).is_opponent } as any : undefined,
-        venue: m.venue,
-        durationMinutes: m.duration_mins,
-        periodFormat: m.period_format,
-        homeScore: m.home_score || 0,
-        awayScore: m.away_score || 0,
-        createdAt: new Date(m.created_at),
-        is_deleted: !!m.is_deleted,
-        created_by_user_id: m.created_by_user_id,
-      } as Match));
-    }
-    const params = new URLSearchParams();
-    params.append('limit', String(limit));
-    if (teamId) params.append('teamId', teamId);
-    const response = await apiClient.get<Match[]>(`/matches/upcoming?${params.toString()}`);
-    return response.data as unknown as Match[];
+    // Local-first: always read from IndexedDB
+    const teams = await db.teams.toArray();
+    const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
+    let rows = await db.matches.toArray();
+    const now = Date.now();
+    rows = rows.filter((m: any) => !m.isDeleted && new Date(m.kickoffTime).getTime() >= now);
+    if (teamId) rows = rows.filter((m: any) => m.homeTeamId === teamId || m.awayTeamId === teamId);
+    rows.sort((a: any, b: any) => new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime());
+    return rows.slice(0, limit).map((m: any) => {
+      const baseMatch = dbToMatch(m as DbMatch);
+      return {
+        ...baseMatch,
+        homeTeam: teamMap.get(m.homeTeamId) ? { id: m.homeTeamId, name: teamMap.get(m.homeTeamId).name, isOpponent: !!teamMap.get(m.homeTeamId).isOpponent } as any : undefined,
+        awayTeam: teamMap.get(m.awayTeamId) ? { id: m.awayTeamId, name: teamMap.get(m.awayTeamId).name, isOpponent: !!teamMap.get(m.awayTeamId).isOpponent } as any : undefined,
+      };
+    });
   },
 
   /**
    * Recent matches
+   * Local-first: always reads from IndexedDB
    */
   async getRecent(limit: number = 10, teamId?: string): Promise<Match[]> {
-    const { authApi } = await import('./authApi');
-    if (!authApi.isAuthenticated()) {
-      const { db } = await import('../../db/indexedDB');
-      const teams = await db.teams.toArray();
-      const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
-      let rows = await db.matches.toArray();
-      const now = Date.now();
-      rows = rows.filter((m: any) => !m.is_deleted && new Date(m.kickoff_ts).getTime() < now);
-      if (teamId) rows = rows.filter((m: any) => m.home_team_id === teamId || m.away_team_id === teamId);
-      rows.sort((a: any, b: any) => new Date(b.kickoff_ts).getTime() - new Date(a.kickoff_ts).getTime());
-      return rows.slice(0, limit).map((m: any) => ({
-        id: m.id,
-        seasonId: m.season_id,
-        kickoffTime: new Date(m.kickoff_ts),
-        competition: m.competition,
-        homeTeamId: m.home_team_id,
-        awayTeamId: m.away_team_id,
-        homeTeam: teamMap.get(m.home_team_id) ? { id: m.home_team_id, name: teamMap.get(m.home_team_id).name, is_opponent: !!teamMap.get(m.home_team_id).is_opponent } as any : undefined,
-        awayTeam: teamMap.get(m.away_team_id) ? { id: m.away_team_id, name: teamMap.get(m.away_team_id).name, is_opponent: !!teamMap.get(m.away_team_id).is_opponent } as any : undefined,
-        venue: m.venue,
-        durationMinutes: m.duration_mins,
-        periodFormat: m.period_format,
-        homeScore: m.home_score || 0,
-        awayScore: m.away_score || 0,
-        createdAt: new Date(m.created_at),
-        is_deleted: !!m.is_deleted,
-        created_by_user_id: m.created_by_user_id,
-      } as Match));
-    }
-    const params = new URLSearchParams();
-    params.append('limit', String(limit));
-    if (teamId) params.append('teamId', teamId);
-    const response = await apiClient.get<Match[]>(`/matches/recent?${params.toString()}`);
-    return response.data as unknown as Match[];
+    // Local-first: always read from IndexedDB
+    const teams = await db.teams.toArray();
+    const teamMap = new Map<string, any>(teams.map((t: any) => [t.id, t]));
+    let rows = await db.matches.toArray();
+    const now = Date.now();
+    rows = rows.filter((m: any) => !m.isDeleted && new Date(m.kickoffTime).getTime() < now);
+    if (teamId) rows = rows.filter((m: any) => m.homeTeamId === teamId || m.awayTeamId === teamId);
+    rows.sort((a: any, b: any) => new Date(b.kickoffTime).getTime() - new Date(a.kickoffTime).getTime());
+    return rows.slice(0, limit).map((m: any) => {
+      const baseMatch = dbToMatch(m as DbMatch);
+      return {
+        ...baseMatch,
+        homeTeam: teamMap.get(m.homeTeamId) ? { id: m.homeTeamId, name: teamMap.get(m.homeTeamId).name, isOpponent: !!teamMap.get(m.homeTeamId).isOpponent } as any : undefined,
+        awayTeam: teamMap.get(m.awayTeamId) ? { id: m.awayTeamId, name: teamMap.get(m.awayTeamId).name, isOpponent: !!teamMap.get(m.awayTeamId).isOpponent } as any : undefined,
+      };
+    });
   },
 
   /**
-   * Update an existing match
+   * Update an existing match - LOCAL-FIRST
    */
   async updateMatch(id: string, matchData: MatchUpdateRequest): Promise<Match> {
-    // Remove undefined values to avoid overwriting fields unintentionally
     const cleanData = Object.fromEntries(
       Object.entries(matchData).filter(([_, value]) => value !== undefined)
     );
 
-    try {
-      const response = await apiClient.put<Match>(`/matches/${id}`, cleanData);
-      return response.data as unknown as Match;
-    } catch (e) {
-      // Offline fallback: update locally and enqueue outbox
-      try {
-        const { db } = await import('../../db/indexedDB');
-        await db.matches.update(id, {
-          season_id: cleanData.seasonId,
-          kickoff_ts: cleanData.kickoffTime ? (cleanData.kickoffTime as Date).toISOString() : undefined,
-          competition: cleanData.competition,
-          home_team_id: cleanData.homeTeamId,
-          away_team_id: cleanData.awayTeamId,
-          venue: cleanData.venue,
-          duration_mins: cleanData.durationMinutes,
-          period_format: cleanData.periodFormat,
-          notes: cleanData.notes,
-          updated_at: Date.now()
-        } as any);
-      } catch {}
-      await addToOutbox('matches', id, 'UPDATE', cleanData as any, 'offline');
-      return (await import('../../services/guestQuickMatch')).getLocalMatch(id) as unknown as Match;
-    }
+    await matchesDataLayer.update(id, {
+      seasonId: cleanData.seasonId,
+      kickoffTime: cleanData.kickoffTime,
+      homeTeamId: cleanData.homeTeamId,
+      awayTeamId: cleanData.awayTeamId,
+      competition: cleanData.competition,
+      venue: cleanData.venue,
+      durationMinutes: cleanData.durationMinutes,
+      periodFormat: cleanData.periodFormat,
+      notes: cleanData.notes,
+    });
+
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
+
+    // Return the updated local match
+    return this.getMatch(id);
   },
 
   // === Live Match – State & Periods ===
@@ -389,231 +408,167 @@ export const matchesApi = {
     return response.data as unknown as MatchPeriod[];
   },
   /**
-   * Start a match with offline fallback
+   * Start a match - LOCAL-FIRST
    * 
-   * Requirements: 2.1 - Create local match_state with status LIVE and first match_period record
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async startMatch(id: string): Promise<MatchState> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<MatchState>(`/matches/${id}/start`);
-        return response.data as unknown as MatchState;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: create local match_state with status LIVE
+    // Local-first: write to IndexedDB first
     const now = Date.now();
     const userId = getCurrentUserId();
     const periodId = `period-${now}-${Math.random().toString(36).slice(2, 11)}`;
 
     // Check if match_state already exists
-    const existingState = await db.match_state.get(id);
-    
+    const existingState = await db.matchState.get(id);
+
     if (existingState) {
       // Update existing state to LIVE
-      await db.match_state.update(id, {
+      await db.matchState.update(id, {
         status: 'LIVE',
-        current_period_id: periodId,
-        timer_ms: 0,
-        last_updated_at: now,
-        updated_at: now,
+        currentPeriodId: periodId,
+        timerMs: 0,
+        lastUpdatedAt: now,
+        updatedAt: new Date(now).toISOString(),
         synced: false,
       });
     } else {
       // Create new match_state
-      const localState: LocalMatchState = {
-        match_id: id,
+      const localState: DbMatchState = {
+        matchId: id,
         status: 'LIVE',
-        current_period_id: periodId,
-        timer_ms: 0,
-        last_updated_at: now,
-        created_at: now,
-        updated_at: now,
-        created_by_user_id: userId,
-        is_deleted: false,
+        currentPeriodId: periodId,
+        timerMs: 0,
+        lastUpdatedAt: now,
+        createdAt: new Date(now).toISOString(),
+        updatedAt: new Date(now).toISOString(),
+        createdByUserId: userId,
+        isDeleted: false,
         synced: false,
       };
-      await db.match_state.add(localState);
+      await db.matchState.add(localState);
     }
 
     // Create first match_period record
-    const localPeriod: LocalMatchPeriod = {
+    const localPeriod: DbMatchPeriod = {
       id: periodId,
-      match_id: id,
-      period_number: 1,
-      period_type: 'REGULAR',
-      started_at: now,
-      created_at: now,
-      updated_at: now,
-      created_by_user_id: userId,
-      is_deleted: false,
+      matchId: id,
+      periodNumber: 1,
+      periodType: 'REGULAR',
+      startedAt: now,
+      createdAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
+      createdByUserId: userId,
+      isDeleted: false,
       synced: false,
     };
-    await db.match_periods.add(localPeriod);
+    await db.matchPeriods.put(localPeriod);
 
-    showOfflineToast('Match started locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
     // Return the updated state
-    const updatedState = await db.match_state.get(id);
+    const updatedState = await db.matchState.get(id);
     if (!updatedState) {
       throw new Error(`Failed to retrieve match state for ${id}`);
     }
-    return transformToApiMatchState(updatedState);
+    return dbToMatchState(updatedState);
   },
   /**
-   * Pause a match with offline fallback
+   * Pause a match - LOCAL-FIRST
    * 
-   * Requirements: 2.2 - Update local match_state to PAUSED
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async pauseMatch(id: string): Promise<MatchState> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<MatchState>(`/matches/${id}/pause`);
-        return response.data as unknown as MatchState;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: update local match_state to PAUSED
+    // Local-first: update local match_state to PAUSED
     const now = Date.now();
-    const existingState = await db.match_state.get(id);
-    
+    const existingState = await db.matchState.get(id);
+
     if (!existingState) {
       throw new Error(`Match state not found for match ${id}`);
     }
 
-    await db.match_state.update(id, {
+    await db.matchState.update(id, {
       status: 'PAUSED',
-      last_updated_at: now,
-      updated_at: now,
+      lastUpdatedAt: now,
+      updatedAt: new Date(now).toISOString(),
       synced: false,
     });
 
-    showOfflineToast('Match paused locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
-    const updatedState = await db.match_state.get(id);
+    const updatedState = await db.matchState.get(id);
     if (!updatedState) {
       throw new Error(`Failed to retrieve match state for ${id}`);
     }
-    return transformToApiMatchState(updatedState);
+    return dbToMatchState(updatedState);
   },
   /**
-   * Resume a match with offline fallback
+   * Resume a match - LOCAL-FIRST
    * 
-   * Requirements: 2.2 - Update local match_state to LIVE
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async resumeMatch(id: string): Promise<MatchState> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<MatchState>(`/matches/${id}/resume`);
-        return response.data as unknown as MatchState;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: update local match_state to LIVE
+    // Local-first: update local match_state to LIVE
     const now = Date.now();
-    const existingState = await db.match_state.get(id);
-    
+    const existingState = await db.matchState.get(id);
+
     if (!existingState) {
       throw new Error(`Match state not found for match ${id}`);
     }
 
-    await db.match_state.update(id, {
+    await db.matchState.update(id, {
       status: 'LIVE',
-      last_updated_at: now,
-      updated_at: now,
+      lastUpdatedAt: now,
+      updatedAt: new Date(now).toISOString(),
       synced: false,
     });
 
-    showOfflineToast('Match resumed locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
-    const updatedState = await db.match_state.get(id);
+    const updatedState = await db.matchState.get(id);
     if (!updatedState) {
       throw new Error(`Failed to retrieve match state for ${id}`);
     }
-    return transformToApiMatchState(updatedState);
+    return dbToMatchState(updatedState);
   },
   /**
-   * Complete a match with offline fallback
+   * Complete a match - LOCAL-FIRST
    * 
-   * Requirements: 2.3 - Update local match_state to COMPLETED and end any open periods
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async completeMatch(id: string, finalScore?: { home: number; away: number }, notes?: string): Promise<MatchState> {
-    const body: any = {};
-    if (finalScore) body.finalScore = finalScore;
-    if (notes) body.notes = notes;
-
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<MatchState>(`/matches/${id}/complete`, body);
-        return response.data as unknown as MatchState;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: update local match_state to COMPLETED
+    // Local-first: update local match_state to COMPLETED
     const now = Date.now();
-    const existingState = await db.match_state.get(id);
-    
+    const existingState = await db.matchState.get(id);
+
     if (!existingState) {
       throw new Error(`Match state not found for match ${id}`);
     }
 
-    // End any open periods (periods without ended_at)
-    const openPeriods = await db.match_periods
-      .where('match_id')
+    // End any open periods (periods without endedAt)
+    const openPeriods = await db.matchPeriods
+      .where('matchId')
       .equals(id)
-      .filter(p => !p.ended_at && !p.is_deleted)
+      .filter(p => !p.endedAt && !p.isDeleted)
       .toArray();
 
     for (const period of openPeriods) {
-      const durationSeconds = period.started_at 
-        ? Math.floor((now - period.started_at) / 1000) 
+      const durationSeconds = period.startedAt
+        ? Math.floor((now - period.startedAt) / 1000)
         : 0;
-      await db.match_periods.update(period.id, {
-        ended_at: now,
-        duration_seconds: durationSeconds,
-        updated_at: now,
+      await db.matchPeriods.update(period.id, {
+        endedAt: now,
+        durationSeconds: durationSeconds,
+        updatedAt: new Date(now).toISOString(),
         synced: false,
       });
     }
 
     // Update match_state to COMPLETED
-    await db.match_state.update(id, {
+    await db.matchState.update(id, {
       status: 'COMPLETED',
-      current_period_id: undefined,
-      last_updated_at: now,
-      updated_at: now,
+      currentPeriodId: undefined,
+      lastUpdatedAt: now,
+      updatedAt: new Date(now).toISOString(),
       synced: false,
     });
 
@@ -621,9 +576,9 @@ export const matchesApi = {
     if (finalScore) {
       try {
         await db.matches.update(id, {
-          home_score: finalScore.home,
-          away_score: finalScore.away,
-          updated_at: now,
+          homeScore: finalScore.home,
+          awayScore: finalScore.away,
+          updatedAt: new Date(now).toISOString(),
           synced: false,
         } as any);
       } catch {
@@ -631,13 +586,13 @@ export const matchesApi = {
       }
     }
 
-    showOfflineToast('Match completed locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
-    const updatedState = await db.match_state.get(id);
+    const updatedState = await db.matchState.get(id);
     if (!updatedState) {
       throw new Error(`Failed to retrieve match state for ${id}`);
     }
-    return transformToApiMatchState(updatedState);
+    return dbToMatchState(updatedState);
   },
 
   /**
@@ -651,164 +606,151 @@ export const matchesApi = {
 
   /**
    * Match states with pagination
+   * Local-first: always reads from IndexedDB
    */
   async getMatchStates(page = 1, limit = 500, matchIds?: string[]): Promise<{ data: Array<MatchState & { matchId: string }>; pagination?: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean } }> {
-    const { authApi } = await import('./authApi');
-    if (!authApi.isAuthenticated()) {
-      return { data: [], pagination: { page, limit, total: 0, totalPages: 1, hasNext: false, hasPrev: false } } as any;
-    }
-    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
-    if (matchIds && matchIds.length) params.append('matchIds', matchIds.join(','));
-    const response = await apiClient.get(`/matches/states?${params.toString()}`);
-    const body: any = response.data;
-    const data = body?.data ?? body;
-    const pagination = body?.pagination;
-    return { data, pagination } as any;
-  },
-  /**
-   * Start a new period with offline fallback
-   * 
-   * Requirements: 2.1 - Create local match_periods record
-   * Requirements: 6.1 - Fall back to local storage on network error
-   */
-  async startPeriod(id: string, periodType?: 'regular' | 'extra_time' | 'penalty_shootout'): Promise<MatchPeriod> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<MatchPeriod>(`/matches/${id}/periods/start`, periodType ? { periodType } : undefined);
-        return response.data as unknown as MatchPeriod;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
+    // Local-first: always read from IndexedDB
+    let states = await db.matchState.toArray();
+
+    // Filter by matchIds if provided
+    if (matchIds && matchIds.length) {
+      const matchIdSet = new Set(matchIds);
+      states = states.filter((s: any) => matchIdSet.has(s.matchId));
     }
 
-    // Offline fallback: create local match_periods record
+    // Filter out deleted
+    states = states.filter((s: any) => !s.isDeleted);
+
+    const total = states.length;
+    const start = (page - 1) * limit;
+    const paged = states.slice(start, start + limit);
+
+    const data = paged.map((s: any) => dbToMatchState(s));
+
+    return {
+      data: data as any,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+        hasNext: start + limit < total,
+        hasPrev: start > 0
+      }
+    };
+  },
+  /**
+   * Start a new period - LOCAL-FIRST
+   * 
+   * All writes go to IndexedDB first. Background sync handles server communication.
+   */
+  async startPeriod(id: string, periodType?: 'regular' | 'extra_time' | 'penalty_shootout'): Promise<MatchPeriod> {
+    // Local-first: create local match_periods record
     const now = Date.now();
     const userId = getCurrentUserId();
     const periodId = `period-${now}-${Math.random().toString(36).slice(2, 11)}`;
 
     // Get the next period number
-    const existingPeriods = await db.match_periods
-      .where('match_id')
+    const existingPeriods = await db.matchPeriods
+      .where('matchId')
       .equals(id)
-      .filter(p => !p.is_deleted)
+      .filter(p => !p.isDeleted)
       .toArray();
     const nextPeriodNumber = existingPeriods.length + 1;
 
     // Map period type to uppercase format
-    const mappedPeriodType: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT' = 
+    const mappedPeriodType: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT' =
       periodType === 'extra_time' ? 'EXTRA_TIME' :
-      periodType === 'penalty_shootout' ? 'PENALTY_SHOOTOUT' :
-      'REGULAR';
+        periodType === 'penalty_shootout' ? 'PENALTY_SHOOTOUT' :
+          'REGULAR';
 
-    const localPeriod: LocalMatchPeriod = {
+    const localPeriod: DbMatchPeriod = {
       id: periodId,
-      match_id: id,
-      period_number: nextPeriodNumber,
-      period_type: mappedPeriodType,
-      started_at: now,
-      created_at: now,
-      updated_at: now,
-      created_by_user_id: userId,
-      is_deleted: false,
+      matchId: id,
+      periodNumber: nextPeriodNumber,
+      periodType: mappedPeriodType,
+      startedAt: now,
+      createdAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
+      createdByUserId: userId,
+      isDeleted: false,
       synced: false,
     };
-    await db.match_periods.add(localPeriod);
+    await db.matchPeriods.add(localPeriod);
 
     // Update match_state with current period
-    const existingState = await db.match_state.get(id);
+    const existingState = await db.matchState.get(id);
     if (existingState) {
-      await db.match_state.update(id, {
-        current_period_id: periodId,
+      await db.matchState.update(id, {
+        currentPeriodId: periodId,
         status: 'LIVE',
-        last_updated_at: now,
-        updated_at: now,
+        lastUpdatedAt: now,
+        updatedAt: new Date(now).toISOString(),
         synced: false,
       });
     }
 
-    showOfflineToast('Period started locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
-    return transformToApiMatchPeriod(localPeriod);
+    return dbToMatchPeriod(localPeriod);
   },
   /**
-   * End a period with offline fallback
+   * End a period - LOCAL-FIRST
    * 
-   * Requirements: 2.1 - Update local match_periods with ended_at
-   * Requirements: 6.1 - Fall back to local storage on network error
+   * All writes go to IndexedDB first. Background sync handles server communication.
    */
   async endPeriod(id: string, periodId: string, payload?: { reason?: string; actualDurationSeconds?: number }): Promise<MatchPeriod> {
-    // Try server first if online
-    if (isOnline()) {
-      try {
-        const response = await apiClient.post<MatchPeriod>(`/matches/${id}/periods/${periodId}/end`, payload || {});
-        return response.data as unknown as MatchPeriod;
-      } catch (error) {
-        // If not a network error, re-throw (e.g., 400, 401, 403)
-        if (!shouldUseOfflineFallback(error)) {
-          throw error;
-        }
-        // Fall through to offline handling for network errors
-      }
-    }
-
-    // Offline fallback: update local match_periods with ended_at
+    // Local-first: update local match_periods with endedAt
     const now = Date.now();
-    const existingPeriod = await db.match_periods.get(periodId);
-    
+    const existingPeriod = await db.matchPeriods.get(periodId);
+
     if (!existingPeriod) {
       throw new Error(`Period ${periodId} not found`);
     }
 
     // Calculate duration
-    const durationSeconds = payload?.actualDurationSeconds ?? 
-      (existingPeriod.started_at ? Math.floor((now - existingPeriod.started_at) / 1000) : 0);
+    const durationSeconds = payload?.actualDurationSeconds ??
+      (existingPeriod.startedAt ? Math.floor((now - existingPeriod.startedAt) / 1000) : 0);
 
-    await db.match_periods.update(periodId, {
-      ended_at: now,
-      duration_seconds: durationSeconds,
-      updated_at: now,
+    await db.matchPeriods.update(periodId, {
+      endedAt: now,
+      durationSeconds: durationSeconds,
+      updatedAt: new Date(now).toISOString(),
       synced: false,
     });
 
     // Update match_state to clear current period
-    const existingState = await db.match_state.get(id);
-    if (existingState && existingState.current_period_id === periodId) {
-      await db.match_state.update(id, {
-        current_period_id: undefined,
-        last_updated_at: now,
-        updated_at: now,
+    const existingState = await db.matchState.get(id);
+    if (existingState && existingState.currentPeriodId === periodId) {
+      await db.matchState.update(id, {
+        currentPeriodId: undefined,
+        lastUpdatedAt: now,
+        updatedAt: new Date(now).toISOString(),
         synced: false,
       });
     }
 
-    showOfflineToast('Period ended locally - will sync when online');
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
 
-    const updatedPeriod = await db.match_periods.get(periodId);
+    const updatedPeriod = await db.matchPeriods.get(periodId);
     if (!updatedPeriod) {
       throw new Error(`Failed to retrieve period ${periodId}`);
     }
-    return transformToApiMatchPeriod(updatedPeriod);
+    return dbToMatchPeriod(updatedPeriod);
   },
   /**
-   * Delete a match (soft delete)
+   * Delete a match (soft delete) - LOCAL-FIRST
    */
   async deleteMatch(id: string): Promise<void> {
+    const { matchesDataLayer } = await import('../dataLayer');
+    await matchesDataLayer.delete(id);
+
+    // Clean up orphaned live state
     try {
-      await apiClient.delete(`/matches/${id}`);
-    } catch (e) {
-      try {
-        const { db } = await import('../../db/indexedDB');
-        await db.matches.update(id, { is_deleted: true, deleted_at: Date.now() } as any);
-        // Clean up orphaned live state for guests
-        await db.settings.delete(`local_live_state:${id}`);
-      } catch {}
-      await addToOutbox('matches', id, 'DELETE', undefined, 'offline');
-    }
+      await db.settings.delete(`local_live_state:${id}`);
+    } catch { }
+
+    try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }
   },
   // === Viewer Sharing ===
   async shareViewerToken(id: string, expiresInMinutes: number = 480): Promise<{ viewer_token: string; expiresAt: string; code?: string; shareUrl?: string }> {

@@ -33,7 +33,7 @@ export type PrismaPosition = {
 import type { Prisma } from '@prisma/client';
 
 // Export enum type
-export type EventKind = 'goal' | 'assist' | 'key_pass' | 'save' | 'interception' | 'tackle' | 'foul' | 'penalty' | 'free_kick' | 'ball_out' | 'own_goal' | 'formation_change';
+export type EventKind = 'goal' | 'assist' | 'key_pass' | 'save' | 'interception' | 'tackle' | 'foul' | 'penalty' | 'free_kick' | 'ball_out' | 'own_goal' | 'formation_change' | 'corner';
 
 // Create our own input types since Event model is ignored
 export type PrismaPlayerCreateInput = {
@@ -104,6 +104,7 @@ export type PrismaMatchUpdateInput = {
 };
 
 export type PrismaEventCreateInput = {
+  id?: string;
   match_id: string;
   period_number?: number | null;
   clock_ms?: number | null;

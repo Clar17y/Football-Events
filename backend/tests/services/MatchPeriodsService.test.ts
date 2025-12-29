@@ -85,10 +85,10 @@ describe('MatchPeriodsService', () => {
       durationSeconds: period.duration_seconds,
       createdAt: period.created_at,
       updatedAt: period.updated_at,
-      created_by_user_id: period.created_by_user_id,
-      deleted_at: period.deleted_at,
-      deleted_by_user_id: period.deleted_by_user_id,
-      is_deleted: period.is_deleted,
+      createdByUserId: period.created_by_user_id,
+      deletedAt: period.deleted_at,
+      deletedByUserId: period.deleted_by_user_id,
+      isDeleted: period.is_deleted,
     }));
 
     vi.mocked(safeTransformMatchPeriod).mockImplementation((period: any) => 
@@ -203,14 +203,14 @@ describe('MatchPeriodsService', () => {
       expect(result).toMatchObject({
         matchId: mockMatchId,
         periodNumber: 1,
-        periodType: 'regular'
+        periodType: 'REGULAR'
       });
 
       expect(mockPrismaClient.match_state.updateMany).toHaveBeenCalledWith({
         where: { match_id: mockMatchId, is_deleted: false },
         data: {
           current_period: 1,
-          current_period_type: 'regular',
+          current_period_type: 'REGULAR',
           updated_at: expect.any(Date)
         }
       });
@@ -226,7 +226,7 @@ describe('MatchPeriodsService', () => {
       expect(result).toMatchObject({
         matchId: mockMatchId,
         periodNumber: 1,
-        periodType: 'extra_time'
+        periodType: 'EXTRA_TIME'
       });
 
       expect(mockPrismaClient.match_state.updateMany).not.toHaveBeenCalled();
@@ -285,7 +285,7 @@ describe('MatchPeriodsService', () => {
         id: mockPeriodId,
         match_id: mockMatchId,
         period_number: 1,
-        period_type: 'regular',
+        period_type: 'REGULAR',
         started_at: startTime,
         ended_at: new Date(),
         duration_seconds: 60,
@@ -298,6 +298,7 @@ describe('MatchPeriodsService', () => {
       };
 
       mockPrismaClient.match_periods.update.mockResolvedValue(updatedPeriod);
+      mockPrismaClient.match_periods.findMany.mockResolvedValue([{ duration_seconds: 60 }]);
 
       const result = await service.endPeriod(mockMatchId, mockPeriodId, mockUserId, mockUserRole);
 
@@ -366,7 +367,7 @@ describe('MatchPeriodsService', () => {
           id: 'period-1',
           match_id: mockMatchId,
           period_number: 1,
-          period_type: 'regular',
+          period_type: 'REGULAR',
           started_at: new Date(),
           ended_at: new Date(),
           duration_seconds: 900,
@@ -381,7 +382,7 @@ describe('MatchPeriodsService', () => {
           id: 'period-2',
           match_id: mockMatchId,
           period_number: 2,
-          period_type: 'regular',
+          period_type: 'REGULAR',
           started_at: new Date(),
           ended_at: null,
           duration_seconds: null,
@@ -403,7 +404,7 @@ describe('MatchPeriodsService', () => {
         id: 'period-1',
         matchId: mockMatchId,
         periodNumber: 1,
-        periodType: 'regular'
+        periodType: 'REGULAR'
       });
 
       expect(mockPrismaClient.match_periods.findMany).toHaveBeenCalledWith({
@@ -499,7 +500,7 @@ describe('MatchPeriodsService', () => {
         id: 'active-period',
         match_id: mockMatchId,
         period_number: 2,
-        period_type: 'regular',
+        period_type: 'REGULAR',
         started_at: new Date(),
         ended_at: null,
         duration_seconds: null,
@@ -519,7 +520,7 @@ describe('MatchPeriodsService', () => {
         id: 'active-period',
         matchId: mockMatchId,
         periodNumber: 2,
-        periodType: 'regular'
+        periodType: 'REGULAR'
       });
     });
 
@@ -548,7 +549,7 @@ describe('MatchPeriodsService', () => {
           id: 'period-1',
           match_id: mockMatchId,
           period_number: 1,
-          period_type: 'regular',
+          period_type: 'REGULAR',
           started_at: new Date(),
           ended_at: new Date(),
           duration_seconds: 900,
@@ -567,13 +568,13 @@ describe('MatchPeriodsService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({
-        periodType: 'regular'
+        periodType: 'REGULAR'
       });
 
       expect(mockPrismaClient.match_periods.findMany).toHaveBeenCalledWith({
         where: {
           match_id: mockMatchId,
-          period_type: 'regular',
+          period_type: 'REGULAR',
           is_deleted: false
         },
         orderBy: { period_number: 'asc' }
@@ -629,10 +630,8 @@ describe('MatchPeriodsService', () => {
       const validTypes = ['regular', 'extra_time', 'penalty_shootout'];
       
       validTypes.forEach(type => {
-        expect(() => {
-          // Access private method through any cast for testing
-          (service as any).validatePeriodType(type);
-        }).not.toThrow();
+        const result = (service as any).validateAndConvertPeriodType(type);
+        expect(result).not.toBeNull();
       });
     });
 
@@ -640,8 +639,8 @@ describe('MatchPeriodsService', () => {
       const invalidTypes = ['invalid', 'overtime', 'break'];
       
       invalidTypes.forEach(type => {
-        const result = (service as any).validatePeriodType(type);
-        expect(result).toBe(false);
+        const result = (service as any).validateAndConvertPeriodType(type);
+        expect(result).toBeNull();
       });
     });
   });
@@ -687,12 +686,12 @@ describe('MatchPeriodsService', () => {
         uniqueConstraints: {
           match_id: mockMatchId,
           period_number: 1,
-          period_type: 'regular'
+          period_type: 'REGULAR'
         },
         createData: expect.objectContaining({
           match_id: mockMatchId,
           period_number: 1,
-          period_type: 'regular',
+          period_type: 'REGULAR',
           started_at: expect.any(Date)
         }),
         userId: mockUserId,

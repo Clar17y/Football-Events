@@ -50,8 +50,8 @@ export class MatchStateService {
    * Validate if a state transition is allowed
    */
   private validateStateTransition(currentStatus: string, newStatus: string): boolean {
-    const allowedTransitions = MatchStateService.VALID_TRANSITIONS[currentStatus as keyof typeof MatchStateService.VALID_TRANSITIONS];
-    return allowedTransitions?.includes(newStatus as any) || false;
+    const allowedTransitions = MatchStateService.VALID_TRANSITIONS[currentStatus as keyof typeof MatchStateService.VALID_TRANSITIONS] as readonly string[] | undefined;
+    return allowedTransitions?.includes(newStatus) || false;
   }
 
   /**

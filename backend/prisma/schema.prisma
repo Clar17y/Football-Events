@@ -1,7 +1,7 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]
-  binaryTargets   = ["native", "windows"]
+  binaryTargets   = ["native", "windows", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -17,6 +17,7 @@ model User {
   first_name           String?
   last_name            String?
   role                 UserRole       @default(USER)
+  subscription_tier    subscription_tier @default(free)
   email_verified       Boolean        @default(false)
   created_at           DateTime       @default(now())
   updated_at           DateTime       @updatedAt
@@ -428,6 +429,13 @@ enum UserRole {
   @@schema("grassroots")
 }
 
+enum subscription_tier {
+  free
+  premium
+
+  @@schema("grassroots")
+}
+
 enum position_code {
   GK
   CB
@@ -480,6 +488,16 @@ enum event_kind {
   ball_out
   own_goal
   formation_change
+  yellow_card
+  red_card
+  corner
+  offside
+  shot_on_target
+  shot_off_target
+  clearance
+  block
+  cross
+  header
 
   @@schema("grassroots")
 }
