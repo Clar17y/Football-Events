@@ -3,12 +3,15 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
-import { createServer } from 'http';
+import { createServer as createHttpServer } from 'http';
+import { createServer as createHttpsServer } from 'https';
 import { Server } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import 'express-async-errors';
-import { validateEnv, getNumericEnv, isDevelopment } from './config/env';
+import { validateEnv, getNumericEnv } from './config/env';
+import { loadSSLConfig, shouldForceHttps } from './config/ssl';
+import { createHttpsRedirect, createHstsMiddleware } from './middleware/httpsRedirect';
 
 // Load environment variables
 dotenv.config();
@@ -16,8 +19,18 @@ dotenv.config();
 // Validate environment variables at startup
 const env = validateEnv();
 
+// Load SSL configuration
+const sslConfig = loadSSLConfig(env);
+const forceHttps = shouldForceHttps(env);
+const protocol = sslConfig.enabled ? 'https' : 'http';
+
 const app = express();
-const server = createServer(app);
+
+// Create HTTP or HTTPS server based on SSL configuration
+const server = sslConfig.enabled && sslConfig.options
+  ? createHttpsServer(sslConfig.options, app)
+  : createHttpServer(app);
+
 const prisma = new PrismaClient();
 
 // Socket.io setup - Allow both localhost and network access
@@ -35,6 +48,12 @@ const io = new Server(server, {
 // Security middleware
 app.use(helmet());
 app.use(compression());
+
+// HTTPS redirect (when FORCE_HTTPS=true)
+app.use(createHttpsRedirect(forceHttps));
+
+// HSTS header (only in production with SSL enabled)
+app.use(createHstsMiddleware(sslConfig.enabled && env.NODE_ENV === 'production'));
 
 // CORS configuration - Allow both localhost and network access
 app.use(cors({
@@ -149,10 +168,16 @@ app.use(errorHandler);
 const PORT = getNumericEnv(env.PORT, 3001);
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT} (${protocol.toUpperCase()})`);
   console.log(`📱 Frontend URL: ${env.FRONTEND_URL}`);
-  console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
-  console.log(`🌐 Network access: http://192.168.1.58:${PORT}/api/health`);
+  console.log(`🏥 Health check: ${protocol}://localhost:${PORT}/api/health`);
+  console.log(`🌐 Network access: ${protocol}://192.168.1.58:${PORT}/api/health`);
+  if (sslConfig.enabled) {
+    console.log('🔒 SSL/TLS encryption enabled');
+  }
+  if (forceHttps) {
+    console.log('🔐 HTTP to HTTPS redirect enabled');
+  }
 });
 
 // Export io for use in route handlers

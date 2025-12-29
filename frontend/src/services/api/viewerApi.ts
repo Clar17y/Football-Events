@@ -1,17 +1,6 @@
-import apiClient from './baseApi';
+import { buildApiBaseUrl } from '../../utils/protocol';
 
-function computeBaseURL(): string {
-  if ((import.meta as any).env?.VITE_API_URL) {
-    return (import.meta as any).env.VITE_API_URL as string;
-  }
-  const hostname = window.location.hostname;
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:3001/api/v1';
-  }
-  return `http://${hostname}:3001/api/v1`;
-}
-
-const baseURL = computeBaseURL();
+const baseURL = buildApiBaseUrl();
 
 type QParam = { name: 'view' | 'code'; value: string };
 

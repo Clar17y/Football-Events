@@ -4,6 +4,7 @@
  */
 
 import type { ApiResponse, PaginatedResponse } from '@shared/types';
+import { buildApiBaseUrl } from '../../utils/protocol';
 
 export interface ApiError {
   message: string;
@@ -38,23 +39,7 @@ export class ApiClient {
   private token: string | null = null;
   private reqSeq: number = 0;
 
-  constructor(baseURL: string = (() => {
-    // Smart API URL detection - works for both PC and mobile automatically
-    if (import.meta.env.VITE_API_URL) {
-      return import.meta.env.VITE_API_URL;
-    }
-
-    // Auto-detect based on current hostname
-    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      // PC development
-      return 'http://localhost:3001/api/v1';
-    } else {
-      // Mobile or network access - use the same IP as frontend
-      return `http://${hostname}:3001/api/v1`;
-    }
-  })()) {
+  constructor(baseURL: string = buildApiBaseUrl()) {
     this.baseURL = baseURL;
     this.loadToken();
   }
