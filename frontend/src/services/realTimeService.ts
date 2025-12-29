@@ -8,6 +8,7 @@
 import { io, Socket } from 'socket.io-client';
 // Database import removed - will use dynamic import to avoid blocking
 import type { MatchEvent } from '../types/events';
+import { buildWsUrl } from '../utils/protocol';
 
 export interface RealTimeConfig {
   serverUrl: string;
@@ -378,21 +379,9 @@ export class RealTimeService {
   }
 }
 
-// Create singleton instance
+// Create singleton instance with secure WebSocket support
 export const realTimeService = new RealTimeService({
-  serverUrl: (() => {
-    // Smart server URL detection
-    if (import.meta.env.VITE_API_URL) {
-      return import.meta.env.VITE_API_URL.replace('/api/v1', '');
-    }
-
-    const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:3001';
-    } else {
-      return `http://${hostname}:3001`;
-    }
-  })(),
+  serverUrl: buildWsUrl(),
   reconnectionAttempts: Infinity, // Keep trying forever
   reconnectionDelay: 2000, // Try every 2 seconds
   timeout: 5000
