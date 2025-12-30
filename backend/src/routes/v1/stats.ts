@@ -16,26 +16,29 @@ router.get('/global', asyncHandler(async (_req, res) => {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-    // Get current season from database for active teams calculation
+    // Get ALL current seasons from database for active teams calculation
+    // Multiple users can have their own current season, so we need all of them
     const currentDate = new Date();
-    let currentSeason = await prisma.seasons.findFirst({
-      where: { is_current: true },
-      select: { season_id: true, label: true }
+    let currentSeasons = await prisma.seasons.findMany({
+      where: { is_current: true, is_deleted: false },
+      select: { season_id: true }
     });
-    
-    // If no season marked current, find by date range
-    if (!currentSeason) {
-      currentSeason = await prisma.seasons.findFirst({
+
+    // If no seasons marked current, find by date range
+    if (currentSeasons.length === 0) {
+      currentSeasons = await prisma.seasons.findMany({
         where: {
           AND: [
             { start_date: { lte: currentDate } },
-            { end_date: { gte: currentDate } }
+            { end_date: { gte: currentDate } },
+            { is_deleted: false }
           ]
         },
-        select: { season_id: true, label: true },
-        orderBy: { start_date: 'desc' }
+        select: { season_id: true }
       });
     }
+
+    const currentSeasonIds = currentSeasons.map(s => s.season_id);
 
     // Execute count queries in parallel
     const [
@@ -48,13 +51,13 @@ router.get('/global', asyncHandler(async (_req, res) => {
     ] = await Promise.all([
       // Total teams across platform
       prisma.team.count({ where: { is_deleted: false, is_opponent: false } }),
-      
+
       // Total players across platform (exclude soft-deleted)
       prisma.player.count({ where: { is_deleted: false } }),
-      
+
       // Total matches ever created
       prisma.match.count(),
-      
+
       // Matches scheduled for today (kickoff time is today)
       prisma.match.count({
         where: {
@@ -65,12 +68,12 @@ router.get('/global', asyncHandler(async (_req, res) => {
         }
       }),
 
-      // Active teams (teams with matches in current season)
-      currentSeason ? prisma.team.count({
+      // Active teams (teams with matches in any current season)
+      currentSeasonIds.length > 0 ? prisma.team.count({
         where: {
           OR: [
-            { homeMatches: { some: { season_id: currentSeason.season_id } } },
-            { awayMatches: { some: { season_id: currentSeason.season_id } } }
+            { homeMatches: { some: { season_id: { in: currentSeasonIds } } } },
+            { awayMatches: { some: { season_id: { in: currentSeasonIds } } } }
           ],
           is_deleted: false,
           is_opponent: false
