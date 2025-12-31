@@ -1,0 +1,175 @@
+/* DevSettingsPage.css - Developer Settings Page Styles */
+
+.dev-settings-page {
+    --background: var(--ion-color-light);
+}
+
+.dev-settings-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 16px;
+}
+
+/* Warning Banner */
+.dev-warning-banner {
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
+/* Result Message */
+.result-message {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-weight: 500;
+}
+
+.result-message.success {
+    background: linear-gradient(135deg, #4caf50 0%, #43a047 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.result-message.error {
+    background: linear-gradient(135deg, #f44336 0%, #e53935 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+}
+
+.result-message ion-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+/* Progress Card */
+.progress-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.progress-card ion-card-header {
+    padding-bottom: 8px;
+}
+
+.progress-card ion-card-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: white;
+    font-size: 18px;
+}
+
+.progress-card ion-spinner {
+    --color: white;
+}
+
+.progress-message {
+    font-size: 16px;
+    margin-bottom: 12px;
+    opacity: 0.95;
+}
+
+.progress-card ion-progress-bar {
+    height: 8px;
+    border-radius: 4px;
+    --background: rgba(255, 255, 255, 0.3);
+    --progress-background: white;
+}
+
+.progress-detail {
+    font-size: 14px;
+    margin-top: 8px;
+    opacity: 0.85;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.action-buttons ion-button {
+    --border-radius: 8px;
+    height: 48px;
+    font-weight: 600;
+}
+
+/* Stats */
+.stat-value {
+    font-weight: 700;
+    color: var(--ion-color-primary);
+    font-size: 16px;
+}
+
+.loading-stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px;
+    color: var(--ion-color-medium);
+}
+
+/* Info Card */
+.data-source {
+    margin-top: 16px;
+    font-size: 14px;
+    color: var(--ion-color-medium);
+}
+
+.data-source a {
+    color: var(--ion-color-primary);
+    text-decoration: none;
+}
+
+.data-source a:hover {
+    text-decoration: underline;
+}
+
+/* Cards */
+ion-card {
+    margin-bottom: 16px;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+ion-card-title {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+ion-card-content ul {
+    padding-left: 20px;
+    margin: 12px 0;
+}
+
+ion-card-content li {
+    margin-bottom: 8px;
+    line-height: 1.5;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+    .dev-settings-page {
+        --background: var(--ion-background-color);
+    }
+
+    ion-card {
+        --background: var(--ion-card-background);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .stat-value {
+        color: var(--ion-color-primary-tint);
+    }
+}

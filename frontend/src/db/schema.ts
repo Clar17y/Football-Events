@@ -143,7 +143,7 @@ export interface DbMatchState extends SyncableRecord {
   /** Match ID (primary key) */
   matchId: string;
   /** Current match status */
-  status: 'NOT_STARTED' | 'LIVE' | 'PAUSED' | 'COMPLETED';
+  status: 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED';
   /** Current period ID (if match is live) */
   currentPeriodId?: string;
   /** Elapsed timer in milliseconds */

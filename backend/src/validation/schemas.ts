@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 // Team validation schemas
 export const teamCreateSchema = z.object({
+  /** Optional client-generated UUID for local-first sync */
+  id: z.string().uuid('Team ID must be a valid UUID').optional(),
   name: z.string()
     .min(1, 'Team name is required')
     .max(100, 'Team name must be less than 100 characters')
@@ -28,6 +30,8 @@ export const teamUpdateSchema = teamCreateSchema.omit({ isOpponent: true }).part
 
 // Player validation schemas
 export const playerCreateSchema = z.object({
+  /** Optional client-generated UUID for local-first sync */
+  id: z.string().uuid('Player ID must be a valid UUID').optional(),
   name: z.string()
     .min(1, 'Player name is required')
     .max(100, 'Player name must be less than 100 characters')
@@ -52,6 +56,8 @@ export const playerUpdateSchema = playerCreateSchema.partial();
 
 // Season validation schemas
 const seasonBaseSchema = z.object({
+  /** Optional client-generated UUID for local-first sync */
+  id: z.string().uuid('Season ID must be a valid UUID').optional(),
   label: z.string()
     .min(1, 'Season label is required')
     .max(50, 'Season label must be less than 50 characters')
@@ -108,6 +114,8 @@ export const matchQuickStartSchema = z.object({
 });
 
 export const matchCreateSchema = z.object({
+  /** Optional client-generated UUID for local-first sync */
+  id: z.string().uuid('Match ID must be a valid UUID').optional(),
   seasonId: z.string().uuid('Season ID must be a valid UUID'),
   kickoffTime: z.string().datetime('Kickoff time must be a valid ISO date'),
   homeTeamId: z.string().uuid('Home team ID must be a valid UUID'),
@@ -290,6 +298,8 @@ export const matchAwardUpdateSchema = matchAwardCreateBaseSchema.partial();
 
 // Lineup validation schemas
 export const lineupCreateSchema = z.object({
+  /** Optional client-generated UUID for local-first sync */
+  id: z.string().uuid('Lineup ID must be a valid UUID').optional(),
   matchId: z.string().uuid('Match ID must be a valid UUID'),
   playerId: z.string().uuid('Player ID must be a valid UUID'),
   startMinute: z.number()
@@ -445,6 +455,8 @@ export const lineupSubstitutionSchema = z.object({
 
 // Player Teams validation schemas
 export const playerTeamCreateSchema = z.object({
+  /** Optional client-generated UUID for local-first sync */
+  id: z.string().uuid('Player-team ID must be a valid UUID').optional(),
   // UUID-based fields
   playerId: z.string().uuid('Player ID must be a valid UUID').optional(),
   teamId: z.string().uuid('Team ID must be a valid UUID').optional(),

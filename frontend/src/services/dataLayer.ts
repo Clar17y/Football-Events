@@ -627,7 +627,7 @@ export const lineupsDataLayer = {
 
 export const matchStateDataLayer = {
     async upsert(matchId: string, data: {
-        status: 'NOT_STARTED' | 'LIVE' | 'PAUSED' | 'COMPLETED';
+        status: 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED';
         currentPeriodId?: string;
         timerMs?: number;
     }): Promise<void> {

@@ -82,7 +82,7 @@ export interface Match extends SharedMatch {
  * Match status enumeration
  */
 export type MatchStatus =
-  | 'NOT_STARTED'
+  | 'SCHEDULED'
   | 'IN_PROGRESS'
   | 'HALF_TIME'
   | 'EXTRA_TIME'

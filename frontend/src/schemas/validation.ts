@@ -118,7 +118,7 @@ export const MatchEventSchema = EventPayloadSchema.extend({
  * Match status validation
  */
 export const MatchStatusSchema = z.enum([
-  'NOT_STARTED',
+  'SCHEDULED',
   'IN_PROGRESS',
   'HALF_TIME',
   'EXTRA_TIME',

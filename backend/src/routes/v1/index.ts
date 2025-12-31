@@ -15,6 +15,7 @@ import activityRouter from './activity';
 import defaultLineupsRouter from './default-lineups';
 import positionsRouter from './positions';
 import meRouter from './me';
+import devRouter from './dev';
 
 const v1Router = Router();
 
@@ -63,5 +64,6 @@ v1Router.use('/stats', statsRouter);
 v1Router.use('/auth', authRouter);
 v1Router.use('/activity', activityRouter);
 v1Router.use('/me', meRouter);
+v1Router.use('/dev', devRouter);
 
 export default v1Router;

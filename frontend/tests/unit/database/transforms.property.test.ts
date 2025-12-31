@@ -284,9 +284,8 @@ describe('Transform Round-Trip Property Tests', () => {
           // Core fields should be preserved
           expect(state.matchId).toBe(dbState.matchId);
 
-          // Status should map correctly (NOT_STARTED -> SCHEDULED)
-          const expectedStatus = dbState.status === 'NOT_STARTED' ? 'SCHEDULED' : dbState.status;
-          expect(state.status).toBe(expectedStatus);
+          // Status should be preserved directly (using SCHEDULED consistently)
+          expect(state.status).toBe(dbState.status);
 
           // Timer should be converted to seconds
           expect(state.totalElapsedSeconds).toBe(Math.floor(dbState.timerMs / 1000));

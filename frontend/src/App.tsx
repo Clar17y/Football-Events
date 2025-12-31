@@ -25,6 +25,7 @@ import LineupManagementPage from './pages/LineupManagementPage';
 import LandingPage from './pages/LandingPage';
 import PricingPage from './pages/PricingPage';
 import SyncIssuesPage from './pages/SyncIssuesPage';
+import DevSettingsPage from './pages/DevSettingsPage';
 // import MatchConsole from './pages/MatchConsole'; // Removed - will be redesigned
 import { syncService } from './services/syncService';
 import ImportPromptModal from './components/ImportPromptModal';
@@ -222,6 +223,12 @@ const AppRoutes: React.FC = () => {
         return <PricingPage onNavigate={handleNavigation} />;
       case 'sync-issues':
         return <SyncIssuesPage onNavigate={handleNavigation} />;
+      case 'dev':
+        // Dev settings page - only available in development
+        if (import.meta.env.DEV) {
+          return <DevSettingsPage />;
+        }
+        return <LandingPage onNavigate={handleNavigation} />;
       case 'dashboard':
         // Guest dashboard: always show the main app interface
         return <HomePage onNavigate={handleNavigation} />;

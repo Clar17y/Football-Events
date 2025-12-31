@@ -36,14 +36,14 @@ describe('matchState transforms', () => {
       expect(result.isDeleted).toBe(false);
     });
 
-    it('maps NOT_STARTED to SCHEDULED', () => {
-      const notStartedState = { ...mockDbState, status: 'NOT_STARTED' as const };
-      const result = dbToMatchState(notStartedState);
+    it('preserves SCHEDULED status', () => {
+      const scheduledState = { ...mockDbState, status: 'SCHEDULED' as const };
+      const result = dbToMatchState(scheduledState);
       expect(result.status).toBe('SCHEDULED');
     });
 
     it('preserves other status values', () => {
-      const statuses = ['LIVE', 'PAUSED', 'COMPLETED'] as const;
+      const statuses = ['SCHEDULED', 'LIVE', 'PAUSED', 'COMPLETED'] as const;
       for (const status of statuses) {
         const state = { ...mockDbState, status };
         const result = dbToMatchState(state);
@@ -66,12 +66,12 @@ describe('matchState transforms', () => {
       }
     });
 
-    it('sets matchStartedAt for non-NOT_STARTED states', () => {
+    it('sets matchStartedAt for non-SCHEDULED states', () => {
       const liveState = { ...mockDbState, status: 'LIVE' as const };
       expect(dbToMatchState(liveState).matchStartedAt).toBeDefined();
 
-      const notStartedState = { ...mockDbState, status: 'NOT_STARTED' as const };
-      expect(dbToMatchState(notStartedState).matchStartedAt).toBeUndefined();
+      const scheduledState = { ...mockDbState, status: 'SCHEDULED' as const };
+      expect(dbToMatchState(scheduledState).matchStartedAt).toBeUndefined();
     });
 
     it('sets matchEndedAt for COMPLETED state', () => {
@@ -228,11 +228,11 @@ describe('matchState transforms', () => {
 
     it('handles minimal input with defaults', () => {
       const result = matchStateWriteToDb('match-123', {
-        status: 'NOT_STARTED',
+        status: 'SCHEDULED',
       });
 
       expect(result.matchId).toBe('match-123');
-      expect(result.status).toBe('NOT_STARTED');
+      expect(result.status).toBe('SCHEDULED');
       expect(result.timerMs).toBe(0);
       expect(result.currentPeriodId).toBeUndefined();
     });
