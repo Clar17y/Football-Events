@@ -10,6 +10,8 @@ import { ToastProvider } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ToastContainer } from './components/ui/Toast';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
+import PWAUpdateNotification from './components/PWAUpdateNotification';
 import { exposeDevUtilities } from './db/utils';
 
 import '@ionic/react/css/core.css';
@@ -39,6 +41,8 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
             <IonApp>
               <App />
               <ToastContainer />
+              <PWAInstallPrompt />
+              <PWAUpdateNotification />
             </IonApp>
           </MuiThemeBridge>
         </ToastProvider>
