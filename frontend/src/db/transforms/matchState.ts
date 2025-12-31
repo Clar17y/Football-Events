@@ -21,10 +21,10 @@ export function dbToMatchState(s: DbMatchState): MatchState {
   return {
     id: s.matchId,
     matchId: s.matchId,
-    status: s.status === 'NOT_STARTED' ? 'SCHEDULED' : s.status,
+    status: s.status,
     currentPeriod: undefined, // Set from period data if available
     currentPeriodType: undefined,
-    matchStartedAt: s.status !== 'NOT_STARTED' ? s.createdAt : undefined,
+    matchStartedAt: s.status !== 'SCHEDULED' ? s.createdAt : undefined,
     matchEndedAt: s.status === 'COMPLETED' ? s.updatedAt : undefined,
     totalElapsedSeconds: Math.floor(s.timerMs / 1000),
     createdAt: s.createdAt,
@@ -40,7 +40,7 @@ export function dbToMatchState(s: DbMatchState): MatchState {
  * Input shape for creating/updating match state (frontend camelCase)
  */
 export interface MatchStateWriteInput {
-  status: 'NOT_STARTED' | 'LIVE' | 'PAUSED' | 'COMPLETED';
+  status: 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED';
   currentPeriodId?: string;
   timerMs?: number;
 }
@@ -141,10 +141,9 @@ export interface ServerMatchStateResponse {
  */
 export function serverMatchStateToDb(s: ServerMatchStateResponse): DbMatchState {
   const now = nowIso();
-  // Map server status to local status
-  const localStatus = s.status === 'SCHEDULED' ? 'NOT_STARTED' : 
-    (s.status === 'CANCELLED' || s.status === 'POSTPONED') ? 'COMPLETED' : s.status;
-  
+  // Map server status to local status (keep SCHEDULED as-is, map CANCELLED/POSTPONED to COMPLETED)
+  const localStatus = (s.status === 'CANCELLED' || s.status === 'POSTPONED') ? 'COMPLETED' : s.status;
+
   return {
     matchId: s.matchId,
     status: localStatus as DbMatchState['status'],

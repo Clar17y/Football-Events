@@ -206,7 +206,7 @@ export const matchPeriodArbitrary = fc.record({
  */
 export const matchStateArbitrary = fc.record({
   matchId: fc.uuid(),
-  status: fc.constantFrom('NOT_STARTED', 'LIVE', 'PAUSED', 'COMPLETED') as fc.Arbitrary<'NOT_STARTED' | 'LIVE' | 'PAUSED' | 'COMPLETED'>,
+  status: fc.constantFrom('SCHEDULED', 'LIVE', 'PAUSED', 'COMPLETED') as fc.Arbitrary<'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED'>,
   currentPeriodId: fc.option(fc.uuid(), { nil: undefined }),
   timerMs: fc.integer({ min: 0, max: 90 * 60 * 1000 }),
   lastUpdatedAt: timestampArbitrary,

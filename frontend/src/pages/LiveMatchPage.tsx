@@ -141,7 +141,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       setMatchState({
         id: 'local-state',
         matchId,
-        status: matchStateData.status || 'NOT_STARTED',
+        status: matchStateData.status || 'SCHEDULED',
         currentPeriod: lastPeriod?.periodNumber || 1,
         totalElapsedSeconds: Math.floor(base / 1000),
         createdAt: new Date(),
@@ -300,7 +300,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       return;
     }
 
-    const status = (localMatchStateRecord?.status || 'NOT_STARTED') as any;
+    const status = (localMatchStateRecord?.status || 'SCHEDULED') as any;
     const open = (localPeriodRecords || []).find((p: any) => !p.endedAt);
     const last = (localPeriodRecords || [])[localPeriodRecords.length - 1];
     const periodNumber = open?.periodNumber || last?.periodNumber || 1;
@@ -413,7 +413,7 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
                   ? 'PAUSED'
                   : stateResp.status === 'COMPLETED'
                     ? 'COMPLETED'
-                    : 'NOT_STARTED';
+                    : 'SCHEDULED';
 
             await db.matchState.put({
               matchId: selectedId,

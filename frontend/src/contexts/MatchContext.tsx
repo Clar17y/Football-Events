@@ -346,7 +346,7 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ...currentMatch,
         clock,
         settings,
-        status: clock.running ? 'IN_PROGRESS' : 'NOT_STARTED'
+        status: clock.running ? 'IN_PROGRESS' : 'SCHEDULED'
       };
 
       setCurrentMatch(updatedMatch);

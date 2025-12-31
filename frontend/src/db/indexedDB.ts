@@ -953,7 +953,7 @@ export class GrassrootsDB extends Dexie {
       } else {
         const newState: DbMatchState = {
           matchId: matchId,
-          status: updates.status || 'NOT_STARTED',
+          status: updates.status || 'SCHEDULED',
           currentPeriodId: updates.currentPeriodId,
           timerMs: updates.timerMs || 0,
           lastUpdatedAt: nowMs,

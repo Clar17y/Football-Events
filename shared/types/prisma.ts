@@ -36,6 +36,8 @@ export type EventKind = import('@prisma/client').event_kind;
 
 // Create our own input types since Event model is ignored
 export type PrismaPlayerCreateInput = {
+  /** Optional client-generated UUID for local-first sync */
+  id?: string;
   name: string;
   squad_number?: number | null;
   preferred_pos?: string | null;
@@ -54,6 +56,8 @@ export type PrismaPlayerUpdateInput = {
 };
 
 export type PrismaTeamCreateInput = {
+  /** Optional client-generated UUID for local-first sync */
+  id?: string;
   name: string;
   is_opponent?: boolean;
   home_kit_primary?: string | null;
@@ -74,6 +78,8 @@ export type PrismaTeamUpdateInput = {
 };
 
 export type PrismaMatchCreateInput = {
+  /** Optional client-generated UUID for local-first sync (maps to match_id primary key) */
+  match_id?: string;
   season_id: string;
   kickoff_ts: Date;
   competition?: string | null;
@@ -117,6 +123,8 @@ export type PrismaEventCreateInput = {
 
 // Season input types
 export type PrismaSeasonCreateInput = {
+  /** Optional client-generated UUID for local-first sync (maps to season_id primary key) */
+  season_id?: string;
   label: string;
   start_date: Date;
   end_date: Date;
@@ -146,6 +154,8 @@ export type PrismaPositionUpdateInput = {
 
 // Lineup input types
 export type PrismaLineupCreateInput = {
+  /** Optional client-generated UUID for local-first sync */
+  id?: string;
   match_id: string;
   player_id: string;
   start_min?: number;
@@ -190,6 +200,8 @@ export type PrismaMatchAwardUpdateInput = {
 
 // Player Team input types
 export type PrismaPlayerTeamCreateInput = {
+  /** Optional client-generated UUID for local-first sync */
+  id?: string;
   player_id: string;
   team_id: string;
   start_date: Date;

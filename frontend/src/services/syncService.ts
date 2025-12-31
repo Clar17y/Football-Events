@@ -49,7 +49,7 @@ try {
     // eslint-disable-next-line no-console
     console.info('[SyncService] Quarantine/backoff disabled (VITE_ENABLE_SYNC_QUARANTINE=false)');
   }
-} catch {}
+} catch { }
 
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 24 * 60 * 60 * 1000;
@@ -133,7 +133,7 @@ async function clearSyncFailure(table: string, recordId: string): Promise<void> 
   if (!ENABLE_SYNC_QUARANTINE) return;
   try {
     await db.syncFailures?.delete([table, recordId]);
-  } catch {}
+  } catch { }
 }
 
 async function recordSyncFailure(table: string, recordId: string, error: unknown): Promise<{ abortAll: boolean }> {
@@ -1146,7 +1146,6 @@ async function syncMatchState(authUserId: string): Promise<SyncResult> {
           continue;
         }
         // Sync state changes to server based on status
-        // Note: Local schema uses 'NOT_STARTED', server uses 'SCHEDULED'
         const status = state.status;
 
         if (status === 'LIVE') {
@@ -1175,7 +1174,7 @@ async function syncMatchState(authUserId: string): Promise<SyncResult> {
             await matchesApi.completeMatch(state.matchId);
           }
         }
-        // For 'NOT_STARTED' status, nothing to sync
+        // For 'SCHEDULED' status, nothing to sync
 
         // Update synced to true and set syncedAt on success (Requirements: 2.4)
         await db.matchState.update(state.matchId, {
@@ -1437,7 +1436,7 @@ class SyncService {
         try {
           const progress = await this.getPendingCounts();
           emitSyncProgress(progress);
-        } catch {}
+        } catch { }
         return combinedResult;
       }
 
