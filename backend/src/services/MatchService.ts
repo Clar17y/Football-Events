@@ -130,7 +130,13 @@ export class MatchService {
               away_kit_primary: true,
               away_kit_secondary: true,
               logo_url: true,
-              is_opponent: true
+              is_opponent: true,
+              created_at: true,
+              updated_at: true,
+              created_by_user_id: true,
+              deleted_at: true,
+              deleted_by_user_id: true,
+              is_deleted: true
             }
           },
           awayTeam: {
@@ -142,7 +148,13 @@ export class MatchService {
               away_kit_primary: true,
               away_kit_secondary: true,
               logo_url: true,
-              is_opponent: true
+              is_opponent: true,
+              created_at: true,
+              updated_at: true,
+              created_by_user_id: true,
+              deleted_at: true,
+              deleted_by_user_id: true,
+              is_deleted: true
             }
           }
         }
@@ -196,7 +208,13 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-            is_opponent: true
+            is_opponent: true,
+            created_at: true,
+            updated_at: true,
+            created_by_user_id: true,
+            deleted_at: true,
+            deleted_by_user_id: true,
+            is_deleted: true
           }
         },
         awayTeam: {
@@ -208,7 +226,13 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-            is_opponent: true
+            is_opponent: true,
+            created_at: true,
+            updated_at: true,
+            created_by_user_id: true,
+            deleted_at: true,
+            deleted_by_user_id: true,
+            is_deleted: true
           }
         }
       }
@@ -363,7 +387,13 @@ export class MatchService {
               away_kit_primary: true,
               away_kit_secondary: true,
               logo_url: true,
-              is_opponent: true
+              is_opponent: true,
+              created_at: true,
+              updated_at: true,
+              created_by_user_id: true,
+              deleted_at: true,
+              deleted_by_user_id: true,
+              is_deleted: true
             }
           },
           awayTeam: {
@@ -375,7 +405,13 @@ export class MatchService {
               away_kit_primary: true,
               away_kit_secondary: true,
               logo_url: true,
-              is_opponent: true
+              is_opponent: true,
+              created_at: true,
+              updated_at: true,
+              created_by_user_id: true,
+              deleted_at: true,
+              deleted_by_user_id: true,
+              is_deleted: true
             }
           }
         }
@@ -473,7 +509,13 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-            is_opponent: true
+            is_opponent: true,
+            created_at: true,
+            updated_at: true,
+            created_by_user_id: true,
+            deleted_at: true,
+            deleted_by_user_id: true,
+            is_deleted: true
           }
         },
         awayTeam: {
@@ -485,7 +527,13 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-            is_opponent: true
+            is_opponent: true,
+            created_at: true,
+            updated_at: true,
+            created_by_user_id: true,
+            deleted_at: true,
+            deleted_by_user_id: true,
+            is_deleted: true
           }
         }
       }
@@ -526,7 +574,13 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-            is_opponent: true
+            is_opponent: true,
+            created_at: true,
+            updated_at: true,
+            created_by_user_id: true,
+            deleted_at: true,
+            deleted_by_user_id: true,
+            is_deleted: true
           }
         },
         awayTeam: {
@@ -538,7 +592,13 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-            is_opponent: true
+            is_opponent: true,
+            created_at: true,
+            updated_at: true,
+            created_by_user_id: true,
+            deleted_at: true,
+            deleted_by_user_id: true,
+            is_deleted: true
           }
         }
       }
@@ -590,7 +650,13 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-            is_opponent: true
+            is_opponent: true,
+            created_at: true,
+            updated_at: true,
+            created_by_user_id: true,
+            deleted_at: true,
+            deleted_by_user_id: true,
+            is_deleted: true
           }
         },
         awayTeam: {
@@ -602,7 +668,13 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-            is_opponent: true
+            is_opponent: true,
+            created_at: true,
+            updated_at: true,
+            created_by_user_id: true,
+            deleted_at: true,
+            deleted_by_user_id: true,
+            is_deleted: true
           }
         }
       }
@@ -654,7 +726,13 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-            is_opponent: true
+            is_opponent: true,
+            created_at: true,
+            updated_at: true,
+            created_by_user_id: true,
+            deleted_at: true,
+            deleted_by_user_id: true,
+            is_deleted: true
           }
         },
         awayTeam: {
@@ -666,7 +744,13 @@ export class MatchService {
             away_kit_primary: true,
             away_kit_secondary: true,
             logo_url: true,
-            is_opponent: true
+            is_opponent: true,
+            created_at: true,
+            updated_at: true,
+            created_by_user_id: true,
+            deleted_at: true,
+            deleted_by_user_id: true,
+            is_deleted: true
           }
         }
       }

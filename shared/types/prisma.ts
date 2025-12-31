@@ -29,11 +29,10 @@ export type PrismaPosition = {
   updated_at?: Date | null;
 };
 
-// Import enum using $ namespace
-import type { Prisma } from '@prisma/client';
-
-// Export enum type
-export type EventKind = 'goal' | 'assist' | 'key_pass' | 'save' | 'interception' | 'tackle' | 'foul' | 'penalty' | 'free_kick' | 'ball_out' | 'own_goal' | 'formation_change' | 'corner';
+// Re-export the event_kind enum from Prisma to keep types in sync with the database schema
+// Using the Prisma-generated type directly ensures it stays in sync after `prisma generate`
+export { event_kind } from '@prisma/client';
+export type EventKind = import('@prisma/client').event_kind;
 
 // Create our own input types since Event model is ignored
 export type PrismaPlayerCreateInput = {
