@@ -6,8 +6,14 @@
 
 ion-item .settings-input {
     flex: 0 0 50%;
-    max-width: 100%;
+    max-width: 50%;
     min-width: 0;
+    --padding-start: 10px;
+}
+
+ion-item {
+    max-width: 50%;
+    min-width: 450px;
 }
 
 .settings-container {

@@ -11,12 +11,10 @@ import {
     IonList,
     IonListHeader,
     IonButtons,
-    IonSelect,
-    IonSelectOption,
-    IonInput,
-    IonRow
+    IonInput
 } from '@ionic/react';
 import { football, colorPaletteOutline, timerOutline } from 'ionicons/icons';
+import { Select, MenuItem, FormControl } from '@mui/material';
 import UserProfile from '../components/UserProfile';
 import ThemeToggle from '../components/ThemeToggle';
 import { useTheme } from '../contexts/ThemeContext';
@@ -128,14 +126,16 @@ const AppSettingsPage: React.FC<AppSettingsPageProps> = ({ onNavigate }) => {
 
                         <IonItem>
                             <IonLabel>Theme</IonLabel>
-                            <IonSelect
-                                value={settings.theme}
-                                onIonChange={(e) => handleThemeChange(e.detail.value)}
-                            >
-                                <IonSelectOption value="light">Light</IonSelectOption>
-                                <IonSelectOption value="dark">Dark</IonSelectOption>
-                                <IonSelectOption value="system">System</IonSelectOption>
-                            </IonSelect>
+                            <FormControl slot="end" size="small" sx={{ minWidth: 220 }}>
+                                <Select
+                                    value={settings.theme}
+                                    onChange={(e) => handleThemeChange(e.target.value as 'light' | 'dark' | 'system')}
+                                >
+                                    <MenuItem value="light">Light</MenuItem>
+                                    <MenuItem value="dark">Dark</MenuItem>
+                                    <MenuItem value="system">System</MenuItem>
+                                </Select>
+                            </FormControl>
                         </IonItem>
                     </IonList>
 
@@ -151,47 +151,52 @@ const AppSettingsPage: React.FC<AppSettingsPageProps> = ({ onNavigate }) => {
 
                         <IonItem>
                             <IonLabel>Match Duration</IonLabel>
-                            <IonSelect
-                                value={settings.defaultDurationMins}
-                                onIonChange={(e) => handleDurationChange(e.detail.value)}
-                                interface="action-sheet"
-                            >
-                                <IonSelectOption value={20}>20 mins</IonSelectOption>
-                                <IonSelectOption value={24}>24 mins</IonSelectOption>
-                                <IonSelectOption value={30}>30 mins</IonSelectOption>
-                                <IonSelectOption value={40}>40 mins</IonSelectOption>
-                                <IonSelectOption value={48}>48 mins</IonSelectOption>
-                                <IonSelectOption value={50}>50 mins</IonSelectOption>
-                                <IonSelectOption value={60}>60 mins</IonSelectOption>
-                                <IonSelectOption value={70}>70 mins</IonSelectOption>
-                                <IonSelectOption value={80}>80 mins</IonSelectOption>
-                                <IonSelectOption value={90}>90 mins</IonSelectOption>
-                            </IonSelect>
+                            <FormControl slot="end" size="small" sx={{ minWidth: 220 }}>
+                                <Select
+                                    value={settings.defaultDurationMins}
+                                    onChange={(e) => handleDurationChange(e.target.value as number)}
+                                >
+                                    <MenuItem value={20}>20 mins</MenuItem>
+                                    <MenuItem value={24}>24 mins</MenuItem>
+                                    <MenuItem value={30}>30 mins</MenuItem>
+                                    <MenuItem value={40}>40 mins</MenuItem>
+                                    <MenuItem value={48}>48 mins</MenuItem>
+                                    <MenuItem value={50}>50 mins</MenuItem>
+                                    <MenuItem value={60}>60 mins</MenuItem>
+                                    <MenuItem value={70}>70 mins</MenuItem>
+                                    <MenuItem value={80}>80 mins</MenuItem>
+                                    <MenuItem value={90}>90 mins</MenuItem>
+                                </Select>
+                            </FormControl>
                         </IonItem>
 
                         <IonItem>
                             <IonLabel>Period Format</IonLabel>
-                            <IonSelect
-                                value={settings.defaultPeriodFormat}
-                                onIonChange={(e) => handlePeriodFormatChange(e.detail.value)}
-                            >
-                                <IonSelectOption value="quarter">Quarters (4 periods)</IonSelectOption>
-                                <IonSelectOption value="half">Halves (2 periods)</IonSelectOption>
-                                <IonSelectOption value="whole">Whole Match (1 period)</IonSelectOption>
-                            </IonSelect>
+                            <FormControl slot="end" size="small" sx={{ minWidth: 220 }}>
+                                <Select
+                                    value={settings.defaultPeriodFormat}
+                                    onChange={(e) => handlePeriodFormatChange(e.target.value as 'quarter' | 'half' | 'whole')}
+                                >
+                                    <MenuItem value="quarter">Quarters (4 periods)</MenuItem>
+                                    <MenuItem value="half">Halves (2 periods)</MenuItem>
+                                    <MenuItem value="whole">Whole Match (1 period)</MenuItem>
+                                </Select>
+                            </FormControl>
                         </IonItem>
 
                         <IonItem>
                             <IonLabel>Default Lineup Size</IonLabel>
-                            <IonSelect
-                                value={settings.defaultLineupSize}
-                                onIonChange={(e) => handleLineupSizeChange(e.detail.value)}
-                            >
-                                <IonSelectOption value={5}>5v5</IonSelectOption>
-                                <IonSelectOption value={7}>7v7</IonSelectOption>
-                                <IonSelectOption value={9}>9v9</IonSelectOption>
-                                <IonSelectOption value={11}>11v11</IonSelectOption>
-                            </IonSelect>
+                            <FormControl slot="end" size="small" sx={{ minWidth: 220 }}>
+                                <Select
+                                    value={settings.defaultLineupSize}
+                                    onChange={(e) => handleLineupSizeChange(e.target.value as number)}
+                                >
+                                    <MenuItem value={5}>5v5</MenuItem>
+                                    <MenuItem value={7}>7v7</MenuItem>
+                                    <MenuItem value={9}>9v9</MenuItem>
+                                    <MenuItem value={11}>11v11</MenuItem>
+                                </Select>
+                            </FormControl>
                         </IonItem>
 
                         <IonItem>
