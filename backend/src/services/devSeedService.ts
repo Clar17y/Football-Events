@@ -299,34 +299,7 @@ export async function seedPremierLeagueData(): Promise<SeedingResult> {
                 });
                 stats.teams++;
                 opponentTeamsMap.set(otherTeam.id, oppTeam.id);
-
-                // Create minimal players for opponent (11)
-                const oppPlayers = await Promise.all(
-                    otherTeam.squad.slice(0, 11).map((p, idx) =>
-                        tx.player.create({
-                            data: {
-                                name: p.name,
-                                squad_number: idx + 1,
-                                preferred_pos: mapPosition(p.position),
-                                dob: p.dateOfBirth ? new Date(p.dateOfBirth) : null,
-                                created_by_user_id: user.id,
-                            },
-                        })
-                    )
-                );
-                stats.players += oppPlayers.length;
-                opponentPlayersMap.set(oppTeam.id, oppPlayers.map(p => p.id));
-
-                await tx.player_teams.createMany({
-                    data: oppPlayers.map(p => ({
-                        player_id: p.id,
-                        team_id: oppTeam.id,
-                        start_date: new Date(),
-                        is_active: true,
-                        created_by_user_id: user.id,
-                    })),
-                });
-                stats.playerTeams += oppPlayers.length;
+                opponentPlayersMap.set(oppTeam.id, []);
             }
 
             // Create matches where this team played
@@ -426,18 +399,16 @@ export async function seedPremierLeagueData(): Promise<SeedingResult> {
                     const period = i < Math.ceil(homeScore / 2) ? 1 : 2;
                     const minute = randomInt(1, 45);
                     const playerId = randomChoice(homePlayerIds);
-                    if (playerId) {
-                        events.push({
-                            match_id: match.match_id,
-                            period_number: period,
-                            clock_ms: minute * 60000,
-                            kind: event_kind.goal,
-                            team_id: homeTeamId,
-                            player_id: playerId,
-                            sentiment: 4,
-                            created_by_user_id: user.id,
-                        });
-                    }
+                    events.push({
+                        match_id: match.match_id,
+                        period_number: period,
+                        clock_ms: minute * 60000,
+                        kind: event_kind.goal,
+                        team_id: homeTeamId,
+                        player_id: (playerId || null) as any,
+                        sentiment: 4,
+                        created_by_user_id: user.id,
+                    });
                 }
 
                 // Goals for away team
@@ -445,18 +416,16 @@ export async function seedPremierLeagueData(): Promise<SeedingResult> {
                     const period = i < Math.ceil(awayScore / 2) ? 1 : 2;
                     const minute = randomInt(1, 45);
                     const playerId = randomChoice(awayPlayerIds);
-                    if (playerId) {
-                        events.push({
-                            match_id: match.match_id,
-                            period_number: period,
-                            clock_ms: minute * 60000,
-                            kind: event_kind.goal,
-                            team_id: awayTeamId,
-                            player_id: playerId,
-                            sentiment: 4,
-                            created_by_user_id: user.id,
-                        });
-                    }
+                    events.push({
+                        match_id: match.match_id,
+                        period_number: period,
+                        clock_ms: minute * 60000,
+                        kind: event_kind.goal,
+                        team_id: awayTeamId,
+                        player_id: (playerId || null) as any,
+                        sentiment: 4,
+                        created_by_user_id: user.id,
+                    });
                 }
 
                 // Add some random events
@@ -473,8 +442,6 @@ export async function seedPremierLeagueData(): Promise<SeedingResult> {
                     const teamId = isHomeEvent ? homeTeamId : awayTeamId;
                     const playerIds = isHomeEvent ? homePlayerIds : awayPlayerIds;
                     const playerId = randomChoice(playerIds);
-                    if (!playerId) continue;
-
                     const kind = randomChoice(eventKinds) ?? event_kind.tackle;
                     const period = Math.random() > 0.5 ? 1 : 2;
                     const minute = randomInt(1, 45);
@@ -487,7 +454,7 @@ export async function seedPremierLeagueData(): Promise<SeedingResult> {
                         clock_ms: minute * 60000,
                         kind,
                         team_id: teamId,
-                        player_id: playerId,
+                        player_id: (playerId || null) as any,
                         sentiment,
                         created_by_user_id: user.id,
                     });
