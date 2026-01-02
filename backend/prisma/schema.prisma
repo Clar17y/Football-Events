@@ -51,8 +51,23 @@ model User {
   default_lineups_created default_lineups[] @relation("DefaultLineupCreatedBy")
   default_lineups_deleted default_lineups[] @relation("DefaultLineupDeletedBy")
   live_formations_created live_formations[] @relation("LiveFormationCreatedBy")
+  settings                 user_settings?
 
   @@map("users")
+  @@schema("grassroots")
+}
+
+model user_settings {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id             String    @unique @db.Uuid
+  display_name        String?
+  notification_prefs  Json?
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime  @updatedAt
+
+  user                User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
   @@schema("grassroots")
 }
 
@@ -69,8 +84,11 @@ model Team {
   created_by_user_id String         @db.Uuid
   deleted_at         DateTime?
   deleted_by_user_id String?        @db.Uuid
-  is_deleted         Boolean        @default(false)
-  is_opponent        Boolean        @default(false)
+  is_deleted             Boolean        @default(false)
+  is_opponent            Boolean        @default(false)
+  default_duration_mins  Int?
+  default_period_format  String?
+  default_lineup_size    Int?
   events             Event[]
   awayMatches        Match[]        @relation("AwayTeam")
   homeMatches        Match[]        @relation("HomeTeam")
