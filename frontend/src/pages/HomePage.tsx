@@ -59,9 +59,27 @@ interface HomePageProps {
 }
 
 const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { showInfo } = useToast();
   const { stats, loading, error, fromCache, lastUpdated } = useGlobalStats();
+  const [displayName, setDisplayName] = useState<string | null>(null);
+
+  // Fetch display name from settings on auth change
+  useEffect(() => {
+    const fetchDisplayName = async () => {
+      if (!isAuthenticated) return;
+      try {
+        const { authApi } = await import('../services/api/authApi');
+        const response = await authApi.getSettings();
+        if (response.success && response.data?.display_name) {
+          setDisplayName(response.data.display_name);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch user settings:', error);
+      }
+    };
+    fetchDisplayName();
+  }, [isAuthenticated]);
 
   // Quick Start state
   const [teams, setTeams] = useState<Team[]>([]);
@@ -250,7 +268,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         <div className="hero-section">
           <div className="hero-content">
             <h1 className="hero-title">
-              {user ? `Welcome back, ${user.first_name || 'Coach'}!` : 'Welcome to MatchMaster!'}
+              {user ? `Welcome back, ${displayName || user.first_name || 'Coach'}!` : 'Welcome to MatchMaster!'}
             </h1>
             <p className="hero-subtitle">
               {user

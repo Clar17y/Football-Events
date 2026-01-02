@@ -59,6 +59,25 @@ export interface TokenResponse {
   refresh_token: string;
 }
 
+export interface UserSettings {
+  id: string;
+  user_id: string;
+  display_name: string | null;
+  notification_prefs: Record<string, boolean> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface UpdateSettingsRequest {
+  display_name?: string | null;
+  notification_prefs?: Record<string, boolean>;
+}
+
 export class AuthApi {
   /**
    * Register a new user
@@ -153,7 +172,7 @@ export class AuthApi {
    */
   async deleteAccount(): Promise<ApiResponse<{ message: string }>> {
     const response = await apiClient.delete<{ message: string }>('/auth/profile');
-    
+
     // Clear tokens after account deletion
     if (response.success) {
       this.clearTokens();
@@ -238,6 +257,30 @@ export class AuthApi {
    */
   clearToken(): void {
     this.clearTokens();
+  }
+
+  /**
+   * Change user password
+   */
+  async changePassword(data: ChangePasswordRequest): Promise<ApiResponse<{ message: string }>> {
+    return apiClient.put<{ message: string }>('/auth/password', {
+      current_password: data.currentPassword,
+      new_password: data.newPassword,
+    });
+  }
+
+  /**
+   * Get user settings
+   */
+  async getSettings(): Promise<ApiResponse<UserSettings>> {
+    return apiClient.get<UserSettings>('/auth/settings');
+  }
+
+  /**
+   * Update user settings
+   */
+  async updateSettings(data: UpdateSettingsRequest): Promise<ApiResponse<UserSettings>> {
+    return apiClient.put<UserSettings>('/auth/settings', data);
   }
 }
 

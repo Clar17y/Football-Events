@@ -1,0 +1,107 @@
+@import '../styles/brand-headers.css';
+
+.app-settings-content {
+    --background: var(--grassroots-background);
+}
+
+ion-item .settings-input {
+    flex: 0 0 50%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.settings-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 16px;
+}
+
+.page-title {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--grassroots-text-primary);
+    margin: 0 0 24px 0;
+    text-align: center;
+}
+
+.settings-section {
+    background: var(--grassroots-surface);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    padding: 16px;
+}
+
+.settings-section ion-list-header {
+    display: flex;
+    align-items: center;
+    padding-left: 0;
+    margin-bottom: 12px;
+}
+
+.settings-section ion-list-header ion-icon {
+    font-size: 20px;
+    color: var(--ion-color-primary);
+    margin-right: 10px;
+}
+
+.settings-section ion-list-header ion-label {
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--grassroots-text-primary);
+}
+
+.settings-section ion-item {
+    --background: transparent;
+    --padding-start: 0;
+}
+
+.settings-section ion-item ion-label {
+    font-weight: 500;
+    color: var(--grassroots-text-primary);
+}
+
+.settings-section ion-select {
+    color: var(--grassroots-text-primary);
+}
+
+.section-description {
+    font-size: 13px;
+    color: var(--grassroots-text-tertiary);
+    margin: 0 0 16px 0;
+    line-height: 1.4;
+}
+
+/* Dark theme overrides */
+.dark-theme .page-title {
+    color: var(--grassroots-text-primary);
+}
+
+.dark-theme .settings-section {
+    background: var(--grassroots-surface);
+}
+
+.dark-theme .settings-section ion-list-header ion-label {
+    color: var(--grassroots-text-primary);
+}
+
+.dark-theme .settings-section ion-item ion-label {
+    color: var(--grassroots-text-primary);
+}
+
+.dark-theme .settings-section ion-select {
+    color: #ffffff;
+}
+
+.dark-theme .section-description {
+    color: var(--grassroots-text-tertiary);
+}
+
+.dark-theme .settings-section ion-item.competition-item ion-input {
+    color: #ffffff;
+    border-bottom-color: rgba(255, 255, 255, 0.2);
+}
+
+.dark-theme .settings-section ion-item.competition-item ion-input:focus-within {
+    border-bottom-color: var(--ion-color-primary);
+}

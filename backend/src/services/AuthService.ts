@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { hashPassword, comparePassword, generateAccessToken, generateRefreshToken } from '../utils/auth.js';
-import type { RegisterRequest, LoginRequest, UpdateProfileRequest } from '../validation/auth.js';
+import type { RegisterRequest, LoginRequest, UpdateProfileRequest, ChangePasswordRequest, UpdateSettingsRequest } from '../validation/auth.js';
 
 const prisma = new PrismaClient();
 
@@ -25,6 +25,15 @@ export interface UserProfile {
   last_name: string | null;
   role: string;
   email_verified: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface UserSettings {
+  id: string;
+  user_id: string;
+  display_name: string | null;
+  notification_prefs: Record<string, boolean> | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -305,5 +314,96 @@ export class AuthService {
         deleted_by_user_id: deletedByUserId
       }
     });
+  }
+
+  /**
+   * Change user password
+   */
+  static async changePassword(userId: string, data: ChangePasswordRequest): Promise<void> {
+    // Get current user with password hash
+    const user = await prisma.user.findFirst({
+      where: {
+        id: userId,
+        is_deleted: false
+      }
+    });
+
+    if (!user) {
+      const error = new Error('User not found') as any;
+      error.statusCode = 404;
+      throw error;
+    }
+
+    // Verify current password
+    const isValidPassword = await comparePassword(data.current_password, user.password_hash);
+    if (!isValidPassword) {
+      const error = new Error('Current password is incorrect') as any;
+      error.statusCode = 401;
+      throw error;
+    }
+
+    // Hash new password and update
+    const newPasswordHash = await hashPassword(data.new_password);
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        password_hash: newPasswordHash,
+        updated_at: new Date()
+      }
+    });
+  }
+
+  /**
+   * Get user settings (creates if doesn't exist)
+   */
+  static async getSettings(userId: string): Promise<UserSettings> {
+    let settings = await prisma.user_settings.findUnique({
+      where: { user_id: userId }
+    });
+
+    // Create settings if they don't exist
+    if (!settings) {
+      settings = await prisma.user_settings.create({
+        data: {
+          user_id: userId
+        }
+      });
+    }
+
+    return {
+      id: settings.id,
+      user_id: settings.user_id,
+      display_name: settings.display_name,
+      notification_prefs: settings.notification_prefs as Record<string, boolean> | null,
+      created_at: settings.created_at,
+      updated_at: settings.updated_at
+    };
+  }
+
+  /**
+   * Update user settings (creates if doesn't exist)
+   */
+  static async updateSettings(userId: string, data: UpdateSettingsRequest): Promise<UserSettings> {
+    const settings = await prisma.user_settings.upsert({
+      where: { user_id: userId },
+      update: {
+        ...(data.display_name !== undefined && { display_name: data.display_name }),
+        ...(data.notification_prefs !== undefined && { notification_prefs: data.notification_prefs })
+      },
+      create: {
+        user_id: userId,
+        display_name: data.display_name ?? null,
+        notification_prefs: data.notification_prefs ?? Prisma.DbNull
+      }
+    });
+
+    return {
+      id: settings.id,
+      user_id: settings.user_id,
+      display_name: settings.display_name,
+      notification_prefs: settings.notification_prefs as Record<string, boolean> | null,
+      created_at: settings.created_at,
+      updated_at: settings.updated_at
+    };
   }
 }

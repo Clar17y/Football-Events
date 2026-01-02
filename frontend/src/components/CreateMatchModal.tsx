@@ -130,10 +130,27 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
     }
   });
 
+  // Helper to get defaults from app settings
+  const getAppSettingsDefaults = () => {
+    try {
+      const saved = localStorage.getItem('matchmaster_app_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          durationMinutes: parsed.defaultDurationMins || 50,
+          periodFormat: (parsed.defaultPeriodFormat || 'quarter') as 'quarter' | 'half' | 'whole',
+          competition: parsed.defaultCompetition || ''
+        };
+      }
+    } catch { }
+    return { durationMinutes: 50, periodFormat: 'quarter' as 'quarter' | 'half' | 'whole', competition: '' };
+  };
+
   // Default to 1 hour from now to ensure match appears in "upcoming"
   const defaultKickoffDateTime = dayjs().add(1, 'hour').minute(0).second(0).millisecond(0);
   const defaultKickoffIso = defaultKickoffDateTime.toDate().toISOString();
   const defaultMiddayTime = defaultKickoffDateTime;
+  const appDefaults = getAppSettingsDefaults();
   const [formData, setFormData] = useState<FormData>({
     myTeamId: '',
     opponentName: '',
@@ -141,10 +158,10 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
     kickoffDate: dayjs(defaultKickoffIso),
     kickoffTime: defaultMiddayTime,
     seasonId: '',
-    competition: '',
+    competition: appDefaults.competition,
     venue: '',
-    durationMinutes: 90,
-    periodFormat: 'half',
+    durationMinutes: appDefaults.durationMinutes,
+    periodFormat: appDefaults.periodFormat,
     notes: ''
   });
 
@@ -179,7 +196,8 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
         notes: editingMatch.notes || ''
       });
     } else if (!editingMatch && isOpen) {
-      // Reset form for new match
+      // Reset form for new match - use app settings defaults
+      const defaults = getAppSettingsDefaults();
       const defaultKickoffIso = preselectedDate
         ? preselectedDate.toISOString()
         : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString();
@@ -192,10 +210,10 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
         kickoffDate: dayjs(defaultKickoffIso),
         kickoffTime: defaultMiddayTime,
         seasonId: '',
-        competition: '',
+        competition: defaults.competition,
         venue: '',
-        durationMinutes: 90,
-        periodFormat: 'half',
+        durationMinutes: defaults.durationMinutes,
+        periodFormat: defaults.periodFormat,
         notes: ''
       });
     }
@@ -267,7 +285,8 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
         }));
       }
     } else {
-      // Reset form when modal closes
+      // Reset form when modal closes - use app settings defaults
+      const closeDefaults = getAppSettingsDefaults();
       const defaultKickoffIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString();
       const defaultMiddayTime = dayjs().hour(12).minute(0).second(0).millisecond(0);
       setFormData({
@@ -279,8 +298,8 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
         seasonId: '',
         competition: '',
         venue: '',
-        durationMinutes: 90,
-        periodFormat: 'half',
+        durationMinutes: closeDefaults.durationMinutes,
+        periodFormat: closeDefaults.periodFormat,
         notes: ''
       });
       setOpponentText('');
@@ -484,6 +503,7 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
         }
 
         // Reset form and close modal
+        const resetDefaults = getAppSettingsDefaults();
         const defaultKickoffIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString();
         setFormData({
           myTeamId: '',
@@ -492,10 +512,10 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
           kickoffDate: dayjs(defaultKickoffIso),
           kickoffTime: defaultMiddayTime,
           seasonId: '',
-          competition: '',
+          competition: resetDefaults.competition,
           venue: '',
-          durationMinutes: 90,
-          periodFormat: 'half',
+          durationMinutes: resetDefaults.durationMinutes,
+          periodFormat: resetDefaults.periodFormat,
           notes: ''
         });
         setOpponentText('');
@@ -512,7 +532,8 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
   };
 
   const handleCancel = () => {
-    // Reset form state
+    // Reset form state using app settings defaults
+    const cancelDefaults = getAppSettingsDefaults();
     const defaultKickoffIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString();
     const defaultMiddayTime = dayjs().hour(12).minute(0).second(0).millisecond(0);
     setFormData({
@@ -522,10 +543,10 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
       kickoffDate: dayjs(defaultKickoffIso),
       kickoffTime: defaultMiddayTime,
       seasonId: '',
-      competition: '',
+      competition: cancelDefaults.competition,
       venue: '',
-      durationMinutes: 90,
-      periodFormat: 'half',
+      durationMinutes: cancelDefaults.durationMinutes,
+      periodFormat: cancelDefaults.periodFormat,
       notes: ''
     });
     setOpponentText('');
