@@ -1,11 +1,12 @@
 import type { PrismaClient } from '@prisma/client';
 import { createApiError } from '../utils/apiError';
-import { CORE_EVENT_KINDS } from '@shared/types/limits';
+import { CORE_EVENT_KINDS, ALL_EVENT_KINDS } from '@shared/types/limits';
 
 export type PlanType = 'free' | 'premium';
 
 export type Limits = {
   ownedTeams: number;
+  totalPlayers: number;
   playersPerOwnedTeam: number;
   seasons: number | null;
   matchesPerSeason: number | null;
@@ -29,28 +30,11 @@ export type Usage = {
   playersByTeam: Record<string, number>;
 };
 
-const ALL_EVENT_KINDS = [
-  ...CORE_EVENT_KINDS,
-  'key_pass',
-  'save',
-  'interception',
-  'tackle',
-  'formation_change',
-  'corner',
-  'offside',
-  'shot_on_target',
-  'shot_off_target',
-  'clearance',
-  'block',
-  'cross',
-  'header',
-  'ball_out',
-] as const;
-
 const HARD_CAPS = {
   ownedTeams: 100,
   opponentTeams: 5000,
   totalTeams: 6000,
+  totalPlayers: 1000,
   seasons: 200,
   matchesPerSeason: 2000,
   activeShareLinks: 10000,
@@ -64,6 +48,7 @@ const PLAN_QUOTAS_ENABLED = process.env['ENABLE_QUOTAS'] !== 'false';
 const LIMITS_BY_PLAN: Record<PlanType, Limits> = {
   free: {
     ownedTeams: 1,
+    totalPlayers: 30,
     playersPerOwnedTeam: 20,
     seasons: 5,
     matchesPerSeason: 30,
@@ -73,6 +58,7 @@ const LIMITS_BY_PLAN: Record<PlanType, Limits> = {
   },
   premium: {
     ownedTeams: 5,
+    totalPlayers: 200,
     playersPerOwnedTeam: 40,
     seasons: null,
     matchesPerSeason: null,
@@ -451,6 +437,36 @@ export class QuotaService {
         code: 'QUOTA_EXCEEDED',
         message: 'Share link limit reached for your plan',
         details: { entity: 'activeShareLinks', limit: limits.activeShareLinks, current: activeLinks, planType }
+      });
+    }
+  }
+
+  async assertCanCreatePlayer(params: { userId: string; userRole: string }): Promise<void> {
+    const { userId, userRole } = params;
+    const planType = await this.getPlanType(userId, userRole);
+    const limits = this.getLimits(planType);
+
+    const totalPlayers = await this.prisma.player.count({
+      where: { created_by_user_id: userId, is_deleted: false }
+    });
+
+    if (totalPlayers >= HARD_CAPS.totalPlayers) {
+      throw createApiError({
+        statusCode: 402,
+        code: 'QUOTA_EXCEEDED',
+        message: 'Player limit reached (safety cap)',
+        details: { entity: 'totalPlayers', limit: HARD_CAPS.totalPlayers, current: totalPlayers, planType }
+      });
+    }
+
+    if (!PLAN_QUOTAS_ENABLED) return;
+
+    if (totalPlayers >= limits.totalPlayers) {
+      throw createApiError({
+        statusCode: 402,
+        code: 'QUOTA_EXCEEDED',
+        message: 'Player limit reached for your plan',
+        details: { entity: 'totalPlayers', limit: limits.totalPlayers, current: totalPlayers, planType }
       });
     }
   }

@@ -24,8 +24,6 @@ import {
   IonCardTitle,
   IonText,
   IonSpinner,
-  IonSelect,
-  IonSelectOption,
   IonTextarea
 } from '@ionic/react';
 import {
@@ -39,7 +37,7 @@ import {
 import { usePlayers } from '../hooks/usePlayers';
 import { useTeams } from '../hooks/useTeams';
 import { authApi } from '../services/api/authApi';
-import { canAddPlayer } from '../utils/quotas';
+import { canAddPlayer, canCreatePlayer } from '../utils/quotas';
 import TeamSelectionModal from './TeamSelectionModal';
 import PositionSelectionModal from './PositionSelectionModal';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -78,17 +76,17 @@ interface FormErrors {
 }
 
 
-const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({ 
-  isOpen, 
-  onDidDismiss, 
-  editPlayer = null, 
-  mode = 'create' 
+const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
+  isOpen,
+  onDidDismiss,
+  editPlayer = null,
+  mode = 'create'
 }) => {
   const { createPlayer, updatePlayer, loading } = usePlayers();
   const { teams, loadTeams } = useTeams();
   const [submitting, setSubmitting] = useState(false); // Guard against double submissions
   const submittingRef = React.useRef(false); // Synchronous guard (refs update immediately)
-  
+
   const [formData, setFormData] = useState<FormData>({
     name: '',
     squadNumber: '',
@@ -103,14 +101,14 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
     if (mode === 'edit' && editPlayer) {
       console.log('[CreatePlayerModal] Editing player:', editPlayer);
       console.log('[CreatePlayerModal] editPlayer.currentTeam:', editPlayer.currentTeam);
-      
+
       // Split currentTeam string back into array
-      const currentTeamsArray = editPlayer.currentTeam 
+      const currentTeamsArray = editPlayer.currentTeam
         ? editPlayer.currentTeam.split(', ').filter(team => team.trim() !== '')
         : [];
-      
+
       console.log('[CreatePlayerModal] Converted to teams array:', currentTeamsArray);
-      
+
       setFormData({
         name: editPlayer.name || '',
         squadNumber: editPlayer.squadNumber?.toString() || '',
@@ -195,7 +193,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
 
   const handleInputChange = (field: keyof FormData, value: string | string[] | Dayjs | null) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    
+
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: undefined }));
@@ -214,7 +212,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
       return;
     }
     submittingRef.current = true; // Set immediately (synchronous)
-    
+
     // Mark all fields as touched
     const allFields = Object.keys(formData) as (keyof FormData)[];
     setTouched(allFields.reduce((acc, field) => ({ ...acc, [field]: true }), {}));
@@ -223,17 +221,30 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
       submittingRef.current = false;
       return;
     }
-    
+
     setSubmitting(true);
 
     // Find team IDs from team names
     const selectedTeams = teams.filter(team => formData.currentTeams.includes(team.name));
 
-    // Guest quota check for new players with team assignment
-    if (mode === 'create' && !authApi.isAuthenticated() && selectedTeams.length > 0) {
+    // Quota check for total players (all new players, regardless of team)
+    if (mode === 'create') {
+      const createQuota = await canCreatePlayer();
+      if (!createQuota.ok) {
+        setErrors(prev => ({ ...prev, name: createQuota.reason }));
+        submittingRef.current = false;
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    // Quota check for players per team (when adding to a team)
+    if (mode === 'create' && selectedTeams.length > 0) {
       const quota = await canAddPlayer(selectedTeams[0].id);
       if (!quota.ok) {
         setErrors(prev => ({ ...prev, currentTeams: quota.reason }));
+        submittingRef.current = false;
+        setSubmitting(false);
         return;
       }
     }
@@ -258,7 +269,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
         console.log('Creating new player with data:', playerData);
         result = await createPlayer(playerData);
       }
-      
+
       if (result) {
         // Reset form and close modal
         setFormData({
@@ -307,7 +318,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
       // Toggle team selection
       const currentTeams = formData.currentTeams;
       const isSelected = currentTeams.includes(teamName);
-      
+
       if (isSelected) {
         // Remove team from selection
         handleInputChange('currentTeams', currentTeams.filter(team => team !== teamName));
@@ -418,18 +429,18 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
   );
 
   return (
-    <IonModal 
-      isOpen={isOpen} 
-      onDidDismiss={onDidDismiss} 
+    <IonModal
+      isOpen={isOpen}
+      onDidDismiss={onDidDismiss}
       className={styles.modal}
       data-theme="player"
     >
       <IonHeader>
         <IonToolbar color="indigo">
           <IonTitle>{mode === 'edit' ? 'Edit Player' : 'Create New Player'}</IonTitle>
-          <IonButton 
-            fill="clear" 
-            slot="end" 
+          <IonButton
+            fill="clear"
+            slot="end"
             onClick={handleCancel}
             disabled={loading}
             style={{ color: 'white' }}
@@ -438,7 +449,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
           </IonButton>
         </IonToolbar>
       </IonHeader>
-      
+
       <IonContent className={styles.content}>
         <div className={styles.container}>
           {/* Player Information Section */}
@@ -509,7 +520,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
               <IonGrid>
                 <IonRow>
                   <IonCol size="12" sizeMd="6">
-                    <IonItem 
+                    <IonItem
                       className={`${styles.formItem} ${errors.preferredPosition && touched.preferredPosition ? styles.error : ''}`}
                       button
                       onClick={() => setPositionModalOpen(true)}
@@ -530,7 +541,7 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
                     )}
                   </IonCol>
                   <IonCol size="12" sizeMd="6">
-                    <IonItem 
+                    <IonItem
                       className={`${styles.formItem} ${errors.currentTeams && touched.currentTeams ? styles.error : ''}`}
                       button
                       onClick={() => setTeamModalOpen(true)}
@@ -617,18 +628,18 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
 
           {/* Action Buttons */}
           <div className={styles.formActions}>
-            <IonButton 
-              expand="block" 
-              fill="clear" 
+            <IonButton
+              expand="block"
+              fill="clear"
               onClick={handleCancel}
               disabled={loading}
               className={styles.cancelButton}
             >
               Cancel
             </IonButton>
-            <IonButton 
-              expand="block" 
-              color="indigo" 
+            <IonButton
+              expand="block"
+              color="indigo"
               onClick={handleSubmit}
               disabled={loading || submitting || !formData.name.trim()}
               className={styles.submitButton}

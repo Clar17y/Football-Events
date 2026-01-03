@@ -8,6 +8,7 @@ export const GUEST_LIMITS = {
   maxTeams: 1,
   maxMatches: 1,
   maxSeasons: 1,
+  maxPlayers: 15,
   maxPlayersPerTeam: 15,
   maxNonScoringEventsPerMatch: 40,
   maxFormationChangesPerMatch: 5,
@@ -18,6 +19,7 @@ export const FREE_LIMITS = {
   maxTeams: 1,
   maxMatchesPerSeason: 30,
   maxSeasons: 5,
+  maxPlayers: 30,
   maxPlayersPerTeam: 20,
   maxNonScoringEventsPerMatch: 40,
   maxFormationChangesPerMatch: 5,
@@ -99,6 +101,24 @@ export async function canCreateMatch(seasonId?: string): Promise<QuotaResult> {
   return remaining > 0
     ? { ok: true, remaining }
     : { ok: false, remaining: 0, reason: `Match limit reached: ${limit} matches per season` };
+}
+
+export async function canCreatePlayer(): Promise<QuotaResult> {
+  const userId = getUserId();
+  if (!userId) return { ok: true, remaining: Number.MAX_SAFE_INTEGER };
+
+  const { db } = await import('../db/indexedDB');
+  const count = await db.players
+    .where('createdByUserId')
+    .equals(userId)
+    .and(p => !p.isDeleted)
+    .count();
+
+  const limit = getLimit(GUEST_LIMITS.maxPlayers, FREE_LIMITS.maxPlayers);
+  const remaining = Math.max(0, limit - count);
+  return remaining > 0
+    ? { ok: true, remaining }
+    : { ok: false, remaining: 0, reason: `Player limit reached: ${limit} player${limit > 1 ? 's' : ''}` };
 }
 
 export async function canAddPlayer(teamId: string): Promise<QuotaResult> {

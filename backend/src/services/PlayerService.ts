@@ -1,17 +1,18 @@
 import { PrismaClient } from '@prisma/client';
-import { 
-  transformPlayer, 
-  transformPlayerCreateRequest, 
+import {
+  transformPlayer,
+  transformPlayerCreateRequest,
   transformPlayerUpdateRequest,
-  transformPlayers 
+  transformPlayers
 } from '@shared/types';
-import type { 
-  Player, 
-  PlayerCreateRequest, 
-  PlayerUpdateRequest 
+import type {
+  Player,
+  PlayerCreateRequest,
+  PlayerUpdateRequest
 } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { createOrRestoreSoftDeleted } from '../utils/softDeleteUtils';
+import { QuotaService } from './QuotaService';
 
 export interface GetPlayersOptions {
   page: number;
@@ -49,9 +50,11 @@ export interface BatchPlayerResult {
 
 export class PlayerService {
   private prisma: PrismaClient;
+  private quotaService: QuotaService;
 
   constructor() {
     this.prisma = new PrismaClient();
+    this.quotaService = new QuotaService(this.prisma);
   }
 
   async getPlayers(userId: string, userRole: string, options: GetPlayersOptions): Promise<PaginatedPlayers> {
@@ -62,14 +65,14 @@ export class PlayerService {
     const where: any = {
       is_deleted: false // Exclude soft-deleted players
     };
-    
+
     if (search) {
       where.name = {
         contains: search,
         mode: 'insensitive' as const
       };
     }
-    
+
     if (teamId) {
       where.player_teams = {
         some: {
@@ -98,7 +101,7 @@ export class PlayerService {
         }
       };
     }
-    
+
     if (position) {
       where.preferred_pos = position;
     }
@@ -159,7 +162,7 @@ export class PlayerService {
 
     // Get all player IDs for batch event query
     const playerIds = players.map(p => p.id);
-    
+
     // Get all events for these players in a single query
     const allEvents = await this.prisma.event.findMany({
       where: {
@@ -207,15 +210,15 @@ export class PlayerService {
     // Transform players and populate currentTeam and stats for each
     const transformedPlayers = players.map(player => {
       const transformedPlayer = transformPlayer(player);
-      
+
       // Get active team names
       const activeTeamNames = player.player_teams.map(pt => pt.team.name);
       transformedPlayer.currentTeam = activeTeamNames.join(', ');
-      
+
       // Calculate matches played from unique match_ids in lineup
       const uniqueMatchIds = new Set(player.lineup.map(l => l.match_id));
       const matchesPlayed = uniqueMatchIds.size;
-      
+
       // Calculate all stats from events
       const playerEvents = eventsByPlayer[player.id] || [];
       const goals = playerEvents.filter(e => e.kind === 'goal').length;
@@ -224,7 +227,7 @@ export class PlayerService {
       const tackles = playerEvents.filter(e => e.kind === 'tackle').length;
       const interceptions = playerEvents.filter(e => e.kind === 'interception').length;
       const keyPasses = playerEvents.filter(e => e.kind === 'key_pass').length;
-      
+
       // Compute clean sheets for this player:
       // A clean sheet occurs when the opponent scored 0 from the player's team perspective
       const activeTeamIds: string[] = (player.player_teams || []).map(pt => (pt as any).team?.id).filter(Boolean);
@@ -251,9 +254,9 @@ export class PlayerService {
         keyPasses: keyPasses,
         cleanSheets: cleanSheets
       };
-      
+
       console.log(`[PlayerService] getPlayers - Player: ${player.name}, Teams: ${activeTeamNames.join(', ')}, Matches: ${matchesPlayed}, Goals: ${goals}, CleanSheets: ${cleanSheets}`);
-      
+
       return transformedPlayer;
     });
 
@@ -271,9 +274,9 @@ export class PlayerService {
   }
 
   async getPlayerById(id: string, userId: string, userRole: string): Promise<Player | null> {
-    const where: any = { 
+    const where: any = {
       id,
-      is_deleted: false 
+      is_deleted: false
     };
 
     // Non-admin users can only see players they created
@@ -316,7 +319,7 @@ export class PlayerService {
 
     // Transform player and populate currentTeam from active relationships
     const transformedPlayer = transformPlayer(player);
-    
+
     // Get active team names
     const activeTeamNames = player.player_teams.map(pt => pt.team.name);
     transformedPlayer.currentTeam = activeTeamNames.join(', ');
@@ -329,14 +332,17 @@ export class PlayerService {
     return transformedPlayer;
   }
 
-  async createPlayer(data: PlayerCreateRequest, userId: string, _userRole: string): Promise<Player> {
+  async createPlayer(data: PlayerCreateRequest, userId: string, userRole: string): Promise<Player> {
+    // Check total player quota before creating
+    await this.quotaService.assertCanCreatePlayer({ userId, userRole });
+
     return withPrismaErrorHandling(async () => {
       // Build unique constraints for soft delete restoration
       const constraints: Record<string, any> = {
         name: data.name,
         created_by_user_id: userId
       };
-      
+
       if (data.squadNumber !== undefined) {
         constraints['squad_number'] = data.squadNumber;
       }
@@ -357,9 +363,9 @@ export class PlayerService {
   async updatePlayer(id: string, data: PlayerUpdateRequest, userId: string, userRole: string): Promise<Player | null> {
     try {
       // First check if player exists and user has permission
-      const where: any = { 
+      const where: any = {
         id,
-        is_deleted: false 
+        is_deleted: false
       };
 
       // Non-admin users can only update players they created
@@ -409,9 +415,9 @@ export class PlayerService {
   async deletePlayer(id: string, userId: string, userRole: string): Promise<boolean> {
     try {
       // First check if player exists and user has permission
-      const where: any = { 
+      const where: any = {
         id,
-        is_deleted: false 
+        is_deleted: false
       };
 
       // Non-admin users can only delete players they created
@@ -447,7 +453,7 @@ export class PlayerService {
 
   async getPlayersByTeam(teamId: string): Promise<Player[]> {
     const players = await this.prisma.player.findMany({
-      where: { 
+      where: {
         is_deleted: false,
         player_teams: {
           some: {
@@ -481,9 +487,9 @@ export class PlayerService {
    */
   private async getUserTeamIds(userId: string): Promise<string[]> {
     const teams = await this.prisma.team.findMany({
-      where: { 
+      where: {
         created_by_user_id: userId,
-        is_deleted: false 
+        is_deleted: false
       },
       select: { id: true }
     });
@@ -567,9 +573,9 @@ export class PlayerService {
 
   async getPlayerSeasonStats(playerId: string, seasonId: string, userId: string, userRole: string): Promise<any | null> {
     // First check if user has access to this player
-    const playerWhere: any = { 
+    const playerWhere: any = {
       id: playerId,
-      is_deleted: false 
+      is_deleted: false
     };
 
     // Non-admin users can only access players they created or from their teams
@@ -589,7 +595,7 @@ export class PlayerService {
       ];
     }
 
-    const player = await this.prisma.player.findFirst({ 
+    const player = await this.prisma.player.findFirst({
       where: playerWhere,
       include: {
         created_by: {
@@ -602,7 +608,7 @@ export class PlayerService {
         }
       }
     });
-    
+
     if (!player) {
       return null; // Player not found or access denied
     }
@@ -631,7 +637,7 @@ export class PlayerService {
           }
         ]
       },
-      select: { 
+      select: {
         match_id: true,
         kickoff_ts: true,
         home_team_id: true,
