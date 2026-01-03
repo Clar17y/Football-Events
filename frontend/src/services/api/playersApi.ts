@@ -12,7 +12,7 @@
 
 import apiClient from './baseApi';
 import { authApi } from './authApi';
-import { canAddPlayer } from '../../utils/guestQuota';
+import { canAddPlayer } from '../../utils/quotas';
 import { getGuestId } from '../../utils/guest';
 import { dbToPlayer, dbToPlayers } from '../../db/transforms';
 import type { EnhancedPlayer } from '../../db/schema';

@@ -49,7 +49,7 @@ import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import dayjs, { Dayjs } from 'dayjs';
 import { matchesApi, type QuickStartPayload } from '../services/api/matchesApi';
 import { createLocalQuickMatch } from '../services/guestQuickMatch';
-import { canCreateMatch } from '../utils/guestQuota';
+import { canCreateMatch } from '../utils/quotas';
 import CreateTeamModal from '../components/CreateTeamModal';
 import RecentActivity from '../components/RecentActivity';
 import type { Team } from '@shared/types';

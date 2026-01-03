@@ -8,7 +8,7 @@ import { validateOrThrow, MatchEventSchema } from '../schemas/validation';
 import { realTimeService } from '../services/realTimeService';
 import { useDatabase } from './DatabaseContext';
 import { authApi } from '../services/api/authApi';
-import { canAddEvent } from '../utils/guestQuota';
+import { canAddEvent } from '../utils/quotas';
 import { useToast } from './ToastContext';
 
 /**
@@ -193,20 +193,17 @@ export const MatchProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Real-time first event management
   const addEvent = useCallback(async (eventData: Omit<MatchEvent, 'id' | 'createdAt'>) => {
     try {
-      // Guest quota: limit non-scoring events per match
+      // Event quota: limit events per match (non-scoring is checked in the canAddEvent function)
       const kind = String(eventData.kind);
-      const isScoring = kind === 'goal' || kind === 'own_goal';
-      if (!authApi.isAuthenticated() && !isScoring) {
-        try {
-          const q = await canAddEvent(String(eventData.matchId), kind);
-          if (!q.ok) {
-            showError?.(q.reason, undefined);
-            throw new Error(q.reason);
-          }
-        } catch (e) {
-          // If quota check fails unexpectedly, allow but log
-          console.warn('Quota check failed:', e);
+      try {
+        const q = await canAddEvent(String(eventData.matchId), kind);
+        if (!q.ok) {
+          showError?.(q.reason, undefined);
+          throw new Error(q.reason);
         }
+      } catch (e) {
+        // If quota check fails unexpectedly, allow but log
+        console.warn('Quota check failed:', e);
       }
 
       // Create complete event with ID and timestamp

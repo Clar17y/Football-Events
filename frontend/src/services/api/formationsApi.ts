@@ -1,6 +1,6 @@
 import apiClient from './baseApi';
 import { authApi } from './authApi';
-import { canChangeFormation } from '../../utils/guestQuota';
+import { canChangeFormation } from '../../utils/quotas';
 import { db } from '../../db/indexedDB';
 
 export interface FormationPlayerDTO {

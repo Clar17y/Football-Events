@@ -43,6 +43,7 @@ import { TextField } from '@mui/material';
 import dayjs, { Dayjs } from 'dayjs';
 import type { Season } from '@shared/types';
 import styles from './FormSection.module.css';
+import { canCreateSeason } from '../utils/quotas';
 
 interface CreateSeasonModalProps {
   isOpen: boolean;
@@ -155,6 +156,15 @@ const CreateSeasonModal: React.FC<CreateSeasonModalProps> = ({
 
     if (!validateForm()) {
       return;
+    }
+
+    // Quota check for new seasons
+    if (mode !== 'edit') {
+      const quota = await canCreateSeason();
+      if (!quota.ok) {
+        setErrors(prev => ({ ...prev, name: quota.reason }));
+        return;
+      }
     }
 
     const seasonData = {

@@ -39,7 +39,7 @@ import {
 import { usePlayers } from '../hooks/usePlayers';
 import { useTeams } from '../hooks/useTeams';
 import { authApi } from '../services/api/authApi';
-import { canAddPlayer } from '../utils/guestQuota';
+import { canAddPlayer } from '../utils/quotas';
 import TeamSelectionModal from './TeamSelectionModal';
 import PositionSelectionModal from './PositionSelectionModal';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
