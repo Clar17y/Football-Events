@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { IonCard, IonCardContent, IonChip, IonLabel, IonText, IonButton } from '@ionic/react';
 import { isGuest, getGuestId } from '../utils/guest';
-import { GUEST_LIMITS, canAddEvent, canChangeFormation } from '../utils/guestQuota';
+import { GUEST_LIMITS, canAddEvent, canChangeFormation } from '../utils/quotas';
 import SignupPromptModal from './SignupPromptModal';
 
 interface GuestBannerProps {

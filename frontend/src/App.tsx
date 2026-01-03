@@ -26,6 +26,8 @@ import LandingPage from './pages/LandingPage';
 import PricingPage from './pages/PricingPage';
 import SyncIssuesPage from './pages/SyncIssuesPage';
 import DevSettingsPage from './pages/DevSettingsPage';
+import ProfileSettingsPage from './pages/ProfileSettingsPage';
+import AppSettingsPage from './pages/AppSettingsPage';
 // import MatchConsole from './pages/MatchConsole'; // Removed - will be redesigned
 import { syncService } from './services/syncService';
 import ImportPromptModal from './components/ImportPromptModal';
@@ -223,6 +225,13 @@ const AppRoutes: React.FC = () => {
         return <PricingPage onNavigate={handleNavigation} />;
       case 'sync-issues':
         return <SyncIssuesPage onNavigate={handleNavigation} />;
+      case 'profile-settings':
+        if (!isAuthenticated) {
+          return <LoginPage onNavigate={handleNavigation} />;
+        }
+        return <ProfileSettingsPage onNavigate={handleNavigation} />;
+      case 'app-settings':
+        return <AppSettingsPage onNavigate={handleNavigation} />;
       case 'dev':
         // Dev settings page - only available in development
         if (import.meta.env.DEV) {

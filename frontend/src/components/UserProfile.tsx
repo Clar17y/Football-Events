@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   IonButton,
   IonIcon,
@@ -23,6 +23,7 @@ import {
 } from 'ionicons/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { useMeLimits } from '../hooks/useMeLimits';
 
 interface UserProfileProps {
   className?: string;
@@ -31,8 +32,28 @@ interface UserProfileProps {
 
 const UserProfile: React.FC<UserProfileProps> = ({ className, onNavigate }) => {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  const { user, logout, isAuthenticated } = useAuth();
   const { showSuccess, showError } = useToast();
+  const { planType } = useMeLimits();
+  const isPremium = planType === 'premium';
+
+  // Fetch display name from settings
+  useEffect(() => {
+    const fetchSettings = async () => {
+      if (!isAuthenticated) return;
+      try {
+        const { authApi } = await import('../services/api/authApi');
+        const response = await authApi.getSettings();
+        if (response.success && response.data?.display_name) {
+          setDisplayName(response.data.display_name);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch user settings:', error);
+      }
+    };
+    fetchSettings();
+  }, [isAuthenticated]);
 
   const handleLogout = async () => {
     try {
@@ -48,8 +69,29 @@ const UserProfile: React.FC<UserProfileProps> = ({ className, onNavigate }) => {
     return null;
   }
 
-  const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+  // Helper to get the preferred display name
+  const getDisplayName = () => {
+    if (displayName) return displayName;
+    if (user.first_name || user.last_name) {
+      return `${user.first_name || ''} ${user.last_name || ''}`.trim();
+    }
+    return 'Coach';
+  };
+
+  // Get initials from display name or full name
+  const getInitials = () => {
+    if (displayName) {
+      // For display name, take first letter of first 1-2 words
+      const words = displayName.trim().split(/\s+/);
+      if (words.length >= 2) {
+        return `${words[0].charAt(0)}${words[1].charAt(0)}`.toUpperCase();
+      }
+      return displayName.charAt(0).toUpperCase();
+    }
+    // Fallback to first_name/last_name
+    const first = user.first_name?.charAt(0) || '';
+    const last = user.last_name?.charAt(0) || '';
+    return `${first}${last}`.toUpperCase() || 'C';
   };
 
   return (
@@ -74,11 +116,11 @@ const UserProfile: React.FC<UserProfileProps> = ({ className, onNavigate }) => {
               fontWeight: 'bold',
             }}
           >
-            {getInitials(user.first_name || '', user.last_name || '')}
+            {getInitials()}
           </div>
         </IonAvatar>
         <IonLabel>
-          {user.first_name} {user.last_name}
+          {getDisplayName()}
         </IonLabel>
         <IonIcon icon={chevronDownOutline} slot="end" />
       </IonButton>
@@ -120,35 +162,49 @@ const UserProfile: React.FC<UserProfileProps> = ({ className, onNavigate }) => {
                     fontWeight: 'bold',
                   }}
                 >
-                  {getInitials(user.first_name || '', user.last_name || '')}
+                  {getInitials()}
                 </div>
               </IonAvatar>
               <IonLabel>
-                <h2>{user.first_name} {user.last_name}</h2>
+                <h2>{getDisplayName()}</h2>
                 <IonText color="medium">
                   <p>{user.email}</p>
                 </IonText>
               </IonLabel>
             </IonItem>
 
-            <IonItem button>
+            <IonItem
+              button
+              onClick={() => {
+                setIsPopoverOpen(false);
+                onNavigate?.('profile-settings');
+              }}
+            >
               <IonIcon icon={personOutline} slot="start" />
               <IonLabel>Profile Settings</IonLabel>
             </IonItem>
+
+            {!isPremium && (
+              <IonItem
+                button
+                onClick={() => {
+                  setIsPopoverOpen(false);
+                  onNavigate?.('pricing');
+                }}
+                style={{ '--background': 'linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(139, 92, 246, 0.1))' } as React.CSSProperties}
+              >
+                <IonIcon icon={sparkles} slot="start" color="primary" />
+                <IonLabel color="primary">Upgrade to Premium</IonLabel>
+              </IonItem>
+            )}
 
             <IonItem
               button
               onClick={() => {
                 setIsPopoverOpen(false);
-                onNavigate?.('pricing');
+                onNavigate?.('app-settings');
               }}
-              style={{ '--background': 'linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(139, 92, 246, 0.1))' } as React.CSSProperties}
             >
-              <IonIcon icon={sparkles} slot="start" color="primary" />
-              <IonLabel color="primary">Upgrade to Premium</IonLabel>
-            </IonItem>
-
-            <IonItem button>
               <IonIcon icon={settingsOutline} slot="start" />
               <IonLabel>App Settings</IonLabel>
             </IonItem>

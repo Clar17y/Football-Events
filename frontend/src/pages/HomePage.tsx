@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { formatPeriodFormat } from '../utils/formatters';
 import { DatabaseStatus } from '../components/DatabaseStatus';
 import {
   IonPage,
@@ -49,7 +50,7 @@ import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import dayjs, { Dayjs } from 'dayjs';
 import { matchesApi, type QuickStartPayload } from '../services/api/matchesApi';
 import { createLocalQuickMatch } from '../services/guestQuickMatch';
-import { canCreateMatch } from '../utils/guestQuota';
+import { canCreateMatch } from '../utils/quotas';
 import CreateTeamModal from '../components/CreateTeamModal';
 import RecentActivity from '../components/RecentActivity';
 import type { Team } from '@shared/types';
@@ -59,11 +60,45 @@ interface HomePageProps {
 }
 
 const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { showInfo } = useToast();
   const { stats, loading, error, fromCache, lastUpdated } = useGlobalStats();
+  const [displayName, setDisplayName] = useState<string | null>(null);
+
+  // Fetch display name from settings on auth change
+  useEffect(() => {
+    const fetchDisplayName = async () => {
+      if (!isAuthenticated) return;
+      try {
+        const { authApi } = await import('../services/api/authApi');
+        const response = await authApi.getSettings();
+        if (response.success && response.data?.display_name) {
+          setDisplayName(response.data.display_name);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch user settings:', error);
+      }
+    };
+    fetchDisplayName();
+  }, [isAuthenticated]);
+
+  // Helper to get defaults from app settings (same as CreateMatchModal)
+  const getAppSettingsDefaults = () => {
+    try {
+      const saved = localStorage.getItem('matchmaster_app_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          durationMinutes: parsed.defaultDurationMins || 50,
+          periodFormat: (parsed.defaultPeriodFormat || 'quarter') as 'quarter' | 'half' | 'whole'
+        };
+      }
+    } catch { }
+    return { durationMinutes: 50, periodFormat: 'quarter' as 'quarter' | 'half' | 'whole' };
+  };
 
   // Quick Start state
+  const appDefaults = getAppSettingsDefaults();
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [showCreateTeam, setShowCreateTeam] = useState(false);
@@ -86,19 +121,19 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const defaultKickoffIso = useMemo(() => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString(), []);
   const [kickoffDate, setKickoffDate] = useState<Dayjs | null>(dayjs(defaultKickoffIso));
   const [kickoffTime, setKickoffTime] = useState<Dayjs | null>(dayjs(defaultKickoffIso));
-  const [durationMinutes, setDurationMinutes] = useState<number>(50);
-  const [periodFormat, setPeriodFormat] = useState<'quarter' | 'half' | 'whole'>('quarter');
+  const [durationMinutes, setDurationMinutes] = useState<number>(appDefaults.durationMinutes);
+  const [periodFormat, setPeriodFormat] = useState<'quarter' | 'half' | 'whole'>(appDefaults.periodFormat);
   const [collapsed, setCollapsed] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState(false);
   const defaultsKey = 'quick_start_defaults_v1';
   const loadDefaults = useRef(() => {
+    // Load saved team preference from quick start defaults
     try {
       const raw = localStorage.getItem(defaultsKey);
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (parsed.teamId) setMyTeamId(parsed.teamId);
-      if (parsed.durationMinutes) setDurationMinutes(parsed.durationMinutes);
-      if (parsed.periodFormat) setPeriodFormat(parsed.periodFormat);
+      // Duration and periodFormat now come from App Settings, not quick start defaults
     } catch { }
   });
 
@@ -250,7 +285,7 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         <div className="hero-section">
           <div className="hero-content">
             <h1 className="hero-title">
-              {user ? `Welcome back, ${user.first_name || 'Coach'}!` : 'Welcome to MatchMaster!'}
+              {user ? `Welcome back, ${displayName || user.first_name || 'Coach'}!` : 'Welcome to MatchMaster!'}
             </h1>
             <p className="hero-subtitle">
               {user
@@ -406,9 +441,9 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                             <div>
                               <label className="form-label" style={{ fontWeight: 700, marginBottom: 4, display: 'block' }}>Periods</label>
                               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                <IonButton fill={periodFormat === 'quarter' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('quarter')}>Quarters</IonButton>
-                                <IonButton fill={periodFormat === 'half' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('half')}>Halves</IonButton>
-                                <IonButton fill={periodFormat === 'whole' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('whole')}>Whole</IonButton>
+                                <IonButton fill={periodFormat === 'quarter' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('quarter')}>{formatPeriodFormat('quarter')}</IonButton>
+                                <IonButton fill={periodFormat === 'half' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('half')}>{formatPeriodFormat('half')}</IonButton>
+                                <IonButton fill={periodFormat === 'whole' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('whole')}>{formatPeriodFormat('whole')}</IonButton>
                               </div>
                             </div>
                           </div>

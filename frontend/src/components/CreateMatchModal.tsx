@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { formatPeriodFormat } from '../utils/formatters';
 import {
   IonModal,
   IonHeader,
@@ -24,8 +25,6 @@ import {
   IonCardTitle,
   IonText,
   IonSpinner,
-  IonSelect,
-  IonSelectOption,
   IonDatetime,
   IonTextarea
 } from '@ionic/react';
@@ -39,7 +38,7 @@ import {
   trophy,
   football
 } from 'ionicons/icons';
-import { Autocomplete, TextField, CircularProgress } from '@mui/material';
+import { Autocomplete, TextField, CircularProgress, Select, MenuItem, FormControl } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -55,7 +54,7 @@ import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import CreateTeamModal from './CreateTeamModal';
 import type { Match, Team, Season } from '@shared/types';
 import styles from './FormSection.module.css';
-import { canCreateMatch } from '../utils/guestQuota';
+import { canCreateMatch } from '../utils/quotas';
 import { authApi } from '../services/api/authApi';
 
 interface CreateMatchModalProps {
@@ -130,10 +129,27 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
     }
   });
 
+  // Helper to get defaults from app settings
+  const getAppSettingsDefaults = () => {
+    try {
+      const saved = localStorage.getItem('matchmaster_app_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          durationMinutes: parsed.defaultDurationMins || 50,
+          periodFormat: (parsed.defaultPeriodFormat || 'quarter') as 'quarter' | 'half' | 'whole',
+          competition: parsed.defaultCompetition || ''
+        };
+      }
+    } catch { }
+    return { durationMinutes: 50, periodFormat: 'quarter' as 'quarter' | 'half' | 'whole', competition: '' };
+  };
+
   // Default to 1 hour from now to ensure match appears in "upcoming"
   const defaultKickoffDateTime = dayjs().add(1, 'hour').minute(0).second(0).millisecond(0);
   const defaultKickoffIso = defaultKickoffDateTime.toDate().toISOString();
   const defaultMiddayTime = defaultKickoffDateTime;
+  const appDefaults = getAppSettingsDefaults();
   const [formData, setFormData] = useState<FormData>({
     myTeamId: '',
     opponentName: '',
@@ -141,10 +157,10 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
     kickoffDate: dayjs(defaultKickoffIso),
     kickoffTime: defaultMiddayTime,
     seasonId: '',
-    competition: '',
+    competition: appDefaults.competition,
     venue: '',
-    durationMinutes: 90,
-    periodFormat: 'half',
+    durationMinutes: appDefaults.durationMinutes,
+    periodFormat: appDefaults.periodFormat,
     notes: ''
   });
 
@@ -179,7 +195,8 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
         notes: editingMatch.notes || ''
       });
     } else if (!editingMatch && isOpen) {
-      // Reset form for new match
+      // Reset form for new match - use app settings defaults
+      const defaults = getAppSettingsDefaults();
       const defaultKickoffIso = preselectedDate
         ? preselectedDate.toISOString()
         : new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString();
@@ -192,10 +209,10 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
         kickoffDate: dayjs(defaultKickoffIso),
         kickoffTime: defaultMiddayTime,
         seasonId: '',
-        competition: '',
+        competition: defaults.competition,
         venue: '',
-        durationMinutes: 90,
-        periodFormat: 'half',
+        durationMinutes: defaults.durationMinutes,
+        periodFormat: defaults.periodFormat,
         notes: ''
       });
     }
@@ -267,7 +284,8 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
         }));
       }
     } else {
-      // Reset form when modal closes
+      // Reset form when modal closes - use app settings defaults
+      const closeDefaults = getAppSettingsDefaults();
       const defaultKickoffIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString();
       const defaultMiddayTime = dayjs().hour(12).minute(0).second(0).millisecond(0);
       setFormData({
@@ -279,8 +297,8 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
         seasonId: '',
         competition: '',
         venue: '',
-        durationMinutes: 90,
-        periodFormat: 'half',
+        durationMinutes: closeDefaults.durationMinutes,
+        periodFormat: closeDefaults.periodFormat,
         notes: ''
       });
       setOpponentText('');
@@ -349,12 +367,12 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
       return;
     }
 
-    // Guest quota guard for matches
-    if (!authApi.isAuthenticated() && !editingMatch) {
+    // Quota guard for matches - check IndexedDB (works offline)
+    if (!editingMatch) {
       try {
-        const allowed = await canCreateMatch();
+        const allowed = await canCreateMatch(formData.seasonId);
         if (!allowed.ok) {
-          showToast({ message: allowed.reason || 'Guest limit reached: 1 match', severity: 'error' });
+          showToast({ message: allowed.reason || 'Match limit reached', severity: 'error' });
           return;
         }
       } catch { }
@@ -484,6 +502,7 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
         }
 
         // Reset form and close modal
+        const resetDefaults = getAppSettingsDefaults();
         const defaultKickoffIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString();
         setFormData({
           myTeamId: '',
@@ -492,10 +511,10 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
           kickoffDate: dayjs(defaultKickoffIso),
           kickoffTime: defaultMiddayTime,
           seasonId: '',
-          competition: '',
+          competition: resetDefaults.competition,
           venue: '',
-          durationMinutes: 90,
-          periodFormat: 'half',
+          durationMinutes: resetDefaults.durationMinutes,
+          periodFormat: resetDefaults.periodFormat,
           notes: ''
         });
         setOpponentText('');
@@ -512,7 +531,8 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
   };
 
   const handleCancel = () => {
-    // Reset form state
+    // Reset form state using app settings defaults
+    const cancelDefaults = getAppSettingsDefaults();
     const defaultKickoffIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString();
     const defaultMiddayTime = dayjs().hour(12).minute(0).second(0).millisecond(0);
     setFormData({
@@ -522,10 +542,10 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
       kickoffDate: dayjs(defaultKickoffIso),
       kickoffTime: defaultMiddayTime,
       seasonId: '',
-      competition: '',
+      competition: cancelDefaults.competition,
       venue: '',
-      durationMinutes: 90,
-      periodFormat: 'half',
+      durationMinutes: cancelDefaults.durationMinutes,
+      periodFormat: cancelDefaults.periodFormat,
       notes: ''
     });
     setOpponentText('');
@@ -710,19 +730,21 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
                     <IonCol size="12">
                       <div className="form-row">
                         <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>Season *</label>
-                        <IonSelect
-                          value={formData.seasonId}
-                          onIonChange={(e) => setFormData(prev => ({ ...prev, seasonId: e.detail.value }))}
-                          placeholder="Select season"
-                          disabled={loading || seasonsLoading}
-                          className={styles.formInput}
-                        >
-                          {seasons.map(season => (
-                            <IonSelectOption key={season.id} value={season.id}>
-                              {season.label} {season.isCurrent ? '(Current)' : ''}
-                            </IonSelectOption>
-                          ))}
-                        </IonSelect>
+                        <FormControl fullWidth size="small">
+                          <Select
+                            value={formData.seasonId}
+                            onChange={(e) => setFormData(prev => ({ ...prev, seasonId: e.target.value }))}
+                            displayEmpty
+                            disabled={loading || seasonsLoading}
+                          >
+                            <MenuItem value="" disabled>Select season</MenuItem>
+                            {seasons.map(season => (
+                              <MenuItem key={season.id} value={season.id}>
+                                {season.label} {season.isCurrent ? '(Current)' : ''}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
                         {errors.seasonId && touched.seasonId && (
                           <IonText color="danger" className={styles.errorText}>
                             {errors.seasonId}
@@ -812,9 +834,9 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
                     <div className="form-row">
                       <label className="form-label" style={{ fontWeight: 700, marginBottom: 4, display: 'block' }}>Periods</label>
                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <IonButton fill={formData.periodFormat === 'quarter' ? 'solid' : 'outline'} color="emerald" onClick={() => setFormData(prev => ({ ...prev, periodFormat: 'quarter' }))}>Quarters</IonButton>
-                        <IonButton fill={formData.periodFormat === 'half' ? 'solid' : 'outline'} color="emerald" onClick={() => setFormData(prev => ({ ...prev, periodFormat: 'half' }))}>Halves</IonButton>
-                        <IonButton fill={formData.periodFormat === 'whole' ? 'solid' : 'outline'} color="emerald" onClick={() => setFormData(prev => ({ ...prev, periodFormat: 'whole' }))}>Whole</IonButton>
+                        <IonButton fill={formData.periodFormat === 'quarter' ? 'solid' : 'outline'} color="emerald" onClick={() => setFormData(prev => ({ ...prev, periodFormat: 'quarter' }))}>{formatPeriodFormat('quarter')}</IonButton>
+                        <IonButton fill={formData.periodFormat === 'half' ? 'solid' : 'outline'} color="emerald" onClick={() => setFormData(prev => ({ ...prev, periodFormat: 'half' }))}>{formatPeriodFormat('half')}</IonButton>
+                        <IonButton fill={formData.periodFormat === 'whole' ? 'solid' : 'outline'} color="emerald" onClick={() => setFormData(prev => ({ ...prev, periodFormat: 'whole' }))}>{formatPeriodFormat('whole')}</IonButton>
                       </div>
                     </div>
                   </IonCol>

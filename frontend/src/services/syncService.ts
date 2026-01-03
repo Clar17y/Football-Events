@@ -641,10 +641,11 @@ async function syncMatches(authUserId: string): Promise<SyncResult> {
       .slice(0, BATCH_SIZE);
 
     // Process soft deletes first
+    // IMPORTANT: Use direct API call for delete, NOT matchesApi.deleteMatch which is local-first
     const matchesToSync = await processSoftDeletes(
       db.matches,
       unsyncedMatches,
-      async (id) => { await matchesApi.deleteMatch(id); },
+      async (id) => { await apiClient.delete(`/matches/${id}`); },
       'matches',
       result
     );
@@ -1058,24 +1059,25 @@ async function syncMatchPeriods(authUserId: string): Promise<SyncResult> {
         } else {
           // Period is still in progress - start it on the server
           // First check if the match has been started
+          // IMPORTANT: Use direct API calls, NOT matchesApi.startMatch() which creates local periods!
           try {
             const state = await matchesApi.getMatchState(period.matchId);
             // Server uses 'SCHEDULED' for not-started matches
             if (state.status === 'SCHEDULED') {
-              await matchesApi.startMatch(period.matchId);
+              await apiClient.post(`/matches/${period.matchId}/start`, {});
             }
           } catch {
             // Match state might not exist, try to start it
             try {
-              await matchesApi.startMatch(period.matchId);
+              await apiClient.post(`/matches/${period.matchId}/start`, {});
             } catch {
               // Match might already be started, continue
             }
           }
 
-          // Start the period
+          // Start the period on server directly (NOT matchesApi.startPeriod which creates a new local period!)
           const periodType = (period.periodType || 'REGULAR').toLowerCase() as 'regular' | 'extra_time' | 'penalty_shootout';
-          await matchesApi.startPeriod(period.matchId, periodType);
+          await apiClient.post(`/matches/${period.matchId}/periods/start`, { periodType });
         }
 
         // Update synced to true and set syncedAt on success (Requirements: 2.4)
@@ -1146,33 +1148,26 @@ async function syncMatchState(authUserId: string): Promise<SyncResult> {
           continue;
         }
         // Sync state changes to server based on status
+        // IMPORTANT: Use direct API calls, NOT matchesApi methods which are local-first!
         const status = state.status;
 
         if (status === 'LIVE') {
-          // Ensure match is started
+          // Ensure match is started on server
           try {
-            await matchesApi.startMatch(state.matchId);
+            await apiClient.post(`/matches/${state.matchId}/start`, {});
           } catch {
             // Match might already be started
           }
         } else if (status === 'PAUSED') {
-          await matchesApi.pauseMatch(state.matchId);
+          await apiClient.post(`/matches/${state.matchId}/pause`, {});
         } else if (status === 'COMPLETED') {
           // Get match to retrieve final score
-          try {
-            const match = await db.matches.get(state.matchId);
-            if (match) {
-              await matchesApi.completeMatch(state.matchId, {
-                home: match.homeScore || 0,
-                away: match.awayScore || 0,
-              });
-            } else {
-              await matchesApi.completeMatch(state.matchId);
-            }
-          } catch {
-            // Try without score
-            await matchesApi.completeMatch(state.matchId);
-          }
+          const match = await db.matches.get(state.matchId);
+          const finalScore = {
+            home: match?.homeScore || 0,
+            away: match?.awayScore || 0,
+          };
+          await apiClient.post(`/matches/${state.matchId}/complete`, { finalScore });
         }
         // For 'SCHEDULED' status, nothing to sync
 

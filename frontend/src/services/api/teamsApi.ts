@@ -12,7 +12,7 @@
 
 import apiClient from './baseApi';
 import { authApi } from './authApi';
-import { canCreateTeam } from '../../utils/guestQuota';
+import { canCreateTeam } from '../../utils/quotas';
 import { dbToTeam, dbToTeams, dbToPlayers } from '../../db/transforms';
 import type { EnhancedTeam, EnhancedPlayer } from '../../db/schema';
 import type {

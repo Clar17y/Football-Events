@@ -48,7 +48,7 @@ import { runMigrations } from './migrations';
 import { performanceMonitor } from './performance';
 import { getGuestId, isGuest } from '../utils/guest';
 import { getCurrentUserId } from '../utils/network';
-import { canAddEvent } from '../utils/guestQuota';
+import { canAddEvent } from '../utils/quotas';
 
 /**
  * Enhanced IndexedDB database with proper typing and validation

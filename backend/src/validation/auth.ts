@@ -7,7 +7,7 @@ export const registerSchema = z.object({
     .email('Invalid email format')
     .min(1, 'Email is required')
     .max(255, 'Email must be less than 255 characters'),
-  
+
   password: z
     .string()
     .min(8, 'Password must be at least 8 characters')
@@ -16,13 +16,13 @@ export const registerSchema = z.object({
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
       'Password must contain at least one lowercase letter, one uppercase letter, and one number'
     ),
-  
+
   first_name: z
     .string()
     .min(1, 'First name is required')
     .max(50, 'First name must be less than 50 characters')
     .optional(),
-  
+
   last_name: z
     .string()
     .min(1, 'Last name is required')
@@ -36,7 +36,7 @@ export const loginSchema = z.object({
     .string()
     .email('Invalid email format')
     .min(1, 'Email is required'),
-  
+
   password: z
     .string()
     .min(1, 'Password is required')
@@ -62,7 +62,7 @@ export const resetPasswordSchema = z.object({
   token: z
     .string()
     .min(1, 'Reset token is required'),
-  
+
   password: z
     .string()
     .min(8, 'Password must be at least 8 characters')
@@ -80,13 +80,13 @@ export const updateProfileSchema = z.object({
     .min(1, 'First name is required')
     .max(50, 'First name must be less than 50 characters')
     .optional(),
-  
+
   last_name: z
     .string()
     .min(1, 'Last name is required')
     .max(50, 'Last name must be less than 50 characters')
     .optional(),
-  
+
   email: z
     .string()
     .email('Invalid email format')
@@ -102,3 +102,35 @@ export type RefreshTokenRequest = z.infer<typeof refreshTokenSchema>;
 export type ForgotPasswordRequest = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordRequest = z.infer<typeof resetPasswordSchema>;
 export type UpdateProfileRequest = z.infer<typeof updateProfileSchema>;
+
+// Change password schema
+export const changePasswordSchema = z.object({
+  current_password: z
+    .string()
+    .min(1, 'Current password is required'),
+
+  new_password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .max(128, 'Password must be less than 128 characters')
+    .regex(
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+      'Password must contain at least one lowercase letter, one uppercase letter, and one number'
+    )
+});
+
+// User settings schema
+export const updateSettingsSchema = z.object({
+  display_name: z
+    .string()
+    .max(100, 'Display name must be less than 100 characters')
+    .nullable()
+    .optional(),
+
+  notification_prefs: z
+    .record(z.boolean())
+    .optional()
+});
+
+export type ChangePasswordRequest = z.infer<typeof changePasswordSchema>;
+export type UpdateSettingsRequest = z.infer<typeof updateSettingsSchema>;

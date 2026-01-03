@@ -2,11 +2,13 @@ import { Router } from 'express';
 import { AuthService } from '../../services/AuthService.js';
 import { authenticateToken } from '../../middleware/auth.js';
 import { validateRequest } from '../../middleware/validation.js';
-import { 
-  registerSchema, 
-  loginSchema, 
-  refreshTokenSchema, 
-  updateProfileSchema 
+import {
+  registerSchema,
+  loginSchema,
+  refreshTokenSchema,
+  updateProfileSchema,
+  changePasswordSchema,
+  updateSettingsSchema
 } from '../../validation/auth.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 
@@ -18,7 +20,7 @@ const router = Router();
  */
 router.post('/register', validateRequest(registerSchema), asyncHandler(async (req, res) => {
   const result = await AuthService.register(req.body);
-  
+
   res.status(201).json({
     success: true,
     message: 'User registered successfully',
@@ -32,7 +34,7 @@ router.post('/register', validateRequest(registerSchema), asyncHandler(async (re
  */
 router.post('/login', validateRequest(loginSchema), asyncHandler(async (req, res) => {
   const result = await AuthService.login(req.body);
-  
+
   res.json({
     success: true,
     message: 'Login successful',
@@ -47,7 +49,7 @@ router.post('/login', validateRequest(loginSchema), asyncHandler(async (req, res
 router.post('/refresh', validateRequest(refreshTokenSchema), asyncHandler(async (req, res) => {
   const { refresh_token } = req.body;
   const result = await AuthService.refreshToken(refresh_token);
-  
+
   res.json({
     success: true,
     message: 'Token refreshed successfully',
@@ -74,7 +76,7 @@ router.post('/logout', asyncHandler(async (_req, res) => {
  */
 router.get('/profile', authenticateToken, asyncHandler(async (req, res) => {
   const user = await AuthService.getProfile(req.user!.id);
-  
+
   res.json({
     success: true,
     data: user
@@ -85,12 +87,12 @@ router.get('/profile', authenticateToken, asyncHandler(async (req, res) => {
  * PUT /api/v1/auth/profile
  * Update current user profile
  */
-router.put('/profile', 
-  authenticateToken, 
-  validateRequest(updateProfileSchema), 
+router.put('/profile',
+  authenticateToken,
+  validateRequest(updateProfileSchema),
   asyncHandler(async (req, res) => {
     const user = await AuthService.updateProfile(req.user!.id, req.body);
-    
+
     res.json({
       success: true,
       message: 'Profile updated successfully',
@@ -105,7 +107,7 @@ router.put('/profile',
  */
 router.delete('/profile', authenticateToken, asyncHandler(async (req, res) => {
   await AuthService.deleteUser(req.user!.id, req.user!.id);
-  
+
   res.json({
     success: true,
     message: 'Account deleted successfully'
@@ -118,11 +120,59 @@ router.delete('/profile', authenticateToken, asyncHandler(async (req, res) => {
  */
 router.get('/me', authenticateToken, asyncHandler(async (req, res) => {
   const user = await AuthService.getProfile(req.user!.id);
-  
+
   res.json({
     success: true,
     data: user
   });
 }));
+
+/**
+ * PUT /api/v1/auth/password
+ * Change current user's password
+ */
+router.put('/password',
+  authenticateToken,
+  validateRequest(changePasswordSchema),
+  asyncHandler(async (req, res) => {
+    await AuthService.changePassword(req.user!.id, req.body);
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+  })
+);
+
+/**
+ * GET /api/v1/auth/settings
+ * Get user settings
+ */
+router.get('/settings', authenticateToken, asyncHandler(async (req, res) => {
+  const settings = await AuthService.getSettings(req.user!.id);
+
+  res.json({
+    success: true,
+    data: settings
+  });
+}));
+
+/**
+ * PUT /api/v1/auth/settings
+ * Update user settings
+ */
+router.put('/settings',
+  authenticateToken,
+  validateRequest(updateSettingsSchema),
+  asyncHandler(async (req, res) => {
+    const settings = await AuthService.updateSettings(req.user!.id, req.body);
+
+    res.json({
+      success: true,
+      message: 'Settings updated successfully',
+      data: settings
+    });
+  })
+);
 
 export default router;
