@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { formatPeriodFormat } from '../utils/formatters';
 import {
   IonIcon,
   IonChip,
@@ -188,7 +189,7 @@ const UpcomingMatchesList: React.FC<UpcomingMatchesListProps> = ({
                     <IonIcon icon={football} className="detail-icon" />
                     <div className="detail-content">
                       <span className="detail-label">Format</span>
-                      <span className="detail-value">{match.periodFormat}</span>
+                      <span className="detail-value">{formatPeriodFormat(match.periodFormat)}</span>
                     </div>
                   </div>
                 </IonCol>

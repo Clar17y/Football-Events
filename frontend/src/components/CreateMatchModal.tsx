@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { formatPeriodFormat } from '../utils/formatters';
 import {
   IonModal,
   IonHeader,
@@ -833,9 +834,9 @@ const CreateMatchModal: React.FC<CreateMatchModalProps> = ({
                     <div className="form-row">
                       <label className="form-label" style={{ fontWeight: 700, marginBottom: 4, display: 'block' }}>Periods</label>
                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <IonButton fill={formData.periodFormat === 'quarter' ? 'solid' : 'outline'} color="emerald" onClick={() => setFormData(prev => ({ ...prev, periodFormat: 'quarter' }))}>Quarters</IonButton>
-                        <IonButton fill={formData.periodFormat === 'half' ? 'solid' : 'outline'} color="emerald" onClick={() => setFormData(prev => ({ ...prev, periodFormat: 'half' }))}>Halves</IonButton>
-                        <IonButton fill={formData.periodFormat === 'whole' ? 'solid' : 'outline'} color="emerald" onClick={() => setFormData(prev => ({ ...prev, periodFormat: 'whole' }))}>Whole</IonButton>
+                        <IonButton fill={formData.periodFormat === 'quarter' ? 'solid' : 'outline'} color="emerald" onClick={() => setFormData(prev => ({ ...prev, periodFormat: 'quarter' }))}>{formatPeriodFormat('quarter')}</IonButton>
+                        <IonButton fill={formData.periodFormat === 'half' ? 'solid' : 'outline'} color="emerald" onClick={() => setFormData(prev => ({ ...prev, periodFormat: 'half' }))}>{formatPeriodFormat('half')}</IonButton>
+                        <IonButton fill={formData.periodFormat === 'whole' ? 'solid' : 'outline'} color="emerald" onClick={() => setFormData(prev => ({ ...prev, periodFormat: 'whole' }))}>{formatPeriodFormat('whole')}</IonButton>
                       </div>
                     </div>
                   </IonCol>
