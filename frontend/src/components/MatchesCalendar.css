@@ -389,18 +389,29 @@
 }
 
 /* Dark Theme Support */
-@media (prefers-color-scheme: dark) {
-  .calendar-cell.today {
-    background: rgba(var(--theme-primary-rgb, var(--ion-color-primary-rgb)), 0.2);
-  }
-  
-  .match-indicator {
-    border-color: var(--grassroots-surface-elevated);
-  }
-  
-  .match-indicator:hover {
-    box-shadow: 0 0 0 2px var(--grassroots-surface-elevated);
-  }
+.dark-theme .calendar-cell.today {
+  background: rgba(var(--theme-primary-rgb, var(--ion-color-primary-rgb)), 0.2);
+}
+
+.dark-theme .match-indicator {
+  border-color: var(--grassroots-surface-elevated);
+}
+
+.dark-theme .match-indicator:hover {
+  box-shadow: 0 0 0 2px var(--grassroots-surface-elevated);
+}
+
+.dark-theme .calendar-title {
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .calendar-date {
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .matches-calendar {
+  background: var(--grassroots-surface);
+  border-color: var(--grassroots-surface-variant);
 }
 
 /* High Contrast Mode */

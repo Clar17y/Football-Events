@@ -428,12 +428,25 @@
 
 /* Dark Theme Support */
 .dark-theme .player-card {
-  --background: var(--grassroots-surface-elevated-dark, #2d3748);
-  border-color: var(--grassroots-surface-variant-dark, #4a5568);
+  --background: var(--grassroots-surface-elevated);
+  border-color: var(--grassroots-surface-variant);
 }
 
 .dark-theme .player-card:hover {
   border-color: var(--ion-color-indigo-tint);
+}
+
+.dark-theme .player-name,
+.dark-theme .section-title {
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .player-position {
+  color: var(--theme-primary, var(--ion-color-indigo-tint));
+}
+
+.dark-theme .player-menu-button {
+  --color: var(--grassroots-text-secondary);
 }
 
 /* High Contrast Mode */

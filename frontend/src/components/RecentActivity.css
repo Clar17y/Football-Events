@@ -173,18 +173,29 @@
 }
 
 /* Dark theme adjustments */
-@media (prefers-color-scheme: dark) {
-  .activity-card {
-    background: var(--grassroots-surface);
-    border: 1px solid var(--grassroots-surface-variant);
-  }
+.dark-theme .activity-card {
+  background: var(--grassroots-surface);
+  border: 1px solid var(--grassroots-surface-variant);
+}
 
-  .activity-item {
-    --background: var(--grassroots-surface);
-    --color: var(--grassroots-text-primary);
-  }
+.dark-theme .activity-item {
+  --background: var(--grassroots-surface);
+  --color: var(--grassroots-text-primary);
+}
 
-  .activity-item:hover {
-    --background: var(--grassroots-surface-elevated);
-  }
+.dark-theme .activity-item:hover {
+  --background: var(--grassroots-surface-elevated);
+}
+
+.dark-theme .activity-description {
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .activity-header .section-title {
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .activity-placeholder h3,
+.dark-theme .activity-error h3 {
+  color: var(--grassroots-text-primary);
 }

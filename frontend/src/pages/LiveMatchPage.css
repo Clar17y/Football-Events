@@ -57,3 +57,8 @@
   font-size: 1rem;
   font-weight: 700;
 }
+
+/* Dark Theme Support */
+.dark-theme .event-section {
+  color: var(--grassroots-text-primary);
+}

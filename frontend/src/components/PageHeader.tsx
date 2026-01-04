@@ -25,16 +25,19 @@ interface PageHeaderProps {
   additionalButtons?: React.ReactNode;
 }
 
-const PageHeader: React.FC<PageHeaderProps> = ({ 
+const PageHeader: React.FC<PageHeaderProps> = ({
   onNavigate,
   showBackButton = true,
   backDestination = 'home',
   showThemeToggle = true,
   additionalButtons
 }) => {
-  const navigate = (page: string) => {
-    if (onNavigate) {
-      onNavigate(page);
+  const handleBack = () => {
+    // Use browser history if available, otherwise fall back to destination
+    if (window.history.length > 1) {
+      window.history.back();
+    } else if (onNavigate) {
+      onNavigate(backDestination);
     }
   };
 
@@ -43,14 +46,14 @@ const PageHeader: React.FC<PageHeaderProps> = ({
       <IonToolbar className="home-toolbar">
         {showBackButton && (
           <IonButtons slot="start">
-            <IonButton fill="clear" onClick={() => navigate(backDestination)}>
+            <IonButton fill="clear" onClick={handleBack}>
               <IonIcon icon={arrowBackOutline} />
             </IonButton>
           </IonButtons>
         )}
         
         <IonTitle className="home-title">
-          <div className="title-container" onClick={() => navigate('home')} style={{ cursor: 'pointer' }}>
+          <div className="title-container" onClick={() => onNavigate?.('home')} style={{ cursor: 'pointer' }}>
             <IonIcon icon={football} className="title-icon" />
             <span>MatchMaster</span>
           </div>
