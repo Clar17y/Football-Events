@@ -391,3 +391,66 @@
     transition: none;
   }
 }
+
+/* Dark Theme Support */
+.dark-theme .player-selection-panel {
+  background: var(--grassroots-surface);
+}
+
+.dark-theme .search-container {
+  background: var(--grassroots-surface);
+  border-color: var(--grassroots-surface-variant);
+}
+
+.dark-theme .search-input {
+  background: var(--grassroots-surface-elevated);
+  border-color: var(--grassroots-surface-variant);
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .search-input:focus {
+  background: var(--grassroots-surface-elevated);
+}
+
+.dark-theme .group-header {
+  background: var(--grassroots-surface-elevated);
+  border-color: var(--grassroots-surface-variant);
+}
+
+.dark-theme .group-header:hover {
+  background: var(--grassroots-surface-variant);
+}
+
+.dark-theme .group-name {
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .group-players {
+  background: var(--grassroots-surface);
+}
+
+.dark-theme .player-item {
+  border-color: var(--grassroots-surface-variant);
+}
+
+.dark-theme .player-item:hover:not(.disabled) {
+  background: var(--grassroots-surface-elevated);
+}
+
+.dark-theme .player-name {
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .player-position {
+  color: var(--grassroots-text-secondary);
+}
+
+.dark-theme .instructions {
+  background: var(--grassroots-surface-elevated);
+  border-color: var(--grassroots-surface-variant);
+  color: var(--grassroots-text-secondary);
+}
+
+.dark-theme .empty-state {
+  color: var(--grassroots-text-secondary);
+}

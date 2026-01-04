@@ -318,3 +318,35 @@
   .match-details { padding: var(--grassroots-space-lg); }
   .upcoming-match-item, .completed-match-item { max-width: none; }
 }
+
+/* Dark Theme Support */
+.dark-theme .upcoming-match-item,
+.dark-theme .completed-match-item {
+  background: var(--grassroots-surface);
+  border-color: var(--grassroots-surface-variant);
+}
+
+.dark-theme .team-name {
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .opponent-team {
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .match-details {
+  background: var(--grassroots-surface-elevated);
+  border-color: var(--grassroots-surface-variant);
+}
+
+.dark-theme .detail-value {
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .notes-content {
+  color: var(--grassroots-text-primary);
+}
+
+.dark-theme .empty-title {
+  color: var(--grassroots-text-primary);
+}
