@@ -162,6 +162,16 @@
   font-size: 0.85rem;
 }
 
+.activity-load-more {
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+.activity-load-more ion-button {
+  --color: var(--ion-color-primary);
+  font-size: 0.9rem;
+}
+
 /* Dark theme adjustments */
 @media (prefers-color-scheme: dark) {
   .activity-card {

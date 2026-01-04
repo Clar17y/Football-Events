@@ -611,11 +611,9 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         </div>
 
         {/* Recent Activity Section */}
-        {user && (
-          <div className="activity-section">
-            <RecentActivity onNavigate={navigate} limit={10} days={30} />
-          </div>
-        )}
+        <div className="activity-section">
+          <RecentActivity onNavigate={navigate} limit={20} days={30} />
+        </div>
       </IonContent>
     </IonPage>
   );

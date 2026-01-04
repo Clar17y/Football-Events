@@ -11,13 +11,15 @@ import {
     IonList,
     IonListHeader,
     IonButtons,
-    IonInput
+    IonInput,
+    IonToggle
 } from '@ionic/react';
-import { football, colorPaletteOutline, timerOutline } from 'ionicons/icons';
+import { football, colorPaletteOutline, timerOutline, listOutline } from 'ionicons/icons';
 import { Select, MenuItem, FormControl } from '@mui/material';
 import UserProfile from '../components/UserProfile';
 import ThemeToggle from '../components/ThemeToggle';
 import { useTheme } from '../contexts/ThemeContext';
+import { DEFAULT_ACTIVITY_FILTERS, type ActivityFilters } from '../types/activity';
 import './AppSettingsPage.css';
 
 interface AppSettingsPageProps {
@@ -32,6 +34,7 @@ interface AppSettings {
     defaultPeriodFormat: 'quarter' | 'half' | 'whole';
     defaultLineupSize: number;
     defaultCompetition: string;
+    activityFilters: ActivityFilters;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -39,7 +42,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     defaultDurationMins: 50,
     defaultPeriodFormat: 'quarter',
     defaultLineupSize: 7,
-    defaultCompetition: ''
+    defaultCompetition: '',
+    activityFilters: DEFAULT_ACTIVITY_FILTERS
 };
 
 const AppSettingsPage: React.FC<AppSettingsPageProps> = ({ onNavigate }) => {
@@ -89,6 +93,16 @@ const AppSettingsPage: React.FC<AppSettingsPageProps> = ({ onNavigate }) => {
 
     const handleCompetitionChange = (value: string) => {
         saveSettings({ ...settings, defaultCompetition: value });
+    };
+
+    const handleActivityFilterChange = (key: keyof ActivityFilters, value: boolean) => {
+        saveSettings({
+            ...settings,
+            activityFilters: {
+                ...settings.activityFilters,
+                [key]: value
+            }
+        });
     };
 
     return (
@@ -207,6 +221,65 @@ const AppSettingsPage: React.FC<AppSettingsPageProps> = ({ onNavigate }) => {
                                 value={settings.defaultCompetition}
                                 onIonInput={(e) => handleCompetitionChange((e.detail.value ?? "").toString())}
                                 placeholder="e.g., Academy League, Sunday Cup"
+                            />
+                        </IonItem>
+                    </IonList>
+
+                    {/* Activity Feed */}
+                    <IonList className="settings-section">
+                        <IonListHeader>
+                            <IonIcon icon={listOutline} />
+                            <IonLabel>Activity Feed</IonLabel>
+                        </IonListHeader>
+                        <p className="section-description">
+                            Choose which types of activity appear in your Recent Activity feed on the home page.
+                        </p>
+
+                        <IonItem>
+                            <IonLabel>Teams</IonLabel>
+                            <IonToggle
+                                checked={settings.activityFilters?.teams ?? true}
+                                onIonChange={(e) => handleActivityFilterChange('teams', e.detail.checked)}
+                            />
+                        </IonItem>
+
+                        <IonItem>
+                            <IonLabel>Players</IonLabel>
+                            <IonToggle
+                                checked={settings.activityFilters?.players ?? true}
+                                onIonChange={(e) => handleActivityFilterChange('players', e.detail.checked)}
+                            />
+                        </IonItem>
+
+                        <IonItem>
+                            <IonLabel>Seasons</IonLabel>
+                            <IonToggle
+                                checked={settings.activityFilters?.seasons ?? true}
+                                onIonChange={(e) => handleActivityFilterChange('seasons', e.detail.checked)}
+                            />
+                        </IonItem>
+
+                        <IonItem>
+                            <IonLabel>Matches</IonLabel>
+                            <IonToggle
+                                checked={settings.activityFilters?.matches ?? true}
+                                onIonChange={(e) => handleActivityFilterChange('matches', e.detail.checked)}
+                            />
+                        </IonItem>
+
+                        <IonItem>
+                            <IonLabel>Match Events</IonLabel>
+                            <IonToggle
+                                checked={settings.activityFilters?.events ?? true}
+                                onIonChange={(e) => handleActivityFilterChange('events', e.detail.checked)}
+                            />
+                        </IonItem>
+
+                        <IonItem>
+                            <IonLabel>Lineups</IonLabel>
+                            <IonToggle
+                                checked={settings.activityFilters?.lineups ?? true}
+                                onIonChange={(e) => handleActivityFilterChange('lineups', e.detail.checked)}
                             />
                         </IonItem>
                     </IonList>

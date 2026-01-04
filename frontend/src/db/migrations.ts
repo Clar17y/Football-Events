@@ -8,6 +8,7 @@
 import type { GrassrootsDB } from './indexedDB';
 import type { EnhancedEvent, EnhancedMatch, EnhancedPlayer, EnhancedTeam } from './schema';
 import { retroactivelyLinkMatchEvents } from './eventLinking';
+import { getCurrentUserOrGuestId } from '../utils/guest';
 
 /**
  * Migration interface
@@ -118,7 +119,7 @@ async function migrateEventsToEnhanced(db: GrassrootsDB): Promise<void> {
       updatedAt: typeof event.updatedAt === 'number' ? new Date(event.updatedAt).toISOString() : (event.updatedAt || event.createdAt || nowIso),
 
       // Authentication and soft delete fields
-      createdByUserId: event.createdByUserId || 'migration-system',
+      createdByUserId: event.createdByUserId || getCurrentUserOrGuestId(),
       deletedAt: undefined,
       deletedByUserId: undefined,
       isDeleted: !!event.isDeleted
@@ -174,7 +175,7 @@ async function migrateMatchesToEnhanced(db: GrassrootsDB): Promise<void> {
         : (oldMatch.updatedAt || oldMatch.updated_at || oldMatch.createdAt || oldMatch.created_at || new Date(now).toISOString()),
 
       // Authentication and soft delete fields
-      createdByUserId: 'migration-system',
+      createdByUserId: oldMatch.createdByUserId || getCurrentUserOrGuestId(),
       deletedAt: undefined,
       deletedByUserId: undefined,
       isDeleted: false
@@ -212,7 +213,7 @@ async function migrateTeamsToEnhanced(db: GrassrootsDB): Promise<void> {
         : (oldTeam.updatedAt || oldTeam.updated_at || oldTeam.createdAt || oldTeam.created_at || new Date(now).toISOString()),
 
       // Authentication and soft delete fields
-      createdByUserId: oldTeam.createdByUserId || 'migration-system',
+      createdByUserId: oldTeam.createdByUserId || getCurrentUserOrGuestId(),
       deletedAt: undefined,
       deletedByUserId: undefined,
       isDeleted: !!oldTeam.isDeleted
@@ -249,7 +250,7 @@ async function migratePlayersToEnhanced(db: GrassrootsDB): Promise<void> {
         : (oldPlayer.updatedAt || oldPlayer.updated_at || oldPlayer.createdAt || oldPlayer.created_at || new Date(now).toISOString()),
 
       // Authentication and soft delete fields
-      createdByUserId: oldPlayer.createdByUserId || 'migration-system',
+      createdByUserId: oldPlayer.createdByUserId || getCurrentUserOrGuestId(),
       deletedAt: undefined,
       deletedByUserId: undefined,
       isDeleted: !!oldPlayer.isDeleted
@@ -283,7 +284,7 @@ async function createDefaultSeason(db: GrassrootsDB): Promise<void> {
         createdAt: nowIso,
         updatedAt: nowIso,
         // Authentication and soft delete fields
-        createdByUserId: 'migration-system',
+        createdByUserId: getCurrentUserOrGuestId(),
         deletedAt: undefined,
         deletedByUserId: undefined,
         isDeleted: false,
