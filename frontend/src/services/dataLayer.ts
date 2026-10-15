@@ -12,7 +12,8 @@ import { db } from '../db/indexedDB';
 import { getGuestId, isGuest } from '../utils/guest';
 import { getCurrentUserId } from '../utils/network';
 import { getCachedMeLimits, type MeLimits } from './limitsCache';
-import { CORE_EVENT_KINDS } from '@shared/types/limits';
+import { GUEST_LIMITS } from '../utils/quotas';
+import { ALL_EVENT_KINDS, CORE_EVENT_KINDS } from '@shared/types/limits';
 import type {
     DbTeam,
     DbPlayer,
@@ -61,6 +62,71 @@ function getUserId(): string {
         return getGuestId();
     }
     return getCurrentUserId();
+}
+
+const LEGACY_RECORDING_OWNERS = new Set(['server', 'authenticated-user', 'local-user']);
+
+/** The replay endpoint accepts these transitions; other server statuses are read-only. */
+export function isReplayableMatchStatus(status: unknown): status is 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED' {
+    return status === 'SCHEDULED' || status === 'LIVE' || status === 'PAUSED' || status === 'COMPLETED';
+}
+
+async function assertRecordingLifecycleMutable(matchId: string): Promise<void> {
+    const state = await db.matchState.get(matchId);
+    if (state && !isReplayableMatchStatus(state.status)) {
+        throw new Error('This match is read-only for recording lifecycle changes');
+    }
+}
+
+export function isCurrentOwnedMatch(match: {
+    createdByUserId?: string;
+    created_by_user_id?: string;
+    isDeleted?: boolean;
+    is_deleted?: boolean;
+} | undefined, ownerId: string): boolean {
+    if (!match) return false;
+    const camel = match.createdByUserId, snake = match.created_by_user_id;
+    return !match.isDeleted && !match.is_deleted && !(camel && snake && camel !== snake) && (camel || snake) === ownerId;
+}
+
+/** Resolve known old attribution only beneath a proven current-owned parent match. */
+export async function recordingOwner<T extends { matchId: string; createdByUserId?: string }>(row: T, ownerId: string): Promise<T> {
+    if (row.createdByUserId === ownerId) return row;
+    const parent = await db.matches.get(row.matchId);
+    if (!ownerId.startsWith('guest-') && LEGACY_RECORDING_OWNERS.has(row.createdByUserId || '') &&
+        isCurrentOwnedMatch(parent, ownerId)) {
+        return { ...row, createdByUserId: ownerId };
+    }
+    throw new Error('Recording belongs to another user');
+}
+
+export async function bumpRecordingRevision(matchId: string): Promise<void> {
+    const match = await db.matches.get(matchId);
+    if (!match) return;
+    const revision = match.recordingRevision ?? 0;
+    if (!Number.isSafeInteger(revision) || revision < 0 || revision === Number.MAX_SAFE_INTEGER) throw new Error('Invalid recording revision');
+    await db.matches.update(matchId, { recordingRevision: revision + 1 });
+}
+
+export async function reclaimLegacyRecordings(ownerId: string): Promise<void> {
+    if (!ownerId || ownerId.startsWith('guest-')) return;
+    await db.transaction('rw', [db.matches, db.events, db.matchPeriods, db.matchState, db.syncFailures], async () => {
+        const ownedParents = (await db.matches.toArray()).filter(match => isCurrentOwnedMatch(match, ownerId));
+        const parents = new Set(ownedParents.map(match => match.id));
+        for (const parent of ownedParents) {
+            if (parent.createdByUserId !== ownerId) await db.matches.update(parent.id, { createdByUserId: ownerId });
+        }
+        for (const table of [db.events, db.matchPeriods, db.matchState]) {
+            const rows = await table.toArray();
+            for (const row of rows) {
+                if (parents.has(row.matchId) && LEGACY_RECORDING_OWNERS.has(row.createdByUserId)) {
+                    const key = 'id' in row && typeof row.id === 'string' ? row.id : row.matchId;
+                    await table.update(key, { createdByUserId: ownerId });
+                    await db.syncFailures.delete([table.name, key]);
+                }
+            }
+        }
+    });
 }
 
 /**
@@ -122,14 +188,17 @@ export const teamsDataLayer = {
         logoUrl?: string;
         isOpponent?: boolean;
     }): Promise<DbTeam> {
+        const ownerId = getUserId();
         const authLimits = await getAuthLimitsForOfflineWrite();
+        if (getUserId() !== ownerId) throw new Error('Account changed. Please retry creation.');
         if (authLimits && !(data.isOpponent ?? false)) {
-            const ownedTeams = await db.teams.filter(t => !t.isDeleted && !t.isOpponent).count();
+            const ownedTeams = await db.teams.filter(t => isCurrentOwnedMatch(t, ownerId) && !t.isOpponent).count();
             if (ownedTeams >= authLimits.limits.ownedTeams) {
                 throw new Error(`Team limit reached (${authLimits.limits.ownedTeams}).`);
             }
         }
 
+        if (getUserId() !== ownerId) throw new Error('Account changed. Please retry creation.');
         const id = generateId();
         const team: DbTeam = {
             id,
@@ -278,14 +347,17 @@ export const seasonsDataLayer = {
         isCurrent?: boolean;
         description?: string;
     }): Promise<DbSeason> {
+        const ownerId = getUserId();
         const authLimits = await getAuthLimitsForOfflineWrite();
+        if (getUserId() !== ownerId) throw new Error('Account changed. Please retry creation.');
         if (authLimits && authLimits.limits.seasons != null) {
-            const seasons = await db.seasons.filter(s => !s.isDeleted).count();
+            const seasons = await db.seasons.filter(s => isCurrentOwnedMatch(s, ownerId)).count();
             if (seasons >= authLimits.limits.seasons) {
                 throw new Error(`Season limit reached (${authLimits.limits.seasons}).`);
             }
         }
 
+        if (getUserId() !== ownerId) throw new Error('Account changed. Please retry creation.');
         const id = generateId();
         const season: DbSeason = {
             id,
@@ -353,7 +425,7 @@ export const matchesDataLayer = {
         competition?: string;
         venue?: string;
         durationMinutes?: number;
-        periodFormat?: 'half' | 'quarter';
+        periodFormat?: 'half' | 'quarter' | 'third' | 'whole';
         notes?: string;
     }): Promise<DbMatch> {
         const authLimits = await getAuthLimitsForOfflineWrite();
@@ -390,7 +462,14 @@ export const matchesDataLayer = {
             ...createCommonFields(),
         } as DbMatch;
 
-        await db.matches.add(match);
+        await db.transaction('rw', db.matches, db.matchState, async () => {
+            await db.matches.add(match);
+            await db.matchState.add({
+                matchId: id, status: 'SCHEDULED', timerMs: 0, totalElapsedSeconds: 0,
+                lastUpdatedAt: Date.now(), createdAt: match.createdAt, updatedAt: match.updatedAt,
+                createdByUserId: match.createdByUserId, isDeleted: false, synced: false,
+            });
+        });
         triggerSync();
         return match;
     },
@@ -403,7 +482,7 @@ export const matchesDataLayer = {
         competition: string;
         venue: string;
         durationMinutes: number;
-        periodFormat: 'half' | 'quarter';
+        periodFormat: 'half' | 'quarter' | 'third' | 'whole';
         homeScore: number;
         awayScore: number;
         notes: string;
@@ -456,106 +535,148 @@ export const matchesDataLayer = {
 // EVENTS
 // ============================================================================
 
+async function eventLimits() {
+    if (isGuest()) return {
+        limits: { ...DEFAULT_FREE_LIMITS, eventsPerMatch: GUEST_LIMITS.maxNonScoringEventsPerMatch,
+            formationChangesPerMatch: GUEST_LIMITS.maxFormationChangesPerMatch },
+        allowedEventKinds: DEFAULT_FREE_ALLOWED_EVENT_KINDS,
+    };
+    const cached = await getCachedMeLimits();
+    return {
+        limits: cached?.limits ?? DEFAULT_FREE_LIMITS,
+        allowedEventKinds: new Set(cached?.allowedEventKinds ?? CORE_EVENT_KINDS),
+    };
+}
+
+function validateEvent(event: { kind: string; matchId: string; teamId?: string }) {
+    if (!(ALL_EVENT_KINDS as readonly string[]).includes(event.kind)) throw new Error('Invalid event kind');
+    if (!event.matchId || !event.teamId) throw new Error('Match ID and Team ID are required for events');
+}
+
+async function checkEventQuota(event: DbEvent, config: Awaited<ReturnType<typeof eventLimits>>, excludeId?: string) {
+    const kind = String(event.kind);
+    if (['goal', 'own_goal'].includes(kind)) return;
+    if (kind !== 'formation_change' && !config.allowedEventKinds.has(kind)) throw new Error('This event type requires Premium.');
+    const formation = kind === 'formation_change';
+    const count = await db.events.where('matchId').equals(event.matchId)
+        .filter(e => e.id !== excludeId && !e.isDeleted && e.createdByUserId === event.createdByUserId &&
+            (formation ? e.kind === 'formation_change' : !['goal', 'own_goal', 'formation_change'].includes(e.kind)))
+        .count();
+    const limit = formation ? config.limits.formationChangesPerMatch : config.limits.eventsPerMatch;
+    if (count >= limit) throw new Error(`${formation ? 'Formation change' : 'Event'} limit reached (${limit}).`);
+}
+
+function eventScoreContribution(event: DbEvent | undefined, match: DbMatch) {
+    if (!event || event.isDeleted || !['goal', 'own_goal'].includes(event.kind)) return { home: 0, away: 0 };
+    const home = event.teamId === match.homeTeamId;
+    const away = event.teamId === match.awayTeamId;
+    if (!home && !away) return { home: 0, away: 0 };
+    return event.kind === 'own_goal' ? { home: Number(away), away: Number(home) } : { home: Number(home), away: Number(away) };
+}
+
+async function projectEventScore(matchId: string, before?: DbEvent, after?: DbEvent) {
+    const match = await db.matches.get(matchId);
+    if (!match) return false;
+    const oldScore = eventScoreContribution(before, match);
+    const newScore = eventScoreContribution(after, match);
+    const homeDelta = newScore.home - oldScore.home;
+    const awayDelta = newScore.away - oldScore.away;
+    if (!homeDelta && !awayDelta) return false;
+    // Cached event history may be partial; preserve the match's known score baseline.
+    // Derived scores do not make an otherwise clean match dirty.
+    await db.matches.update(matchId, {
+        homeScore: Math.max(0, (match.homeScore ?? 0) + homeDelta),
+        awayScore: Math.max(0, (match.awayScore ?? 0) + awayDelta),
+        scoreRevision: generateId(),
+    });
+    return true;
+}
+
 export const eventsDataLayer = {
     async create(data: {
-        matchId: string;
-        kind: string;
-        periodNumber?: number;
-        clockMs?: number;
-        teamId: string;
-        playerId?: string;
-        notes?: string;
-        sentiment?: number;
-    }): Promise<DbEvent> {
-        const authLimits = await getAuthLimitsForOfflineWrite();
-        if (authLimits) {
-            const kind = String(data.kind);
-            const isScoring = kind === 'goal' || kind === 'own_goal';
-
-            if (kind === 'formation_change') {
-                const formationChanges = await db.events
-                    .where('matchId')
-                    .equals(data.matchId)
-                    .filter(e => !e.isDeleted && String(e.kind) === 'formation_change')
-                    .count();
-                if (formationChanges >= authLimits.limits.formationChangesPerMatch) {
-                    throw new Error(`Formation change limit reached (${authLimits.limits.formationChangesPerMatch}).`);
-                }
-            } else if (!isScoring) {
-                if (!authLimits.allowedEventKinds.has(kind)) {
-                    throw new Error('This event type requires Premium.');
-                }
-                const nonScoringEvents = await db.events
-                    .where('matchId')
-                    .equals(data.matchId)
-                    .filter(e => !e.isDeleted && !['goal', 'own_goal', 'formation_change'].includes(String(e.kind)))
-                    .count();
-                if (nonScoringEvents >= authLimits.limits.eventsPerMatch) {
-                    throw new Error(`Event limit reached (${authLimits.limits.eventsPerMatch}).`);
+        matchId: string; kind: string; periodNumber?: number; clockMs?: number;
+        teamId: string; playerId?: string | null; notes?: string; sentiment?: number;
+        createdAt?: string; createdByUserId?: string; isDeleted?: boolean;
+    }, formationGuard?: { ownerId: string; isCurrent: () => boolean }): Promise<DbEvent> {
+        validateEvent(data);
+        const config = await eventLimits();
+        const event: DbEvent = {
+            ...createCommonFields(), id: generateId(), matchId: data.matchId, kind: data.kind as DbEvent['kind'],
+            periodNumber: data.periodNumber ?? 1, clockMs: data.clockMs ?? 0,
+            teamId: data.teamId, playerId: data.playerId || undefined,
+            notes: data.notes, sentiment: data.sentiment ?? 0,
+            createdAt: data.createdAt ?? new Date().toISOString(),
+            createdByUserId: data.createdByUserId ?? getUserId(), isDeleted: data.isDeleted ?? false,
+        };
+        await db.transaction('rw', db.events, db.matches, db.matchState, async () => {
+            if (formationGuard) {
+                const parent = await db.matches.get(data.matchId);
+                const state = await db.matchState.get(data.matchId);
+                if (!formationGuard.isCurrent() || getUserId() !== formationGuard.ownerId ||
+                    !isCurrentOwnedMatch(parent, formationGuard.ownerId) ||
+                    (state ? !isCurrentOwnedMatch(state, formationGuard.ownerId) ||
+                        !['SCHEDULED', 'LIVE', 'PAUSED'].includes(state.status) : parent?.synced !== false || !!parent.syncedAt || ('syncAttempted' in parent && !!parent.syncAttempted))) {
+                    throw new Error('Match recording context changed. Reopen Team Changes.');
                 }
             }
-        }
-
-        const id = generateId();
-        const now = new Date().toISOString();
-
-        const event: DbEvent = {
-            id,
-            matchId: data.matchId,
-            kind: data.kind as any,
-            periodNumber: data.periodNumber ?? 1,
-            clockMs: data.clockMs ?? 0,
-            teamId: data.teamId,
-            playerId: data.playerId ?? '',
-            notes: data.notes,
-            sentiment: data.sentiment ?? 0,
-            syncedAt: now,
-            ...createCommonFields(),
-        } as DbEvent;
-
-        await db.events.add(event);
+            if (!event.isDeleted) await checkEventQuota(event, config);
+            if (formationGuard && (!formationGuard.isCurrent() || getUserId() !== formationGuard.ownerId)) {
+                throw new Error('Match recording context changed. Reopen Team Changes.');
+            }
+            await db.events.add(event);
+            event.scoreProjectionPending = await projectEventScore(event.matchId, undefined, event);
+            await db.events.update(event.id, { scoreProjectionPending: event.scoreProjectionPending });
+            await bumpRecordingRevision(event.matchId);
+        });
         triggerSync();
         return event;
     },
 
     async update(id: string, data: Partial<{
-        kind: string;
-        periodNumber: number;
-        clockMs: number;
-        teamId: string;
-        playerId: string;
-        notes: string;
-        sentiment: number;
+        kind: string; periodNumber: number; clockMs: number; teamId: string;
+        playerId: string | null; notes: string; sentiment: number;
     }>): Promise<void> {
-        const updateData: any = updateFields();
-        if (data.kind !== undefined) updateData.kind = data.kind;
-        if (data.periodNumber !== undefined) updateData.periodNumber = data.periodNumber;
-        if (data.clockMs !== undefined) updateData.clockMs = data.clockMs;
-        if (data.teamId !== undefined) updateData.teamId = data.teamId;
-        if (data.playerId !== undefined) updateData.playerId = data.playerId;
-        if (data.notes !== undefined) updateData.notes = data.notes;
-        if (data.sentiment !== undefined) updateData.sentiment = data.sentiment;
-
-        await db.events.update(id, updateData);
+        const config = await eventLimits();
+        await db.transaction('rw', db.events, db.matches, db.syncFailures, async () => {
+            let existing = await db.events.get(id);
+            if (!existing || existing.isDeleted) throw new Error(`Event ${id} not found`);
+            existing = await recordingOwner(existing, getUserId());
+            const defined = Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
+            const updated = { ...existing, ...defined, ...updateFields() } as DbEvent;
+            if (data.playerId === null) updated.playerId = undefined;
+            validateEvent(updated);
+            if (updated.kind !== existing.kind || updated.teamId !== existing.teamId) await checkEventQuota(updated, config, id);
+            await db.events.put(updated);
+            await db.syncFailures.delete(['events', id]);
+            const scoreChanged = await projectEventScore(existing.matchId, existing, updated);
+            await db.events.update(id, {
+                scoreProjectionPending: scoreChanged || (existing.synced === false && existing.scoreProjectionPending !== false),
+            });
+            await bumpRecordingRevision(existing.matchId);
+        });
         triggerSync();
     },
 
     async delete(id: string): Promise<void> {
-        await db.events.update(id, {
-            isDeleted: true,
-            deletedAt: new Date().toISOString(),
-            deletedByUserId: getUserId(),
-            ...updateFields(),
+        await db.transaction('rw', db.events, db.matches, db.syncFailures, async () => {
+            let existing = await db.events.get(id);
+            if (!existing) return;
+            existing = await recordingOwner(existing, getUserId());
+            await db.events.update(id, {
+                createdByUserId: existing.createdByUserId, isDeleted: true, deletedAt: new Date().toISOString(), deletedByUserId: getUserId(), ...updateFields(),
+            });
+            await db.syncFailures.delete(['events', id]);
+            const scoreChanged = await projectEventScore(existing.matchId, existing);
+            await db.events.update(id, {
+                scoreProjectionPending: scoreChanged || (existing.synced === false && existing.scoreProjectionPending !== false),
+            });
+            await bumpRecordingRevision(existing.matchId);
         });
         triggerSync();
     },
 
     async getByMatch(matchId: string): Promise<DbEvent[]> {
-        return db.events
-            .where('matchId')
-            .equals(matchId)
-            .filter(e => !e.isDeleted)
-            .sortBy('clockMs');
+        return db.events.where('matchId').equals(matchId).filter(e => !e.isDeleted).sortBy('clockMs');
     },
 };
 
@@ -628,30 +749,28 @@ export const lineupsDataLayer = {
 export const matchStateDataLayer = {
     async upsert(matchId: string, data: {
         status: 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED';
-        currentPeriodId?: string;
+        currentPeriodId?: string | null;
         timerMs?: number;
+        totalElapsedSeconds?: number;
     }): Promise<void> {
-        const existing = await db.matchState.get(matchId);
-        const now = Date.now();
-
-        if (existing) {
-            await db.matchState.update(matchId, {
-                status: data.status,
-                currentPeriodId: data.currentPeriodId,
-                timerMs: data.timerMs ?? existing.timerMs,
-                lastUpdatedAt: now,
-                ...updateFields(),
-            });
-        } else {
-            await db.matchState.add({
-                matchId: matchId,
-                status: data.status,
-                currentPeriodId: data.currentPeriodId,
-                timerMs: data.timerMs ?? 0,
-                lastUpdatedAt: now,
-                ...createCommonFields(),
-            } as DbMatchState);
+        if (!isReplayableMatchStatus(data.status)) throw new Error('Unsupported recording lifecycle status');
+        if (data.totalElapsedSeconds !== undefined && (!Number.isFinite(data.totalElapsedSeconds) || data.totalElapsedSeconds < 0)) {
+            throw new Error('Invalid playing duration');
         }
+        await db.transaction('rw', db.matches, db.matchState, db.syncFailures, async () => {
+            await assertRecordingLifecycleMutable(matchId);
+            let existing = await db.matchState.get(matchId);
+            if (existing) existing = await recordingOwner(existing, getUserId());
+            await db.matchState.put({
+                ...(existing ?? createCommonFields()), matchId, status: data.status,
+                currentPeriodId: Object.prototype.hasOwnProperty.call(data, 'currentPeriodId') ? data.currentPeriodId ?? undefined : existing?.currentPeriodId,
+                timerMs: data.timerMs ?? existing?.timerMs ?? 0,
+                ...('totalElapsedSeconds' in data ? { totalElapsedSeconds: data.totalElapsedSeconds } : {}),
+                lastUpdatedAt: Date.now(), ...updateFields(),
+            } as DbMatchState);
+            await db.syncFailures.delete(['matchState', matchId]);
+            await bumpRecordingRevision(matchId);
+        });
         triggerSync();
     },
 
@@ -683,24 +802,45 @@ export const matchPeriodsDataLayer = {
             ...createCommonFields(),
         } as DbMatchPeriod;
 
-        await db.matchPeriods.add(period);
+        const persisted = await db.transaction('rw', db.matches, db.matchPeriods, db.matchState, async () => {
+            await assertRecordingLifecycleMutable(data.matchId);
+            let active = await db.matchPeriods.where('matchId').equals(data.matchId)
+                .filter(p => !p.isDeleted && p.endedAt == null).first();
+            if (active) {
+                active = await recordingOwner(active, getUserId());
+                if (active.periodNumber === period.periodNumber && String(active.periodType || 'REGULAR').toUpperCase() === period.periodType) {
+                    await db.matchPeriods.update(active.id, { createdByUserId: active.createdByUserId });
+                    return active;
+                }
+                throw new Error('Cannot start new period: another period is already active');
+            }
+            await db.matchPeriods.add(period);
+            await bumpRecordingRevision(data.matchId);
+            return period;
+        });
         triggerSync();
-        return period;
+        return persisted;
     },
 
-    async endPeriod(id: string, endedAt?: number): Promise<void> {
-        const period = await db.matchPeriods.get(id);
-        if (period) {
+    async endPeriod(id: string, endedAt?: number, durationSeconds?: number): Promise<void> {
+        if (durationSeconds !== undefined && (!Number.isFinite(durationSeconds) || durationSeconds < 0)) throw new Error('Invalid playing duration');
+        await db.transaction('rw', db.matches, db.matchPeriods, db.matchState, db.syncFailures, async () => {
+            let period = await db.matchPeriods.get(id);
+            if (!period) throw new Error(`Period ${id} not found`);
+            await assertRecordingLifecycleMutable(period.matchId);
+            period = await recordingOwner(period, getUserId());
             const endTime = endedAt ?? Date.now();
-            const durationSeconds = Math.floor((endTime - period.startedAt) / 1000);
-
+            if (endTime < period.startedAt) throw new Error('Period cannot end before it starts');
             await db.matchPeriods.update(id, {
+                createdByUserId: period.createdByUserId,
                 endedAt: endTime,
-                durationSeconds: durationSeconds,
+                durationSeconds: Math.floor(durationSeconds ?? Math.max(0, (endTime - period.startedAt) / 1000)),
                 ...updateFields(),
             });
-            triggerSync();
-        }
+            await db.syncFailures.delete(['matchPeriods', id]);
+            await bumpRecordingRevision(period.matchId);
+        });
+        triggerSync();
     },
 
     async getByMatch(matchId: string): Promise<DbMatchPeriod[]> {

@@ -56,6 +56,8 @@ export interface SyncableRecord {
   synced: boolean;
   /** ISO timestamp of last successful sync */
   syncedAt?: IsoDateTimeString;
+  /** Changes with recording contents so an older request cannot acknowledge a newer mutation. */
+  syncRevision?: string;
 }
 
 // ============================================================================
@@ -99,8 +101,14 @@ export interface DbTeam extends Team, SyncableRecord {
  * Note: IndexedDB uses `matchId` as alias for `id` for legacy compatibility
  */
 export interface DbMatch extends Match, SyncableRecord {
+  /** A proven season collision caused this never-persisted match's denial. */
+  prerequisiteRecovery?: boolean;
   /** Primary key alias for IndexedDB (same as id) */
   matchId: string;
+  /** Changes only when a local event changes the projected score. */
+  scoreRevision?: string;
+  /** Match-scoped local recording generation; legacy rows begin at zero. */
+  recordingRevision?: number;
 }
 
 /**
@@ -108,6 +116,8 @@ export interface DbMatch extends Match, SyncableRecord {
  * Note: Uses ISO strings for dates (aligned with shared types)
  */
 export interface DbEvent extends Event, SyncableRecord {
+  /** Whether the outstanding local mutation can affect the match score. */
+  scoreProjectionPending?: boolean;
   /** Array of linked event IDs (auto-generated) */
   linkedEvents?: string[];
   /** Timestamp when auto-linking was performed (ISO string) */
@@ -118,7 +128,11 @@ export interface DbEvent extends Event, SyncableRecord {
  * IndexedDB Season type - extends shared Season with sync metadata
  * Note: Uses ISO strings for dates (aligned with shared types)
  */
-export type DbSeason = Season & SyncableRecord;
+export type DbSeason = Season & SyncableRecord & {
+  /** Proven cloud identity; local IDs and match references remain stable. */
+  remoteSeasonId?: string;
+  syncAttempted?: boolean;
+};
 
 /**
  * IndexedDB Lineup type - extends shared Lineup with sync metadata
@@ -143,11 +157,13 @@ export interface DbMatchState extends SyncableRecord {
   /** Match ID (primary key) */
   matchId: string;
   /** Current match status */
-  status: 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED';
+  status: MatchState['status'];
   /** Current period ID (if match is live) */
   currentPeriodId?: string;
   /** Elapsed timer in milliseconds */
   timerMs: number;
+  /** Actual playing time, excluding pauses and planned period offsets. */
+  totalElapsedSeconds?: number;
   /** Last updated timestamp (number for timer precision) */
   lastUpdatedAt: number;
   /** Client timestamps (ISO strings for consistency) */
