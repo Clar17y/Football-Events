@@ -47,22 +47,22 @@ const LiveHeader: React.FC<LiveHeaderProps> = ({
     status === 'LIVE' ? 'success' : status === 'PAUSED' ? 'warning' : status === 'COMPLETED' ? 'tertiary' : 'medium';
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+    <div className="live-header">
       {showPrev && (
-        <IonButton fill="clear" onClick={onPrev} disabled={!!prevDisabled}>
+        <IonButton className="live-header-nav" aria-label="Previous match" fill="clear" onClick={onPrev} disabled={!!prevDisabled}>
           <IonIcon icon={chevronBackOutline} />
         </IonButton>
       )}
 
-      <div style={{ flex: 1, textAlign: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-          <div style={{ minWidth: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 18, fontWeight: 700 }}>
+      <div className="live-header-main">
+        <div className="live-header-scoreboard">
+          <div className="live-header-team">
             {homeName}
           </div>
-          <div style={{ fontSize: 22, fontWeight: 800 }}>
+          <div className="live-header-score">
             {status === 'SCHEDULED' || status === undefined ? 'vs' : `${homeScore ?? 0} - ${awayScore ?? 0}`}
           </div>
-          <div style={{ minWidth: 0, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 18, fontWeight: 700 }}>
+          <div className="live-header-team">
             {awayName}
           </div>
         </div>
@@ -89,7 +89,7 @@ const LiveHeader: React.FC<LiveHeaderProps> = ({
       </div>
 
       {showNext && (
-        <IonButton fill="clear" onClick={onNext} disabled={!!nextDisabled}>
+        <IonButton className="live-header-nav" aria-label="Next match" fill="clear" onClick={onNext} disabled={!!nextDisabled}>
           <IonIcon icon={chevronForwardOutline} />
         </IonButton>
       )}

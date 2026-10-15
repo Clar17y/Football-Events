@@ -2,6 +2,7 @@ import apiClient from './baseApi';
 import { authApi } from './authApi';
 import { canChangeFormation } from '../../utils/quotas';
 import { db } from '../../db/indexedDB';
+import { getCurrentUserId } from '../../utils/network';
 
 export interface FormationPlayerDTO {
   id: string;
@@ -55,7 +56,8 @@ export const formationsApi = {
     formationCache.delete(matchId);
   },
 
-  async applyChange(matchId: string, startMin: number, formation: FormationDataDTO, reason?: string) {
+  async applyChange(matchId: string, startMin: number, formation: FormationDataDTO, reason?: string, guard?: { isCurrent: () => boolean; teamId: string }) {
+    const ownerId = getCurrentUserId();
     const prev = formationCache.get(matchId);
     const notes = JSON.stringify({ reason: reason || null, formation, prevFormation: prev || null });
 
@@ -84,9 +86,9 @@ export const formationsApi = {
       matchId,
       kind: 'formation_change',
       clockMs: Math.floor((startMin || 0) * 60 * 1000),
-      teamId: formationTeamId,
+      teamId: guard?.teamId || formationTeamId,
       notes: notes,
-    });
+    }, guard ? { ownerId, isCurrent: guard.isCurrent } : undefined);
 
     formationCache.set(matchId, formation);
     try { window.dispatchEvent(new CustomEvent('data:changed')); } catch { }

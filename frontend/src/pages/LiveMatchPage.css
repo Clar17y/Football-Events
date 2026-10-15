@@ -21,7 +21,7 @@
   --background: var(--position-forward, var(--ion-color-rose));
   --background-hover: var(--position-forward, var(--ion-color-rose));
   --background-activated: var(--position-forward, var(--ion-color-rose));
-  --color: #fff;
+  --color: #000;
 }
 
 .event-btn--indigo {
@@ -35,7 +35,7 @@
   --background: var(--position-goalkeeper, var(--ion-color-emerald));
   --background-hover: var(--position-goalkeeper, var(--ion-color-emerald));
   --background-activated: var(--position-goalkeeper, var(--ion-color-emerald));
-  --color: #fff;
+  --color: #000;
 }
 
 .event-btn--amber {
@@ -56,6 +56,46 @@
   --padding-end: 16px;
   font-size: 1rem;
   font-weight: 700;
+}
+
+.live-header { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; }
+.live-header-main { flex: 1; min-width: 0; text-align: center; }
+.live-header-scoreboard { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; }
+.live-header-team { font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+.live-header-score { font-size: 22px; font-weight: 800; white-space: nowrap; }
+.live-header-nav { flex: 0 0 44px; width: 44px; min-height: 44px; margin: 0; --padding-start: 0; --padding-end: 0; }
+.live-match-page .event-btn { min-height: 52px; height: auto; white-space: normal; margin: 0; --padding-start: 8px; --padding-end: 8px; }
+.live-match-page .event-btn ion-icon { flex-shrink: 0; font-size: 18px; margin-inline-end: 6px; }
+.event-btn-label { display: flex; flex: 1; flex-direction: column; align-items: center; gap: 3px; min-width: 0; max-width: 100%; padding-block: 5px; }
+.event-btn-name { max-width: 100%; white-space: normal; overflow-wrap: anywhere; hyphens: auto; line-height: 1.2; }
+.event-btn-premium { max-width: 100%; padding: 2px 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.2); font-size: 11px; line-height: 1.2; white-space: nowrap; }
+.live-match-page .team-btn { flex: 1; min-width: 0; min-height: 48px; height: auto; white-space: normal; overflow-wrap: anywhere; --padding-start: 8px; --padding-end: 8px; }
+.live-guest-status { padding: 8px 16px; color: var(--grassroots-text-secondary, var(--ion-color-medium)); font-size: 13px; }
+.live-match-page ion-grid { box-sizing: border-box; width: 100%; max-width: 100%; --ion-grid-padding: 0; }
+.live-match-page ion-col { box-sizing: border-box; min-width: 0; max-width: 100%; --ion-grid-column-padding: 0; }
+.live-match-page ion-card { margin: 4px 8px; }
+.live-match-page ion-card-content { padding: 8px 10px; }
+.live-match-page ion-button { min-height: 44px; }
+.live-recording-actions { padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; }
+.live-match-page .event-section { margin-top: 0; }
+.live-error { padding: 12px 16px; color: var(--ion-color-danger); overflow-wrap: anywhere; }
+.live-player-picker { padding: 16px; overflow-y: auto; }
+.live-player-picker h3 { margin: 0 0 8px; overflow-wrap: anywhere; }
+.live-player-picker input[type="search"], .live-player-picker select { display: block; width: 100%; box-sizing: border-box; min-height: 48px; margin: 6px 0 12px; padding: 8px; border: 1px solid var(--grassroots-surface-variant, var(--ion-color-medium)); border-radius: 8px; background: var(--grassroots-surface, var(--ion-background-color)); color: var(--grassroots-text-primary, var(--ion-text-color)); }
+.live-roster-list { max-height: 30vh; overflow-y: auto; }
+.live-roster-list ion-button { min-height: 48px; height: auto; white-space: normal; }
+.live-roster-row { display: flex; gap: 8px; align-items: center; }
+.live-roster-row > ion-button:first-child { flex: 1; min-width: 0; margin: 4px 0; }
+.live-roster-pitch { flex-shrink: 0; min-width: 88px; }
+.live-track-player { display: flex; gap: 8px; align-items: center; min-height: 48px; }
+.live-track-player input { width: 22px; height: 22px; }
+.live-picker-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.live-event-feedback { max-width: calc(100% - 24px); box-sizing: border-box; background: var(--grassroots-surface, var(--ion-color-dark)); color: var(--grassroots-text-primary, var(--ion-color-light)); border: 1px solid var(--ion-color-medium); border-radius: 12px; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+@media (max-width: 480px) {
+  .live-match-page .event-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .live-match-page .event-btn { min-height: 48px; font-size: 14px; }
+  .live-header-team { font-size: 16px; }
+  .live-match-page ion-card { margin-inline: 8px; }
 }
 
 /* Dark Theme Support */

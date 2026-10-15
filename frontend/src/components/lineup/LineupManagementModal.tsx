@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonContent, IonCard, IonCardContent, IonSelect, IonSelectOption, IonText, IonSpinner } from '@ionic/react';
 import { VisualPitchInterface, PlayerSelectionPanel, PlayerWithPosition, FormationData, PitchPosition } from './index';
 import formationsApi, { FormationDataDTO } from '../../services/api/formationsApi';
@@ -12,11 +12,20 @@ type Props = {
   selectedTeamId: string;
   currentMinute?: number;
   onFormationChanged?: () => void;
+  canApply?: () => boolean;
 };
 
 const REASONS = ['Starting Lineup Adjustment', 'Playtime rotation', 'Injury', 'Formation Change', 'Power play', 'Power play x2'];
 
-const LineupManagementModal: React.FC<Props> = ({ isOpen, onClose, matchId, selectedTeamId, currentMinute = 0, onFormationChanged }) => {
+const LineupManagementModal: React.FC<Props> = ({ isOpen, onClose, matchId, selectedTeamId, currentMinute = 0, onFormationChanged, canApply }) => {
+  const validityRef = useRef({ mounted: true, isOpen, matchId, selectedTeamId, generation: 0 });
+  const validity = validityRef.current;
+  if (validity.isOpen !== isOpen || validity.matchId !== matchId || validity.selectedTeamId !== selectedTeamId) validity.generation++;
+  Object.assign(validity, { isOpen, matchId, selectedTeamId });
+  useEffect(() => {
+    validityRef.current.mounted = true;
+    return () => { validityRef.current.mounted = false; validityRef.current.generation++; };
+  }, []);
   const [loading, setLoading] = useState(false);
   const [roster, setRoster] = useState<PlayerWithPosition[]>([]);
   const [formation, setFormation] = useState<FormationData>({ players: [] });
@@ -103,12 +112,16 @@ const LineupManagementModal: React.FC<Props> = ({ isOpen, onClose, matchId, sele
   }, []);
 
   const applyChanges = async () => {
+    const generation = validityRef.current.generation;
+    const isCurrent = () => validityRef.current.mounted && validityRef.current.isOpen && validityRef.current.generation === generation && (!canApply || canApply());
+    if (applying || !isCurrent()) return;
     try {
       setApplying(true);
       const dto: FormationDataDTO = {
         players: formation.players.map(p => ({ id: p.id, name: p.name, squadNumber: p.squadNumber, preferredPosition: p.preferredPosition, position: { x: p.position?.x || 0, y: p.position?.y || 0 } }))
       };
-      await formationsApi.applyChange(matchId, currentMinute || 0, dto, reason);
+      await formationsApi.applyChange(matchId, currentMinute || 0, dto, reason, { isCurrent, teamId: selectedTeamId });
+      if (!isCurrent()) return;
       formationsApi.setCached(matchId, dto);
       try { (window as any).__toastApi?.current?.showSuccess?.('Formation updated'); } catch {}
 
@@ -119,6 +132,7 @@ const LineupManagementModal: React.FC<Props> = ({ isOpen, onClose, matchId, sele
 
       onClose();
     } catch (e: any) {
+      if (!isCurrent()) return;
       console.error('Apply formation failed', e);
       try { (window as any).__toastApi?.current?.showError?.(e?.message || 'Failed to apply changes'); } catch {}
     } finally {
