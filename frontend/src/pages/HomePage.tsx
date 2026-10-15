@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { formatPeriodFormat } from '../utils/formatters';
-import { DatabaseStatus } from '../components/DatabaseStatus';
 import {
   IonPage,
   IonContent,
@@ -26,19 +25,22 @@ import {
   statsChart,
   play,
   ribbon,
-  football
+  football,
+  chevronDown,
+  chevronUp,
+  warningOutline
 } from 'ionicons/icons';
 // useHistory removed - using state-based navigation
 import ThemeToggle from '../components/ThemeToggle';
 import { useGlobalStats } from '../hooks/useGlobalStats';
 import { useAuth } from '../contexts/AuthContext';
+import { useOwnedDiscovery, isOwnedDiscoveryRow } from '../hooks/useOwnedDiscovery';
 import UserProfile from '../components/UserProfile';
 import ImportGuestDataButton from '../components/ImportGuestDataButton';
 import GuestBanner from '../components/GuestBanner';
 import { useToast } from '../contexts/ToastContext';
 import OfflineSyncIndicator from '../components/OfflineSyncIndicator';
 import './HomePage.css';
-import { teamsApi } from '../services/api/teamsApi';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -48,39 +50,62 @@ import TextField from '@mui/material/TextField';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import dayjs, { Dayjs } from 'dayjs';
+import 'dayjs/locale/en-gb';
 import { matchesApi, type QuickStartPayload } from '../services/api/matchesApi';
 import { createLocalQuickMatch } from '../services/guestQuickMatch';
 import { canCreateMatch } from '../utils/quotas';
+import { getAuthUserId } from '../utils/network';
+import { authApi } from '../services/api/authApi';
+import { CONNECTED_RECOVERY_MESSAGE } from '../services/api/authFailure';
 import CreateTeamModal from '../components/CreateTeamModal';
 import RecentActivity from '../components/RecentActivity';
-import type { Team } from '@shared/types';
+import { bootstrapOwnedTeams } from '../services/ownedTeamBootstrap';
 
 interface HomePageProps {
   onNavigate?: (page: string) => void;
 }
 
 const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, recoveryMessage } = useAuth();
+  const retainedSubject = getAuthUserId();
+  const accountRecoveryRequired = !!recoveryMessage || (!!authApi.isAuthenticated?.() && (!user || user.id !== retainedSubject));
+  const discovery = useOwnedDiscovery();
+  const currentOwnerId = discovery.ownerId;
+  useEffect(() => {
+    let cancelled = false;
+    if (isAuthenticated && user?.id === currentOwnerId && !accountRecoveryRequired && currentOwnerId) {
+      void bootstrapOwnedTeams(currentOwnerId, () => !cancelled && discovery.isCurrent())
+        .catch(error => { if (!cancelled && discovery.isCurrent()) console.warn('Failed to load managed teams:', error); });
+    }
+    return () => { cancelled = true; };
+  }, [discovery.sessionKey, isAuthenticated, user?.id, currentOwnerId, accountRecoveryRequired]);
   const { showInfo } = useToast();
   const { stats, loading, error, fromCache, lastUpdated } = useGlobalStats();
-  const [displayName, setDisplayName] = useState<string | null>(null);
+  const displayIdentity = `${discovery.sessionKey}:${isAuthenticated ? user?.id ?? '' : 'guest'}`;
+  const displayIdentityRef = useRef(displayIdentity);
+  displayIdentityRef.current = displayIdentity;
+  const [displayNameResult, setDisplayNameResult] = useState<{ identity: string; name: string } | null>(null);
+  const displayName = displayNameResult?.identity === displayIdentity ? displayNameResult.name : null;
 
-  // Fetch display name from settings on auth change
+  // Settings belong to the requesting identity, including while an old request finishes.
   useEffect(() => {
+    let cancelled = false;
+    setDisplayNameResult(null);
     const fetchDisplayName = async () => {
-      if (!isAuthenticated) return;
+      if (!isAuthenticated || !user || user.id !== currentOwnerId) return;
       try {
         const { authApi } = await import('../services/api/authApi');
         const response = await authApi.getSettings();
-        if (response.success && response.data?.display_name) {
-          setDisplayName(response.data.display_name);
+        if (!cancelled && displayIdentityRef.current === displayIdentity && discovery.isCurrent() && response.success && response.data?.display_name) {
+          setDisplayNameResult({ identity: displayIdentity, name: response.data.display_name });
         }
       } catch (error) {
         console.warn('Failed to fetch user settings:', error);
       }
     };
     fetchDisplayName();
-  }, [isAuthenticated]);
+    return () => { cancelled = true; };
+  }, [displayIdentity, isAuthenticated, user?.id, currentOwnerId]);
 
   // Helper to get defaults from app settings (same as CreateMatchModal)
   const getAppSettingsDefaults = () => {
@@ -99,64 +124,96 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
   // Quick Start state
   const appDefaults = getAppSettingsDefaults();
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [teamsLoading, setTeamsLoading] = useState(false);
+  const teamsLoading = discovery.loading;
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [myTeamId, setMyTeamId] = useState<string>('');
+  const currentTeams = useMemo(() => discovery.teams.filter(team => !team.isOpponent), [discovery.teams]);
   const [opponentOptions, setOpponentOptions] = useState<string[]>([]);
   const { searchText: opponentText, setSearchText: setOpponentText, showSpinner: opponentLoading } = useDebouncedSearch({
     delay: 250,
     minLength: 2,
     onSearch: async (term: string) => {
-      if (!term) { setOpponentOptions([]); return; }
-      try {
-        const list = await teamsApi.getOpponentTeams(term.trim());
-        setOpponentOptions(list.map(t => t.name));
-      } catch {
-        setOpponentOptions([]);
-      }
+      if (!discovery.isCurrent() || !term) { setOpponentOptions([]); return; }
+      setOpponentOptions(discovery.teams.filter(team => team.isOpponent &&
+        team.name.toLowerCase().includes(term.trim().toLowerCase())).map(team => team.name));
     }
   });
   const [isHome, setIsHome] = useState<boolean>(true);
-  const defaultKickoffIso = useMemo(() => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString(), []);
-  const [kickoffDate, setKickoffDate] = useState<Dayjs | null>(dayjs(defaultKickoffIso));
-  const [kickoffTime, setKickoffTime] = useState<Dayjs | null>(dayjs(defaultKickoffIso));
+  const [kickoffDate, setKickoffDate] = useState<Dayjs | null>(() => dayjs());
+  const [kickoffTime, setKickoffTime] = useState<Dayjs | null>(() => dayjs());
   const [durationMinutes, setDurationMinutes] = useState<number>(appDefaults.durationMinutes);
   const [periodFormat, setPeriodFormat] = useState<'quarter' | 'half' | 'whole'>(appDefaults.periodFormat);
-  const [collapsed, setCollapsed] = useState<boolean>(true);
+  const [showDetails, setShowDetails] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
+  const [quickStartError, setQuickStartError] = useState<string | null>(null);
+  const isSubmittingRef = useRef(false);
+
   const defaultsKey = 'quick_start_defaults_v1';
-  const loadDefaults = useRef(() => {
+  const selectedTeamRef = useRef<string>('');
+
+  // Hook into local matches and states for direct LIVE/PAUSED resume
+  const { matches: localMatches, matchStates: localMatchStates, teams: allLocalTeams } = discovery;
+
+  const liveMatchesToResume = useMemo(() => {
+    const statesMap = new Map((localMatchStates || []).map(s => [s.matchId, s]));
+    return (localMatches || []).filter(m => {
+      const st = statesMap.get(m.id);
+      return st?.status === 'LIVE' || st?.status === 'PAUSED';
+    }).map(m => {
+      const st = statesMap.get(m.id);
+      return {
+        ...m,
+        status: st?.status as 'LIVE' | 'PAUSED'
+      };
+    });
+  }, [localMatches, localMatchStates]);
+
+  const saveTeamPreference = (teamId: string) => {
+    try {
+      if (teamId) {
+        localStorage.setItem(defaultsKey, JSON.stringify({ teamId, ownerId: currentOwnerId }));
+      }
+    } catch {
+      // Storage failure must not break the task
+    }
+  };
+
+  const handleTeamChange = (newTeamId: string) => {
+    if (newTeamId && !currentTeams.some(team => team.id === newTeamId)) return;
+    selectedTeamRef.current = newTeamId;
+    setMyTeamId(newTeamId);
+    saveTeamPreference(newTeamId);
+  };
+
+  useEffect(() => {
     // Load saved team preference from quick start defaults
     try {
       const raw = localStorage.getItem(defaultsKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (parsed.teamId) setMyTeamId(parsed.teamId);
-      // Duration and periodFormat now come from App Settings, not quick start defaults
-    } catch { }
-  });
-
-  useEffect(() => {
-    loadDefaults.current();
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.teamId === 'string' && parsed.teamId.trim()) {
+          selectedTeamRef.current = parsed.teamId.trim();
+          setMyTeamId(parsed.teamId.trim());
+        }
+      }
+    } catch {
+      // Storage failure must not break the task
+    }
   }, []);
 
   useEffect(() => {
-    // load user's teams for dropdown
-    const load = async () => {
-      try {
-        setTeamsLoading(true);
-        const res = await teamsApi.getTeams({ page: 1, limit: 100 });
-        setTeams(res.data || []);
-        if (res.data && res.data.length && !myTeamId) {
-          setMyTeamId(res.data[0].id);
-        }
-      } finally {
-        setTeamsLoading(false);
-      }
-    };
-    load();
-  }, [user]);
+    setShowCreateTeam(false);
+    setQuickStartError(null);
+    setOpponentOptions([]);
+  }, [discovery.sessionKey]);
+
+  useEffect(() => {
+    if (teamsLoading) return;
+    const candidate = currentTeams.find(team => team.id === selectedTeamRef.current) || currentTeams[0];
+    selectedTeamRef.current = candidate?.id || '';
+    setMyTeamId(candidate?.id || '');
+    if (candidate) saveTeamPreference(candidate.id);
+  }, [currentTeams, teamsLoading, currentOwnerId]);
 
   const navigate = (page: string) => {
     if (onNavigate) {
@@ -281,6 +338,333 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
       <IonContent className="home-content">
         <GuestBanner />
+        {/* Live Matches Direct Resume Section */}
+        {liveMatchesToResume.length > 0 && (
+          <div className="home-live-matches-section" style={{ padding: '0 var(--grassroots-space-md)', marginTop: '0.75rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <IonIcon icon={play} color="danger" />
+              <span>In-Progress Matches</span>
+            </h3>
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              {liveMatchesToResume.map(match => {
+                const homeName = allLocalTeams.find(t => t.id === match.homeTeamId)?.name || 'Home';
+                const awayName = allLocalTeams.find(t => t.id === match.awayTeamId)?.name || 'Away';
+                return (
+                  <IonCard key={match.id} className="home-live-match-card" style={{ margin: 0 }}>
+                    <IonCardContent style={{ padding: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '1rem' }}>
+                          {homeName} vs {awayName}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--grassroots-text-secondary)', marginTop: '2px' }}>
+                          Status: <span style={{ fontWeight: 700, color: match.status === 'LIVE' ? 'var(--ion-color-danger)' : 'var(--ion-color-warning)' }}>{match.status}</span>
+                          {match.competition ? ` • ${match.competition}` : ''}
+                        </div>
+                      </div>
+                      <IonButton
+                        size="small"
+                        color="danger"
+                        onClick={() => { if (discovery.canAccessMatch(match.id)) navigate(`/live/${match.id}`); }}
+                        style={{ minHeight: '44px' }}
+                      >
+                        Resume Match
+                      </IonButton>
+                    </IonCardContent>
+                  </IonCard>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Quick Start Card - Top Priority for Fast Recording */}
+        <div style={{ padding: '0 var(--grassroots-space-md)', marginTop: '0.75rem', marginBottom: '1rem' }}>
+          <IonCard className="nav-card nav-card-amber" style={{ margin: 0 }}>
+            <IonCardContent className="nav-card-content" style={{ padding: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <IonIcon icon={play} className="nav-card-icon" color="amber" style={{ fontSize: '1.75rem' }} />
+                <div>
+                  <h2 className="nav-card-title" style={{ margin: 0, fontSize: '1.25rem' }}>Quick Match Start</h2>
+                  <p className="nav-card-subtitle" style={{ margin: 0, fontSize: '0.85rem' }}>Start recording your child's football match immediately</p>
+                </div>
+              </div>
+
+              {accountRecoveryRequired && <div className="quickstart-error-banner" role="alert">{recoveryMessage || CONNECTED_RECOVERY_MESSAGE}</div>}
+              {quickStartError && !accountRecoveryRequired && (
+                <div className="quickstart-error-banner" role="alert">
+                  <IonIcon icon={warningOutline} style={{ fontSize: '1.25rem', flexShrink: 0 }} />
+                  <span>{quickStartError}</span>
+                </div>
+              )}
+
+              <div className="form-grid quickstart-grid" style={{ display: 'grid', gap: '0.75rem' }}>
+                {/* My Team */}
+                <div className="form-row">
+                  <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>
+                    Team
+                  </label>
+                  <div>
+                    {currentTeams.length > 0 ? (
+                      <Autocomplete
+                        options={currentTeams}
+                        getOptionLabel={(opt) => opt.name}
+                        value={currentTeams.find(t => t.id === myTeamId) || null}
+                        onChange={(_, val) => handleTeamChange(val?.id || '')}
+                        loading={teamsLoading}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            placeholder="Select team"
+                            size="small"
+                            className="quickstart-input"
+                            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                            InputProps={{
+                              ...params.InputProps,
+                              endAdornment: (
+                                <>
+                                  {teamsLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                                  {params.InputProps.endAdornment}
+                                </>
+                              ),
+                            }}
+                          />
+                        )}
+                        fullWidth
+                      />
+                    ) : (
+                      <IonButton expand="block" disabled={accountRecoveryRequired || teamsLoading} onClick={() => setShowCreateTeam(true)} style={{ minHeight: '44px' }}>
+                        {teamsLoading ? 'Loading teams…' : 'Create Team'}
+                      </IonButton>
+                    )}
+                  </div>
+                </div>
+
+                {/* Opponent (Optional) */}
+                <div className="form-row">
+                  <label className="form-label" style={{ fontWeight: 700, marginBottom: 4, display: 'block' }}>
+                    Opponent <span style={{ fontWeight: 400, color: 'var(--grassroots-text-secondary)' }}>(Optional)</span>
+                  </label>
+                  <Autocomplete
+                    freeSolo
+                    options={opponentOptions}
+                    loading={opponentLoading}
+                    inputValue={opponentText}
+                    onInputChange={(_, value) => setOpponentText(value)}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        placeholder="Leave blank for Unknown Opponent"
+                        size="small"
+                        className="quickstart-input"
+                        sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
+                        InputProps={{
+                          ...params.InputProps,
+                          endAdornment: (
+                            <>
+                              {opponentLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                              {params.InputProps.endAdornment}
+                            </>
+                          ),
+                        }}
+                      />
+                    )}
+                    fullWidth
+                  />
+                  <div className="quickstart-field-hint">
+                    You can record without the opponent's name.
+                  </div>
+                </div>
+
+                {/* Optional Details Toggle Button */}
+                <div>
+                  <p className="quickstart-field-hint">
+                    {isHome ? 'Home' : 'Away'} · {durationMinutes} minutes · {formatPeriodFormat(periodFormat)}
+                  </p>
+                  <button
+                    type="button"
+                    className="quickstart-details-toggle"
+                    aria-expanded={showDetails}
+                    onClick={() => setShowDetails(prev => !prev)}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid var(--grassroots-surface-variant, #cbd5e1)',
+                      borderRadius: '8px',
+                      padding: '0.5rem 0.75rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      cursor: 'pointer',
+                      color: 'var(--grassroots-text-primary)'
+                    }}
+                  >
+                    <span>{showDetails ? 'Hide match details' : 'More match details (Venue, Periods, Duration, Kickoff)'}</span>
+                    <IonIcon icon={showDetails ? chevronUp : chevronDown} />
+                  </button>
+                </div>
+
+                {/* Collapsible Match Details */}
+                {showDetails && (
+                  <div style={{ display: 'grid', gap: '0.75rem', padding: '0.5rem 0', borderTop: '1px solid var(--grassroots-surface-variant)' }}>
+                    {/* Venue + Periods side-by-side */}
+                    <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+                      {/* Venue */}
+                      <div>
+                        <label className="form-label" style={{ fontWeight: 700, marginBottom: 4, display: 'block' }}>Venue</label>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <IonButton fill={isHome ? 'solid' : 'outline'} color="primary" onClick={() => setIsHome(true)} style={{ minHeight: '44px' }}>Home</IonButton>
+                          <IonButton fill={!isHome ? 'solid' : 'outline'} color="medium" onClick={() => setIsHome(false)} style={{ minHeight: '44px' }}>Away</IonButton>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="form-label" style={{ fontWeight: 700, marginBottom: 4, display: 'block' }}>Periods</label>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <IonButton fill={periodFormat === 'quarter' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('quarter')} style={{ minHeight: '44px' }}>{formatPeriodFormat('quarter')}</IonButton>
+                          <IonButton fill={periodFormat === 'half' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('half')} style={{ minHeight: '44px' }}>{formatPeriodFormat('half')}</IonButton>
+                          <IonButton fill={periodFormat === 'whole' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('whole')} style={{ minHeight: '44px' }}>{formatPeriodFormat('whole')}</IonButton>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Duration */}
+                    <div className="form-row">
+                      <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>Duration (mins: 1-200)</label>
+                      <input
+                        className="form-input quickstart-input"
+                        type="number"
+                        min={1}
+                        max={200}
+                        value={durationMinutes}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setDurationMinutes(Number.isNaN(val) ? 0 : val);
+                        }}
+                        style={{ width: '100%', minHeight: '44px' }}
+                      />
+                    </div>
+
+                    {/* Kickoff */}
+                    <div className="form-row">
+                      <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>Kickoff</label>
+                      <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="en-gb">
+                        <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: '1fr 1fr' }}>
+                          <DatePicker
+                            label="Date"
+                            value={kickoffDate}
+                            onChange={(newVal) => setKickoffDate(newVal)}
+                            slotProps={{ textField: { fullWidth: true, className: 'quickstart-input' } }}
+                          />
+                          <TimePicker
+                            label="Time"
+                            value={kickoffTime}
+                            onChange={(newVal) => setKickoffTime(newVal)}
+                            slotProps={{ textField: { fullWidth: true, className: 'quickstart-input' } }}
+                          />
+                        </div>
+                      </LocalizationProvider>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Button */}
+                <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <IonButton
+                    color="primary"
+                    className="quickstart-start-btn"
+                    disabled={accountRecoveryRequired || submitting || teamsLoading || !currentTeams.some(team => team.id === myTeamId)}
+                    onClick={async () => {
+                      if (accountRecoveryRequired || !discovery.isCurrent() || !currentTeams.some(team => team.id === myTeamId)) return;
+                      if (isSubmittingRef.current) return;
+                      isSubmittingRef.current = true;
+                      setSubmitting(true);
+                      setQuickStartError(null);
+
+                      try {
+                        const validatedDuration = Number(durationMinutes);
+                        if (!Number.isInteger(validatedDuration) || validatedDuration < 1 || validatedDuration > 200) {
+                          setQuickStartError('Please enter a whole number between 1 and 200 minutes.');
+                          return;
+                        }
+
+                        // Build kickoff ISO from local date and time without timezone subtracting offset
+                        const d = kickoffDate && kickoffDate.isValid() ? kickoffDate : dayjs();
+                        const t = kickoffTime && kickoffTime.isValid() ? kickoffTime : dayjs();
+                        const mergedLocal = d.hour(t.hour()).minute(t.minute()).second(0).millisecond(0);
+                        const kickoffIso = mergedLocal.toDate().toISOString();
+
+                        const opponentNameResolved = opponentText?.trim() || 'Unknown Opponent';
+
+                        if (!user) {
+                          // Guest: create local quick match with quota verification
+                          const allowed = await canCreateMatch();
+                          if (!discovery.isCurrent()) return;
+                          if (!allowed.ok) {
+                            const refusalMsg = allowed.reason || 'Guest limit reached: 1 match';
+                            setQuickStartError(refusalMsg);
+                            showInfo?.(refusalMsg);
+                            return;
+                          }
+                          const payload: QuickStartPayload = {
+                            myTeamId,
+                            opponentName: opponentNameResolved,
+                            isHome,
+                            kickoffTime: kickoffIso,
+                            durationMinutes: validatedDuration,
+                            periodFormat
+                          };
+                          const local = await createLocalQuickMatch(payload as any);
+                          if (local?.id) {
+                            if (discovery.isCurrent()) onNavigate?.(`/live/${local.id}`);
+                          } else {
+                            throw new Error('Could not create match locally.');
+                          }
+                        } else {
+                          const payload: QuickStartPayload = {
+                            myTeamId,
+                            opponentName: opponentNameResolved,
+                            isHome,
+                            kickoffTime: kickoffIso,
+                            durationMinutes: validatedDuration,
+                            periodFormat
+                          };
+                          const match = await matchesApi.quickStart(payload);
+                          const id = (match as any).id || (match as any).match_id;
+                          if (id) {
+                            if (discovery.isCurrent()) onNavigate?.(`/live/${id}`);
+                          } else {
+                            throw new Error('Could not create match.');
+                          }
+                        }
+                      } catch (err: any) {
+                        console.error('Quick start failed', err);
+                        const errorMsg = err?.message || 'Failed to start match. Please try again.';
+                        setQuickStartError(errorMsg);
+                      } finally {
+                        isSubmittingRef.current = false;
+                        setSubmitting(false);
+                      }
+                    }}
+                  >
+                    Start Live Match
+                  </IonButton>
+                </div>
+
+                <CreateTeamModal
+                  key={discovery.sessionKey}
+                  isOpen={showCreateTeam && !accountRecoveryRequired && !!currentOwnerId}
+                  onDidDismiss={() => setShowCreateTeam(false)}
+                  onCreated={(team) => {
+                    if (!discovery.isCurrent() || !isOwnedDiscoveryRow(team, currentOwnerId) || team.isOpponent) return;
+                    selectedTeamRef.current = team.id;
+                    setMyTeamId(team.id);
+                    saveTeamPreference(team.id);
+                    setShowCreateTeam(false);
+                  }}
+                />
+              </div>
+            </IonCardContent>
+          </IonCard>
+        </div>
+
         {/* Hero Section */}
         <div className="hero-section">
           <div className="hero-content">
@@ -290,11 +674,12 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             <p className="hero-subtitle">
               {user
                 ? 'Manage your teams, track player progress, and create memorable moments'
-                : 'The ultimate grassroots football management platform. Sign in to unlock full team management features!'
+                : 'The ultimate grassroots football management platform.'
               }
             </p>
           </div>
-          <div className="hero-stats">
+          {isAuthenticated && <p className="hero-subtitle">Across the MatchMaster community</p>}
+          {isAuthenticated && <div className="hero-stats">
             {quickStats.map((stat, index) => (
               <IonChip key={index} color={stat.color} className="stat-chip">
                 <IonLabel>
@@ -303,257 +688,24 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 </IonLabel>
               </IonChip>
             ))}
-          </div>
+          </div>}
 
-          {fromCache && lastUpdated && (
+          {isAuthenticated && fromCache && lastUpdated && (
             <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--grassroots-text-tertiary)', marginTop: '0.5rem' }}>
               Last updated: {new Date(lastUpdated).toLocaleString()}
             </div>
           )}
 
-          {/* Call to action for non-authenticated users */}
-          {!user && (
-            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-              <IonButton
-                color="primary"
-                size="default"
-                onClick={() => navigate('login')}
-              >
-                Sign In to Get Started
-              </IonButton>
-              <div style={{ marginTop: '0.5rem' }}>
-                <IonButton
-                  fill="clear"
-                  size="small"
-                  onClick={() => navigate('register')}
-                >
-                  New here? Create an account
-                </IonButton>
-              </div>
-            </div>
-          )}
-
-          {error && (
+          {isAuthenticated && error && (
             <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--grassroots-danger)', marginTop: '0.5rem' }}>
               Using offline data
             </div>
           )}
         </div>
 
-
         {/* Navigation Grid */}
         <div className="navigation-section">
           <IonGrid className="navigation-grid">
-            {(
-              <IonRow style={{ justifyContent: 'center', marginBottom: '0.5rem' }}>
-                <IonCol size="12" sizeMd="6" sizeLg="4">
-                  <div className="nav-card-wrapper">
-                    <IonCard className="nav-card nav-card-amber">
-                      <IonCardContent className="nav-card-content">
-                        <div className="nav-card-header" style={{ cursor: 'pointer' }} onClick={() => setCollapsed(prev => !prev)}>
-                          <IonIcon icon={play} className="nav-card-icon" color="amber" />
-                          <div className="nav-card-text">
-                            <h3 className="nav-card-title">Quick Start</h3>
-                            <p className="nav-card-subtitle">{collapsed ? 'Click here to get started…' : 'Create a match and start recording events'}</p>
-                          </div>
-                        </div>
-
-                        <div className="form-grid quickstart-grid" style={{ display: collapsed ? 'none' : 'grid', gap: '0.75rem', marginTop: '0.75rem' }}>
-
-                          {/* My Team */}
-                          <div className="form-row">
-                            <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>My Team</label>
-                            <div>
-                              {teams.length > 0 ? (
-                                <Autocomplete
-                                  options={teams}
-                                  getOptionLabel={(opt) => opt.name}
-                                  value={teams.find(t => t.id === myTeamId) || null}
-                                  onChange={(_, val) => setMyTeamId(val?.id || '')}
-                                  loading={teamsLoading}
-                                  renderInput={(params) => (
-                                    <TextField
-                                      {...params}
-                                      placeholder="Select your team"
-                                      size="small"
-                                      className="quickstart-input"
-                                      sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
-                                      InputProps={{
-                                        ...params.InputProps,
-                                        endAdornment: (
-                                          <>
-                                            {teamsLoading ? <CircularProgress color="inherit" size={16} /> : null}
-                                            {params.InputProps.endAdornment}
-                                          </>
-                                        ),
-                                      }}
-                                    />
-                                  )}
-                                  fullWidth
-                                />
-                              ) : (
-                                <IonButton expand="block" onClick={() => setShowCreateTeam(true)}>Create Team</IonButton>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Opponent */}
-                          <div className="form-row">
-                            <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>Opponent Team</label>
-                            <Autocomplete
-                              freeSolo
-                              options={opponentOptions}
-                              loading={opponentLoading}
-                              inputValue={opponentText}
-                              onInputChange={(_, value) => setOpponentText(value)}
-                              renderInput={(params) => (
-                                <TextField
-                                  {...params}
-                                  placeholder="Opponent team"
-                                  size="small"
-                                  className="quickstart-input"
-                                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px' } }}
-                                  InputProps={{
-                                    ...params.InputProps,
-                                    endAdornment: (
-                                      <>
-                                        {opponentLoading ? <CircularProgress color="inherit" size={16} /> : null}
-                                        {params.InputProps.endAdornment}
-                                      </>
-                                    ),
-                                  }}
-                                />
-                              )}
-                              fullWidth
-                            />
-                          </div>
-
-                          {/* Venue + Periods side-by-side */}
-                          <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
-                            {/* Venue */}
-                            <div>
-                              <label className="form-label" style={{ fontWeight: 700, marginBottom: 4, display: 'block' }}>Venue</label>
-                              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <IonButton fill={isHome ? 'solid' : 'outline'} color="primary" onClick={() => setIsHome(true)}>Home</IonButton>
-                                <IonButton fill={!isHome ? 'solid' : 'outline'} color="medium" onClick={() => setIsHome(false)}>Away</IonButton>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="form-label" style={{ fontWeight: 700, marginBottom: 4, display: 'block' }}>Periods</label>
-                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                <IonButton fill={periodFormat === 'quarter' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('quarter')}>{formatPeriodFormat('quarter')}</IonButton>
-                                <IonButton fill={periodFormat === 'half' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('half')}>{formatPeriodFormat('half')}</IonButton>
-                                <IonButton fill={periodFormat === 'whole' ? 'solid' : 'outline'} color="primary" onClick={() => setPeriodFormat('whole')}>{formatPeriodFormat('whole')}</IonButton>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Duration */}
-                          <div className="form-row">
-                            <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>Duration (mins)</label>
-                            <input
-                              className="form-input quickstart-input"
-                              type="number"
-                              min={1}
-                              max={200}
-                              value={durationMinutes}
-                              onChange={(e) => setDurationMinutes(Number(e.target.value) || 0)}
-                              style={{ width: '100%' }}
-                            />
-                          </div>
-
-                          {/* Kickoff */}
-                          <div className="form-row">
-                            <label className="form-label" style={{ fontWeight: 700, marginBottom: 6, display: 'block' }}>Kickoff</label>
-                            <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="en-gb">
-                              <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: '1fr 1fr' }}>
-                                <DatePicker
-                                  label="Date"
-                                  value={kickoffDate}
-                                  onChange={(newVal) => setKickoffDate(newVal)}
-                                  slotProps={{ textField: { fullWidth: true, className: 'quickstart-input' } }}
-                                />
-                                <TimePicker
-                                  label="Time"
-                                  value={kickoffTime}
-                                  onChange={(newVal) => setKickoffTime(newVal)}
-                                  slotProps={{ textField: { fullWidth: true, className: 'quickstart-input' } }}
-                                />
-                              </div>
-                            </LocalizationProvider>
-                          </div>
-
-                          <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                            <IonButton
-                              color="primary"
-                              disabled={submitting || !myTeamId || !opponentText.trim()}
-                              onClick={async () => {
-                                try {
-                                  setSubmitting(true);
-                                  if (!user) {
-                                    // Guest: create local quick match
-                                    const allowed = await canCreateMatch();
-                                    if (!allowed.ok) {
-                                      showInfo?.(allowed.reason || 'Guest limit reached: 1 match');
-                                      return;
-                                    }
-                                    const payload: QuickStartPayload = {
-                                      myTeamId,
-                                      opponentName: opponentText.trim(),
-                                      isHome,
-                                      kickoffTime: (() => { const d = kickoffDate || dayjs(); const t = kickoffTime || dayjs(); const merged = d.hour(t.hour()).minute(t.minute()).second(0).millisecond(0); return merged.toDate().toISOString(); })(),
-                                      durationMinutes,
-                                      periodFormat
-                                    };
-                                    const local = await createLocalQuickMatch(payload as any);
-                                    if (local?.id) onNavigate?.(`/live/${local.id}`);
-                                  } else {
-                                    const payload: QuickStartPayload = {
-                                      myTeamId,
-                                      opponentName: opponentText.trim(),
-                                      isHome,
-                                      kickoffTime: (() => { const d = kickoffDate || dayjs(); const t = kickoffTime || dayjs(); const merged = d.hour(t.hour()).minute(t.minute()).second(0).millisecond(0); return merged.toDate().toISOString(); })(),
-                                      durationMinutes,
-                                      periodFormat
-                                    };
-                                    const match = await matchesApi.quickStart(payload);
-                                    const id = (match as any).id || (match as any).match_id;
-                                    if (id) {
-                                      onNavigate?.(`/live/${id}`);
-                                    }
-                                  }
-                                } catch (err) {
-                                  console.error('Quick start failed', err);
-                                } finally {
-                                  setSubmitting(false);
-                                }
-                              }}
-                            >
-                              Start Live Match
-                            </IonButton>
-
-                          </div>
-
-                          <CreateTeamModal
-                            isOpen={showCreateTeam}
-                            onDidDismiss={() => setShowCreateTeam(false)}
-                            onCreated={(team) => {
-                              setTeams(prev => {
-                                const exists = prev.some(t => t.id === team.id);
-                                return exists ? prev.map(t => (t.id === team.id ? team : t)) : [team, ...prev];
-                              });
-                              setMyTeamId(team.id);
-                              setShowCreateTeam(false);
-                            }}
-                          />
-                        </div>
-                      </IonCardContent>
-                    </IonCard>
-                  </div>
-                </IonCol>
-              </IonRow>
-            )}
-
             <IonRow>
               {navigationCards.map((card, index) => (
                 <IonCol size="12" sizeMd="6" sizeLg="4" key={index}>

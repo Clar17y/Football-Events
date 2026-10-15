@@ -6,6 +6,7 @@
 
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/indexedDB';
+import { useDiscoveryActor, isOwnedDiscoveryRow, isOwnedRecordingRow } from './useOwnedDiscovery';
 import type { ActivityItem, ActivityFilters } from '../types/activity';
 import {
     getPeriodLabel,
@@ -49,9 +50,13 @@ export interface UseLocalRecentActivityOptions {
 
 export function useLocalRecentActivity(options: UseLocalRecentActivityOptions = {}) {
     const { limit = 20, days = 30, filters } = options;
+    const actor = useDiscoveryActor();
+    const { ownerId, sessionKey } = actor;
+    const owned = (row: Parameters<typeof isOwnedDiscoveryRow>[0]) => isOwnedDiscoveryRow(row, ownerId);
 
     const activities = useLiveQuery(
         async () => {
+            if (!ownerId) return { sessionKey, items: [], totalCount: 0 };
             const cutoffDate = new Date();
             cutoffDate.setDate(cutoffDate.getDate() - days);
             const cutoffTimestamp = cutoffDate.getTime();
@@ -63,7 +68,7 @@ export function useLocalRecentActivity(options: UseLocalRecentActivityOptions = 
             // ----------------------------------------------------------------
             if (filters?.teams !== false) {
                 const teams = await db.teams
-                    .filter(t => !t.isDeleted && !t.isOpponent && isAfterCutoff(t.createdAt, cutoffTimestamp))
+                    .filter(t => owned(t) && !t.isOpponent && isAfterCutoff(t.createdAt, cutoffTimestamp))
                     .toArray();
 
                 for (const team of teams) {
@@ -86,26 +91,28 @@ export function useLocalRecentActivity(options: UseLocalRecentActivityOptions = 
             // ----------------------------------------------------------------
             if (filters?.players !== false) {
                 const players = await db.players
-                    .filter(p => !p.isDeleted && isAfterCutoff(p.createdAt, cutoffTimestamp))
+                    .filter(p => owned(p) && isAfterCutoff(p.createdAt, cutoffTimestamp))
                     .toArray();
 
                 // Get active team relationships
                 const playerTeams = await db.playerTeams
-                    .filter(pt => !pt.isDeleted && pt.isActive === true)
+                    .filter(pt => owned(pt) && pt.isActive === true)
                     .toArray();
                 const playerToTeam = new Map<string, string>();
-                for (const pt of playerTeams) {
-                    playerToTeam.set(pt.playerId, pt.teamId);
-                }
 
                 // Get team names
                 const teamIds = [...new Set(playerTeams.map(pt => pt.teamId))];
                 const teamsMap = new Map<string, string>();
                 for (const teamId of teamIds) {
                     const team = await db.teams.get(teamId);
-                    if (team && !team.isDeleted) {
+                    if (team && owned(team)) {
                         teamsMap.set(teamId, team.name);
                     }
+                }
+
+                const playerIds = new Set(players.map(player => player.id));
+                for (const pt of playerTeams) {
+                    if (playerIds.has(pt.playerId) && teamsMap.has(pt.teamId)) playerToTeam.set(pt.playerId, pt.teamId);
                 }
 
                 for (const player of players) {
@@ -139,7 +146,7 @@ export function useLocalRecentActivity(options: UseLocalRecentActivityOptions = 
             // ----------------------------------------------------------------
             if (filters?.seasons !== false) {
                 const seasons = await db.seasons
-                    .filter(s => !s.isDeleted && isAfterCutoff(s.createdAt, cutoffTimestamp))
+                    .filter(s => owned(s) && isAfterCutoff(s.createdAt, cutoffTimestamp))
                     .toArray();
 
                 for (const season of seasons) {
@@ -169,7 +176,7 @@ export function useLocalRecentActivity(options: UseLocalRecentActivityOptions = 
             // ----------------------------------------------------------------
             if (filters?.matches !== false) {
                 const matches = await db.matches
-                    .filter(m => !m.isDeleted && isAfterCutoff(m.createdAt, cutoffTimestamp))
+                    .filter(m => owned(m) && isAfterCutoff(m.createdAt, cutoffTimestamp))
                     .toArray();
 
                 // Get team names for all matches
@@ -181,7 +188,7 @@ export function useLocalRecentActivity(options: UseLocalRecentActivityOptions = 
                 const matchTeamsMap = new Map<string, string>();
                 for (const teamId of matchTeamIds) {
                     const team = await db.teams.get(teamId);
-                    if (team) matchTeamsMap.set(teamId, team.name);
+                    if (team && owned(team)) matchTeamsMap.set(teamId, team.name);
                 }
 
                 for (const match of matches) {
@@ -214,27 +221,25 @@ export function useLocalRecentActivity(options: UseLocalRecentActivityOptions = 
             if (filters?.events !== false) {
                 // Get finished periods
                 const finishedPeriods = await db.matchPeriods
-                    .filter(p => !p.isDeleted && p.endedAt != null && p.endedAt >= cutoffTimestamp)
+                    .filter(p => !p.isDeleted && !((p as { is_deleted?: boolean }).is_deleted) && p.endedAt != null && p.endedAt >= cutoffTimestamp)
                     .toArray();
 
                 for (const period of finishedPeriods) {
                     // Get match info
                     const match = await db.matches.get(period.matchId);
-                    if (!match || match.isDeleted) continue;
+                    if (!match || !owned(match) || !isOwnedRecordingRow(period, match, ownerId)) continue;
 
                     const homeTeam = await db.teams.get(match.homeTeamId);
                     const awayTeam = await db.teams.get(match.awayTeamId);
-                    if (!homeTeam || !awayTeam) continue;
-
-                    const homeName = homeTeam.name;
-                    const awayName = awayTeam.name;
+                    const homeName = homeTeam && owned(homeTeam) ? homeTeam.name : 'Home';
+                    const awayName = awayTeam && owned(awayTeam) ? awayTeam.name : 'Away';
                     const matchName = `${homeName} vs ${awayName}`;
 
                     // Get events for this period
                     const periodEvents = await db.events
                         .where('[matchId+periodNumber]')
                         .equals([period.matchId, period.periodNumber])
-                        .filter(e => !e.isDeleted)
+                        .filter(e => isOwnedRecordingRow(e, match, ownerId))
                         .toArray();
 
                     if (periodEvents.length === 0) continue;
@@ -255,7 +260,7 @@ export function useLocalRecentActivity(options: UseLocalRecentActivityOptions = 
 
                     // Count regular periods for label logic
                     const allRegular = await db.matchPeriods
-                        .filter(p => p.matchId === period.matchId && p.periodType === 'REGULAR' && !p.isDeleted)
+                        .filter(p => p.matchId === period.matchId && p.periodType === 'REGULAR' && isOwnedRecordingRow(p, match, ownerId))
                         .toArray();
                     const maxReg = allRegular.length;
 
@@ -267,7 +272,7 @@ export function useLocalRecentActivity(options: UseLocalRecentActivityOptions = 
                     const playersMap = new Map<string, string>();
                     for (const pId of playerIds) {
                         const player = await db.players.get(pId);
-                        if (player) playersMap.set(pId, player.name);
+                        if (player && owned(player)) playersMap.set(pId, player.name);
                     }
 
                     // Build children
@@ -290,8 +295,8 @@ export function useLocalRecentActivity(options: UseLocalRecentActivityOptions = 
                                 sentiment: ev.sentiment
                             }),
                             createdAt: toIsoString(ev.createdAt),
-                            teamId: ev.teamId,
-                            playerId: ev.playerId,
+                            teamId: ev.teamId && ((ev.teamId === match.homeTeamId && homeTeam && owned(homeTeam)) || (ev.teamId === match.awayTeamId && awayTeam && owned(awayTeam))) ? ev.teamId : undefined,
+                            playerId: ev.playerId && playersMap.has(ev.playerId) ? ev.playerId : undefined,
                             timeLabel: formatEventTime(ev.clockMs || 0, period.periodType, maxReg)
                         };
                     });
@@ -330,7 +335,7 @@ export function useLocalRecentActivity(options: UseLocalRecentActivityOptions = 
             if (filters?.lineups !== false) {
                 const defaultLineups = await db.defaultLineups
                     .filter(dl => {
-                        if (dl.isDeleted) return false;
+                        if (!owned(dl)) return false;
                         if (isAfterCutoff(dl.createdAt, cutoffTimestamp)) return true;
                         if (dl.updatedAt && isAfterCutoff(dl.updatedAt, cutoffTimestamp)) return true;
                         return false;
@@ -339,7 +344,8 @@ export function useLocalRecentActivity(options: UseLocalRecentActivityOptions = 
 
                 for (const dl of defaultLineups) {
                     const team = await db.teams.get(dl.teamId);
-                    const teamName = team?.name || 'Unknown Team';
+                    if (!team || !owned(team)) continue;
+                    const teamName = team.name;
                     const action = dl.updatedAt ? 'updated' : 'created';
                     const ts = dl.updatedAt || dl.createdAt;
                     const title = `Default lineup ${action} for ${teamName}.`;
@@ -367,17 +373,21 @@ export function useLocalRecentActivity(options: UseLocalRecentActivityOptions = 
 
             // Return limited results plus total count for "hasMore" calculation
             return {
+                sessionKey,
                 items: sorted.slice(0, limit),
                 totalCount: sorted.length
             };
         },
-        [limit, days, filters?.teams, filters?.players, filters?.seasons, filters?.matches, filters?.events, filters?.lineups]
+        [sessionKey, limit, days, filters?.teams, filters?.players, filters?.seasons, filters?.matches, filters?.events, filters?.lineups]
     );
 
+    const visible = activities?.sessionKey === sessionKey ? activities : undefined;
     return {
-        activities: activities?.items ?? [],
-        loading: activities === undefined,
+        activities: visible?.items ?? [],
+        loading: !!ownerId && !visible,
         error: null,
-        hasMore: (activities?.totalCount ?? 0) > (activities?.items.length ?? 0)
+        hasMore: (visible?.totalCount ?? 0) > (visible?.items.length ?? 0),
+        sessionKey,
+        isCurrent: actor.isCurrent
     };
 }

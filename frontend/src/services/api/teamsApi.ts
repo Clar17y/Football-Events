@@ -13,6 +13,7 @@
 import apiClient from './baseApi';
 import { authApi } from './authApi';
 import { canCreateTeam } from '../../utils/quotas';
+import { getCurrentUserId } from '../../utils/network';
 import { dbToTeam, dbToTeams, dbToPlayers } from '../../db/transforms';
 import type { EnhancedTeam, EnhancedPlayer } from '../../db/schema';
 import type {
@@ -67,6 +68,13 @@ export interface TeamSquadResponse {
   success: boolean;
 }
 
+// Legacy creator aliases are evidence only when they agree with the current owner.
+export function teamHasOwner(team: { createdByUserId?: unknown; created_by_user_id?: unknown }, ownerId: string): boolean {
+  const creators = [team.createdByUserId, team.created_by_user_id]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  return creators.length > 0 && creators.every(creator => creator === ownerId);
+}
+
 /**
  * Teams API service with full CRUD operations
  */
@@ -77,12 +85,13 @@ export const teamsApi = {
    */
   async getTeams(params: TeamsListParams = {}): Promise<TeamsListResponse> {
     const { page = 1, limit = 25, search, includeOpponents } = params;
+    const ownerId = getCurrentUserId();
 
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
     let teams = await db.teams.toArray();
     // Exclude soft-deleted; include opponents only if requested
-    teams = teams.filter((t: any) => t && !t.isDeleted && (includeOpponents ? true : (t as any).isOpponent !== true));
+    teams = teams.filter(t => t && !t.isDeleted && teamHasOwner(t, ownerId) && (includeOpponents || t.isOpponent !== true));
     if (search && search.trim()) {
       const term = search.trim().toLowerCase();
       teams = teams.filter(t => (t.name || '').toLowerCase().includes(term));
@@ -91,7 +100,7 @@ export const teamsApi = {
     const total = teams.length;
     const start = (page - 1) * limit;
     const paged = teams.slice(start, start + limit);
-    const data = dbToTeams(paged as EnhancedTeam[]);
+    const data = dbToTeams(paged.map(team => ({ ...team, createdByUserId: ownerId })) as EnhancedTeam[]);
     return {
       data,
       total,
@@ -313,16 +322,17 @@ export const teamsApi = {
    */
   async getOpponentTeams(search?: string): Promise<Team[]> {
     const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+    const ownerId = getCurrentUserId();
 
     // Local-first: always read from IndexedDB
     const { db } = await import('../../db/indexedDB');
-    let teams = await db.teams.filter((t: any) => !t.isDeleted).toArray();
+    let teams = await db.teams.filter(t => !t.isDeleted && t.isOpponent === true && teamHasOwner(t, ownerId)).toArray();
     if (search && search.trim()) {
       const term = normalize(search);
       teams = teams.filter(t => normalize(t.name || '').includes(term));
     }
     teams.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    return dbToTeams(teams as EnhancedTeam[]);
+    return dbToTeams(teams.map(team => ({ ...team, createdByUserId: ownerId })) as EnhancedTeam[]);
   }
 };
 

@@ -93,8 +93,14 @@
   margin-bottom: var(--grassroots-space-xl);
 }
 
-.matches-upcoming-section {
+.matches-upcoming-section,
+.matches-past-section {
   margin-bottom: var(--grassroots-space-xl);
+}
+
+.matches-past-section > p {
+  color: var(--grassroots-text-secondary);
+  line-height: 1.5;
 }
 
 .upcoming-matches-placeholder {

@@ -1,8 +1,9 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import MatchesPage from '../../../src/pages/MatchesPage';
 import type { Match, Team } from '@shared/types';
+import { matchesApi } from '../../../src/services/api/matchesApi';
 
 // Test data - defined early so mocks can reference them
 const mockTeam1: Team = {
@@ -61,21 +62,56 @@ const mockCompletedMatch: Match = {
   awayTeam: mockTeam2,
 };
 
-// Mock the local data hooks - this is what the component actually uses
-vi.mock('../../../src/hooks/useLocalData', () => ({
-  useLocalMatches: () => ({
-    matches: [mockUpcomingMatch, mockCompletedMatch],
-    loading: false,
-  }),
-  useLocalTeams: () => ({
-    teams: [mockTeam1, mockTeam2],
-    loading: false,
-  }),
-  useLocalMatchState: () => ({
-    matchState: null,
-    loading: false,
-  }),
-}));
+let mockMatchesList = [mockUpcomingMatch, mockCompletedMatch];
+let mockMatchStatesList = [
+  {
+    matchId: 'upcoming-match-1',
+    status: 'SCHEDULED',
+    timerMs: 0,
+    lastUpdatedAt: Date.now(),
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false,
+    synced: true,
+  },
+  {
+    matchId: 'completed-match-1',
+    status: 'COMPLETED',
+    timerMs: 5400000,
+    lastUpdatedAt: Date.now(),
+    createdAt: new Date().toISOString(),
+    createdByUserId: 'user1',
+    isDeleted: false,
+    synced: true,
+  },
+];
+
+let mockOwner: string | null = 'user1';
+let mockSubject: string | null = 'user1';
+let mockGeneration = 0;
+let mockTeams = [mockTeam1, mockTeam2];
+let lastUpcoming: any;
+let lastCalendar: any;
+let lastModal: any;
+vi.mock('../../../src/contexts/AuthContext', () => ({ useAuth: () => ({
+  user: mockOwner ? { id: mockOwner } : null, isAuthenticated: !!mockOwner
+}) }));
+vi.mock('../../../src/utils/network', () => ({ getAuthUserId: () => mockSubject, getCurrentUserId: () => 'guest-one' }));
+vi.mock('../../../src/services/api/authApi', () => ({ authApi: {
+  isAuthenticated: () => !!mockSubject, getSessionGeneration: () => mockGeneration
+} }));
+vi.mock('../../../src/hooks/useOwnedDiscovery', async () => {
+  const actual = await vi.importActual<typeof import('../../../src/hooks/useOwnedDiscovery')>('../../../src/hooks/useOwnedDiscovery');
+  return { ...actual, useOwnedDiscovery: () => {
+    const actor = actual.useDiscoveryActor();
+    const teams = React.useMemo(() => mockTeams.filter(row => actual.isOwnedDiscoveryRow(row, actor.ownerId)), [mockTeams, actor.ownerId]);
+    const matches = React.useMemo(() => mockMatchesList.filter(row => actual.isOwnedDiscoveryRow(row, actor.ownerId)), [mockMatchesList, actor.ownerId]);
+    const states = React.useMemo(() => mockMatchStatesList.filter(row => actual.isOwnedRecordingRow(row, matches.find(m => m.id === row.matchId), actor.ownerId)), [mockMatchStatesList, matches, actor.ownerId]);
+    const current = React.useRef(matches); current.current = matches;
+    return { ...actor, teams, matches, matchStates: states, loading: false,
+      canAccessMatch: (id: string) => actor.isCurrent() && current.current.some(row => row.id === id) };
+  } };
+});
 
 // Mock useInitialSync hook
 vi.mock('../../../src/hooks/useInitialSync', () => ({
@@ -128,7 +164,10 @@ vi.mock('../../../src/components/PageHeader', () => ({
 }));
 
 vi.mock('../../../src/components/MatchesCalendar', () => ({
-  default: ({ onMatchClick, matches }: any) => (
+  default: (props: any) => {
+    lastCalendar = props;
+    const { onMatchClick, matches } = props;
+    return (
     <div data-testid="matches-calendar">
       {matches.map((match: Match) => (
         <button
@@ -140,51 +179,73 @@ vi.mock('../../../src/components/MatchesCalendar', () => ({
         </button>
       ))}
     </div>
-  )
+  ); }
 }));
 
 vi.mock('../../../src/components/UpcomingMatchesList', () => ({
-  default: ({ matches }: any) => (
+  default: (props: any) => {
+    lastUpcoming = props;
+    const { matches, onLiveMatch, onEditMatch } = props;
+    return (
     <div data-testid="upcoming-matches-list" className="upcoming-matches-list">
-      {matches
-        .filter((match: Match) => new Date(match.kickoffTime) >= new Date())
-        .map((match: Match) => (
-          <div
-            key={match.id}
-            data-testid={`upcoming-match-${match.id}`}
-            data-match-id={match.id}
-            className="upcoming-match-item"
-            tabIndex={-1}
-          >
-            {match.id}
-          </div>
-        ))}
+      {matches.map((match: Match) => (
+        <div
+          key={match.id}
+          data-testid={`upcoming-match-${match.id}`}
+          data-match-id={match.id}
+          className="upcoming-match-item"
+          tabIndex={-1}
+        >
+          {match.id}
+          <button onClick={() => onLiveMatch(match)}>Open match</button>
+          <button onClick={() => onEditMatch(match)}>Edit match</button>
+        </div>
+      ))}
     </div>
-  )
+  ); }
 }));
 
 vi.mock('../../../src/components/CompletedMatchesList', () => ({
   default: ({ matches }: any) => (
     <div data-testid="completed-matches-list" className="completed-matches-list">
-      {matches
-        .filter((match: Match) => new Date(match.kickoffTime) < new Date())
-        .map((match: Match) => (
-          <div
-            key={match.id}
-            data-testid={`completed-match-${match.id}`}
-            data-match-id={match.id}
-            className="completed-match-item"
-            tabIndex={-1}
-          >
-            {match.id}
-          </div>
-        ))}
+      {matches.map((match: Match) => (
+        <div
+          key={match.id}
+          data-testid={`completed-match-${match.id}`}
+          data-match-id={match.id}
+          className="completed-match-item"
+          tabIndex={-1}
+        >
+          {match.id}
+        </div>
+      ))}
+    </div>
+  )
+}));
+
+vi.mock('../../../src/components/LiveMatchesList', () => ({
+  default: ({ matches }: any) => (
+    <div data-testid="live-matches-list" className="live-matches-list">
+      {matches.map((match: Match) => (
+        <div
+          key={match.id}
+          data-testid={`live-match-${match.id}`}
+          data-match-id={match.id}
+          className="live-match-item"
+          tabIndex={-1}
+        >
+          {match.id}
+        </div>
+      ))}
     </div>
   )
 }));
 
 vi.mock('../../../src/components/CreateMatchModal', () => ({
-  default: (props: any) => <div data-testid="create-match-modal" {...props} />
+  default: (props: any) => {
+    lastModal = props;
+    return <div data-testid="create-match-modal">{props.isOpen && <span>Editor: {props.editingMatch?.id || 'new'}</span>}</div>;
+  }
 }));
 
 // Mock scrollIntoView and focus methods
@@ -201,9 +262,104 @@ Object.defineProperty(HTMLElement.prototype, 'focus', {
   writable: true,
 });
 
+describe('Matches owner replacement and raw proof', () => {
+  beforeEach(() => {
+    vi.clearAllMocks(); mockOwner = mockSubject = 'user1'; mockGeneration = 0;
+    mockTeams = [mockTeam1, mockTeam2]; mockMatchesList = [mockUpcomingMatch, mockCompletedMatch];
+    mockMatchStatesList = [];
+  });
+
+  it('closes an open editor and expansion, blocks all stale actions, and keeps new-owner calendar/editor actions', async () => {
+    const navigate = vi.fn();
+    const view = render(<MatchesPage onNavigate={navigate} />);
+    const old = lastUpcoming;
+    const oldCalendar = lastCalendar;
+    act(() => { old.onToggleExpand(mockUpcomingMatch.id); old.onEditMatch(mockUpcomingMatch); });
+    expect(lastUpcoming.expandedMatches.has(mockUpcomingMatch.id)).toBe(true);
+    expect(screen.getByText(`Editor: ${mockUpcomingMatch.id}`)).toBeInTheDocument();
+    const next = { ...mockUpcomingMatch, id: 'next-match', createdByUserId: 'user2' };
+    mockMatchesList = [...mockMatchesList, next];
+    mockOwner = mockSubject = 'user2'; mockGeneration++;
+    view.rerender(<MatchesPage onNavigate={navigate} />);
+    expect(lastModal.isOpen).toBe(false);
+    expect(lastModal.editingMatch).toBeNull();
+    expect(lastUpcoming.expandedMatches.size).toBe(0);
+    expect(screen.queryByTestId(`calendar-match-${mockUpcomingMatch.id}`)).not.toBeInTheDocument();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await act(async () => {
+      old.onEditMatch(mockUpcomingMatch); old.onLiveMatch(mockUpcomingMatch); old.onMatchSelect(mockUpcomingMatch.id);
+      await old.onDeleteMatch(mockUpcomingMatch); await oldCalendar.onMatchClick(mockUpcomingMatch.id);
+      oldCalendar.onDateClick(new Date());
+    });
+    expect(lastModal.isOpen).toBe(false);
+    expect(lastUpcoming.expandedMatches.size).toBe(0);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(matchesApi.deleteMatch).not.toHaveBeenCalled(); expect(confirm).not.toHaveBeenCalled();
+    act(() => { lastUpcoming.onEditMatch(next); });
+    expect(lastModal.editingMatch.id).toBe('next-match');
+    expect(lastModal.isOpen).toBe(true);
+    act(() => { lastModal.onDidDismiss(); lastCalendar.onDateClick(new Date()); });
+    expect(lastModal.isOpen).toBe(true); expect(lastModal.editingMatch).toBeNull();
+    confirm.mockRestore();
+  });
+
+  it('excludes conflicting/missing/deleted/foreign roots and replaces embedded foreign team data', () => {
+    mockMatchesList = [
+      { ...mockUpcomingMatch, homeTeam: { ...mockTeam1, name: 'Foreign embedded', createdByUserId: 'foreign' } },
+      { ...mockUpcomingMatch, id: 'snake', createdByUserId: undefined, created_by_user_id: 'user1' },
+      { ...mockUpcomingMatch, id: 'conflict', created_by_user_id: 'foreign' },
+      { ...mockUpcomingMatch, id: 'missing', createdByUserId: undefined },
+      { ...mockUpcomingMatch, id: 'deleted', is_deleted: true },
+      { ...mockUpcomingMatch, id: 'foreign', createdByUserId: 'user2' }
+    ] as any;
+    mockTeams = [{ ...mockTeam1, id: 'foreign-team', name: 'Foreign first', createdByUserId: 'user2' }, mockTeam1, mockTeam2];
+    render(<MatchesPage />);
+    expect(lastCalendar.matches.map((row: Match) => row.id).sort()).toEqual(['snake', mockUpcomingMatch.id].sort());
+    expect([...lastCalendar.teamsCache.keys()]).toEqual(['team1', 'team2']);
+    expect(lastCalendar.primaryTeamId).toBe('team1');
+    expect(lastCalendar.matches[0].homeTeam.name).toBe('Home Team');
+  });
+
+  it('hides rows and disables creation while retained credentials lack a matching confirmed profile', () => {
+    const view = render(<MatchesPage />);
+    mockOwner = null;
+    view.rerender(<MatchesPage />);
+    expect(lastCalendar.matches).toEqual([]);
+    expect(lastCalendar.teamsCache.size).toBe(0);
+    expect(screen.getByText('Schedule Your First Match')).toBeDisabled();
+    expect(lastModal.isOpen).toBe(false);
+  });
+});
+
 describe('MatchesPage Calendar-to-List Navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockOwner = mockSubject = 'user1';
+    mockGeneration = 0;
+    mockTeams = [mockTeam1, mockTeam2];
+    mockMatchesList = [mockUpcomingMatch, mockCompletedMatch];
+    mockMatchStatesList = [
+      {
+        matchId: 'upcoming-match-1',
+        status: 'SCHEDULED',
+        timerMs: 0,
+        lastUpdatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'user1',
+        isDeleted: false,
+        synced: true,
+      },
+      {
+        matchId: 'completed-match-1',
+        status: 'COMPLETED',
+        timerMs: 5400000,
+        lastUpdatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'user1',
+        isDeleted: false,
+        synced: true,
+      },
+    ];
   });
 
   it('should scroll to upcoming match when calendar match indicator is clicked', async () => {
@@ -324,5 +480,148 @@ describe('MatchesPage Calendar-to-List Navigation', () => {
     // Check that completed match has tabindex="-1"
     const completedMatchElement = screen.getByTestId(`completed-match-${mockCompletedMatch.id}`);
     expect(completedMatchElement.getAttribute('tabindex')).toBe('-1');
+  });
+
+  describe('Match status partitioning', () => {
+    it.each([['PAUSED', -1], ['LIVE', 1]])('keeps %s matches active with a %s hour kickoff offset', async (status, offset) => {
+      mockMatchesList = [{ ...mockUpcomingMatch, id: 'active-match', kickoffTime: new Date(Date.now() + Number(offset) * 3600000).toISOString() }];
+      mockMatchStatesList = [{ ...mockMatchStatesList[0], matchId: 'active-match', status: String(status) }];
+      render(<MatchesPage />);
+      expect(screen.getByTestId('live-match-active-match')).toBeInTheDocument();
+      expect(screen.queryByTestId('completed-match-active-match')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('upcoming-match-active-match')).not.toBeInTheDocument();
+    });
+
+    it.each(['COMPLETED', 'CANCELLED'])('keeps %s matches terminal with either past or future kickoff', async status => {
+      mockMatchesList = [
+        { ...mockUpcomingMatch, id: 'terminal-future' },
+        { ...mockCompletedMatch, id: 'terminal-past' },
+      ];
+      mockMatchStatesList = mockMatchesList.map(match => ({ ...mockMatchStatesList[0], matchId: match.id, status }));
+      render(<MatchesPage />);
+      expect(screen.getByTestId('completed-match-terminal-future')).toBeInTheDocument();
+      expect(screen.getByTestId('completed-match-terminal-past')).toBeInTheDocument();
+      expect(screen.queryByTestId('live-matches-list')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('upcoming-match-terminal-future')).not.toBeInTheDocument();
+    });
+
+    it('should partition LIVE and PAUSED matches into live section regardless of past or future kickoff date', async () => {
+      const pastLiveMatch: Match = {
+        id: 'past-live-match',
+        seasonId: 'season1',
+        homeTeamId: 'team1',
+        awayTeamId: 'team2',
+        kickoffTime: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+        durationMinutes: 90,
+        periodFormat: '2x45',
+        homeScore: 1,
+        awayScore: 0,
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'user1',
+        isDeleted: false,
+        homeTeam: mockTeam1,
+        awayTeam: mockTeam2,
+      };
+
+      const futurePausedMatch: Match = {
+        id: 'future-paused-match',
+        seasonId: 'season1',
+        homeTeamId: 'team1',
+        awayTeamId: 'team2',
+        kickoffTime: new Date(Date.now() + 3600000).toISOString(), // 1 hour future
+        durationMinutes: 90,
+        periodFormat: '2x45',
+        homeScore: 0,
+        awayScore: 0,
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'user1',
+        isDeleted: false,
+        homeTeam: mockTeam1,
+        awayTeam: mockTeam2,
+      };
+
+      mockMatchesList = [pastLiveMatch, futurePausedMatch];
+      mockMatchStatesList = [
+        {
+          matchId: 'past-live-match',
+          status: 'LIVE',
+          timerMs: 1200000,
+          lastUpdatedAt: Date.now(),
+          createdAt: new Date().toISOString(),
+          createdByUserId: 'user1',
+          isDeleted: false,
+          synced: true,
+        },
+        {
+          matchId: 'future-paused-match',
+          status: 'PAUSED',
+          timerMs: 600000,
+          lastUpdatedAt: Date.now(),
+          createdAt: new Date().toISOString(),
+          createdByUserId: 'user1',
+          isDeleted: false,
+          synced: true,
+        },
+      ];
+
+      render(<MatchesPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('live-matches-list')).toBeInTheDocument();
+      });
+
+      expect(screen.getByTestId('live-match-past-live-match')).toBeInTheDocument();
+      expect(screen.getByTestId('live-match-future-paused-match')).toBeInTheDocument();
+    });
+
+    it.each(['user1', 'guest-one'])('shows state-unknown historical matches in Past matches for %s without inferring completion', async owner => {
+      if (owner.startsWith('guest-')) mockOwner = mockSubject = null;
+      const pastUnstartedMatch: Match = {
+        id: 'past-unstarted-match',
+        seasonId: 'season1',
+        homeTeamId: 'team1',
+        awayTeamId: 'team2',
+        kickoffTime: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
+        durationMinutes: 90,
+        periodFormat: '2x45',
+        homeScore: 0,
+        awayScore: 0,
+        createdAt: new Date().toISOString(),
+        createdByUserId: owner,
+        isDeleted: false,
+        homeTeam: mockTeam1,
+        awayTeam: mockTeam2,
+      };
+
+      // No match state record for this match!
+      mockMatchesList = [pastUnstartedMatch];
+      mockMatchStatesList = [];
+
+      const onNavigate = vi.fn();
+      render(<MatchesPage onNavigate={onNavigate} />);
+
+      const pastSection = screen.getByRole('heading', { name: 'Past matches' }).parentElement!;
+      expect(within(pastSection).getByTestId('upcoming-match-past-unstarted-match')).toBeInTheDocument();
+      expect(document.querySelectorAll('[data-match-id="past-unstarted-match"]')).toHaveLength(1);
+      expect(screen.getByTestId('completed-matches-list')).not.toHaveTextContent('past-unstarted-match');
+      fireEvent.click(within(pastSection).getByText('Open match'));
+      expect(onNavigate).toHaveBeenCalledWith('/live/past-unstarted-match');
+    });
+
+    it('keeps a known scheduled match Upcoming after kickoff and moves only purged-state history to Past', () => {
+      const scheduled = { ...mockCompletedMatch, id: 'scheduled-old' };
+      const historical = { ...mockCompletedMatch, id: 'purged-state-old' };
+      mockMatchesList = [scheduled, historical];
+      mockMatchStatesList = [{ ...mockMatchStatesList[0], matchId: scheduled.id, status: 'SCHEDULED' }];
+      const view = render(<MatchesPage />);
+      const upcomingSection = screen.getByRole('heading', { name: 'Upcoming Matches' }).parentElement!;
+      const pastSection = screen.getByRole('heading', { name: 'Past matches' }).parentElement!;
+      expect(within(upcomingSection).getByTestId('upcoming-match-scheduled-old')).toBeInTheDocument();
+      expect(within(pastSection).getByTestId('upcoming-match-purged-state-old')).toBeInTheDocument();
+      mockMatchStatesList = [];
+      view.rerender(<MatchesPage />);
+      expect(within(screen.getByRole('heading', { name: 'Past matches' }).parentElement!).getByTestId('upcoming-match-scheduled-old')).toBeInTheDocument();
+      expect(document.querySelectorAll('[data-match-id="scheduled-old"]')).toHaveLength(1);
+    });
   });
 });

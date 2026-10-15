@@ -13,6 +13,7 @@ import type { Match, MatchUpdateRequest } from '@shared/types';
 import type { MatchState, MatchPeriod } from '@shared/types';
 import type { DbMatch, DbMatchState, DbMatchPeriod } from '../../db/schema';
 import { teamsDataLayer, seasonsDataLayer, matchesDataLayer } from '../dataLayer';
+import { teamHasOwner } from './teamsApi';
 
 /**
  * Show offline toast notification
@@ -92,12 +93,24 @@ export const matchesApi = {
    */
   async quickStart(payload: QuickStartPayload): Promise<Match> {
     const userId = getCurrentUserId();
+    if (payload.myTeamId) {
+      const selectedTeam = await db.teams.get(payload.myTeamId);
+      if (!selectedTeam || selectedTeam.isDeleted || selectedTeam.isOpponent || !teamHasOwner(selectedTeam, userId)) {
+        throw new Error('The selected team is unavailable. Please choose your team again.');
+      }
+    }
+    if (payload.seasonId) {
+      const selectedSeason = await db.seasons.get(payload.seasonId);
+      if (!selectedSeason || selectedSeason.isDeleted || selectedSeason.createdByUserId !== userId) {
+        throw new Error('The selected season is unavailable. Please choose your season again.');
+      }
+    }
 
     // 1) Ensure season exists (use provided or find/create default)
     let seasonId = payload.seasonId;
     if (!seasonId) {
       // Try to find an existing current season
-      const allSeasons = await db.seasons.filter(s => !s.isDeleted).toArray();
+      const allSeasons = await db.seasons.filter(s => !s.isDeleted && s.createdByUserId === userId).toArray();
       const currentSeason = allSeasons.find(s => s.isCurrent);
 
       if (currentSeason) {
@@ -126,17 +139,18 @@ export const matchesApi = {
 
     // 2) Ensure our team exists (use provided id or find by name)
     let ourTeamId = payload.myTeamId;
-    if (!ourTeamId && payload.myTeamName) {
+    const ourTeamName = payload.myTeamName?.trim();
+    if (!ourTeamId && ourTeamName) {
       // Search by name
       const existingTeam = await db.teams
-        .filter(t => !t.isDeleted && t.name === payload.myTeamName)
+        .filter(t => !t.isDeleted && !t.isOpponent && teamHasOwner(t, userId) && t.name === ourTeamName)
         .first();
 
       if (existingTeam) {
         ourTeamId = existingTeam.id;
       } else {
         const newTeam = await teamsDataLayer.create({
-          name: payload.myTeamName,
+          name: ourTeamName,
           isOpponent: false,
         });
         ourTeamId = newTeam.id;
@@ -153,17 +167,10 @@ export const matchesApi = {
     }
 
     // 3) Ensure opponent team exists (by name)
-    const opponentName = payload.opponentName?.trim() || 'Opponent';
+    const opponentName = payload.opponentName?.trim() || 'Unknown Opponent';
     let opponentTeam = await db.teams
-      .filter(t => !t.isDeleted && t.name === opponentName && t.isOpponent === true)
+      .filter(t => !t.isDeleted && teamHasOwner(t, userId) && t.name === opponentName && t.isOpponent === true)
       .first();
-
-    if (!opponentTeam) {
-      // Also check for any team with this name (might not be marked as opponent yet)
-      opponentTeam = await db.teams
-        .filter(t => !t.isDeleted && t.name === opponentName)
-        .first();
-    }
 
     if (!opponentTeam) {
       opponentTeam = await teamsDataLayer.create({
@@ -186,7 +193,7 @@ export const matchesApi = {
       competition: payload.competition,
       venue: payload.venue,
       durationMinutes: payload.durationMinutes ?? 60,
-      periodFormat: (payload.periodFormat === 'quarter' || payload.periodFormat === 'half')
+      periodFormat: (payload.periodFormat === 'quarter' || payload.periodFormat === 'half' || payload.periodFormat === 'whole')
         ? payload.periodFormat
         : 'quarter',
       notes: payload.notes,

@@ -20,10 +20,9 @@ import CreateMatchModal from '../components/CreateMatchModal';
 import UpcomingMatchesList from '../components/UpcomingMatchesList';
 import CompletedMatchesList from '../components/CompletedMatchesList';
 import LiveMatchesList from '../components/LiveMatchesList';
-import { useLocalMatches, useLocalTeams, useLocalMatchState } from '../hooks/useLocalData';
+import { useOwnedDiscovery } from '../hooks/useOwnedDiscovery';
 import { useInitialSync } from '../hooks/useInitialSync';
 import { matchesApi } from '../services/api/matchesApi';
-import { authApi } from '../services/api/authApi';
 import type { Match, Team, MatchState } from '@shared/types';
 import './PageStyles.css';
 import './MatchesPage.css';
@@ -33,17 +32,15 @@ interface MatchesPageProps {
   onNavigate?: (page: string) => void;
 }
 
+type MatchCategory = 'live' | 'upcoming' | 'past' | 'completed';
+
 const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
   // Trigger initial sync from server for authenticated users
   useInitialSync();
 
-  // Reactive data from IndexedDB
-  const { matches: rawMatches, loading } = useLocalMatches();
-  const { teams: teamsList } = useLocalTeams({ includeOpponents: true });
-
-  // For match states, we'll use the date-based fallback in the UI
-  // since loading all states reactively would be complex
-  const matchStates: MatchState[] = [];
+  const discovery = useOwnedDiscovery();
+  const { matches: rawMatches, teams: teamsList, matchStates: localMatchStates, loading } = discovery;
+  const matchStates = localMatchStates as unknown as MatchState[];
 
   // Convert teams array to Map for quick lookup
   const teamsCache = useMemo(() => {
@@ -59,13 +56,24 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
     return rawMatches
       .map((match: any) => ({
         ...match,
-        homeTeam: match.homeTeam || teamsCache.get(match.homeTeamId || match.home_team_id),
-        awayTeam: match.awayTeam || teamsCache.get(match.awayTeamId || match.away_team_id),
+        homeTeam: teamsCache.get(match.homeTeamId || match.home_team_id),
+        awayTeam: teamsCache.get(match.awayTeamId || match.away_team_id),
       }))
       .sort((a: any, b: any) =>
         new Date(a.kickoffTime || a.kickoff_time).getTime() - new Date(b.kickoffTime || b.kickoff_time).getTime()
       ) as Match[];
   }, [rawMatches, teamsCache]);
+
+  const statesMap = useMemo(() => new Map(matchStates.map(state => [state.matchId, state])), [localMatchStates]);
+  const categoryForMatch = (match: Match): MatchCategory => {
+    const status = statesMap.get(match.id)?.status;
+    if (status === 'LIVE' || status === 'PAUSED') return 'live';
+    if (status === 'COMPLETED' || status === 'CANCELLED') return 'completed';
+    if (status === 'SCHEDULED' || status === 'POSTPONED') return 'upcoming';
+    return new Date(match.kickoffTime).getTime() < Date.now() ? 'past' : 'upcoming';
+  };
+  const matchGroups: Record<MatchCategory, Match[]> = { live: [], upcoming: [], past: [], completed: [] };
+  matches.forEach(match => matchGroups[categoryForMatch(match)].push(match));
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -78,6 +86,17 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
 
   // Edit match state
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
+
+  const [selectionSession, setSelectionSession] = useState(discovery.sessionKey);
+  const selectionCurrent = selectionSession === discovery.sessionKey;
+  useEffect(() => {
+    setCreateModalOpen(false);
+    setSelectedDate(null);
+    setEditingMatch(null);
+    setExpandedMatches(new Set());
+    setExpandedCompletedMatches(new Set());
+    setSelectionSession(discovery.sessionKey);
+  }, [discovery.sessionKey]);
 
   const navigate = (page: string) => {
     if (onNavigate) {
@@ -107,6 +126,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
 
   // Calendar event handlers
   const handleDateClick = (date: Date) => {
+    if (!discovery.isCurrent()) return;
     setSelectedDate(date);
     setCreateModalOpen(true);
   };
@@ -114,21 +134,22 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
   const contentRef = useRef<any>(null);
 
   const handleMatchClick = async (matchId: string) => {
+    if (!discovery.canAccessMatch(matchId)) return;
     // Locate the match card in the lists (avoid matching the calendar indicators)
     const matchMeta = matches.find(m => m.id === matchId);
-    const now = new Date();
-    const isUpcoming = matchMeta ? new Date(matchMeta.kickoffTime) >= now : undefined;
+    const category = matchMeta ? categoryForMatch(matchMeta) : undefined;
     const upcomingSelector = `.upcoming-matches-list [data-match-id="${matchId}"]`;
     const completedSelector = `.completed-matches-list [data-match-id="${matchId}"]`;
-    const preferredSelector = isUpcoming === undefined
+    const pastSelector = `.matches-past-section [data-match-id="${matchId}"]`;
+    const liveSelector = `.matches-live-section [data-match-id="${matchId}"]`;
+    const selectors = { upcoming: upcomingSelector, completed: completedSelector, past: pastSelector, live: liveSelector };
+    const preferredSelector = category === undefined
       ? `${upcomingSelector}, ${completedSelector}`
-      : isUpcoming
-        ? upcomingSelector
-        : completedSelector;
+      : selectors[category];
 
     let matchElement = document.querySelector(preferredSelector) as HTMLElement | null;
     if (!matchElement) {
-      matchElement = document.querySelector(`${upcomingSelector}, ${completedSelector}`) as HTMLElement | null;
+      matchElement = document.querySelector(`${upcomingSelector}, ${completedSelector}, ${pastSelector}, ${liveSelector}`) as HTMLElement | null;
     }
 
     if (matchElement) {
@@ -136,6 +157,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
       try {
         if (contentRef.current && (contentRef.current as any).getScrollElement) {
           const scrollEl = await (contentRef.current as any).getScrollElement();
+          if (!discovery.canAccessMatch(matchId)) return;
           if (scrollEl) {
             const matchRect = matchElement.getBoundingClientRect();
             const scrollRect = scrollEl.getBoundingClientRect();
@@ -162,7 +184,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
 
       // Ensure focus for accessibility
       setTimeout(() => {
-        matchElement.focus();
+        if (discovery.canAccessMatch(matchId)) matchElement.focus();
       }, 100);
 
       // Remove highlight after 1.5s
@@ -173,11 +195,8 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
       // If match element not found, try to determine if it's upcoming or completed
       const match = matches.find(m => m.id === matchId);
       if (match) {
-        const now = new Date();
-        const isUpcoming = new Date(match.kickoffTime) >= now;
-
         // Scroll to the appropriate section as fallback
-        const sectionSelector = isUpcoming ? '.matches-upcoming-section' : '.matches-completed-section';
+        const sectionSelector = `.matches-${categoryForMatch(match)}-section`;
         const section = document.querySelector(sectionSelector) as HTMLElement;
         if (section) {
           section.scrollIntoView({
@@ -187,7 +206,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
 
           // Set focus to the section for accessibility
           setTimeout(() => {
-            section.focus();
+            if (discovery.canAccessMatch(matchId)) section.focus();
           }, 100);
         }
       } else {
@@ -221,6 +240,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
 
   // UpcomingMatchesList event handlers
   const handleToggleExpand = (matchId: string) => {
+    if (!discovery.canAccessMatch(matchId)) return;
     setExpandedMatches(prev => {
       const next = new Set(prev);
       if (next.has(matchId)) {
@@ -239,12 +259,14 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
   };
 
   const handleEditMatch = (match: Match) => {
+    if (!discovery.canAccessMatch(match.id)) return;
     setEditingMatch(match);
     setCreateModalOpen(true);
   };
 
   // CompletedMatchesList event handlers
   const handleToggleExpandCompleted = (matchId: string) => {
+    if (!discovery.canAccessMatch(matchId)) return;
     setExpandedCompletedMatches(prev => {
       const next = new Set(prev);
       if (next.has(matchId)) {
@@ -263,16 +285,19 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
   };
 
   const handleViewEvents = (match: Match) => {
+    if (!discovery.canAccessMatch(match.id)) return;
     if (onNavigate) onNavigate(`/live/${match.id}`);
   };
 
   const handleLiveMatch = (match: Match) => {
+    if (!discovery.canAccessMatch(match.id)) return;
     if (onNavigate) onNavigate(`/live/${match.id}`);
   };
 
   const handleDeleteMatch = async (match: Match) => {
+    if (!discovery.canAccessMatch(match.id)) return;
     const confirmed = window.confirm('Delete this match? This cannot be undone.');
-    if (!confirmed) return;
+    if (!confirmed || !discovery.canAccessMatch(match.id)) return;
     try {
       await matchesApi.deleteMatch(match.id);
       // Reactive data updates automatically from IndexedDB
@@ -313,7 +338,8 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
         expand="block"
         color="secondary"
         className="empty-action"
-        onClick={() => setCreateModalOpen(true)}
+        disabled={!discovery.ownerId}
+        onClick={() => { if (discovery.isCurrent()) setCreateModalOpen(true); }}
       >
         <IonIcon icon={add} slot="start" />
         Schedule Your First Match
@@ -366,7 +392,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
           <div className="matches-calendar-section">
             <MatchesCalendar
               matches={matches}
-              selectedDate={selectedDate}
+              selectedDate={selectionCurrent ? selectedDate : null}
               onDateClick={handleDateClick}
               onMatchClick={handleMatchClick}
               loading={loading}
@@ -377,9 +403,7 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
 
           {/* Live Matches Section below calendar, styled like lists */}
           {(() => {
-            const statesMap = new Map(matchStates.map(s => [s.matchId, s]));
-            const liveIds = new Set(matchStates.filter(s => s.status === 'LIVE' || s.status === 'PAUSED').map(s => s.matchId));
-            const liveMatches = matches.filter(m => liveIds.has(m.id));
+            const liveMatches = matchGroups.live;
             if (liveMatches.length === 0) return null;
             return (
               <div className="matches-live-section" tabIndex={-1}>
@@ -395,26 +419,12 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
             );
           })()}
 
-          {/* Upcoming Matches Section (SCHEDULED/POSTPONED) */}
+          {/* Upcoming Matches Section (SCHEDULED/POSTPONED or unstarted matches) */}
           <div className="matches-upcoming-section" tabIndex={-1}>
             <h2 className="section-title">Upcoming Matches</h2>
             <UpcomingMatchesList
-              matches={(() => {
-                if (!matchStates.length) {
-                  const now = new Date();
-                  const fallback = matches.filter(m => new Date(m.kickoffTime) >= now);
-                  console.log('⚠️ Using fallback upcoming filter by date. Count:', fallback.length);
-                  return fallback;
-                }
-                const states = new Map(matchStates.map(s => [s.matchId, s]));
-                const list = matches.filter(m => {
-                  const st = states.get(m.id) as any;
-                  return st?.status === 'SCHEDULED' || st?.status === 'POSTPONED';
-                });
-                console.log('✅ Upcoming by status. Count:', list.length);
-                return list;
-              })()}
-              expandedMatches={expandedMatches}
+              matches={matchGroups.upcoming}
+              expandedMatches={selectionCurrent ? expandedMatches : new Set()}
               onToggleExpand={handleToggleExpand}
               onMatchSelect={handleMatchSelect}
               onEditMatch={handleEditMatch}
@@ -426,26 +436,31 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
             />
           </div>
 
+          {matchGroups.past.length > 0 && (
+            <div className="matches-past-section" tabIndex={-1}>
+              <h2 className="section-title">Past matches</h2>
+              <p>No saved match status is available. Open a match to view details or record it.</p>
+              <UpcomingMatchesList
+                matches={matchGroups.past}
+                expandedMatches={selectionCurrent ? expandedMatches : new Set()}
+                onToggleExpand={handleToggleExpand}
+                onMatchSelect={handleMatchSelect}
+                onEditMatch={handleEditMatch}
+                onLiveMatch={handleLiveMatch}
+                onDeleteMatch={handleDeleteMatch}
+                loading={loading}
+                teamsCache={teamsCache}
+                primaryTeamId={primaryTeamId}
+              />
+            </div>
+          )}
+
           {/* Completed Matches Section (COMPLETED/CANCELLED) */}
           <div className="matches-completed-section" tabIndex={-1}>
             <h2 className="section-title">Completed Matches</h2>
             <CompletedMatchesList
-              matches={(() => {
-                if (!matchStates.length) {
-                  const now = new Date();
-                  const fallback = matches.filter(m => new Date(m.kickoffTime) < now);
-                  console.log('⚠️ Using fallback completed filter by date. Count:', fallback.length);
-                  return fallback;
-                }
-                const states = new Map(matchStates.map(s => [s.matchId, s]));
-                const list = matches.filter(m => {
-                  const st = states.get(m.id) as any;
-                  return st?.status === 'COMPLETED' || st?.status === 'CANCELLED';
-                });
-                console.log('✅ Completed by status. Count:', list.length);
-                return list;
-              })()}
-              expandedMatches={expandedCompletedMatches}
+              matches={matchGroups.completed}
+              expandedMatches={selectionCurrent ? expandedCompletedMatches : new Set()}
               onToggleExpand={handleToggleExpandCompleted}
               onMatchSelect={handleCompletedMatchSelect}
               onViewEvents={handleViewEvents}
@@ -462,15 +477,16 @@ const MatchesPage: React.FC<MatchesPageProps> = ({ onNavigate }) => {
 
         {/* Create Match Modal */}
         <CreateMatchModal
-          isOpen={createModalOpen}
+          key={discovery.sessionKey}
+          isOpen={selectionCurrent && createModalOpen && !!discovery.ownerId && (!editingMatch || discovery.canAccessMatch(editingMatch.id))}
           onDidDismiss={() => {
             setCreateModalOpen(false);
             setSelectedDate(null);
             setEditingMatch(null);
           }}
-          preselectedDate={selectedDate || undefined}
+          preselectedDate={selectionCurrent ? selectedDate || undefined : undefined}
           onMatchCreated={handleMatchCreated}
-          editingMatch={editingMatch}
+          editingMatch={selectionCurrent && editingMatch && discovery.canAccessMatch(editingMatch.id) ? editingMatch : null}
           onMatchUpdated={handleMatchUpdated}
         />
       </IonContent>

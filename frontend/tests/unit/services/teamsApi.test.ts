@@ -9,14 +9,16 @@ import type { Team, TeamCreateRequest, TeamUpdateRequest } from '@shared/types';
 
 // Mock the database
 const mockTeams: any[] = [];
+let mockOwnerId = 'user-1';
+vi.mock('../../../src/utils/network', () => ({ getCurrentUserId: () => mockOwnerId }));
 const mockDb = {
   teams: {
     toArray: vi.fn(() => Promise.resolve([...mockTeams])),
     get: vi.fn((id: string) => Promise.resolve(mockTeams.find(t => t.id === id))),
     put: vi.fn(),
     delete: vi.fn(),
-    filter: vi.fn(() => ({
-      toArray: vi.fn(() => Promise.resolve(mockTeams.filter(t => !t.isDeleted)))
+    filter: vi.fn((predicate: (team: any) => boolean) => ({
+      toArray: vi.fn(() => Promise.resolve(mockTeams.filter(predicate)))
     }))
   },
   playerTeams: {
@@ -81,6 +83,7 @@ describe('Teams API Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockTeams.length = 0;
+    mockOwnerId = 'user-1';
   });
 
   afterEach(() => {
@@ -88,6 +91,27 @@ describe('Teams API Service', () => {
   });
 
   describe('getTeams', () => {
+    it('offers only active current-owner teams, normalizes proven creator aliases and rejects conflicting or absent ownership', async () => {
+      mockTeams.push(
+        { id: 'current', name: 'Current Club', createdByUserId: 'user-1' },
+        { id: 'snake', name: 'Legacy Club', created_by_user_id: 'user-1' },
+        { id: 'guest', name: 'Guest Club', createdByUserId: 'guest-one' },
+        { id: 'previous', name: 'Previous Club', createdByUserId: 'user-2' },
+        { id: 'deleted', name: 'Deleted Club', createdByUserId: 'user-1', isDeleted: true },
+        { id: 'opponent', name: 'Opponent Club', createdByUserId: 'user-1', isOpponent: true },
+        { id: 'unknown', name: 'Unclaimed Club' },
+        { id: 'conflict', name: 'Conflicting Club', createdByUserId: 'user-2', created_by_user_id: 'user-1' },
+      );
+      const own = await teamsApi.getTeams();
+      expect(own.data.map(team => team.id)).toEqual(['current', 'snake']);
+      expect(own.data.every(team => team.createdByUserId === 'user-1')).toBe(true);
+      const all = await teamsApi.getTeams({ includeOpponents: true });
+      expect(all.data.map(team => team.id)).toEqual(['current', 'snake', 'opponent']);
+      const opponents = await teamsApi.getOpponentTeams();
+      expect(opponents.map(team => team.id)).toEqual(['opponent']);
+      mockOwnerId = 'guest-one';
+      expect((await teamsApi.getTeams()).data.map(team => team.id)).toEqual(['guest']);
+    });
     it('should fetch teams from local database with default pagination', async () => {
       mockTeams.push(
         {
