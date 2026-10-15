@@ -196,7 +196,7 @@ describe('UpcomingMatchesList', () => {
     expect(screen.getByText('Test Stadium')).toBeInTheDocument();
     expect(screen.getByText('Test League')).toBeInTheDocument();
     expect(screen.getByText('90 minutes')).toBeInTheDocument();
-    expect(screen.getByText('half')).toBeInTheDocument();
+    expect(screen.getByText('Halves')).toBeInTheDocument();
     expect(screen.getByText('Test match notes')).toBeInTheDocument();
   });
 

@@ -68,6 +68,7 @@ describe('No Outbox Table Property Tests', () => {
       expect(schemaTableNames).toContain('syncMetadata');
       expect(schemaTableNames).toContain('syncFailures');
       expect(schemaTableNames).toContain('settings');
+      expect(schemaTableNames).toContain('globalStats');
       
       // Verify outbox does NOT exist
       expect(schemaTableNames).not.toContain('outbox');
@@ -76,8 +77,8 @@ describe('No Outbox Table Property Tests', () => {
     it('should have correct number of tables (no outbox)', () => {
       // Expected tables: events, matches, teams, players, seasons, lineup,
       // playerTeams, matchNotes, matchPeriods, matchState, defaultLineups,
-      // syncMetadata, syncFailures, settings = 14 tables (no outbox)
-      const expectedTableCount = 14;
+      // syncMetadata, syncFailures, settings, globalStats = 15 tables (no outbox)
+      const expectedTableCount = 15;
       const actualTableCount = Object.keys(SCHEMA_INDEXES).length;
       
       expect(actualTableCount).toBe(expectedTableCount);
@@ -108,7 +109,8 @@ describe('No Outbox Table Property Tests', () => {
       await fc.assert(
         fc.asyncProperty(
           fc.record({
-            kind: fc.constantFrom('goal', 'assist', 'save', 'foul', 'tackle'),
+            // Successful guest writes use core events; premium rejection is covered separately.
+            kind: fc.constantFrom('goal', 'own_goal', 'assist', 'foul', 'penalty', 'free_kick', 'yellow_card', 'red_card'),
             matchId: fc.uuid(),
             teamId: fc.uuid(),
             playerId: fc.option(fc.uuid(), { nil: undefined }),
