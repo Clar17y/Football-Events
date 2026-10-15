@@ -123,7 +123,7 @@ export const matchCreateSchema = z.object({
   competition: z.string().max(100).optional(),
   venue: z.string().max(100).optional(),
   durationMinutes: z.number().int().min(1).max(200).optional(),
-  periodFormat: z.enum(['quarter', 'half', 'third']).optional(),
+  periodFormat: z.enum(['quarter', 'half', 'third', 'whole']).optional(),
   homeScore: z.number().int().min(0).optional(),
   awayScore: z.number().int().min(0).optional(),
   notes: z.string().max(1000).optional()
@@ -137,7 +137,7 @@ export const matchUpdateSchema = z.object({
   competition: z.string().max(100).optional(),
   venue: z.string().max(100).optional(),
   durationMinutes: z.number().int().min(1).max(200).optional(),
-  periodFormat: z.enum(['quarter', 'half', 'third']).optional(),
+  periodFormat: z.enum(['quarter', 'half', 'third', 'whole']).optional(),
   homeScore: z.number().int().min(0).optional(),
   awayScore: z.number().int().min(0).optional(),
   notes: z.string().max(1000).optional()
@@ -660,6 +660,18 @@ export const matchFormationChangeSchema = z.object({
   eventId: z.string().uuid('Event ID must be a valid UUID').optional()
 });
 
+const playingSecondsSchema = z.number().int().nonnegative().max(2147483647);
+
+export const matchStateReplaySchema = z.object({
+  status: z.enum(['SCHEDULED', 'LIVE', 'PAUSED', 'COMPLETED']),
+  totalElapsedSeconds: playingSecondsSchema,
+  currentPeriod: z.number().int().min(1).max(10).nullable().optional(),
+  currentPeriodType: z.enum(['REGULAR', 'EXTRA_TIME', 'PENALTY_SHOOTOUT']).nullable().optional(),
+  activeSince: z.string().datetime().optional(),
+  matchStartedAt: z.string().datetime().optional(),
+  matchEndedAt: z.string().datetime().optional(),
+});
+
 // Match state management validation schemas
 export const matchStartSchema = z.object({
   notes: z.string()
@@ -668,18 +680,21 @@ export const matchStartSchema = z.object({
 });
 
 export const matchPauseSchema = z.object({
+  totalElapsedSeconds: playingSecondsSchema.optional(),
   reason: z.string()
     .max(500, 'Pause reason must be less than 500 characters')
     .optional()
 });
 
 export const matchResumeSchema = z.object({
+  totalElapsedSeconds: playingSecondsSchema.optional(),
   notes: z.string()
     .max(500, 'Resume notes must be less than 500 characters')
     .optional()
 });
 
 export const matchCompleteSchema = z.object({
+  totalElapsedSeconds: playingSecondsSchema.optional(),
   finalScore: z.object({
     home: z.number()
       .int('Home score must be an integer')
@@ -745,6 +760,6 @@ export const periodImportSchema = z.object({
   durationSeconds: z.number()
     .int('Duration must be an integer')
     .min(0, 'Duration cannot be negative')
-    .max(7200, 'Duration cannot exceed 2 hours')
+    .max(2147483647)
     .optional()
 });

@@ -451,6 +451,7 @@ export interface MatchState {
   matchStartedAt?: IsoDateTimeString;      // mapped from match_started_at
   matchEndedAt?: IsoDateTimeString;        // mapped from match_ended_at
   totalElapsedSeconds: number;             // mapped from total_elapsed_seconds
+  activeSince?: IsoDateTimeString | null;  // running-time anchor; null when paused or finished
   createdAt: IsoDateTimeString;            // mapped from created_at
   updatedAt?: IsoDateTimeString;           // mapped from updated_at
   // Authentication and soft delete fields (camelCase)

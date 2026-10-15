@@ -8,9 +8,11 @@ const transformMatchState = (prismaMatchState: any): any => ({
   currentPeriodType: prismaMatchState.current_period_type || undefined,
   matchStartedAt: prismaMatchState.match_started_at || undefined,
   matchEndedAt: prismaMatchState.match_ended_at || undefined,
+  activeSince: prismaMatchState.active_since ?? null,
   totalElapsedSeconds: prismaMatchState.total_elapsed_seconds,
   createdAt: prismaMatchState.created_at,
   updatedAt: prismaMatchState.updated_at || undefined,
+  createdByUserId: prismaMatchState.created_by_user_id,
   created_by_user_id: prismaMatchState.created_by_user_id,
   deleted_at: prismaMatchState.deleted_at || undefined,
   deleted_by_user_id: prismaMatchState.deleted_by_user_id || undefined,
@@ -25,6 +27,7 @@ import { cache, CacheKeys, CacheTTL } from '../utils/cache';
 
 export interface MatchStateTransitionOptions {
   reason?: string;
+  totalElapsedSeconds?: number;
 }
 
 export class MatchStateService {
@@ -76,6 +79,68 @@ export class MatchStateService {
     }
 
     return match.created_by_user_id === userId;
+  }
+
+  /** Apply a durable local lifecycle snapshot after its periods have been imported. */
+  async reconcileState(matchId: string, userId: string, userRole: string, data: {
+    status: 'SCHEDULED' | 'LIVE' | 'PAUSED' | 'COMPLETED';
+    totalElapsedSeconds: number;
+    currentPeriod?: number | null;
+    currentPeriodType?: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT' | null;
+    activeSince?: string;
+    matchStartedAt?: string;
+    matchEndedAt?: string;
+  }): Promise<MatchState> {
+    return withPrismaErrorHandling(async () => {
+      if (!await this.validateUserPermission(matchId, userId, userRole)) {
+        throw Object.assign(new Error('Access denied: You do not have permission to manage this match'), { statusCode: 403 });
+      }
+      const updated = await this.prisma.$transaction(async tx => {
+        const state = await tx.match_state.findFirst({ where: { match_id: matchId } });
+        if (state && ['COMPLETED', 'CANCELLED', 'POSTPONED'].includes(state.status) && state.status !== data.status) {
+          throw Object.assign(new Error('Cannot replay over a terminal match state'), { statusCode: 409 });
+        }
+        // A stale snapshot must not move a started match back to its pre-kickoff state.
+        if (state && !state.is_deleted && data.status === 'SCHEDULED' && state.status !== 'SCHEDULED') {
+          throw Object.assign(new Error('Cannot replay a scheduled state over a started match'), { statusCode: 409 });
+        }
+        // Retrying a completion acknowledges the saved result instead of overwriting it.
+        if (state && !state.is_deleted && state.status === 'COMPLETED' && data.status === 'COMPLETED') return state;
+        const periods = await tx.match_periods.findMany({ where: { match_id: matchId, is_deleted: false } });
+        if (data.status !== 'SCHEDULED' && !periods.length) {
+          throw Object.assign(new Error('Import periods before replaying match state'), { statusCode: 409 });
+        }
+        if (data.currentPeriod != null && !periods.some(p => p.period_number === data.currentPeriod && p.period_type === data.currentPeriodType)) {
+          throw Object.assign(new Error('Current period has not been imported'), { statusCode: 409 });
+        }
+        const selected = data.currentPeriod != null ? periods.find(period => period.period_number === data.currentPeriod &&
+          period.period_type === data.currentPeriodType) : periods.find(period => !period.ended_at);
+        if (data.status === 'LIVE' && (!selected || selected.ended_at)) {
+          throw Object.assign(new Error('LIVE requires an active imported period'), { statusCode: 409 });
+        }
+        if (data.status === 'COMPLETED' && periods.some(p => !p.ended_at)) {
+          throw Object.assign(new Error('End active periods before completing the match'), { statusCode: 409 });
+        }
+        const values = {
+          status: data.status, total_elapsed_seconds: data.totalElapsedSeconds,
+          current_period: data.currentPeriod ?? null, current_period_type: data.currentPeriodType ?? null,
+          active_since: data.status === 'LIVE' ? new Date(data.activeSince ?? Date.now()) : null,
+          match_started_at: data.matchStartedAt ? new Date(data.matchStartedAt) : state?.match_started_at ?? null,
+          match_ended_at: data.status === 'COMPLETED' ? new Date(data.matchEndedAt ?? Date.now()) : null,
+          is_deleted: false, deleted_at: null, deleted_by_user_id: null, updated_at: new Date(),
+        };
+        return tx.match_state.upsert({
+          where: { match_id: matchId },
+          create: { ...values, match_id: matchId, created_by_user_id: userId },
+          update: values,
+        });
+      });
+      this.invalidateMatchCache(matchId, userId, userRole);
+      const result = transformMatchState(updated);
+      const { sseHub } = await import('../utils/sse');
+      sseHub.broadcast(matchId, 'state_changed', result);
+      return result;
+    }, 'MatchState');
   }
 
   /**
@@ -199,7 +264,7 @@ export class MatchStateService {
   /**
    * Pause a live match
    */
-  async pauseMatch(matchId: string, userId: string, userRole: string, _options?: MatchStateTransitionOptions): Promise<MatchState> {
+  async pauseMatch(matchId: string, userId: string, userRole: string, options?: MatchStateTransitionOptions): Promise<MatchState> {
     return withPrismaErrorHandling(async () => {
       // Validate user permission first
       const hasPermission = await this.validateUserPermission(matchId, userId, userRole);
@@ -240,7 +305,7 @@ export class MatchStateService {
           where: { id: matchState.id },
           data: {
             status: 'PAUSED',
-            total_elapsed_seconds: baseTotal + delta,
+            total_elapsed_seconds: options?.totalElapsedSeconds ?? baseTotal + delta,
             active_since: null,
             updated_at: new Date()
           }
@@ -267,7 +332,7 @@ export class MatchStateService {
   /**
    * Resume a paused match
    */
-  async resumeMatch(matchId: string, userId: string, userRole: string): Promise<MatchState> {
+  async resumeMatch(matchId: string, userId: string, userRole: string, options?: MatchStateTransitionOptions): Promise<MatchState> {
     return withPrismaErrorHandling(async () => {
       // Validate user permission first
       const hasPermission = await this.validateUserPermission(matchId, userId, userRole);
@@ -306,6 +371,7 @@ export class MatchStateService {
           where: { id: matchState.id },
           data: {
             status: 'LIVE',
+            ...(options?.totalElapsedSeconds !== undefined ? { total_elapsed_seconds: options.totalElapsedSeconds } : {}),
             active_since: new Date(),
             updated_at: new Date()
           }
@@ -361,7 +427,7 @@ export class MatchStateService {
   /**
    * Complete a match - transition to completed
    */
-  async completeMatch(matchId: string, userId: string, userRole: string): Promise<MatchState> {
+  async completeMatch(matchId: string, userId: string, userRole: string, options?: MatchStateTransitionOptions): Promise<MatchState> {
     return withPrismaErrorHandling(async () => {
       // Validate user permission
       const hasPermission = await this.validateUserPermission(matchId, userId, userRole);
@@ -403,7 +469,12 @@ export class MatchStateService {
         if (activePeriod && activePeriod.started_at) {
           const endTime = new Date();
           const durationMs = endTime.getTime() - activePeriod.started_at.getTime();
-          const durationSeconds = Math.ceil(durationMs / 1000);
+          const completedBefore = options?.totalElapsedSeconds !== undefined ? await tx.match_periods.findMany({
+            where: { match_id: matchId, ended_at: { not: null }, is_deleted: false }, select: { duration_seconds: true }
+          }) : [];
+          const completedTotal = completedBefore.reduce((sum, p) => sum + (p.duration_seconds || 0), 0);
+          const durationSeconds = options?.totalElapsedSeconds !== undefined
+            ? Math.max(0, options.totalElapsedSeconds - completedTotal) : Math.max(0, Math.ceil(durationMs / 1000));
 
           await tx.match_periods.update({
             where: { id: activePeriod.id },
@@ -427,8 +498,9 @@ export class MatchStateService {
           where: { id: matchState.id },
           data: {
             status: 'COMPLETED',
+            active_since: null,
             match_ended_at: new Date(),
-            total_elapsed_seconds: finalTotal,
+            total_elapsed_seconds: options?.totalElapsedSeconds ?? finalTotal,
             updated_at: new Date()
           }
         });
