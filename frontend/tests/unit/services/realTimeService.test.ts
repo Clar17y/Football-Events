@@ -1,244 +1,57 @@
-import { describe, it, expect, beforeEach, afterEach, vi, Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+const mocks = vi.hoisted(() => ({ create: vi.fn(), generation: 0, owner: 'user-1',
+  socket: { on: vi.fn(), emit: vi.fn(), disconnect: vi.fn() } }));
+vi.mock('socket.io-client', () => ({ io: () => mocks.socket }));
+vi.mock('../../../src/services/dataLayer', () => ({ eventsDataLayer: { create: mocks.create } }));
+vi.mock('../../../src/services/api/baseApi', () => ({ apiClient: { getSessionGeneration: () => mocks.generation } }));
+vi.mock('../../../src/utils/network', () => ({ getCurrentUserId: () => mocks.owner }));
 import { RealTimeService } from '../../../src/services/realTimeService';
 import type { MatchEvent } from '../../../src/types/events';
-
-// Create mock db object that will be used by dynamic imports
-const mockDb = {
-  addEventToTable: vi.fn(),
-  events: {
-    filter: vi.fn(() => ({
-      toArray: vi.fn()
-    })),
-    update: vi.fn()
-  }
-};
-
-// Mock Socket.IO
-vi.mock('socket.io-client', () => {
-  const mockSocket = {
-    on: vi.fn(),
-    emit: vi.fn(),
-    disconnect: vi.fn(),
-    connected: false
-  };
-  
-  return {
-    io: vi.fn(() => mockSocket)
-  };
+let service: RealTimeService;
+const event = { id: 'event-1', matchId: 'match-1', teamId: 'team-1', kind: 'goal',
+  createdByUserId: 'user-1', sentiment: 3, isDeleted: false } as MatchEvent;
+function receive(name: string, ...args: any[]) {
+  mocks.socket.on.mock.calls.find(call => call[0] === name)?.[1]?.(...args);
+}
+beforeEach(() => {
+  vi.clearAllMocks(); mocks.generation = 0; mocks.owner = 'user-1';
+  mocks.create.mockResolvedValue({ id: 'durable-event' });
+  service = new RealTimeService({ serverUrl: 'http://localhost', timeout: 5, reconnectionAttempts: 1, reconnectionDelay: 1 });
 });
-
-// Mock database - needs to handle dynamic imports
-vi.mock('../../../src/db/indexedDB', () => ({
-  db: mockDb
-}));
-
-// Mock guest utilities used by storeEventLocally
-vi.mock('../../../src/utils/guest', () => ({
-  isGuest: vi.fn(() => false),
-  getGuestId: vi.fn(() => 'guest-123')
-}));
-
-describe('RealTimeService', () => {
-  let realTimeService: RealTimeService;
-  let mockEvent: MatchEvent;
-  let mockSocket: any;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    
-    // Get fresh mock socket instance
-    mockSocket = {
-      on: vi.fn(),
-      emit: vi.fn(),
-      disconnect: vi.fn(),
-      connected: false
-    };
-    
-    realTimeService = new RealTimeService({
-      serverUrl: 'http://localhost:3001',
-      reconnectionAttempts: 3,
-      reconnectionDelay: 1000,
-      timeout: 5000
-    });
-
-    mockEvent = {
-      id: 'test-event-1',
-      kind: 'goal',
-      matchId: 'test-match-1',
-      teamId: 'test-team-1',
-      playerId: 'test-player-1',
-      periodNumber: 1,
-      clockMs: 300000,
-      sentiment: 3,
-      notes: 'Test goal',
-      createdAt: new Date().toISOString(),
-      createdByUserId: 'user-1',
-      isDeleted: false
-    } as MatchEvent;
+afterEach(() => service.disconnect());
+describe('durable legacy publishing and viewer transport', () => {
+  it.each([false, true])('saves canonically before success with connected=%s', async connected => {
+    if (connected) receive('connect');
+    expect(await service.publishEvent(event)).toEqual({ success: true, method: 'local' });
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ sentiment: 3, createdByUserId: 'user-1' }),
+      expect.objectContaining({ ownerId: 'user-1', isCurrent: expect.any(Function) }));
+    expect(mocks.socket.emit).not.toHaveBeenCalled();
   });
-
-  afterEach(() => {
-    realTimeService.disconnect();
+  it('cannot report success when local persistence fails', async () => {
+    receive('connect'); mocks.create.mockRejectedValueOnce(new Error('storage failure'));
+    expect(await service.publishEvent(event)).toEqual({ success: false, method: 'local' });
+    expect(mocks.socket.emit).not.toHaveBeenCalled();
   });
-
-  describe('publishEvent', () => {
-    it('should try real-time first when connected', async () => {
-      // Mock connected state
-      (realTimeService as any).isConnected = true;
-      (realTimeService as any).socket = mockSocket;
-      
-      // Mock successful real-time publish
-      mockSocket.emit.mockImplementation((event: string, data: any, callback?: (response: { success: boolean }) => void) => {
-        if (event === 'match_event' && callback) {
-          callback({ success: true });
-        }
-      });
-
-      const result = await realTimeService.publishEvent(mockEvent);
-
-      expect(result.success).toBe(true);
-      expect(result.method).toBe('realtime');
-      expect(mockSocket.emit).toHaveBeenCalledWith('match_event', mockEvent, expect.any(Function));
-      expect(mockDb.addEventToTable).not.toHaveBeenCalled();
-    });
-
-    it('should fallback to local storage when real-time fails', async () => {
-      // Mock connected state but failing real-time
-      (realTimeService as any).isConnected = true;
-      (realTimeService as any).socket = mockSocket;
-      
-      // Mock failed real-time publish
-      mockSocket.emit.mockImplementation((event: string, data: any, callback?: (response: { success: boolean }) => void) => {
-        if (event === 'match_event' && callback) {
-          callback({ success: false });
-        }
-      });
-
-      // Mock successful local storage
-      mockDb.addEventToTable.mockResolvedValue({ success: true, data: 'event-id' });
-
-      const result = await realTimeService.publishEvent(mockEvent);
-
-      expect(result.success).toBe(true);
-      expect(result.method).toBe('local');
-      expect(mockSocket.emit).toHaveBeenCalledWith('match_event', mockEvent, expect.any(Function));
-      expect(mockDb.addEventToTable).toHaveBeenCalled();
-    });
-
-    it('should use local storage when disconnected', async () => {
-      // Mock disconnected state
-      (realTimeService as any).isConnected = false;
-      (realTimeService as any).socket = null;
-      
-      // Mock successful local storage
-      mockDb.addEventToTable.mockResolvedValue({ success: true, data: 'event-id' });
-
-      const result = await realTimeService.publishEvent(mockEvent);
-
-      expect(result.success).toBe(true);
-      expect(result.method).toBe('local');
-      expect(mockSocket.emit).not.toHaveBeenCalled();
-      expect(mockDb.addEventToTable).toHaveBeenCalled();
-    });
-
-    it('should handle local storage failure gracefully', async () => {
-      // Mock disconnected state
-      (realTimeService as any).isConnected = false;
-      (realTimeService as any).socket = null;
-      
-      // Mock failed local storage
-      mockDb.addEventToTable.mockResolvedValue({ 
-        success: false, 
-        error: 'Database error' 
-      });
-
-      const result = await realTimeService.publishEvent(mockEvent);
-
-      expect(result.success).toBe(false);
-      expect(result.method).toBe('local');
-    });
+  it.each([{ ...event, createdByUserId: 'another-user' }, { ...event, teamId: undefined }])('rejects invalid publishing context', async invalid => {
+    expect((await service.publishEvent(invalid)).success).toBe(false);
+    expect(mocks.create).not.toHaveBeenCalled();
   });
-
-  describe('connection management', () => {
-    it('should handle connection events', () => {
-      const connectionCallback = vi.fn();
-      const unsubscribe = realTimeService.onConnectionChange(connectionCallback);
-
-      // Manually trigger connection change since we're mocking
-      (realTimeService as any).isConnected = true;
-      (realTimeService as any).notifyConnectionChange(true);
-
-      expect(connectionCallback).toHaveBeenCalledWith(true);
-
-      // Simulate disconnection
-      (realTimeService as any).isConnected = false;
-      (realTimeService as any).notifyConnectionChange(false);
-
-      expect(connectionCallback).toHaveBeenCalledWith(false);
-
-      // Test unsubscribe
-      unsubscribe();
-      connectionCallback.mockClear();
-
-      // Try to trigger connection change after unsubscribe
-      (realTimeService as any).notifyConnectionChange(true);
-
-      expect(connectionCallback).not.toHaveBeenCalled();
-    });
-
-    it('should handle live events', () => {
-      const eventCallback = vi.fn();
-      const unsubscribe = realTimeService.onEvent(eventCallback);
-
-      // Manually trigger event notification since we're mocking
-      (realTimeService as any).notifyEventReceived(mockEvent);
-
-      expect(eventCallback).toHaveBeenCalledWith(mockEvent);
-
-      // Test unsubscribe
-      unsubscribe();
-      eventCallback.mockClear();
-
-      // Try to trigger event after unsubscribe
-      (realTimeService as any).notifyEventReceived(mockEvent);
-
-      expect(eventCallback).not.toHaveBeenCalled();
-    });
+  it('captures owner and generation for the canonical writer guard', async () => {
+    await service.publishEvent(event);
+    const guard = mocks.create.mock.calls[0][1]; expect(guard.isCurrent()).toBe(true);
+    mocks.generation++; expect(guard.isCurrent()).toBe(false);
   });
-
-  describe('match room management', () => {
-    it('should join match room when connected', () => {
-      // Mock connected state
-      (realTimeService as any).isConnected = true;
-      (realTimeService as any).socket = mockSocket;
-
-      realTimeService.joinMatch('test-match-1');
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('join-match', 'test-match-1');
-      expect(realTimeService.matchId).toBe('test-match-1');
-    });
-
-    it('should leave match room when connected', () => {
-      // Setup current match
-      (realTimeService as any).currentMatchId = 'test-match-1';
-      (realTimeService as any).isConnected = true;
-      (realTimeService as any).socket = mockSocket;
-
-      realTimeService.leaveMatch();
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('leave-match', 'test-match-1');
-      expect(realTimeService.matchId).toBe(null);
-    });
-
-    it('should store match ID even when disconnected', () => {
-      // Mock disconnected state
-      (realTimeService as any).isConnected = false;
-      (realTimeService as any).socket = null;
-
-      realTimeService.joinMatch('test-match-1');
-
-      expect(mockSocket.emit).not.toHaveBeenCalled();
-      expect(realTimeService.matchId).toBe('test-match-1');
-    });
+  it('ignores receipt confirmations and only notifies live viewers', () => {
+    const viewer = vi.fn(); service.onEvent(viewer);
+    receive('match_event_confirmed', event.id); receive('live_event', event);
+    expect(viewer).toHaveBeenCalledWith(event);
+    expect(mocks.socket.on.mock.calls.some(call => call[0] === 'match_event_confirmed')).toBe(false);
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it('rejoins, leaves and disconnects the selected room', () => {
+    service.joinMatch('match-1'); receive('connect'); expect(service.connected).toBe(true);
+    expect(mocks.socket.emit).toHaveBeenCalledWith('join-match', 'match-1');
+    service.leaveMatch(); expect(service.matchId).toBeNull();
+    receive('disconnect'); expect(service.connected).toBe(false);
   });
 });

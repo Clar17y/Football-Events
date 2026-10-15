@@ -1,8 +1,11 @@
 import { apiClient, ApiRequestError } from './api/baseApi';
-import { matchesApi } from './api/matchesApi';
+import { captureSyncSession, assertSyncSession, isSyncSessionCurrent, SyncSessionChangedError, seasonRemoteId, lookupOwnedSeason, type SyncSession, type SeasonIdentity } from './seasonIdentity';
+import { serverSeasonToDb } from '../db/transforms/seasons';
+import type { DbSeason } from '../db/schema';
 import { isGuestId } from './importService';
 import { db } from '../db/indexedDB';
 import { getAuthUserId } from '../utils/network';
+import { bumpRecordingRevision, isReplayableMatchStatus, reclaimLegacyRecordings } from './dataLayer';
 import {
   dbTeamToServerPayload,
   dbPlayerToServerPayload,
@@ -105,7 +108,7 @@ function classifySyncError(error: unknown): FailureClassification {
 }
 
 function isAuthStopError(error: unknown): boolean {
-  return classifySyncError(error).disposition === 'auth';
+  return error instanceof SyncSessionChangedError || classifySyncError(error).disposition === 'auth';
 }
 
 async function getSyncFailure(table: string, recordId: string) {
@@ -183,29 +186,196 @@ function isOwnedByAuth(record: { createdByUserId?: string }, authUserId: string)
   return record.createdByUserId === authUserId || LEGACY_USER_IDS.has(record.createdByUserId || '');
 }
 
+function sessionClient(session: SyncSession) {
+  async function request<T>(method: 'get' | 'post' | 'put' | 'delete', path: string, data?: any) {
+    assertSyncSession(session);
+    const response = method === 'delete'
+      ? await apiClient.delete<T>(path)
+      : await apiClient[method]<T>(path, data);
+    assertSyncSession(session);
+    return response;
+  }
+  return {
+    get: <T = any>(path: string, data?: URLSearchParams) => request<T>('get', path, data),
+    post: <T = any>(path: string, data?: any) => request<T>('post', path, data),
+    put: <T = any>(path: string, data?: any) => request<T>('put', path, data),
+    delete: <T = any>(path: string) => request<T>('delete', path),
+  };
+}
+
+async function parentConfirmed(table: 'seasons' | 'matches', id: string, ownerId: string): Promise<boolean> {
+  const parent = await db[table]?.get(id);
+  return !!parent && isOwnedByAuth(parent, ownerId) && !parent.isDeleted &&
+    (parent.synced === true || !!parent.syncedAt);
+}
+
+async function recoverRecordingFailures(matchId: string, session: SyncSession): Promise<void> {
+  await db.transaction('rw', [db.matches, db.events, db.matchPeriods, db.matchState, db.lineup, db.syncFailures], async () => {
+    assertSyncSession(session);
+    const match = await db.matches.get(matchId);
+    if (!match?.prerequisiteRecovery || !match.syncedAt || match.createdByUserId !== session.ownerId) return;
+    for (const table of [db.events, db.matchPeriods, db.matchState, db.lineup]) {
+      const rows = await table.where('matchId').equals(matchId).toArray();
+      for (const row of rows) {
+        const id = 'id' in row ? row.id : row.matchId;
+        const failure = await getSyncFailure(table.name, id);
+        if (row.createdByUserId === session.ownerId && !row.syncedAt && failure?.lastStatus === 403 &&
+            failure.reasonCode === 'ACCESS_DENIED') await clearSyncFailure(table.name, id);
+      }
+    }
+    assertSyncSession(session);
+    await db.matches.update(matchId, { prerequisiteRecovery: false });
+  });
+}
+
+async function bindSeason(submitted: DbSeason, identity: SeasonIdentity, session: SyncSession): Promise<boolean> {
+  const { remote, provenance } = identity;
+  return db.transaction('rw', db.seasons, db.matches, db.syncFailures, async () => {
+    assertSyncSession(session);
+    const current = await db.seasons.get(submitted.seasonId);
+    if (!current || current.createdByUserId !== session.ownerId) return false;
+    const remoteId = remote.id ?? remote.seasonId;
+    const existingAliases = await db.seasons.filter(row => row.seasonId !== current.seasonId &&
+      row.remoteSeasonId === remoteId).toArray();
+    if (existingAliases.length) return false;
+    const canonical = await db.seasons.get(remoteId);
+    if (canonical && canonical.id !== current.id &&
+        (canonical.createdByUserId !== session.ownerId || !canonical.synced || canonical.isDeleted)) return false;
+    const references = canonical && canonical.id !== current.id
+      ? await db.matches.where('seasonId').equals(remoteId).toArray() : [];
+    if (references.some(match => match.createdByUserId !== session.ownerId)) return false;
+    const priorFailure = await getSyncFailure('seasons', current.seasonId);
+    const metadata = serverSeasonToDb(remote);
+    const unchanged = sameSnapshot(current, submitted);
+    const fields = ['label', 'startDate', 'endDate', 'isCurrent', 'description'] as const;
+    const fieldValue = (row: DbSeason, field: typeof fields[number]) =>
+      field === 'startDate' || field === 'endDate' ? row[field]?.split('T')[0] : row[field] ?? (field === 'isCurrent' ? false : '');
+    const baseline: Partial<DbSeason> = {};
+    // Natural-key adoption imports cloud fields only where this draft was not edited.
+    // Exact-ID proof establishes existence, never acknowledges an unpersisted local edit.
+    if (provenance === 'natural-key') {
+      for (const field of fields) {
+        if (fieldValue(current, field) === fieldValue(submitted, field)) Object.assign(baseline, { [field]: metadata[field] });
+      }
+    }
+    const merged = { ...current, ...baseline };
+    const persisted = fields.every(field => fieldValue(merged, field) === fieldValue(metadata, field));
+    await db.seasons.update(current.seasonId, {
+      ...baseline,
+      remoteSeasonId: remoteId, syncedAt: new Date().toISOString(), synced: unchanged && persisted && !current.isDeleted,
+    });
+    if (canonical && canonical.id !== current.id) {
+      for (const match of references) await db.matches.update(match.id, { seasonId: current.seasonId });
+      await db.seasons.delete(remoteId);
+    }
+    if (priorFailure?.lastStatus === 409) {
+      const matches = await db.matches.where('seasonId').equals(current.seasonId).toArray();
+      for (const match of matches) {
+        const failure = await getSyncFailure('matches', match.id);
+        if (match.createdByUserId === session.ownerId && !match.syncedAt && failure?.lastStatus === 403 &&
+            failure.reasonCode === 'ACCESS_DENIED') {
+          await clearSyncFailure('matches', match.id);
+          await db.matches.update(match.id, { prerequisiteRecovery: true });
+        }
+      }
+    }
+    assertSyncSession(session);
+    if (priorFailure?.lastStatus === 409 || !priorFailure?.permanent) await clearSyncFailure('seasons', current.seasonId);
+    return true;
+  });
+}
+
+type SyncSnapshot = { syncRevision?: string; createdByUserId?: string; syncAttempted?: boolean; remoteId?: string };
+
+function sameSnapshot(current: any, submitted: any): boolean {
+  if (current.createdByUserId !== submitted.createdByUserId) return false;
+  if (submitted.syncRevision) return current.syncRevision === submitted.syncRevision;
+  const content = (row: any) => JSON.stringify(Object.entries(row)
+    .filter(([key]) => !['synced', 'syncedAt', 'syncAttempted', 'remoteId', 'remoteSeasonId', 'prerequisiteRecovery', 'linkedEvents', 'autoLinkedAt'].includes(key))
+    .sort(([a], [b]) => a.localeCompare(b)));
+  return content(current) === content(submitted);
+}
+
+async function acknowledgeSnapshot(table: any, key: string, submitted: any, session: SyncSession, remoteId?: string) {
+  await db.transaction('rw', table, db.matches, db.syncFailures, async () => {
+    const current = await table.get(key);
+    if (!current || current.createdByUserId !== submitted.createdByUserId || !isSyncSessionCurrent(session)) return;
+    await table.update(key, {
+      synced: sameSnapshot(current, submitted), syncedAt: new Date().toISOString(),
+      ...(remoteId ? { remoteId } : {}),
+    });
+    if (sameSnapshot(current, submitted)) await clearSyncFailure(table.name, key);
+    if (typeof submitted.matchId === 'string') await bumpRecordingRevision(submitted.matchId);
+    assertSyncSession(session);
+  });
+}
+
+async function recordSnapshotFailure(tableName: string, table: any, key: string, submitted: any, error: unknown, session: SyncSession) {
+  if (isAuthStopError(error) || !isSyncSessionCurrent(session)) return { abortAll: true };
+  return db.transaction('rw', table, db.syncFailures, async () => {
+    const current = await table.get(key);
+    // An error for old contents must not quarantine an edit or Undo made while waiting.
+    if (!isSyncSessionCurrent(session) || !current || !sameSnapshot(current, submitted)) return { abortAll: false };
+    const result = await recordSyncFailure(tableName, key, error);
+    assertSyncSession(session);
+    return result;
+  });
+}
+
+async function removeSnapshot(table: any, submitted: any, session: SyncSession) {
+  await db.transaction('rw', table, db.matches, db.syncFailures, async () => {
+    const current = await table.get(submitted.id);
+    if (isSyncSessionCurrent(session) && current && sameSnapshot(current, submitted)) {
+      await table.delete(submitted.id);
+      await clearSyncFailure(table.name, submitted.id);
+      if (typeof submitted.matchId === 'string') await bumpRecordingRevision(submitted.matchId);
+      assertSyncSession(session);
+    }
+  });
+}
+
+async function markSnapshotAttempted(table: any, key: string, submitted: any, session: SyncSession): Promise<boolean> {
+  return db.transaction('rw', table, async () => {
+    assertSyncSession(session);
+    const current = await table.get(key);
+    if (!current || !sameSnapshot(current, submitted)) return false;
+    await table.update(key, { syncAttempted: true });
+    assertSyncSession(session);
+    return true;
+  });
+}
+
+async function eligibleBatch<T extends { id: string }>(tableName: string, records: T[], session: SyncSession, dependency?: (row: T) => Promise<boolean>): Promise<T[]> {
+  const eligible: T[] = [];
+  for (const row of records) {
+    assertSyncSession(session);
+    if (await shouldAttemptSync(tableName, row.id) && (!dependency || await dependency(row))) eligible.push(row);
+    if (eligible.length === BATCH_SIZE) break;
+  }
+  return eligible;
+}
+
 /**
- * Handle soft-deleted records:
- * - If isDeleted && !syncedAt → delete locally only (never synced to server)
- * - If isDeleted && syncedAt → call DELETE API, then delete locally
- *
- * Returns records that still need to be synced (non-deleted or delete failed)
+ * Retire only the submitted tombstone. Events always attempt idempotent remote deletion:
+ * a lost PUT response cannot establish that an event never reached the server.
+ * Returns the non-deleted records; failed deletions stay pending locally.
  */
 async function processSoftDeletes<T extends { id: string; isDeleted?: boolean; syncedAt?: string }>(
   table: any,
   records: T[],
   deleteApiCall: (id: string) => Promise<void>,
   tableName: string,
-  result: SyncResult
+  result: SyncResult,
+  session: SyncSession
 ): Promise<T[]> {
   const toSync: T[] = [];
 
   for (const record of records) {
     if (record.isDeleted) {
-      if (!record.syncedAt) {
+      if (!record.syncedAt && !(record as SyncSnapshot).syncAttempted && tableName !== 'events') {
         // Never synced to server - just delete locally
         try {
-          await table.delete(record.id);
-          await clearSyncFailure(tableName, record.id);
+          await removeSnapshot(table, record, session);
           console.debug(`[SyncService] Deleted local-only ${tableName} record:`, record.id);
         } catch (err) {
           console.error(`[SyncService] Failed to delete local ${tableName}:`, err);
@@ -216,14 +386,17 @@ async function processSoftDeletes<T extends { id: string; isDeleted?: boolean; s
         }
         // Was synced before - tell server to delete, then delete locally
         try {
-          await deleteApiCall(record.id);
-          await table.delete(record.id);
-          await clearSyncFailure(tableName, record.id);
+          try {
+            await deleteApiCall(record.id);
+          } catch (error) {
+            if (classifySyncError(error).status !== 404) throw error;
+          }
+          await removeSnapshot(table, record, session);
           result.synced++;
           console.debug(`[SyncService] Deleted synced ${tableName} record from server:`, record.id);
         } catch (err) {
-          const { abortAll } = await recordSyncFailure(tableName, record.id, err);
-          if (abortAll) throw err;
+          const { abortAll } = await recordSnapshotFailure(tableName, table, record.id, record, err, session);
+          if (abortAll) { if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError(); throw err; }
           result.failed++;
           result.errors.push({
             table: tableName,
@@ -281,78 +454,58 @@ function emitSyncProgress(progress: SyncProgress): void {
  * Requirements: 3.3 - Update synced to true and set synced_at on success
  * Requirements: 3.3 - Exclude guest records
  */
-async function syncSeasons(authUserId: string): Promise<SyncResult> {
+async function syncSeasons(authUserId: string, session: SyncSession): Promise<SyncResult> {
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
-  if (!authUserId) {
-    return result;
-  }
-
-  try {
-    if (!db.seasons) {
-      return result;
-    }
-
-    let allSeasons;
+  const client = sessionClient(session);
+  const seasons = await db.seasons.toArray();
+  let attempted = 0;
+  for (const season of seasons.filter(s => !s.synced && isOwnedByAuth(s, authUserId) && !isGuestId(s.createdByUserId))) {
+    assertSyncSession(session);
+    const failure = await getSyncFailure('seasons', season.seasonId);
+    const repairConflict = !season.syncedAt && failure?.lastStatus === 409;
+    if (!repairConflict && !await shouldAttemptSync('seasons', season.seasonId)) continue;
+    if (++attempted > BATCH_SIZE) break;
     try {
-      allSeasons = await db.seasons.toArray();
-    } catch (dbErr) {
-      console.debug('[SyncService] Seasons table not ready:', dbErr);
-      return result;
-    }
-
-    // Filter for unsynced, non-guest records
-    const unsyncedSeasons = allSeasons
-      .filter(s => s.synced === false && !isGuestId(s.createdByUserId) && isOwnedByAuth(s, authUserId))
-      .slice(0, BATCH_SIZE);
-
-    // Process soft deletes first
-    const seasonsToSync = await processSoftDeletes(
-      db.seasons,
-      unsyncedSeasons.map(s => ({ ...s, id: s.seasonId })),
-      async (id) => { await apiClient.delete(`/seasons/${id}`); },
-      'seasons',
-      result
-    );
-
-    for (const season of seasonsToSync) {
-      try {
-        if (!(await shouldAttemptSync('seasons', season.id))) {
+      if (season.isDeleted) {
+        await processSoftDeletes(db.seasons, [season], async () => {
+          await client.delete(`/seasons/${seasonRemoteId(season)}`);
+        }, 'seasons', result, session);
+        continue;
+      }
+      if (!season.syncedAt) {
+        const existing = await lookupOwnedSeason(season, session);
+        if (existing) {
+          if (!await bindSeason(season, existing, session)) throw new Error('Local season identity conflict');
+          result.synced++;
           continue;
         }
-        // Use centralized transform: IndexedDB → Server API payload
-        const seasonData = dbSeasonToServerPayload(season as any);
-
-        // If syncedAt exists, this is an update; otherwise it's a create
-        // IMPORTANT: Call server API directly, not the local-first seasonsApi
-        if ((season as any).syncedAt) {
-          await apiClient.put(`/seasons/${season.id}`, seasonData);
-        } else {
-          await apiClient.post('/seasons', seasonData);
-        }
-
-        await db.seasons.update(season.id, {
-          synced: true,
-          syncedAt: new Date().toISOString(),
-        });
-        await clearSyncFailure('seasons', season.id);
-
-        result.synced++;
-      } catch (err) {
-        const { abortAll } = await recordSyncFailure('seasons', season.id, err);
-        if (abortAll) throw err;
-        result.failed++;
-        result.errors.push({
-          table: 'seasons',
-          recordId: season.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
+        // An old conflict must remain blocked until identity has actually been proved.
+        if (repairConflict) continue;
       }
+      const payload = dbSeasonToServerPayload(season);
+      if (season.syncedAt) {
+        await client.put(`/seasons/${seasonRemoteId(season)}`, payload);
+      } else {
+        assertSyncSession(session);
+        if (!await markSnapshotAttempted(db.seasons, season.seasonId, season, session)) continue;
+        try { await client.post('/seasons', payload); }
+        catch (error) {
+          if (classifySyncError(error).status !== 409) throw error;
+          const existing = await lookupOwnedSeason({ ...season, syncAttempted: true }, session);
+          if (!existing || !await bindSeason(season, existing, session)) throw error;
+          result.synced++;
+          continue;
+        }
+      }
+      await acknowledgeSnapshot(db.seasons, season.seasonId, season, session);
+      result.synced++;
+    } catch (error) {
+      const { abortAll } = await recordSnapshotFailure('seasons', db.seasons, season.seasonId, season, error, session);
+      if (abortAll) throw error;
+      result.failed++;
+      result.errors.push({ table: 'seasons', recordId: season.seasonId, error: String(error) });
     }
-  } catch (err) {
-    if (isAuthStopError(err)) throw err;
-    console.error('[SyncService] Error syncing seasons:', err);
   }
-
   return result;
 }
 
@@ -363,7 +516,8 @@ async function syncSeasons(authUserId: string): Promise<SyncResult> {
  * Requirements: 3.3 - Update synced to true and set synced_at on success
  * Requirements: 3.3 - Exclude guest records
  */
-async function syncTeams(authUserId: string): Promise<SyncResult> {
+async function syncTeams(authUserId: string, session: SyncSession): Promise<SyncResult> {
+  const client = sessionClient(session);
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
   if (!authUserId) {
     return result;
@@ -391,9 +545,9 @@ async function syncTeams(authUserId: string): Promise<SyncResult> {
     const teamsToSync = await processSoftDeletes(
       db.teams,
       unsyncedTeams,
-      async (id) => { await apiClient.delete(`/teams/${id}`); },
+      async (id) => { await client.delete(`/teams/${id}`); },
       'teams',
-      result
+      result, session
     );
 
     for (const team of teamsToSync) {
@@ -407,21 +561,17 @@ async function syncTeams(authUserId: string): Promise<SyncResult> {
         // If syncedAt exists, this is an update; otherwise it's a create
         // IMPORTANT: Call server API directly, not the local-first teamsApi
         if ((team as any).syncedAt) {
-          await apiClient.put(`/teams/${team.id}`, teamData);
+          await client.put(`/teams/${team.id}`, teamData);
         } else {
-          await apiClient.post('/teams', teamData);
+          await client.post('/teams', teamData);
         }
 
-        await db.teams.update(team.id, {
-          synced: true,
-          syncedAt: new Date().toISOString(),
-        });
-        await clearSyncFailure('teams', team.id);
+        await acknowledgeSnapshot(db.teams, team.id, team, session);
 
         result.synced++;
       } catch (err) {
-        const { abortAll } = await recordSyncFailure('teams', team.id, err);
-        if (abortAll) throw err;
+        const { abortAll } = await recordSnapshotFailure('teams', db.teams, team.id, team, err, session);
+        if (abortAll) { if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError(); throw err; }
         result.failed++;
         result.errors.push({
           table: 'teams',
@@ -445,7 +595,8 @@ async function syncTeams(authUserId: string): Promise<SyncResult> {
  * Requirements: 3.3 - Update synced to true and set synced_at on success
  * Requirements: 3.3 - Exclude guest records
  */
-async function syncPlayers(authUserId: string): Promise<SyncResult> {
+async function syncPlayers(authUserId: string, session: SyncSession): Promise<SyncResult> {
+  const client = sessionClient(session);
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
   if (!authUserId) {
     return result;
@@ -473,9 +624,9 @@ async function syncPlayers(authUserId: string): Promise<SyncResult> {
     const playersToSync = await processSoftDeletes(
       db.players,
       unsyncedPlayers,
-      async (id) => { await apiClient.delete(`/players/${id}`); },
+      async (id) => { await client.delete(`/players/${id}`); },
       'players',
-      result
+      result, session
     );
 
     for (const player of playersToSync) {
@@ -490,31 +641,27 @@ async function syncPlayers(authUserId: string): Promise<SyncResult> {
         // IMPORTANT: Call server API directly, not the local-first playersApi
         if ((player as any).syncedAt) {
           // Update existing player
-          await apiClient.put(`/players/${player.id}`, playerData);
+          await client.put(`/players/${player.id}`, playerData);
         } else {
           // Create new player
           if (player.currentTeam) {
-            await apiClient.post('/players-with-team', {
+            await client.post('/players-with-team', {
               ...playerData,
               teamId: player.currentTeam,
               startDate: new Date().toISOString().slice(0, 10),
               isActive: true,
             });
           } else {
-            await apiClient.post('/players', playerData);
+            await client.post('/players', playerData);
           }
         }
 
-        await db.players.update(player.id, {
-          synced: true,
-          syncedAt: new Date().toISOString(),
-        });
-        await clearSyncFailure('players', player.id);
+        await acknowledgeSnapshot(db.players, player.id, player, session);
 
         result.synced++;
       } catch (err) {
-        const { abortAll } = await recordSyncFailure('players', player.id, err);
-        if (abortAll) throw err;
+        const { abortAll } = await recordSnapshotFailure('players', db.players, player.id, player, err, session);
+        if (abortAll) { if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError(); throw err; }
         result.failed++;
         result.errors.push({
           table: 'players',
@@ -538,7 +685,8 @@ async function syncPlayers(authUserId: string): Promise<SyncResult> {
  * Requirements: 3.3 - Update synced to true and set synced_at on success
  * Requirements: 3.3 - Exclude guest records
  */
-async function syncPlayerTeams(authUserId: string): Promise<SyncResult> {
+async function syncPlayerTeams(authUserId: string, session: SyncSession): Promise<SyncResult> {
+  const client = sessionClient(session);
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
   if (!authUserId) {
     return result;
@@ -567,10 +715,10 @@ async function syncPlayerTeams(authUserId: string): Promise<SyncResult> {
       db.playerTeams,
       unsyncedPlayerTeams,
       async (id) => {
-        await apiClient.delete(`/player-teams/${id}`);
+        await client.delete(`/player-teams/${id}`);
       },
       'playerTeams',
-      result
+      result, session
     );
 
     for (const playerTeam of playerTeamsToSync) {
@@ -581,18 +729,14 @@ async function syncPlayerTeams(authUserId: string): Promise<SyncResult> {
         const payload = dbPlayerTeamToServerPayload(playerTeam);
 
         // Use PUT for upsert behavior with client-generated ID
-        await apiClient.put(`/player-teams/${playerTeam.id}`, payload);
+        await client.put(`/player-teams/${playerTeam.id}`, payload);
 
-        await db.playerTeams.update(playerTeam.id, {
-          synced: true,
-          syncedAt: new Date().toISOString(),
-        });
-        await clearSyncFailure('playerTeams', playerTeam.id);
+        await acknowledgeSnapshot(db.playerTeams, playerTeam.id, playerTeam, session);
 
         result.synced++;
       } catch (err) {
-        const { abortAll } = await recordSyncFailure('playerTeams', playerTeam.id, err);
-        if (abortAll) throw err;
+        const { abortAll } = await recordSnapshotFailure('playerTeams', db.playerTeams, playerTeam.id, playerTeam, err, session);
+        if (abortAll) { if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError(); throw err; }
         result.failed++;
         result.errors.push({
           table: 'playerTeams',
@@ -616,7 +760,8 @@ async function syncPlayerTeams(authUserId: string): Promise<SyncResult> {
  * Requirements: 3.3 - Update synced to true and set synced_at on success
  * Requirements: 3.3 - Exclude guest records
  */
-async function syncMatches(authUserId: string): Promise<SyncResult> {
+async function syncMatches(authUserId: string, session: SyncSession): Promise<SyncResult> {
+  const client = sessionClient(session);
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
   if (!authUserId) {
     return result;
@@ -636,18 +781,18 @@ async function syncMatches(authUserId: string): Promise<SyncResult> {
     }
 
     // Filter for unsynced, non-guest records
-    const unsyncedMatches = allMatches
-      .filter(m => m.synced === false && !isGuestId(m.createdByUserId) && isOwnedByAuth(m, authUserId))
-      .slice(0, BATCH_SIZE);
+    const unsyncedMatches = await eligibleBatch('matches', allMatches
+      .filter(m => m.synced === false && !isGuestId(m.createdByUserId) && isOwnedByAuth(m, authUserId)), session,
+      m => m.isDeleted ? Promise.resolve(true) : parentConfirmed('seasons', m.seasonId, authUserId));
 
     // Process soft deletes first
     // IMPORTANT: Use direct API call for delete, NOT matchesApi.deleteMatch which is local-first
     const matchesToSync = await processSoftDeletes(
       db.matches,
       unsyncedMatches,
-      async (id) => { await apiClient.delete(`/matches/${id}`); },
+      async (id) => { await client.delete(`/matches/${id}`); },
       'matches',
-      result
+      result, session
     );
 
     for (const match of matchesToSync) {
@@ -656,25 +801,25 @@ async function syncMatches(authUserId: string): Promise<SyncResult> {
           continue;
         }
         // Use centralized transform: IndexedDB → Server API payload
-        const matchData = dbMatchToServerPayload(match);
+        const season = await db.seasons.get(match.seasonId);
+        assertSyncSession(session);
+        if (!season || !await parentConfirmed('seasons', match.seasonId, authUserId)) continue;
+        const matchData = { ...dbMatchToServerPayload(match), seasonId: seasonRemoteId(season) };
 
         // If syncedAt exists, this is an update; otherwise it's a create
         if ((match as any).syncedAt) {
-          await apiClient.put(`/matches/${match.id}`, matchData);
+          await client.put(`/matches/${match.id}`, matchData);
         } else {
-          await apiClient.post('/matches', matchData);
+          await client.post('/matches', matchData);
         }
 
-        await db.matches.update(match.id, {
-          synced: true,
-          syncedAt: new Date().toISOString(),
-        });
-        await clearSyncFailure('matches', match.id);
+        await acknowledgeSnapshot(db.matches, match.id, match, session);
+        await recoverRecordingFailures(match.id, session);
 
         result.synced++;
       } catch (err) {
-        const { abortAll } = await recordSyncFailure('matches', match.id, err);
-        if (abortAll) throw err;
+        const { abortAll } = await recordSnapshotFailure('matches', db.matches, match.id, match, err, session);
+        if (abortAll) { if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError(); throw err; }
         result.failed++;
         result.errors.push({
           table: 'matches',
@@ -698,7 +843,8 @@ async function syncMatches(authUserId: string): Promise<SyncResult> {
  * Requirements: 3.3 - Update synced to true and set synced_at on success
  * Requirements: 3.3 - Exclude guest records
  */
-async function syncLineups(authUserId: string): Promise<SyncResult> {
+async function syncLineups(authUserId: string, session: SyncSession): Promise<SyncResult> {
+  const client = sessionClient(session);
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
   if (!authUserId) {
     return result;
@@ -718,9 +864,9 @@ async function syncLineups(authUserId: string): Promise<SyncResult> {
     }
 
     // Filter for unsynced, non-guest records
-    const unsyncedLineups = allLineups
-      .filter(l => l.synced === false && !isGuestId(l.createdByUserId) && isOwnedByAuth(l, authUserId))
-      .slice(0, BATCH_SIZE);
+    const unsyncedLineups = await eligibleBatch('lineup', allLineups
+      .filter(l => l.synced === false && !isGuestId(l.createdByUserId) && isOwnedByAuth(l, authUserId)), session,
+      l => parentConfirmed('matches', l.matchId, authUserId));
 
     // Process soft deletes first
     const lineupsToSync = await processSoftDeletes(
@@ -729,11 +875,11 @@ async function syncLineups(authUserId: string): Promise<SyncResult> {
       async (id) => {
         const lineup = unsyncedLineups.find(l => l.id === id);
         if (lineup) {
-          await apiClient.delete(`/lineups/by-key/${lineup.matchId}/${lineup.playerId}/${lineup.startMinute}`);
+          await client.delete(`/lineups/by-key/${lineup.matchId}/${lineup.playerId}/${lineup.startMinute}`);
         }
       },
       'lineup',
-      result
+      result, session
     );
 
     for (const lineup of lineupsToSync) {
@@ -741,21 +887,17 @@ async function syncLineups(authUserId: string): Promise<SyncResult> {
         if (!(await shouldAttemptSync('lineup', lineup.id))) {
           continue;
         }
-        await apiClient.put(`/lineups/by-key/${lineup.matchId}/${lineup.playerId}/${lineup.startMinute}`, {
+        await client.put(`/lineups/by-key/${lineup.matchId}/${lineup.playerId}/${lineup.startMinute}`, {
           endMinute: lineup.endMinute,
           position: lineup.position,
         });
 
-        await db.lineup.update(lineup.id, {
-          synced: true,
-          syncedAt: new Date().toISOString(),
-        });
-        await clearSyncFailure('lineup', lineup.id);
+        await acknowledgeSnapshot(db.lineup, lineup.id, lineup, session);
 
         result.synced++;
       } catch (err) {
-        const { abortAll } = await recordSyncFailure('lineup', lineup.id, err);
-        if (abortAll) throw err;
+        const { abortAll } = await recordSnapshotFailure('lineup', db.lineup, lineup.id, lineup, err, session);
+        if (abortAll) { if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError(); throw err; }
         result.failed++;
         result.errors.push({
           table: 'lineup',
@@ -779,7 +921,8 @@ async function syncLineups(authUserId: string): Promise<SyncResult> {
  * Requirements: 3.3 - Update synced to true and set synced_at on success
  * Requirements: 3.3 - Exclude guest records
  */
-async function syncDefaultLineups(authUserId: string): Promise<SyncResult> {
+async function syncDefaultLineups(authUserId: string, session: SyncSession): Promise<SyncResult> {
+  const client = sessionClient(session);
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
   if (!authUserId) {
     return result;
@@ -810,11 +953,11 @@ async function syncDefaultLineups(authUserId: string): Promise<SyncResult> {
       async (id) => {
         const dl = unsyncedDefaultLineups.find(d => d.id === id);
         if (dl) {
-          await apiClient.delete(`/default-lineups/${dl.teamId}`);
+          await client.delete(`/default-lineups/${dl.teamId}`);
         }
       },
       'defaultLineups',
-      result
+      result, session
     );
 
     for (const defaultLineup of defaultLineupsToSync) {
@@ -822,21 +965,17 @@ async function syncDefaultLineups(authUserId: string): Promise<SyncResult> {
         if (!(await shouldAttemptSync('defaultLineups', defaultLineup.id))) {
           continue;
         }
-        await apiClient.post('/default-lineups', {
+        await client.post('/default-lineups', {
           teamId: defaultLineup.teamId,
           formation: defaultLineup.formation,
         });
 
-        await db.defaultLineups.update(defaultLineup.id, {
-          synced: true,
-          syncedAt: new Date().toISOString(),
-        });
-        await clearSyncFailure('defaultLineups', defaultLineup.id);
+        await acknowledgeSnapshot(db.defaultLineups, defaultLineup.id, defaultLineup, session);
 
         result.synced++;
       } catch (err) {
-        const { abortAll } = await recordSyncFailure('defaultLineups', defaultLineup.id, err);
-        if (abortAll) throw err;
+        const { abortAll } = await recordSnapshotFailure('defaultLineups', db.defaultLineups, defaultLineup.id, defaultLineup, err, session);
+        if (abortAll) { if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError(); throw err; }
         result.failed++;
         result.errors.push({
           table: 'defaultLineups',
@@ -860,7 +999,8 @@ async function syncDefaultLineups(authUserId: string): Promise<SyncResult> {
  * Requirements: 2.4 - Update synced to true and set synced_at on success
  * Requirements: 2.6 - Exclude records where created_by_user_id starts with 'guest-'
  */
-async function syncEvents(authUserId: string): Promise<SyncResult> {
+async function syncEvents(authUserId: string, session: SyncSession): Promise<SyncResult> {
+  const client = sessionClient(session);
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
   if (!authUserId) {
     return result;
@@ -884,42 +1024,38 @@ async function syncEvents(authUserId: string): Promise<SyncResult> {
     }
 
     // Filter for unsynced, non-guest records (Requirements: 2.6)
-    const unsyncedEvents = allEvents
-      .filter(e => e.synced === false && !isGuestId(e.createdByUserId) && isOwnedByAuth(e, authUserId))
-      .slice(0, BATCH_SIZE);
+    const unsyncedEvents = await eligibleBatch('events', allEvents
+      .filter(e => e.synced === false && e.createdByUserId === authUserId), session,
+      row => parentConfirmed('matches', row.matchId, authUserId));
 
     const isUuid = (value: string): boolean =>
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
     const deleteEventOnServer = async (eventId: string): Promise<void> => {
-      const local = unsyncedEvents.find(e => e.id === eventId);
-      if (!local) return;
-
-      // If we have a server UUID id, delete directly.
-      if (isUuid(local.id)) {
-        await apiClient.delete(`/events/${local.id}`);
+      if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError();
+      const local = unsyncedEvents.find(e => e.id === eventId)!;
+      const remoteId = (local as SyncSnapshot).remoteId;
+      if (isUuid(remoteId || local.id)) {
+        await client.delete(`/events/${remoteId || local.id}`);
         return;
       }
-
-      // Otherwise, best-effort: resolve the server event by its natural keys and delete that.
-      try {
-        const resp = await apiClient.get<any>(`/events/match/${local.matchId}`);
-        const list = Array.isArray(resp.data) ? resp.data : (resp.data?.events || []);
-        const serverMatch = list.find((e: any) => {
-          return (
-            e.kind === local.kind &&
-            String(e.teamId || '') === String(local.teamId || '') &&
-            String(e.playerId || '') === String(local.playerId || '') &&
-            Number(e.clockMs || 0) === Number(local.clockMs || 0)
-          );
-        });
-
-        if (serverMatch?.id && isUuid(String(serverMatch.id))) {
-          await apiClient.delete(`/events/${serverMatch.id}`);
-        }
-      } catch {
-        // Ignore lookup failures; deletion will be retried on next sync cycle if needed.
+      if (!local.syncedAt && !(local as SyncSnapshot).syncAttempted) return;
+      const resp = await client.get<any>(`/events/match/${local.matchId}`);
+      const list = Array.isArray(resp.data) ? resp.data : resp.data?.events;
+      if (!Array.isArray(list)) throw new Error('Invalid legacy event lookup response');
+      const matches = list.filter((e: any) => e.kind === local.kind &&
+        String(e.teamId || '') === String(local.teamId || '') && String(e.playerId || '') === String(local.playerId || '') &&
+        Number(e.clockMs || 0) === Number(local.clockMs || 0) && Number(e.periodNumber || 1) === Number(local.periodNumber || 1));
+      if (matches.length !== 1 || !isUuid(String(matches[0].id))) {
+        throw new Error('Legacy event identity is uncertain; pending deletion retained');
       }
+      await db.transaction('rw', db.events, async () => {
+        const current = await db.events.get(local.id);
+        if (isSyncSessionCurrent(session) && current?.createdByUserId === local.createdByUserId) {
+          await db.events.update(local.id, { remoteId: matches[0].id } as any);
+        }
+      });
+      await client.delete(`/events/${matches[0].id}`);
     };
 
     // Process soft deletes first
@@ -928,11 +1064,15 @@ async function syncEvents(authUserId: string): Promise<SyncResult> {
       unsyncedEvents,
       deleteEventOnServer,
       'events',
-      result
+      result, session
     );
 
     for (const event of eventsToSync) {
       try {
+        if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError();
+        // Persist uncertainty before sending: a lost response is not evidence of absence.
+        if (!await markSnapshotAttempted(db.events, event.id, event, session)) continue;
+        let response: any;
         if (!(await shouldAttemptSync('events', event.id))) {
           continue;
         }
@@ -947,7 +1087,7 @@ async function syncEvents(authUserId: string): Promise<SyncResult> {
           }
 
           const startMin = (event.clockMs ?? 0) / 60_000;
-          await apiClient.post(`/matches/${event.matchId}/formation-changes`, {
+          response = await client.post(`/matches/${event.matchId}/formation-changes`, {
             ...(isUuid(event.id) ? { eventId: event.id } : {}),
             startMin,
             formation,
@@ -959,23 +1099,23 @@ async function syncEvents(authUserId: string): Promise<SyncResult> {
 
           // Use PUT upsert when we have a UUID id (local-first parity + update support)
           if (isUuid(event.id)) {
-            await apiClient.put(`/events/${event.id}`, payload);
+            response = await client.put(`/events/${event.id}`, payload);
           } else {
-            await apiClient.post('/events', payload);
+            const remoteId = (event as SyncSnapshot).remoteId;
+            if (remoteId) response = await client.put(`/events/${remoteId}`, payload);
+            else if ((event as SyncSnapshot).syncAttempted) throw new Error('Legacy event create response was lost; identity repair required');
+            else response = await client.post('/events', payload);
           }
         }
 
         // Update synced to true and set syncedAt on success (Requirements: 2.4)
-        await db.events.update(event.id, {
-          synced: true,
-          syncedAt: new Date().toISOString(),
-        });
-        await clearSyncFailure('events', event.id);
+        await acknowledgeSnapshot(db.events, event.id, event, session,
+          response?.data?.id || response?.data?.event?.id);
 
         result.synced++;
       } catch (err) {
-        const { abortAll } = await recordSyncFailure('events', event.id, err);
-        if (abortAll) throw err;
+        const { abortAll } = await recordSnapshotFailure('events', db.events, event.id, event, err, session);
+        if (abortAll) { if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError(); throw err; }
         result.failed++;
         result.errors.push({
           table: 'events',
@@ -1000,7 +1140,8 @@ async function syncEvents(authUserId: string): Promise<SyncResult> {
  * Requirements: 2.4 - Update synced to true and set synced_at on success
  * Requirements: 2.6 - Exclude guest records
  */
-async function syncMatchPeriods(authUserId: string): Promise<SyncResult> {
+async function syncMatchPeriods(authUserId: string, session: SyncSession): Promise<SyncResult> {
+  const client = sessionClient(session);
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
   if (!authUserId) {
     return result;
@@ -1024,73 +1165,26 @@ async function syncMatchPeriods(authUserId: string): Promise<SyncResult> {
     }
 
     // Filter for unsynced, non-guest records (Requirements: 2.6)
-    const unsyncedPeriods = allPeriods
-      .filter(p => p.synced === false && !isGuestId(p.createdByUserId) && isOwnedByAuth(p, authUserId))
-      .slice(0, BATCH_SIZE);
-
-    // Process soft deletes first (periods are rarely deleted, but handle it)
-    const periodsToSync = await processSoftDeletes(
-      db.matchPeriods,
-      unsyncedPeriods,
-      async (id) => {
-        // Match periods don't have a dedicated delete endpoint - just remove locally
-        // Server will eventually sync and remove orphans
-        console.debug('[SyncService] Period delete - removing locally only:', id);
-      },
-      'matchPeriods',
-      result
-    );
+    const periodsToSync = await eligibleBatch('matchPeriods', allPeriods
+      .filter(p => p.synced === false && !p.isDeleted && p.createdByUserId === authUserId), session,
+      row => parentConfirmed('matches', row.matchId, authUserId));
 
     for (const period of periodsToSync) {
       try {
-        if (!(await shouldAttemptSync('matchPeriods', period.id))) {
-          continue;
-        }
-        // Use appropriate API based on period completion status
-        if (period.endedAt) {
-          // Period is complete - use the import endpoint to preserve timestamps
-          await apiClient.post(`/matches/${period.matchId}/periods/import`, {
-            periodNumber: period.periodNumber,
-            periodType: period.periodType || 'REGULAR',
-            startedAt: new Date(period.startedAt).toISOString(),
-            endedAt: new Date(period.endedAt).toISOString(),
-            // Do not send durationSeconds: backend validation caps it (2h) but server can derive it from timestamps.
-          });
-        } else {
-          // Period is still in progress - start it on the server
-          // First check if the match has been started
-          // IMPORTANT: Use direct API calls, NOT matchesApi.startMatch() which creates local periods!
-          try {
-            const state = await matchesApi.getMatchState(period.matchId);
-            // Server uses 'SCHEDULED' for not-started matches
-            if (state.status === 'SCHEDULED') {
-              await apiClient.post(`/matches/${period.matchId}/start`, {});
-            }
-          } catch {
-            // Match state might not exist, try to start it
-            try {
-              await apiClient.post(`/matches/${period.matchId}/start`, {});
-            } catch {
-              // Match might already be started, continue
-            }
-          }
-
-          // Start the period on server directly (NOT matchesApi.startPeriod which creates a new local period!)
-          const periodType = (period.periodType || 'REGULAR').toLowerCase() as 'regular' | 'extra_time' | 'penalty_shootout';
-          await apiClient.post(`/matches/${period.matchId}/periods/start`, { periodType });
-        }
-
-        // Update synced to true and set syncedAt on success (Requirements: 2.4)
-        await db.matchPeriods.update(period.id, {
-          synced: true,
-          syncedAt: new Date().toISOString(),
+        if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError();
+        await client.post(`/matches/${period.matchId}/periods/import`, {
+          periodNumber: period.periodNumber,
+          periodType: period.periodType || 'REGULAR',
+          startedAt: new Date(period.startedAt).toISOString(),
+          ...(period.endedAt != null ? { endedAt: new Date(period.endedAt).toISOString() } : {}),
+          ...(period.durationSeconds != null ? { durationSeconds: period.durationSeconds } : {}),
         });
-        await clearSyncFailure('matchPeriods', period.id);
+        await acknowledgeSnapshot(db.matchPeriods, period.id, period, session);
 
         result.synced++;
       } catch (err) {
-        const { abortAll } = await recordSyncFailure('matchPeriods', period.id, err);
-        if (abortAll) throw err;
+        const { abortAll } = await recordSnapshotFailure('matchPeriods', db.matchPeriods, period.id, period, err, session);
+        if (abortAll) { if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError(); throw err; }
         result.failed++;
         result.errors.push({
           table: 'matchPeriods',
@@ -1114,7 +1208,8 @@ async function syncMatchPeriods(authUserId: string): Promise<SyncResult> {
  * Requirements: 2.4 - Update synced to true and set synced_at on success
  * Requirements: 2.6 - Exclude guest records
  */
-async function syncMatchState(authUserId: string): Promise<SyncResult> {
+async function syncMatchState(authUserId: string, session: SyncSession): Promise<SyncResult> {
+  const client = sessionClient(session);
   const result: SyncResult = { synced: 0, failed: 0, errors: [] };
   if (!authUserId) {
     return result;
@@ -1138,50 +1233,51 @@ async function syncMatchState(authUserId: string): Promise<SyncResult> {
     }
 
     // Filter for unsynced, non-guest records (Requirements: 2.6)
-    const statesToSync = allStates
-      .filter(s => s.synced === false && !isGuestId(s.createdByUserId) && isOwnedByAuth(s, authUserId))
-      .slice(0, BATCH_SIZE);
+    const statesToSync = [];
+    for (const state of allStates.filter(s => s.synced === false && !s.isDeleted && s.createdByUserId === authUserId &&
+        isReplayableMatchStatus(s.status))) {
+      if (!(await shouldAttemptSync('matchState', state.matchId)) || !await parentConfirmed('matches', state.matchId, authUserId)) continue;
+      const periods = await db.matchPeriods.where('matchId').equals(state.matchId)
+        .filter(p => !p.isDeleted && p.createdByUserId === authUserId).toArray();
+      if (periods.some(period => !period.synced)) continue;
+      statesToSync.push(state);
+      if (statesToSync.length === BATCH_SIZE) break;
+    }
 
     for (const state of statesToSync) {
       try {
         if (!(await shouldAttemptSync('matchState', state.matchId))) {
           continue;
         }
-        // Sync state changes to server based on status
-        // IMPORTANT: Use direct API calls, NOT matchesApi methods which are local-first!
-        const status = state.status;
-
-        if (status === 'LIVE') {
-          // Ensure match is started on server
-          try {
-            await apiClient.post(`/matches/${state.matchId}/start`, {});
-          } catch {
-            // Match might already be started
-          }
-        } else if (status === 'PAUSED') {
-          await apiClient.post(`/matches/${state.matchId}/pause`, {});
-        } else if (status === 'COMPLETED') {
-          // Get match to retrieve final score
-          const match = await db.matches.get(state.matchId);
-          const finalScore = {
-            home: match?.homeScore || 0,
-            away: match?.awayScore || 0,
-          };
-          await apiClient.post(`/matches/${state.matchId}/complete`, { finalScore });
-        }
-        // For 'SCHEDULED' status, nothing to sync
-
-        // Update synced to true and set syncedAt on success (Requirements: 2.4)
-        await db.matchState.update(state.matchId, {
-          synced: true,
-          syncedAt: new Date().toISOString(),
+        if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError();
+        const periods = await db.matchPeriods.where('matchId').equals(state.matchId)
+          .filter(p => !p.isDeleted && p.createdByUserId === authUserId).toArray();
+        // Never acknowledge a final state while a prerequisite period is still pending.
+        if (periods.some(p => !p.synced)) continue;
+        const current = periods.find(p => p.id === state.currentPeriodId);
+        const endedTotal = periods.reduce((sum, p) => sum + (p.endedAt != null ? p.durationSeconds ?? 0 : 0), 0);
+        const match = await db.matches.get(state.matchId);
+        const plannedSeconds = (match?.durationMinutes ?? 60) * 60;
+        const perSeconds = plannedSeconds / (match?.periodFormat === 'half' ? 2 : match?.periodFormat === 'third' ? 3 : match?.periodFormat === 'whole' ? 1 : 4);
+        const offset = current?.periodType === 'EXTRA_TIME' ? plannedSeconds + (current.periodNumber - 1) * 900 :
+          current?.periodType === 'PENALTY_SHOOTOUT' ? state.timerMs / 1000 : (current ? (current.periodNumber - 1) * perSeconds : 0);
+        const activeSeconds = current && current.endedAt == null ? Math.max(0, state.timerMs / 1000 - offset) : 0;
+        const explicitTotal = state.totalElapsedSeconds;
+        const totalElapsedSeconds = Math.floor(explicitTotal ?? endedTotal + activeSeconds);
+        await client.post(`/matches/${state.matchId}/state/reconcile`, {
+          status: state.status, totalElapsedSeconds,
+          currentPeriod: current?.periodNumber ?? null,
+          currentPeriodType: current?.periodType ?? null,
+          ...(state.status === 'LIVE' ? { activeSince: new Date(state.lastUpdatedAt).toISOString() } : {}),
+          ...(periods.length ? { matchStartedAt: new Date(Math.min(...periods.map(p => p.startedAt))).toISOString() } : {}),
+          ...(state.status === 'COMPLETED' ? { matchEndedAt: new Date(state.lastUpdatedAt).toISOString() } : {}),
         });
-        await clearSyncFailure('matchState', state.matchId);
+        await acknowledgeSnapshot(db.matchState, state.matchId, state, session);
 
         result.synced++;
       } catch (err) {
-        const { abortAll } = await recordSyncFailure('matchState', state.matchId, err);
-        if (abortAll) throw err;
+        const { abortAll } = await recordSnapshotFailure('matchState', db.matchState, state.matchId, state, err, session);
+        if (abortAll) { if (!isSyncSessionCurrent(session)) throw new SyncSessionChangedError(); throw err; }
         result.failed++;
         result.errors.push({
           table: 'matchState',
@@ -1251,13 +1347,15 @@ class SyncService {
       if (!authUserId) {
         return progress;
       }
+      const session = captureSyncSession(authUserId);
+      await reclaimLegacyRecordings(authUserId);
+      assertSyncSession(session);
 
       const failures = ENABLE_SYNC_QUARANTINE && db.syncFailures ? await db.syncFailures.toArray().catch(() => []) : [];
       const failureMap = new Map<string, any>();
       for (const f of failures) {
         failureMap.set(`${f.table}:${f.recordId}`, f);
       }
-      progress.blocked = failures.filter((f: any) => f.permanent).length;
 
       const now = Date.now();
       const globalBackoffActive = globalBackoffUntilMs > now;
@@ -1275,20 +1373,39 @@ class SyncService {
         db.matchPeriods?.toArray().catch(() => []) || [],
         db.matchState?.toArray().catch(() => []) || [],
       ]);
+      assertSyncSession(session);
+      const dependency = (table: 'seasons' | 'matches', id: string): 'permanent' | 'deferred' | undefined => {
+        const rows = table === 'seasons' ? seasons : matches;
+        const parent = rows.find(row => row.id === id);
+        if (parent && isOwnedByAuth(parent, authUserId) && !parent.isDeleted && (parent.synced || parent.syncedAt)) return undefined;
+        const failure = failureMap.get(`${table}:${id}`);
+        if (failure?.nextRetryAt > now && !failure.permanent) {
+          nextRetryAtMs = nextRetryAtMs == null ? failure.nextRetryAt : Math.min(nextRetryAtMs, failure.nextRetryAt);
+        }
+        const repairableSeason = table === 'seasons' && failure?.lastStatus === 409 && parent && !parent.syncedAt;
+        return !parent || !isOwnedByAuth(parent, authUserId) || parent.isDeleted || (failure?.permanent && !repairableSeason)
+          ? 'permanent' : 'deferred';
+      };
 
       const count = (
         table: string,
         recordId: string | undefined | null,
         createdByUserId: string | undefined,
         ownedCheck: boolean,
-        synced: boolean
+        synced: boolean,
+        dependency?: 'permanent' | 'deferred'
       ): { include: boolean; eligible: boolean } => {
         if (!recordId) return { include: false, eligible: false };
         if (synced !== false) return { include: false, eligible: false };
         if (!createdByUserId || isGuestId(createdByUserId)) return { include: false, eligible: false };
         if (!ownedCheck) return { include: false, eligible: false };
         const failure = failureMap.get(`${table}:${recordId}`);
-        if (failure?.permanent) return { include: false, eligible: false };
+        const repairableSeason = table === 'seasons' && failure?.lastStatus === 409 &&
+          seasons.some(season => season.id === recordId && !season.syncedAt && !season.isDeleted);
+        if ((failure?.permanent && !repairableSeason) || dependency === 'permanent') {
+          progress.blocked++;
+          return { include: false, eligible: false };
+        }
         if (globalBackoffActive) {
           nextRetryAtMs = nextRetryAtMs == null ? globalBackoffUntilMs : Math.min(nextRetryAtMs, globalBackoffUntilMs);
           return { include: true, eligible: false };
@@ -1297,7 +1414,7 @@ class SyncService {
           nextRetryAtMs = nextRetryAtMs == null ? failure.nextRetryAt : Math.min(nextRetryAtMs, failure.nextRetryAt);
           return { include: true, eligible: false };
         }
-        return { include: true, eligible: true };
+        return { include: true, eligible: dependency !== 'deferred' };
       };
 
       for (const s of seasons) {
@@ -1335,7 +1452,8 @@ class SyncService {
 
       for (const m of matches) {
         const recordId = (m as any).id || (m as any).matchId;
-        const { include, eligible } = count('matches', recordId, m.createdByUserId, isOwnedByAuth(m, authUserId), m.synced);
+        const { include, eligible } = count('matches', recordId, m.createdByUserId, isOwnedByAuth(m, authUserId), m.synced,
+          m.isDeleted ? undefined : dependency('seasons', m.seasonId));
         if (include) {
           progress.matches++;
           if (eligible) progress.eligible++;
@@ -1343,7 +1461,7 @@ class SyncService {
       }
 
       for (const l of lineups) {
-        const { include, eligible } = count('lineup', l.id, l.createdByUserId, isOwnedByAuth(l, authUserId), l.synced);
+        const { include, eligible } = count('lineup', l.id, l.createdByUserId, isOwnedByAuth(l, authUserId), l.synced, dependency('matches', l.matchId));
         if (include) {
           progress.lineups++;
           if (eligible) progress.eligible++;
@@ -1359,7 +1477,7 @@ class SyncService {
       }
 
       for (const e of events) {
-        const { include, eligible } = count('events', e.id, e.createdByUserId, isOwnedByAuth(e, authUserId), e.synced);
+        const { include, eligible } = count('events', e.id, e.createdByUserId, e.createdByUserId === authUserId, e.synced, dependency('matches', e.matchId));
         if (include) {
           progress.events++;
           if (eligible) progress.eligible++;
@@ -1367,7 +1485,8 @@ class SyncService {
       }
 
       for (const mp of matchPeriods) {
-        const { include, eligible } = count('matchPeriods', mp.id, mp.createdByUserId, isOwnedByAuth(mp, authUserId), mp.synced);
+        const { include, eligible } = count('matchPeriods', mp.id, mp.createdByUserId, mp.createdByUserId === authUserId, mp.synced,
+          mp.isDeleted ? 'permanent' : dependency('matches', mp.matchId));
         if (include) {
           progress.matchPeriods++;
           if (eligible) progress.eligible++;
@@ -1376,7 +1495,12 @@ class SyncService {
 
       for (const ms of matchState) {
         const recordId = (ms as any).matchId;
-        const { include, eligible } = count('matchState', recordId, ms.createdByUserId, isOwnedByAuth(ms, authUserId), ms.synced);
+        const pendingPeriods = matchPeriods.filter(period => period.matchId === ms.matchId && !period.isDeleted &&
+          period.createdByUserId === authUserId && period.synced === false);
+        const parentDependency = dependency('matches', ms.matchId);
+        const stateDependency = ms.isDeleted || !isReplayableMatchStatus(ms.status) || parentDependency === 'permanent' || pendingPeriods.some(period => failureMap.get(`matchPeriods:${period.id}`)?.permanent)
+          ? 'permanent' : pendingPeriods.length || parentDependency === 'deferred' ? 'deferred' : undefined;
+        const { include, eligible } = count('matchState', recordId, ms.createdByUserId, ms.createdByUserId === authUserId, ms.synced, stateDependency);
         if (include) {
           progress.matchState++;
           if (eligible) progress.eligible++;
@@ -1425,6 +1549,9 @@ class SyncService {
       if (!apiClient.isAuthenticated()) return combinedResult;
       const authUserId = getAuthUserId();
       if (!authUserId) return combinedResult;
+      const session = captureSyncSession(authUserId);
+      await reclaimLegacyRecordings(authUserId);
+      assertSyncSession(session);
 
       if (ENABLE_SYNC_QUARANTINE && globalBackoffUntilMs > Date.now()) {
         // Respect global backoff (e.g., Retry-After on 429) to avoid request storms.
@@ -1459,61 +1586,61 @@ class SyncService {
       // seasons → teams → players → matches → lineups → default_lineups → events → match_periods → match_state
 
       // 1. Sync seasons first (no dependencies)
-      const seasonsResult = await syncSeasons(authUserId);
+      const seasonsResult = await syncSeasons(authUserId, session);
       combinedResult.synced += seasonsResult.synced;
       combinedResult.failed += seasonsResult.failed;
       combinedResult.errors.push(...seasonsResult.errors);
 
       // 2. Sync teams (depends on seasons for some contexts)
-      const teamsResult = await syncTeams(authUserId);
+      const teamsResult = await syncTeams(authUserId, session);
       combinedResult.synced += teamsResult.synced;
       combinedResult.failed += teamsResult.failed;
       combinedResult.errors.push(...teamsResult.errors);
 
       // 3. Sync players (depends on teams)
-      const playersResult = await syncPlayers(authUserId);
+      const playersResult = await syncPlayers(authUserId, session);
       combinedResult.synced += playersResult.synced;
       combinedResult.failed += playersResult.failed;
       combinedResult.errors.push(...playersResult.errors);
 
       // 3.5. Sync player-teams (depends on players and teams)
-      const playerTeamsResult = await syncPlayerTeams(authUserId);
+      const playerTeamsResult = await syncPlayerTeams(authUserId, session);
       combinedResult.synced += playerTeamsResult.synced;
       combinedResult.failed += playerTeamsResult.failed;
       combinedResult.errors.push(...playerTeamsResult.errors);
 
       // 4. Sync matches (depends on seasons and teams)
-      const matchesResult = await syncMatches(authUserId);
+      const matchesResult = await syncMatches(authUserId, session);
       combinedResult.synced += matchesResult.synced;
       combinedResult.failed += matchesResult.failed;
       combinedResult.errors.push(...matchesResult.errors);
 
       // 5. Sync lineups (depends on matches and players)
-      const lineupsResult = await syncLineups(authUserId);
+      const lineupsResult = await syncLineups(authUserId, session);
       combinedResult.synced += lineupsResult.synced;
       combinedResult.failed += lineupsResult.failed;
       combinedResult.errors.push(...lineupsResult.errors);
 
       // 6. Sync default lineups (depends on teams and players)
-      const defaultLineupsResult = await syncDefaultLineups(authUserId);
+      const defaultLineupsResult = await syncDefaultLineups(authUserId, session);
       combinedResult.synced += defaultLineupsResult.synced;
       combinedResult.failed += defaultLineupsResult.failed;
       combinedResult.errors.push(...defaultLineupsResult.errors);
 
       // 7. Sync events from events table (depends on matches and players)
-      const eventsResult = await syncEvents(authUserId);
+      const eventsResult = await syncEvents(authUserId, session);
       combinedResult.synced += eventsResult.synced;
       combinedResult.failed += eventsResult.failed;
       combinedResult.errors.push(...eventsResult.errors);
 
       // 8. Sync match periods from match_periods table (depends on matches)
-      const periodsResult = await syncMatchPeriods(authUserId);
+      const periodsResult = await syncMatchPeriods(authUserId, session);
       combinedResult.synced += periodsResult.synced;
       combinedResult.failed += periodsResult.failed;
       combinedResult.errors.push(...periodsResult.errors);
 
       // 9. Sync match state from match_state table (depends on matches)
-      const stateResult = await syncMatchState(authUserId);
+      const stateResult = await syncMatchState(authUserId, session);
       combinedResult.synced += stateResult.synced;
       combinedResult.failed += stateResult.failed;
       combinedResult.errors.push(...stateResult.errors);

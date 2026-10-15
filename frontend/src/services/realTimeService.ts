@@ -1,13 +1,15 @@
 /**
- * Real-Time First Service
+ * Live viewer transport and durable local event publishing
  * 
- * Implements the real-time first architecture with direct events table storage as fallback.
- * Priority: Try WebSocket first, store locally only when real-time fails.
+ * Recording delivery and acknowledgement belong exclusively to REST sync.
  */
 
 import { io, Socket } from 'socket.io-client';
 // Database import removed - will use dynamic import to avoid blocking
 import type { MatchEvent } from '../types/events';
+import { eventsDataLayer } from './dataLayer';
+import { apiClient } from './api/baseApi';
+import { getCurrentUserId } from '../utils/network';
 import { buildWsUrl } from '../utils/protocol';
 
 export interface RealTimeConfig {
@@ -21,7 +23,6 @@ export class RealTimeService {
   private socket: Socket | null = null;
   private isConnected = false;
   private currentMatchId: string | null = null;
-  private syncInProgress = false;
   private eventCallbacks: ((event: MatchEvent) => void)[] = [];
   private connectionCallbacks: ((connected: boolean) => void)[] = [];
 
@@ -62,8 +63,6 @@ export class RealTimeService {
         this.joinMatch(this.currentMatchId);
       }
 
-      // Sync any unsynced events
-      this.syncUnsyncedEvents();
     });
 
     this.socket.on('disconnect', () => {
@@ -84,89 +83,22 @@ export class RealTimeService {
       this.notifyEventReceived(event);
     });
 
-    this.socket.on('match_event_confirmed', (eventId: string) => {
-      console.log('✅ Event confirmed by server:', eventId);
-      // Mark as synced in events table
-      this.markEventSynced(eventId);
-    });
   }
 
-  /**
-   * Real-time first event publishing
-   * Try real-time first, fallback to local storage if it fails
-   */
   async publishEvent(event: MatchEvent): Promise<{ success: boolean; method: 'realtime' | 'local' }> {
-    // 1. ALWAYS try real-time first
-    if (this.isConnected && this.socket) {
-      try {
-        const success = await this.tryRealTimePublish(event);
-        if (success) {
-          console.log('✅ Event sent real-time:', event.id);
-          return { success: true, method: 'realtime' };
-        }
-      } catch (error) {
-        console.log('❌ Real-time failed, storing locally:', error);
-      }
-    }
-
-    // 2. ONLY store locally if real-time fails
+    const ownerId = getCurrentUserId();
+    const generation = apiClient.getSessionGeneration();
     try {
-      await this.storeEventLocally(event);
-      console.log('📦 Event stored locally:', event.id);
+      if (!event.teamId) throw new Error('Team ID is required for events');
+      if (event.createdByUserId && event.createdByUserId !== ownerId) throw new Error('Recording belongs to another user');
+      await eventsDataLayer.create({ ...event, teamId: event.teamId, createdByUserId: ownerId }, {
+        ownerId,
+        isCurrent: () => getCurrentUserId() === ownerId && apiClient.getSessionGeneration() === generation,
+      });
       return { success: true, method: 'local' };
     } catch (error) {
-      console.error('❌ Failed to store event locally:', error);
+      console.error('Failed to save event locally:', error);
       return { success: false, method: 'local' };
-    }
-  }
-
-  /**
-   * Attempt real-time event publishing
-   */
-  private async tryRealTimePublish(event: MatchEvent): Promise<boolean> {
-    if (!this.socket || !this.isConnected) {
-      return false;
-    }
-
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        resolve(false);
-      }, this.config.timeout);
-
-      this.socket!.emit('match_event', event, (response: { success: boolean }) => {
-        clearTimeout(timeout);
-        resolve(response.success);
-      });
-    });
-  }
-
-  /**
-   * Store event locally in the events table (for offline-first architecture)
-   * Events are stored with synced: false and will be synced when connectivity is restored
-   */
-  private async storeEventLocally(event: MatchEvent): Promise<void> {
-    try {
-      const { db } = await import('../db/indexedDB');
-      if (!event.teamId) {
-        throw new Error('Team ID is required for events');
-      }
-      const result = await db.addEventToTable({
-        kind: event.kind,
-        matchId: event.matchId,
-        teamId: event.teamId,
-        playerId: event.playerId || null,
-        clockMs: event.clockMs || 0,
-        periodNumber: event.periodNumber,
-        notes: event.notes || '',
-        createdAt: event.createdAt || new Date().toISOString()
-      });
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to store event locally');
-      }
-    } catch (dbError) {
-      console.warn('Database not available for local storage:', dbError);
-      throw new Error('Database not available');
     }
   }
 
@@ -192,105 +124,6 @@ export class RealTimeService {
     }
 
     this.currentMatchId = null;
-  }
-
-  /**
-   * Sync unsynced events when connection is restored
-   * Queries events table for records where synced === false
-   */
-  private async syncUnsyncedEvents(): Promise<void> {
-    if (this.syncInProgress || !this.isConnected) {
-      return;
-    }
-
-    this.syncInProgress = true;
-    console.log('🔄 Syncing unsynced events...');
-
-    try {
-      const { db } = await import('../db/indexedDB');
-      
-      // Query events table for unsynced records
-      // Use filter since synced is a boolean and not indexed as IndexableType
-      const unsyncedEvents = await db.events
-        .filter(event => event.synced === false)
-        .toArray();
-      
-      if (unsyncedEvents.length === 0) {
-        console.log('No unsynced events to process');
-        return;
-      }
-
-      console.log(`📦 Found ${unsyncedEvents.length} unsynced events`);
-
-      for (const event of unsyncedEvents) {
-        try {
-          // Validate event has required fields
-          if (!event || typeof event !== 'object' || !event.kind || !event.matchId) {
-            console.warn('Invalid event structure or missing required fields:', event);
-            continue;
-          }
-
-          // Convert DbEvent to MatchEvent format for transmission
-          const matchEvent: MatchEvent = {
-            id: event.id,
-            kind: event.kind,
-            matchId: event.matchId,
-            teamId: event.teamId,
-            playerId: event.playerId,
-            periodNumber: event.periodNumber || 1,
-            clockMs: event.clockMs || 0,
-            sentiment: event.sentiment || 0,
-            notes: event.notes || '',
-            createdAt: event.createdAt || new Date().toISOString(),
-            createdByUserId: event.createdByUserId || 'system',
-            isDeleted: event.isDeleted || false
-          };
-
-          const success = await this.tryRealTimePublish(matchEvent);
-
-          if (success) {
-            // On success: set synced: true and syncedAt to ISO string
-            const nowIso = new Date().toISOString();
-            await db.events.update(event.id, {
-              synced: true,
-              syncedAt: nowIso
-            });
-            console.log(`✅ Synced event: ${event.id}`);
-          } else {
-            // On failure: keep synced: false (no update needed)
-            console.log(`❌ Failed to sync event: ${event.id}`);
-          }
-        } catch (error) {
-          // On error: keep synced: false (no update needed)
-          console.error(`❌ Error syncing event ${event.id}:`, error);
-        }
-      }
-
-      console.log('🔄 Event sync completed');
-    } catch (error) {
-      console.error('❌ Event sync failed:', error);
-    } finally {
-      this.syncInProgress = false;
-    }
-  }
-
-  /**
-   * Mark event as synced in events table
-   * Called when server confirms event receipt
-   */
-  private async markEventSynced(eventId: string): Promise<void> {
-    try {
-      const { db } = await import('../db/indexedDB');
-      const nowIso = new Date().toISOString();
-      
-      // Update the event directly in the events table
-      await db.events.update(eventId, {
-        synced: true,
-        syncedAt: nowIso
-      });
-    } catch (error) {
-      console.warn('Failed to mark event as synced:', error);
-    }
   }
 
   /**
