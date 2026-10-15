@@ -43,6 +43,18 @@ describe('Frontend API Services Integration Tests', () => {
     const accessTokens = new Map<string, string>(); // token -> user email
     const refreshTokens = new Map<string, string>(); // token -> user email
 
+    // Match the server's subject-bearing JWT contract; the fake server still
+    // validates issued tokens through accessTokens rather than a signature.
+    const issueAccessToken = (userId: string) => {
+      const encode = (value: object) => btoa(JSON.stringify(value))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({
+        sub: userId,
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        jti: crypto.randomUUID(),
+      })}.test-signature`;
+    };
+
     const json = (status: number, body: any) =>
       new Response(JSON.stringify(body), {
         status,
@@ -95,7 +107,7 @@ describe('Frontend API Services Integration Tests', () => {
           };
           users.set(email, user);
 
-          const accessToken = `access-${Math.random().toString(36).slice(2)}`;
+          const accessToken = issueAccessToken(user.id);
           const refreshToken = `refresh-${Math.random().toString(36).slice(2)}`;
           accessTokens.set(accessToken, email);
           refreshTokens.set(refreshToken, email);
@@ -124,7 +136,7 @@ describe('Frontend API Services Integration Tests', () => {
           const user = users.get(email);
           if (!user || user.password !== password) return unauthorized();
 
-          const accessToken = `access-${Math.random().toString(36).slice(2)}`;
+          const accessToken = issueAccessToken(user.id);
           const refreshToken = `refresh-${Math.random().toString(36).slice(2)}`;
           accessTokens.set(accessToken, email);
           refreshTokens.set(refreshToken, email);
@@ -154,7 +166,7 @@ describe('Frontend API Services Integration Tests', () => {
           const user = users.get(email);
           if (!user) return unauthorized();
 
-          const nextAccessToken = `access-${Math.random().toString(36).slice(2)}`;
+          const nextAccessToken = issueAccessToken(user.id);
           const nextRefreshToken = `refresh-${Math.random().toString(36).slice(2)}`;
           accessTokens.set(nextAccessToken, email);
           refreshTokens.set(nextRefreshToken, email);
