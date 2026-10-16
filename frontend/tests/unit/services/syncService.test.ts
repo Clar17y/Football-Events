@@ -106,6 +106,7 @@ describe('Sync Service Unit Tests', () => {
     __syncQuarantineTestUtils.resetGlobalBackoff();
 
     // Default mock implementations
+    (apiClient.get as Mock).mockResolvedValue({ data: { data: [], pagination: { hasNext: false } } });
     (apiClient.isAuthenticated as Mock).mockReturnValue(true);
     (apiClient.post as Mock).mockResolvedValue({ data: { id: 'server-id' } });
     (apiClient.put as Mock).mockResolvedValue({ data: { id: 'server-id' } });
@@ -306,6 +307,8 @@ describe('Sync Service Unit Tests', () => {
 
   describe('syncMatches', () => {
     it('should sync unsynced matches excluding guest records', async () => {
+      await db.seasons.add({ id: 'season-1', seasonId: 'season-1', label: 'Confirmed parent', synced: true,
+        createdByUserId: 'user-123' } as any);
       await db.matches.add({
         id: 'match-1',
         matchId: 'match-1',
@@ -342,6 +345,7 @@ describe('Sync Service Unit Tests', () => {
 
   describe('syncLineups', () => {
     it('should sync unsynced lineups excluding guest records', async () => {
+      await db.matches.add({ id: 'match-1', matchId: 'match-1', synced: true, createdByUserId: 'user-123' } as any);
       await db.lineup.add({
         id: 'lineup-1',
         matchId: 'match-1',

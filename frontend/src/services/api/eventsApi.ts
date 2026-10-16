@@ -52,7 +52,7 @@ export const eventsApi = {
   /**
    * Update an event - LOCAL-FIRST
    */
-  async update(id: string, data: Partial<EventCreateRequest & { sentiment: number; notes?: string; playerId?: string | null }>): Promise<Event> {
+  async update(id: string, data: Partial<Omit<EventCreateRequest, 'playerId'> & { sentiment: number; notes?: string; playerId?: string | null }>): Promise<Event> {
     const { eventsDataLayer } = await import('../dataLayer');
 
     await eventsDataLayer.update(id, {
@@ -60,7 +60,7 @@ export const eventsApi = {
       periodNumber: data.periodNumber,
       clockMs: data.clockMs,
       teamId: data.teamId,
-      playerId: data.playerId ?? undefined,
+      playerId: data.playerId,
       notes: data.notes,
       sentiment: data.sentiment,
     });

@@ -461,18 +461,41 @@ export function useLocalLineups(matchId: string | undefined) {
 // MATCH STATE
 // ============================================================================
 
-export function useLocalMatchState(matchId: string | undefined) {
-    const matchState = useLiveQuery(
+export function useLocalMatchState(matchId: string | undefined, reloadVersion = 0) {
+    const snapshot = useLiveQuery(
         async () => {
-            if (!matchId) return undefined;
-            return db.matchState.get(matchId);
+            try {
+                return { matchId, reloadVersion, matchState: matchId ? await db.matchState.get(matchId) : undefined, error: undefined as string | undefined };
+            } catch {
+                return { matchId, reloadVersion, matchState: undefined, error: 'Could not read saved match state.' };
+            }
         },
-        [matchId]
+        [matchId, reloadVersion]
+    );
+    const current = snapshot?.matchId === matchId && snapshot?.reloadVersion === reloadVersion;
+
+    return {
+        matchState: current ? snapshot.matchState : undefined,
+        loading: !!matchId && !current,
+        loadedMatchId: current ? snapshot.matchId : undefined,
+        error: current ? snapshot.error : undefined,
+    };
+}
+
+export function useLocalMatchStates() {
+    const matchStates = useLiveQuery(
+        async () => {
+            const states = await db.matchState
+                .filter(s => !s.isDeleted)
+                .toArray();
+            return states;
+        },
+        []
     );
 
     return {
-        matchState,
-        loading: matchState === undefined && matchId !== undefined,
+        matchStates: (matchStates ?? EMPTY_ARRAY) as LocalMatchState[],
+        loading: matchStates === undefined,
     };
 }
 
@@ -480,22 +503,26 @@ export function useLocalMatchState(matchId: string | undefined) {
 // MATCH PERIODS
 // ============================================================================
 
-export function useLocalMatchPeriods(matchId: string | undefined) {
-    const periods = useLiveQuery(
+export function useLocalMatchPeriods(matchId: string | undefined, reloadVersion = 0) {
+    const snapshot = useLiveQuery(
         async () => {
-            if (!matchId) return [];
-            return db.matchPeriods
-                .where('matchId')
-                .equals(matchId)
-                .filter(p => !p.isDeleted)
-                .sortBy('periodNumber');
+            try {
+                const periods = matchId ? await db.matchPeriods.where('matchId').equals(matchId)
+                    .filter(p => !p.isDeleted).sortBy('periodNumber') : [];
+                return { matchId, reloadVersion, periods, error: undefined as string | undefined };
+            } catch {
+                return { matchId, reloadVersion, periods: [], error: 'Could not read saved match periods.' };
+            }
         },
-        [matchId]
+        [matchId, reloadVersion]
     );
+    const current = snapshot?.matchId === matchId && snapshot?.reloadVersion === reloadVersion;
 
     return {
-        periods: (periods ?? EMPTY_ARRAY) as LocalMatchPeriod[],
-        loading: periods === undefined,
+        periods: (current ? snapshot.periods : EMPTY_ARRAY) as LocalMatchPeriod[],
+        loading: !!matchId && !current,
+        loadedMatchId: current ? snapshot.matchId : undefined,
+        error: current ? snapshot.error : undefined,
     };
 }
 

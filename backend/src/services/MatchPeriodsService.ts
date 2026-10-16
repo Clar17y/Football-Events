@@ -1,8 +1,15 @@
 import { PrismaClient, period_type } from '@prisma/client';
-import { transformMatchPeriod, safeTransformMatchPeriod, transformMatchPeriods } from '@shared/types';
+import { transformMatchPeriod as sharedTransformMatchPeriod } from '@shared/types';
 import type { MatchPeriod } from '@shared/types';
 import { withPrismaErrorHandling } from '../utils/prismaErrorHandler';
 import { createOrRestoreSoftDeleted } from '../utils/softDeleteUtils';
+
+// Shared legacy transforms treat zero as absent; zero is an explicit playing duration.
+function transformMatchPeriod(row: Parameters<typeof sharedTransformMatchPeriod>[0]): MatchPeriod {
+  const period = sharedTransformMatchPeriod(row);
+  if (row.duration_seconds != null) period.durationSeconds = row.duration_seconds;
+  return period;
+}
 
 export interface PeriodTransitionOptions {
   reason?: string;
@@ -313,7 +320,7 @@ export class MatchPeriodsService {
         ]
       });
 
-      return transformMatchPeriods(periods);
+      return periods.map(transformMatchPeriod);
     }, 'MatchPeriod');
   }
 
@@ -371,7 +378,7 @@ export class MatchPeriodsService {
       }
 
       const activePeriod = await this.getActivePeriod(matchId);
-      return safeTransformMatchPeriod(activePeriod);
+      return activePeriod ? transformMatchPeriod(activePeriod) : null;
     }, 'MatchPeriod');
   }
 
@@ -410,7 +417,7 @@ export class MatchPeriodsService {
         orderBy: { period_number: 'asc' }
       });
 
-      return transformMatchPeriods(periods);
+      return periods.map(transformMatchPeriod);
     }, 'MatchPeriod');
   }
 
@@ -501,9 +508,9 @@ export class MatchPeriodsService {
           error.statusCode = 400;
           throw error;
         }
-        // Validate that endedAt is after startedAt
-        if (endedAt <= startedAt) {
-          const error = new Error('endedAt must be after startedAt') as any;
+        // Allow an immediately ended period with zero playing time.
+        if (endedAt < startedAt) {
+          const error = new Error('endedAt cannot be before startedAt') as any;
           error.statusCode = 400;
           throw error;
         }
@@ -518,41 +525,25 @@ export class MatchPeriodsService {
       // Cast periodType to the Prisma enum type
       const dbPeriodType = data.periodType as period_type;
 
-      // Check for existing period with same match_id, period_number, period_type
-      const existingPeriod = await this.prisma.match_periods.findFirst({
-        where: {
-          match_id: matchId,
-          period_number: data.periodNumber,
-          period_type: dbPeriodType,
-          is_deleted: false
-        }
-      });
-
-      if (existingPeriod) {
-        // Update existing period with imported data
-        const updatedPeriod = await this.prisma.match_periods.update({
-          where: { id: existingPeriod.id },
-          data: {
-            started_at: startedAt,
-            ended_at: endedAt,
-            duration_seconds: durationSeconds ?? null,
-            updated_at: new Date()
-          }
-        });
-        return transformMatchPeriod(updatedPeriod);
+      if (durationSeconds !== undefined && (!Number.isSafeInteger(durationSeconds) || durationSeconds < 0)) {
+        throw Object.assign(new Error('Invalid playing duration'), { statusCode: 400 });
       }
-
-      // Create new period with preserved timestamps
-      const newPeriod = await this.prisma.match_periods.create({
-        data: {
-          match_id: matchId,
-          period_number: data.periodNumber,
-          period_type: dbPeriodType,
+      // The database's logical-key constraint makes a lost-response retry atomic.
+      const newPeriod = await this.prisma.match_periods.upsert({
+        where: { match_id_period_number_period_type: {
+          match_id: matchId, period_number: data.periodNumber, period_type: dbPeriodType,
+        } },
+        create: {
+          match_id: matchId, period_number: data.periodNumber, period_type: dbPeriodType,
+          started_at: startedAt, ended_at: endedAt, duration_seconds: durationSeconds ?? null,
+          created_by_user_id: userId,
+        },
+        update: {
           started_at: startedAt,
-          ended_at: endedAt,
-          duration_seconds: durationSeconds ?? null,
-          created_by_user_id: userId
-        }
+          // A delayed open snapshot must not reopen an already ended period.
+          ...(endedAt ? { ended_at: endedAt, duration_seconds: durationSeconds ?? null } : {}),
+          is_deleted: false, deleted_at: null, deleted_by_user_id: null, updated_at: new Date(),
+        },
       });
 
       return transformMatchPeriod(newPeriod);

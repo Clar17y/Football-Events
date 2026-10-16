@@ -43,7 +43,6 @@ import PositionSelectionModal from './PositionSelectionModal';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { TextField } from '@mui/material';
 import dayjs, { Dayjs } from 'dayjs';
 import 'dayjs/locale/en-gb';
@@ -141,15 +140,6 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [positionModalOpen, setPositionModalOpen] = useState(false);
   const [teamModalOpen, setTeamModalOpen] = useState(false);
-
-  // Create MUI theme with indigo color
-  const muiTheme = createTheme({
-    palette: {
-      primary: {
-        main: '#3f51b5', // ion-color-indigo
-      },
-    },
-  });
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -348,83 +338,39 @@ const CreatePlayerModal: React.FC<CreatePlayerModalProps> = ({
 
   const renderDatePicker = (label: string, field: 'dateOfBirth') => (
     <div className={`${styles.datePickerWrapper} ${errors[field] && touched[field] ? styles.error : ''}`}>
-      <ThemeProvider theme={muiTheme}>
-        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="en-gb">
-          <DatePicker
-            format="DD/MM/YYYY"
-            label={label}
-            value={formData[field]}
-            onChange={(newValue) => handleInputChange(field, newValue)}
-            maxDate={dayjs()}
-            enableAccessibleFieldDOMStructure={false}
-            slots={{
-              textField: TextField,
-            }}
-            slotProps={{
-              textField: {
-                fullWidth: true,
-                variant: 'outlined',
-                onBlur: () => handleInputBlur(field),
-                sx: {
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: '12px',
-                    backgroundColor: 'var(--grassroots-surface)',
-                    '& fieldset': {
-                      borderColor: errors[field] && touched[field] ? 'var(--ion-color-danger)' : 'transparent',
-                    },
-                    '&:hover fieldset': {
-                      borderColor: errors[field] && touched[field] ? 'var(--ion-color-danger)' : 'transparent',
-                    },
-                    '&.Mui-focused fieldset': {
-                      borderColor: 'var(--ion-color-indigo)',
-                    },
+      <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="en-gb">
+        <DatePicker
+          format="DD/MM/YYYY"
+          label={label}
+          value={formData[field]}
+          onChange={(newValue) => handleInputChange(field, newValue)}
+          maxDate={dayjs()}
+          enableAccessibleFieldDOMStructure={false}
+          slots={{
+            textField: TextField,
+          }}
+          slotProps={{
+            textField: {
+              fullWidth: true,
+              variant: 'outlined',
+              onBlur: () => handleInputBlur(field),
+              sx: {
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: 'var(--touchline-surface)',
+                  '& fieldset': {
+                    borderColor: errors[field] && touched[field]
+                      ? 'var(--ion-color-danger)'
+                      : 'var(--touchline-line)',
                   },
-                  '& .MuiInputLabel-root': {
-                    color: 'var(--grassroots-text-secondary)',
-                    fontWeight: 600,
-                    '&.Mui-focused': {
-                      color: 'var(--ion-color-indigo)',
-                    },
-                  },
-                  '& .MuiInputBase-input': {
-                    color: 'var(--grassroots-text-primary)',
-                    fontWeight: 500,
-                  },
-                  '& .MuiSvgIcon-root': {
-                    color: 'var(--grassroots-text-primary)',
-                  },
-                  '.dark-theme &': {
-                    '& .MuiOutlinedInput-root': {
-                      backgroundColor: '#2a2a2a',
-                      '& fieldset': {
-                        borderColor: errors[field] && touched[field] ? 'var(--ion-color-danger)' : 'transparent',
-                      },
-                      '&:hover fieldset': {
-                        borderColor: errors[field] && touched[field] ? 'var(--ion-color-danger)' : 'transparent',
-                      },
-                      '&.Mui-focused fieldset': {
-                        borderColor: 'var(--ion-color-indigo)',
-                      },
-                    },
-                    '& .MuiInputLabel-root': {
-                      color: '#888888',
-                      '&.Mui-focused': {
-                        color: 'var(--ion-color-indigo)',
-                      },
-                    },
-                    '& .MuiInputBase-input': {
-                      color: '#ffffff',
-                    },
-                    '& .MuiSvgIcon-root': {
-                      color: '#ffffff',
-                    },
+                  '&.Mui-focused fieldset': {
+                    borderColor: 'var(--ion-color-primary)',
                   },
                 },
               },
-            }}
-          />
-        </LocalizationProvider>
-      </ThemeProvider>
+            },
+          }}
+        />
+      </LocalizationProvider>
     </div>
   );
 

@@ -106,6 +106,7 @@ export async function buildSnapshot(matchId: string) {
     currentPeriod: state?.current_period ?? null,
     currentPeriodType: state?.current_period_type ?? null,
     totalElapsedSeconds: state?.total_elapsed_seconds ?? 0,
+    activeSince: state?.active_since?.toISOString() ?? null,
     score,
     homeTeam: match?.homeTeam || null,
     awayTeam: match?.awayTeam || null,

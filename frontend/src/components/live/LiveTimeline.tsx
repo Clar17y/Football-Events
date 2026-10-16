@@ -2,6 +2,7 @@ import React from 'react';
 import { IonButton, IonChip, IonIcon, IonLabel, IonText } from '@ionic/react';
 import VisualPitchInterface from '../lineup/VisualPitchInterface';
 import { buildFormationSummary } from '../../lib/formationCore';
+import { formatEventMinute } from '../../utils/liveMatchTiming';
 import './LiveTimeline.css';
 import { 
   footballOutline,
@@ -44,6 +45,7 @@ export interface LiveTimelineProps {
   playerNameMap?: Record<string, string>;
   emptyMessage?: string;
   showDelete?: boolean;
+  deleteDisabled?: boolean;
   onDelete?: (item: FeedItem) => void;
   durationMinutes?: number;
   periodFormat?: 'quarter' | 'half' | 'whole' | string;
@@ -55,43 +57,12 @@ const minuteLabel = (ev: any, durationMinutes?: number, periodFormat?: string): 
     const d = ev?.createdAt ? new Date(ev.createdAt) : new Date();
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
-  const dur = Math.max(1, Number(durationMinutes || 0));
-  const fmt = String(periodFormat || '').toLowerCase();
-  const regCount = fmt.includes('half') ? 2 : fmt.includes('quarter') ? 4 : 1;
-  const regPerMs = Math.round((dur * 60000) / regCount);
-  let base = 0;
-  let periodDurationMs = regPerMs; // Duration of current period for stoppage calc
-
-  if (ev?.periodType === 'REGULAR') {
-    base = (Math.max(1, Number(ev.periodNumber || 1)) - 1) * regPerMs;
-    periodDurationMs = regPerMs;
-  } else if (ev?.periodType === 'EXTRA_TIME') {
-    const etPerMs = 15 * 60000; // default per ET period
-    base = (dur * 60000) + (Math.max(1, Number(ev.periodNumber || 1)) - 1) * etPerMs;
-    periodDurationMs = etPerMs;
-  } else if (ev?.periodType === 'PENALTY_SHOOTOUT') {
-    base = (dur * 60000) + 2 * 15 * 60000; // regulation + ET1+ET2 (approx)
-    periodDurationMs = 0; // No stoppage time in penalty shootout
-  }
-
-  const totalMs = base + (ev.clockMs || 0);
-  const mm = Math.floor(totalMs / 60000);
-
-  // Calculate expected end of current period for stoppage time
-  const expectedEndMs = base + periodDurationMs;
-
-  // If event occurred in stoppage/injury time, show as "45'+2'" format
-  if (totalMs > expectedEndMs && periodDurationMs > 0) {
-    const regularMinutes = Math.floor(expectedEndMs / 60000);
-    const stoppageMs = totalMs - expectedEndMs;
-    const stoppageMinutes = Math.floor(stoppageMs / 60000);
-    return `${regularMinutes}'+${stoppageMinutes}'`;
-  }
-
-  return `${mm}'`;
+  return formatEventMinute(ev.clockMs, { durationMinutes, periodFormat }, {
+    periodNumber: Math.max(1, Number(ev.periodNumber || 1)), periodType: ev.periodType || 'REGULAR',
+  });
 };
 
-const LiveTimeline: React.FC<LiveTimelineProps> = ({ feed, currentMatch, playerNameMap = {}, emptyMessage, showDelete, onDelete, durationMinutes, periodFormat }) => {
+const LiveTimeline: React.FC<LiveTimelineProps> = ({ feed, currentMatch, playerNameMap = {}, emptyMessage, showDelete, deleteDisabled, onDelete, durationMinutes, periodFormat }) => {
   if (!feed || feed.length === 0) {
     return <IonText color="medium">{emptyMessage || 'Timeline will be populated as events and match updates occur.'}</IonText>;
   }
@@ -119,7 +90,10 @@ const LiveTimeline: React.FC<LiveTimelineProps> = ({ feed, currentMatch, playerN
               {item.kind !== 'system' && (item.event || item.kind === 'formation') ? (
                 <IonChip style={{ height: 20 }} color={chipColor(item.event?.kind)}>
                   <IonLabel style={{ fontSize: 12 }}>
-                    {minuteLabel(item.event || { clockMs: item.clockMs, periodNumber: item.periodNumber, periodType: item.periodType, createdAt: item.createdAt }, durationMinutes, periodFormat)}
+                    {minuteLabel({ ...item.event, clockMs: item.event?.clockMs ?? item.clockMs,
+                      periodNumber: item.event?.periodNumber ?? item.periodNumber,
+                      periodType: item.event?.periodType ?? item.periodType,
+                      createdAt: item.event?.createdAt ?? item.createdAt }, durationMinutes, periodFormat)}
                   </IonLabel>
                 </IonChip>
               ) : (
@@ -234,7 +208,7 @@ const LiveTimeline: React.FC<LiveTimelineProps> = ({ feed, currentMatch, playerN
                 </IonChip>
               )}
               {showDelete && item.kind === 'event' && (
-                <IonButton size="small" fill="clear" color="danger" onClick={() => onDelete?.(item)} aria-label="Delete event">
+                <IonButton className="live-timeline-delete" disabled={deleteDisabled} size="small" fill="clear" color="danger" onClick={() => onDelete?.(item)} aria-label="Delete event">
                   <IonIcon icon={trashOutline} />
                 </IonButton>
               )}

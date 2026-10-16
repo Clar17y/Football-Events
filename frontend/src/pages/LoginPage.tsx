@@ -19,6 +19,7 @@ import { personAddOutline, eyeOutline, eyeOffOutline } from 'ionicons/icons';
 // useHistory removed - using state-based navigation
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import './HomePage.css';
 
 interface LoginPageProps {
   onNavigate?: (page: string) => void;
@@ -98,14 +99,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
   };
 
   return (
-    <IonPage>
+    <IonPage className="auth-page">
       <PageHeader onNavigate={navigate} />
       
       <IonContent className="home-content">
         {/* Hero Section */}
         <div className="hero-section">
           <div className="hero-content">
-            <h1 className="hero-title">Welcome Back!</h1>
+            <h1 className="hero-title">Welcome back</h1>
             <p className="hero-subtitle">
               Sign in to access your teams, players, and match data
             </p>
@@ -113,10 +114,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
         </div>
 
         {/* Login Form Section */}
-        <div className="navigation-section">
+        <div className="navigation-section" style={{ maxWidth: 460, margin: '0 auto' }}>
           <IonCard className="nav-card">
             <IonCardHeader>
-              <IonCardTitle style={{ fontSize: '1.5rem', fontWeight: 'bold', textAlign: 'center' }}>Sign In</IonCardTitle>
+              <IonCardTitle style={{ fontSize: '1.35rem', fontWeight: 700, textAlign: 'center', color: 'var(--touchline-ink, #14231d)' }}>Sign In</IonCardTitle>
             </IonCardHeader>
             
             <IonCardContent>
@@ -174,6 +175,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
                     expand="block"
                     type="submit"
                     disabled={isLoading}
+                    style={{ '--background': 'var(--touchline-forest, #12392d)', '--color': '#ffffff', minHeight: '44px', fontWeight: 600, textTransform: 'none' }}
                     onClick={(e) => {
                       e.preventDefault();
                       handleLogin();

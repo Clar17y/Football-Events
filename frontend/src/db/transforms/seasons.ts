@@ -94,7 +94,7 @@ export function dbSeasonToServerPayload(s: DbSeason): ServerSeasonPayload {
   const today = new Date().toISOString().slice(0, 10);
 
   return {
-    id: s.id,
+    id: s.remoteSeasonId ?? s.id,
     label: s.label,
     startDate: formatDate(s.startDate, today),
     endDate: formatDate(s.endDate, today),

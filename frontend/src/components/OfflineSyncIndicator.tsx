@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { IonChip, IonLabel, IonIcon } from '@ionic/react';
 import { cloudOffline, cloudUpload, checkmarkCircle, alertCircle, timeOutline } from 'ionicons/icons';
 import type { SyncProgress } from '../services/syncService';
+import { useAuth } from '../contexts/AuthContext';
 
 const POLL_MS = 3000;
 
@@ -59,6 +60,10 @@ function showOnlineToast(): void {
  * Requirements: 4.1, 4.3 - Show offline status and sync progress
  */
 const OfflineSyncIndicator: React.FC = () => {
+  const { isAuthenticated, user } = useAuth();
+  const [statusKnown, setStatusKnown] = useState(false);
+  const [statusError, setStatusError] = useState(false);
+  const refreshVersionRef = useRef(0);
   const [pending, setPending] = useState<number>(0);
   const [eligible, setEligible] = useState<number>(0);
   const [blocked, setBlocked] = useState<number>(0);
@@ -77,21 +82,25 @@ const OfflineSyncIndicator: React.FC = () => {
   };
 
   const refresh = async () => {
+    const version = ++refreshVersionRef.current;
     try {
       // Use syncService to get accurate pending counts across all tables
       const { syncService } = await import('../services/syncService');
       const progress = await syncService.getPendingCounts();
+      if (version !== refreshVersionRef.current) return;
+      setStatusKnown(true);
+      setStatusError(false);
       const newPending = progress.total;
       const newEligible = progress.eligible;
       const newBlocked = progress.blocked;
       
       // Track if we just completed a sync (pending went from >0 to 0)
-      if (previousPendingRef.current > 0 && newPending === 0 && newBlocked === 0 && online) {
+      if (previousPendingRef.current > 0 && newPending === 0 && newBlocked === 0 && navigator.onLine) {
         // Sync completed - show toast
         showSyncCompleteToast(previousPendingRef.current);
         setLastSyncedCount(previousPendingRef.current);
         setSyncing(false);
-      } else if (newPending > 0 && newEligible > 0 && online) {
+      } else if (newPending > 0 && newEligible > 0 && navigator.onLine) {
         setSyncing(true);
       } else {
         setSyncing(false);
@@ -103,6 +112,9 @@ const OfflineSyncIndicator: React.FC = () => {
       setBlocked(newBlocked);
       setNextRetryAtMs(progress.nextRetryAtMs ?? null);
     } catch {
+      if (version !== refreshVersionRef.current) return;
+      setStatusKnown(false);
+      setStatusError(true);
       setPending(0);
       setEligible(0);
       setBlocked(0);
@@ -111,19 +123,22 @@ const OfflineSyncIndicator: React.FC = () => {
   };
 
   useEffect(() => {
-    refresh();
-    const id = window.setInterval(refresh, POLL_MS);
+    setStatusKnown(false);
+    setStatusError(false);
+    previousPendingRef.current = 0;
+    if (isAuthenticated) refresh();
+    const id = isAuthenticated ? window.setInterval(refresh, POLL_MS) : undefined;
     
     // Handle online event
     // Requirements: 4.3 - Show sync progress when coming back online
     const onOnline = () => {
       setOnline(true);
-      if (wasOfflineRef.current) {
+      if (wasOfflineRef.current && isAuthenticated) {
         showOnlineToast();
         wasOfflineRef.current = false;
       }
-      setSyncing(true);
-      refresh();
+      setSyncing(isAuthenticated);
+      if (isAuthenticated) refresh();
     };
     
     // Handle offline event
@@ -131,15 +146,19 @@ const OfflineSyncIndicator: React.FC = () => {
     const onOffline = () => {
       setOnline(false);
       wasOfflineRef.current = true;
-      showOfflineToast();
+      if (isAuthenticated) showOfflineToast();
       setSyncing(false);
     };
     
-    const onAnyChange = () => refresh();
+    const onAnyChange = () => { if (isAuthenticated) refresh(); };
     
     // Handle sync:progress events from syncService
     // Requirements: 4.3 - Track sync progress
     const onSyncProgress = (event: CustomEvent<SyncProgress>) => {
+      if (!isAuthenticated) return;
+      ++refreshVersionRef.current;
+      setStatusKnown(true);
+      setStatusError(false);
       const progress = event.detail;
       setPending(progress.total);
       setEligible(progress.eligible);
@@ -168,22 +187,41 @@ const OfflineSyncIndicator: React.FC = () => {
     wasOfflineRef.current = !navigator.onLine;
     
     return () => {
-      window.clearInterval(id);
+      ++refreshVersionRef.current;
+      if (id !== undefined) window.clearInterval(id);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
       window.removeEventListener('guest:changed', onAnyChange as EventListener);
       window.removeEventListener('sync:status', onAnyChange as EventListener);
       window.removeEventListener('sync:progress', onSyncProgress as EventListener);
     };
-  }, []);
+  }, [isAuthenticated, user?.id]);
+
+  if (!isAuthenticated) {
+    return (
+      <IonChip className="offline-sync-indicator guest" title="Guest recordings stay on this device. Sign in to sync across devices.">
+        <IonIcon icon={cloudOffline} aria-hidden="true" />
+        <IonLabel>On this device</IonLabel>
+      </IonChip>
+    );
+  }
 
   // Offline state - show warning chip
   // Requirements: 4.1 - Display visual indicator showing offline status
   if (!online) {
     return (
-      <IonChip color="warning" style={{ height: 22 }}>
-        <IonIcon icon={cloudOffline} />
-        <IonLabel style={{ fontSize: 12 }}>Offline</IonLabel>
+      <IonChip className="offline-sync-indicator offline">
+        <IonIcon icon={cloudOffline} aria-hidden="true" />
+        <IonLabel>Offline</IonLabel>
+      </IonChip>
+    );
+  }
+
+  if (!statusKnown) {
+    return (
+      <IonChip className="offline-sync-indicator checking">
+        <IonIcon icon={timeOutline} aria-hidden="true" />
+        <IonLabel>{statusError ? 'Sync status unavailable' : 'Checking sync'}</IonLabel>
       </IonChip>
     );
   }
@@ -191,12 +229,17 @@ const OfflineSyncIndicator: React.FC = () => {
   // Quarantined/permanent failures
   if (blocked > 0) {
     return (
-      <IonChip color="danger" style={{ height: 22, cursor: 'pointer' }} onClick={goToSyncIssues}>
-        <IonIcon icon={alertCircle} />
-        <IonLabel style={{ fontSize: 12 }}>
+      <button
+        type="button"
+        className="offline-sync-indicator actionable issues"
+        aria-label={`View ${blocked} sync issue${blocked === 1 ? '' : 's'}`}
+        onClick={goToSyncIssues}
+      >
+        <IonIcon icon={alertCircle} aria-hidden="true" />
+        <IonLabel>
           Issues {blocked}
         </IonLabel>
-      </IonChip>
+      </button>
     );
   }
 
@@ -215,16 +258,16 @@ const OfflineSyncIndicator: React.FC = () => {
         return `Retry in ${hours}h`;
       })();
       return (
-        <IonChip color="medium" style={{ height: 22 }}>
-          <IonIcon icon={timeOutline} />
-          <IonLabel style={{ fontSize: 12 }}>{label}</IonLabel>
+        <IonChip className="offline-sync-indicator waiting">
+          <IonIcon icon={timeOutline} aria-hidden="true" />
+          <IonLabel>{label}</IonLabel>
         </IonChip>
       );
     }
     return (
-      <IonChip color="tertiary" style={{ height: 22 }}>
-        <IonIcon icon={cloudUpload} />
-        <IonLabel style={{ fontSize: 12 }}>
+      <IonChip className="offline-sync-indicator syncing">
+        <IonIcon icon={cloudUpload} aria-hidden="true" />
+        <IonLabel>
           {pending > 0 ? `Syncing ${pending}` : 'Syncing...'}
         </IonLabel>
       </IonChip>
@@ -234,9 +277,9 @@ const OfflineSyncIndicator: React.FC = () => {
   // All synced state
   // Requirements: 4.4 - Show confirmation that data has been synced
   return (
-    <IonChip color="success" style={{ height: 22 }}>
-      <IonIcon icon={checkmarkCircle} />
-      <IonLabel style={{ fontSize: 12 }}>All synced</IonLabel>
+    <IonChip className="offline-sync-indicator synced">
+      <IonIcon icon={checkmarkCircle} aria-hidden="true" />
+      <IonLabel>All synced</IonLabel>
     </IonChip>
   );
 };

@@ -48,7 +48,6 @@ import { runMigrations } from './migrations';
 import { performanceMonitor } from './performance';
 import { getGuestId, isGuest } from '../utils/guest';
 import { getCurrentUserId } from '../utils/network';
-import { canAddEvent } from '../utils/quotas';
 
 /**
  * Enhanced IndexedDB database with proper typing and validation
@@ -318,6 +317,19 @@ export class GrassrootsDB extends Dexie {
       outbox: null
     });
 
+    // Mutation tokens survive reloads and distinguish writes within the same millisecond.
+    for (const table of [this.events, this.matchPeriods, this.matchState] as Table<any, string>[]) {
+      table.hook('creating', (_key, record) => {
+        record.syncRevision = crypto.randomUUID();
+      });
+      table.hook('updating', (changes) => {
+        const metadata = new Set(['synced', 'syncedAt', 'syncAttempted', 'remoteId', 'linkedEvents', 'autoLinkedAt']);
+        if (Object.keys(changes).some(key => !metadata.has(key))) {
+          return { syncRevision: crypto.randomUUID() };
+        }
+      });
+    }
+
     // Hook for auto-linking events
     this.events.hook('creating', (primKey, obj, trans) => {
       // Auto-link events after creation
@@ -398,6 +410,14 @@ export class GrassrootsDB extends Dexie {
   /**
    * Add an enhanced event with auto-linking
    */
+  private async advanceRecordingRevision(matchId: string): Promise<void> {
+    const match = await this.matches.get(matchId);
+    if (!match) return;
+    const revision = match.recordingRevision ?? 0;
+    if (!Number.isSafeInteger(revision) || revision < 0 || revision === Number.MAX_SAFE_INTEGER) throw new Error('Invalid recording revision');
+    await this.matches.update(matchId, { recordingRevision: revision + 1 });
+  }
+
   async addEnhancedEvent(eventData: {
     kind: string;
     matchId: string;
@@ -453,7 +473,10 @@ export class GrassrootsDB extends Dexie {
         synced: false,
       };
 
-      await this.events.add(event);
+      await this.transaction('rw', this.events, this.matches, async () => {
+        await this.events.add(event);
+        await this.advanceRecordingRevision(event.matchId);
+      });
 
       return {
         success: true,
@@ -501,7 +524,11 @@ export class GrassrootsDB extends Dexie {
    */
   async deleteEnhancedEvent(eventId: string): Promise<DatabaseResult<void>> {
     try {
-      await this.events.delete(eventId);
+      await this.transaction('rw', this.events, this.matches, async () => {
+        const event = await this.events.get(eventId);
+        await this.events.delete(eventId);
+        if (event) await this.advanceRecordingRevision(event.matchId);
+      });
 
       return {
         success: true,
@@ -556,46 +583,14 @@ export class GrassrootsDB extends Dexie {
         };
       }
 
-      // Enforce guest quota for non-scoring events
-      try {
-        const quota = await canAddEvent(payload.matchId, payload.kind);
-        if (!quota.ok) {
-          return {
-            success: false,
-            error: quota.reason,
-            affected_count: 0
-          };
-        }
-      } catch (e) {
-        console.warn('Quota check failed:', e);
-      }
-
-      const nowMs = Date.now();
-      const nowIso = new Date(nowMs).toISOString();
-      const eventId = globalThis.crypto?.randomUUID?.() ?? `event-${nowMs}-${Math.random().toString(36).substr(2, 9)}`;
-
-      // Calculate clockMs if not provided
-      const clockMs = payload.clockMs ??
-        ((payload.minute ?? 0) * 60000 + (payload.second ?? 0) * 1000);
-
-      const event: DbEvent = {
-        id: eventId,
-        matchId: payload.matchId,
+      const { eventsDataLayer } = await import('../services/dataLayer');
+      const event = await eventsDataLayer.create({
+        ...payload,
         periodNumber: payload.periodNumber ?? payload.period ?? 1,
-        clockMs: clockMs,
-        kind: payload.kind as any,
-        teamId: payload.teamId,
-        playerId: payload.playerId ?? '',
-        sentiment: payload.sentiment ?? 0,
-        notes: payload.notes || (payload.data?.notes as string) || '',
-        createdAt: payload.createdAt || nowIso,
-        updatedAt: nowIso,
-        createdByUserId: payload.createdByUserId || (isGuest() ? getGuestId() : getCurrentUserId()),
-        isDeleted: payload.isDeleted ?? false,
-        synced: false, // Mark as unsynced
-      };
-
-      await this.events.add(event);
+        clockMs: payload.clockMs ?? ((payload.minute ?? 0) * 60000 + (payload.second ?? 0) * 1000),
+        notes: payload.notes ?? payload.data?.notes,
+      });
+      const eventId = event.id;
 
       return {
         success: true,
@@ -846,7 +841,10 @@ export class GrassrootsDB extends Dexie {
         synced: false,
       };
 
-      await this.matchPeriods.add(matchPeriod);
+      await this.transaction('rw', this.matchPeriods, this.matches, async () => {
+        await this.matchPeriods.add(matchPeriod);
+        await this.advanceRecordingRevision(matchPeriod.matchId);
+      });
 
       return {
         success: true,
@@ -867,30 +865,33 @@ export class GrassrootsDB extends Dexie {
    */
   async endMatchPeriod(matchId: string, periodId: string, endedAt?: number): Promise<DatabaseResult<void>> {
     try {
-      const period = await this.matchPeriods.get(periodId);
-      if (!period) {
+      return await this.transaction('rw', this.matchPeriods, this.matches, async () => {
+        const period = await this.matchPeriods.get(periodId);
+        if (!period) {
+          return {
+            success: false,
+            error: 'Period not found',
+            affected_count: 0
+          };
+        }
+
+        const endTime = endedAt || Date.now();
+        const durationSeconds = Math.floor((endTime - period.startedAt) / 1000);
+        const nowIso = new Date().toISOString();
+
+        await this.matchPeriods.update(periodId, {
+          endedAt: endTime,
+          durationSeconds: durationSeconds,
+          updatedAt: nowIso,
+          synced: false
+        });
+        await this.advanceRecordingRevision(period.matchId);
+
         return {
-          success: false,
-          error: 'Period not found',
-          affected_count: 0
+          success: true,
+          affected_count: 1
         };
-      }
-
-      const endTime = endedAt || Date.now();
-      const durationSeconds = Math.floor((endTime - period.startedAt) / 1000);
-      const nowIso = new Date().toISOString();
-
-      await this.matchPeriods.update(periodId, {
-        endedAt: endTime,
-        durationSeconds: durationSeconds,
-        updatedAt: nowIso,
-        synced: false
       });
-
-      return {
-        success: true,
-        affected_count: 1
-      };
     } catch (error) {
       return {
         success: false,
@@ -939,32 +940,35 @@ export class GrassrootsDB extends Dexie {
         };
       }
 
-      const existing = await this.matchState.get(matchId);
-      const nowMs = Date.now();
-      const nowIso = new Date(nowMs).toISOString();
+      await this.transaction('rw', this.matchState, this.matches, async () => {
+        const existing = await this.matchState.get(matchId);
+        const nowMs = Date.now();
+        const nowIso = new Date(nowMs).toISOString();
 
-      if (existing) {
-        await this.matchState.update(matchId, {
-          ...updates,
-          lastUpdatedAt: nowMs,
-          updatedAt: nowIso,
-          synced: false
-        });
-      } else {
-        const newState: DbMatchState = {
-          matchId: matchId,
-          status: updates.status || 'SCHEDULED',
-          currentPeriodId: updates.currentPeriodId,
-          timerMs: updates.timerMs || 0,
-          lastUpdatedAt: nowMs,
-          createdAt: nowIso,
-          updatedAt: nowIso,
-          createdByUserId: updates.createdByUserId || (isGuest() ? getGuestId() : getCurrentUserId()),
-          isDeleted: false,
-          synced: false,
-        };
-        await this.matchState.add(newState);
-      }
+        if (existing) {
+          await this.matchState.update(matchId, {
+            ...updates,
+            lastUpdatedAt: nowMs,
+            updatedAt: nowIso,
+            synced: false
+          });
+        } else {
+          const newState: DbMatchState = {
+            matchId: matchId,
+            status: updates.status || 'SCHEDULED',
+            currentPeriodId: updates.currentPeriodId,
+            timerMs: updates.timerMs || 0,
+            lastUpdatedAt: nowMs,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+            createdByUserId: updates.createdByUserId || (isGuest() ? getGuestId() : getCurrentUserId()),
+            isDeleted: false,
+            synced: false,
+          };
+          await this.matchState.add(newState);
+        }
+        await this.advanceRecordingRevision(matchId);
+      });
 
       return {
         success: true,

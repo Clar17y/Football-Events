@@ -1,26 +1,24 @@
-/* ===== PLAYERS PAGE STYLES ===== */
-/* Beautiful, modern player management interface following the grassroots design system */
+/* ===== PLAYERS PAGE STYLES - TOUCHLINE SYSTEM ===== */
+/* Modern player management interface following the open forest system */
 
 @import '../styles/brand-headers.css';
 
 /* Players Header Section */
 .players-header {
-  padding: var(--grassroots-space-lg) var(--grassroots-space-md) var(--grassroots-space-md);
-  background: linear-gradient(135deg, var(--grassroots-surface) 0%, var(--grassroots-surface-elevated) 100%);
-  border-bottom: 1px solid var(--grassroots-surface-variant);
+  padding: 20px;
+  background: var(--touchline-bg, #f8faf7);
+  border-bottom: 1px solid var(--touchline-line, #dce4de);
 }
 
 .players-title-section {
-  margin-bottom: var(--grassroots-space-md);
+  margin-bottom: var(--grassroots-space-sm, 8px);
 }
 
-/* Page Header with Color Bar */
 .page-header-with-color {
-  background: var(--theme-primary, var(--ion-color-indigo));
-  padding: var(--grassroots-space-sm) var(--grassroots-space-md);
-  border-radius: var(--grassroots-radius-md);
-  margin-bottom: var(--grassroots-space-xs);
-  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--grassroots-space-sm, 8px);
+  margin-bottom: var(--grassroots-space-xs, 4px);
 }
 
 .players-main-title {
@@ -28,7 +26,7 @@
   font-weight: 700;
   font-size: 1.75rem;
   letter-spacing: -0.025em;
-  color: var(--grassroots-text-on-dark);
+  color: var(--touchline-ink, #14231d);
   margin: 0;
 }
 
@@ -36,76 +34,72 @@
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 400;
   font-size: 0.95rem;
-  color: var(--grassroots-text-secondary);
-  margin: var(--grassroots-space-xs) 0 0 0;
+  color: var(--touchline-muted, #56645d);
+  margin: 4px 0 0 0;
   line-height: 1.5;
 }
 
 .players-count {
-  font-weight: 500;
-  color: var(--grassroots-text-primary);
+  font-weight: 600;
+  color: var(--touchline-ink, #14231d);
 }
 
 /* Search Section */
 .players-search {
-  --background: var(--grassroots-surface);
-  --border-radius: var(--grassroots-radius-md);
-  --box-shadow: var(--grassroots-shadow-sm);
-  --color: var(--grassroots-text-primary);
-  --placeholder-color: var(--grassroots-text-secondary);
-  margin-top: var(--grassroots-space-sm);
+  --background: var(--touchline-surface, #ffffff);
+  --border-radius: var(--touchline-radius, 14px);
+  --box-shadow: none;
+  --color: var(--touchline-ink, #14231d);
+  --placeholder-color: var(--touchline-muted, #56645d);
+  border: 1px solid var(--touchline-line, #dce4de);
+  border-radius: var(--touchline-radius, 14px);
+  margin-top: 12px;
 }
-
 
 /* Players Content */
 .players-content {
   min-height: calc(100vh - 200px);
+  padding: 20px;
 }
 
 /* Player Card Styles */
 .player-card {
-  border-radius: var(--grassroots-radius-lg);
-  box-shadow: var(--grassroots-shadow-md);
-  border: 1px solid var(--grassroots-surface-variant);
-  transition: all 0.3s ease;
+  border-radius: var(--touchline-radius, 14px);
+  box-shadow: none;
+  border: 1px solid var(--touchline-line, #dce4de);
+  transition: border-color 0.2s ease, transform 0.2s ease;
   overflow: hidden;
-  background: var(--grassroots-surface);
+  background: var(--touchline-surface, #ffffff);
   margin: 0;
   width: 100%;
   box-sizing: border-box;
   position: relative;
-  min-height: 140px; /* Fixed height for consistency */
+  min-height: 130px;
   display: flex;
   flex-direction: column;
 }
 
-/* Position Stripe - diagonal like team stripes */
+/* Position Stripe - semantic position colors preserved */
 .player-position-stripe {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  width: 20%;
-  background: var(--ion-color-indigo, #3880ff);
+  width: 18%;
+  background: var(--touchline-forest);
   z-index: 1;
   opacity: 0.15;
   transform: skewX(-15deg);
   transform-origin: top;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.2s ease;
 }
 
-/* Position-based stripe colors */
-.player-card-goalkeeper .player-position-stripe { background: var(--position-goalkeeper, var(--ion-color-emerald)); }
-.player-card-defender .player-position-stripe { background: var(--position-defender, var(--ion-color-indigo)); }
-.player-card-midfielder .player-position-stripe { background: var(--position-midfielder, var(--ion-color-amber)); }
-.player-card-forward .player-position-stripe { background: var(--position-forward, var(--ion-color-rose)); }
+/* Position-based stripe colors (Semantic pitch positions) */
+.player-card-goalkeeper .player-position-stripe { background: var(--position-goalkeeper, #059669); }
+.player-card-defender .player-position-stripe { background: var(--position-defender, #4f46e5); }
+.player-card-midfielder .player-position-stripe { background: var(--position-midfielder, #d97706); }
+.player-card-forward .player-position-stripe { background: var(--position-forward, #dc2626); }
 
-/* Default stripe for players without position */
-.player-card-default .player-position-stripe {
-  background: var(--ion-color-indigo, #3880ff);
-}
-
-/* Ensure content is above stripe */
 .player-card .player-card-content {
   position: relative;
   z-index: 2;
@@ -113,36 +107,31 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 0; /* Allow content to shrink if needed */
+  padding: 14px 16px;
 }
 
-/* Player card hover effects */
 .player-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--grassroots-shadow-lg);
+  transform: translateY(-1px);
 }
 
 .player-card:hover .player-position-stripe {
   opacity: 0.25;
 }
 
-/* Position-based hover border colors (tokenized) */
-.player-card-goalkeeper:hover { border-color: var(--position-goalkeeper, var(--ion-color-emerald)); }
-.player-card-defender:hover { border-color: var(--position-defender, var(--ion-color-indigo)); }
-.player-card-midfielder:hover { border-color: var(--position-midfielder, var(--ion-color-amber)); }
-.player-card-forward:hover { border-color: var(--position-forward, var(--ion-color-rose)); }
-
-.player-card-default:hover {
-  border-color: var(--ion-color-indigo);
-}
+/* Position-based hover border colors */
+.player-card-goalkeeper:hover { border-color: var(--position-goalkeeper, #059669); }
+.player-card-defender:hover { border-color: var(--position-defender, #4f46e5); }
+.player-card-midfielder:hover { border-color: var(--position-midfielder, #d97706); }
+.player-card-forward:hover { border-color: var(--position-forward, #dc2626); }
+.player-card-default:hover { border-color: var(--touchline-forest); }
 
 /* Position Sections */
 .players-sections {
-  padding: var(--grassroots-space-md);
+  padding: 0;
 }
 
 .position-section {
-  margin-bottom: var(--grassroots-space-lg);
+  margin-bottom: 20px;
 }
 
 .position-section:last-child {
@@ -154,52 +143,51 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--grassroots-space-sm) var(--grassroots-space-md);
-  background: var(--grassroots-surface-elevated);
-  border: 1px solid var(--grassroots-surface-variant);
-  border-radius: var(--grassroots-radius-md);
-  margin-bottom: var(--grassroots-space-sm);
+  padding: 10px 16px;
+  min-height: 44px;
+  background: var(--touchline-surface, #ffffff);
+  border: 1px solid var(--touchline-line, #dce4de);
+  border-radius: var(--touchline-radius, 14px);
+  margin-bottom: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.15s ease;
   user-select: none;
 }
 
 .position-section-header:hover {
-  background: var(--grassroots-surface-variant);
-  transform: translateY(-1px);
-  box-shadow: var(--grassroots-shadow-sm);
+  background: var(--touchline-soft, #edf3ee);
 }
 
 .section-header-content {
   display: flex;
   align-items: center;
-  gap: var(--grassroots-space-sm);
+  gap: 10px;
 }
 
 .section-icon {
   font-size: 1.25rem;
-  color: var(--grassroots-text-secondary);
+  color: var(--touchline-muted, #56645d);
 }
 
 .section-title {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  color: var(--grassroots-text-primary);
+  color: var(--touchline-ink, #14231d);
   margin: 0;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.01em;
 }
 
 .section-chevron {
   font-size: 1.25rem;
-  color: var(--grassroots-text-tertiary);
+  color: var(--touchline-muted, #56645d);
   transition: transform 0.2s ease;
 }
 
 .team-filter-inline {
   display: flex;
   align-items: center;
-  margin-left: var(--grassroots-space-sm);
+  margin-left: 8px;
 }
 
 .team-filter-inline-rounded .team-filter-button {
@@ -208,15 +196,14 @@
   --padding-bottom: 6px;
   --padding-start: 10px;
   --padding-end: 10px;
+  min-height: 36px;
 }
 
-/* Section Grid */
 .section-grid {
   margin: 0;
   padding: 0;
 }
 
-/* Grid spacing fix: prevent overflow and wrapping */
 .players-grid ion-col,
 .players-grid .col {
   padding: 0;
@@ -226,25 +213,7 @@
   display: flex;
   align-items: stretch;
   justify-content: center;
-  padding: var(--grassroots-space-sm);
-}
-
-.section-grid ion-row {
-  margin: 0;
-}
-
-/* Animations for collapsible sections */
-.position-section .section-grid {
-  overflow: hidden;
-  transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
-}
-/* Removed unused players-grid and players-grid-container */
-
-/* Legacy player card styles removed - using new position-based styles above */
-
-.player-card-content {
-  padding: var(--grassroots-space-md);
-  position: relative;
+  padding: 8px;
 }
 
 /* Player Header */
@@ -252,7 +221,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: var(--grassroots-space-sm);
+  margin-bottom: 8px;
 }
 
 .player-info {
@@ -263,19 +232,20 @@
 .player-name-section {
   display: flex;
   align-items: center;
-  gap: var(--grassroots-space-sm);
-  margin-bottom: var(--grassroots-space-xs);
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
 .player-jersey-number {
-  background: var(--theme-primary, var(--ion-color-indigo));
-  color: var(--theme-on-primary, var(--grassroots-text-on-dark));
+  background: var(--touchline-forest, #12392d);
+  color: #ffffff;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 700;
-  font-size: 0.875rem;
-  padding: var(--grassroots-space-xs) var(--grassroots-space-sm);
-  border-radius: var(--grassroots-radius-sm);
-  min-width: 32px;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 8px;
+  border-radius: 6px;
+  min-width: 28px;
   text-align: center;
   line-height: 1;
 }
@@ -283,8 +253,8 @@
 .player-name {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 600;
-  font-size: 1.125rem;
-  color: var(--grassroots-text-primary);
+  font-size: 1.05rem;
+  color: var(--touchline-ink, #14231d);
   margin: 0;
   line-height: 1.3;
   overflow: hidden;
@@ -295,314 +265,253 @@
 .player-position {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 500;
-  font-size: 0.875rem;
-  color: var(--theme-primary, var(--ion-color-indigo));
+  font-size: 0.8125rem;
+  color: var(--touchline-muted, #56645d);
   margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* Player Actions */
 .player-actions {
   display: flex;
   align-items: center;
-  gap: var(--grassroots-space-xs);
+  gap: 4px;
 }
 
 .player-menu-button {
-  --color: var(--grassroots-text-secondary);
+  --color: var(--touchline-muted, #56645d);
   --background: transparent;
-  --background-hover: var(--grassroots-surface-variant);
-  --border-radius: var(--grassroots-radius-sm);
-  --padding-start: var(--grassroots-space-xs);
-  --padding-end: var(--grassroots-space-xs);
-  --padding-top: var(--grassroots-space-xs);
-  --padding-bottom: var(--grassroots-space-xs);
+  --background-hover: var(--touchline-soft);
+  --border-radius: 8px;
+  min-height: 44px;
+  min-width: 44px;
   margin: 0;
 }
 
 .player-menu-button:hover {
-  --color: var(--grassroots-text-primary);
+  --color: var(--touchline-ink, #14231d);
 }
 
 /* Player Details */
 .player-details {
   display: flex;
   flex-direction: column;
-  gap: var(--grassroots-space-xs);
+  gap: 6px;
 }
 
 .player-team-info {
   display: flex;
   align-items: center;
-  gap: var(--grassroots-space-xs);
+  gap: 6px;
 }
 
 .player-team-chip {
-  --background: var(--grassroots-surface-variant);
-  --color: var(--grassroots-text-secondary);
+  --background: var(--touchline-soft, #edf3ee);
+  --color: var(--touchline-muted, #56645d);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 500;
   font-size: 0.8125rem;
-  height: 28px;
+  height: 26px;
+  border-radius: 6px;
 }
 
 .player-stats {
   display: flex;
-  gap: var(--grassroots-space-md);
-  margin-top: var(--grassroots-space-sm);
+  gap: 8px;
+  margin-top: 6px;
 }
 
 .stat-chip {
-  --background: var(--grassroots-surface-variant);
-  --color: var(--grassroots-text-secondary);
+  --background: var(--touchline-soft, #edf3ee);
+  --color: var(--touchline-muted, #56645d);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 500;
   font-size: 0.8125rem;
-  height: 28px;
+  height: 26px;
+  border-radius: 6px;
 }
 
 .stat-chip ion-icon {
   font-size: 0.875rem;
-  margin-right: var(--grassroots-space-xs);
-}
-
-/* Loading Skeletons */
-.player-skeleton {
-  --background: var(--grassroots-surface-elevated);
-  border-radius: var(--grassroots-radius-lg);
-  box-shadow: var(--grassroots-shadow-sm);
-  margin: 0;
-  border: 1px solid var(--grassroots-surface-variant);
-}
-
-.player-skeleton-content {
-  padding: var(--grassroots-space-md);
-}
-
-.skeleton-header {
-  display: flex;
-  align-items: center;
-  gap: var(--grassroots-space-sm);
-  margin-bottom: var(--grassroots-space-sm);
-}
-
-.skeleton-jersey {
-  width: 32px;
-  height: 24px;
-  border-radius: var(--grassroots-radius-sm);
-}
-
-.skeleton-name {
-  height: 20px;
-  width: 60%;
-  border-radius: var(--grassroots-radius-xs);
-}
-
-.skeleton-position {
-  height: 16px;
-  width: 40%;
-  border-radius: var(--grassroots-radius-xs);
-  margin-bottom: var(--grassroots-space-xs);
-}
-
-.skeleton-team {
-  height: 16px;
-  width: 50%;
-  border-radius: var(--grassroots-radius-xs);
-}
-
-
-/* Responsive Design */
-@media (min-width: 768px) {
-  .players-header {
-    padding: var(--grassroots-space-xl) var(--grassroots-space-lg) var(--grassroots-space-lg);
-  }
-}
-
-@media (min-width: 1024px) {
-  .players-header {
-    padding: var(--grassroots-space-xl) var(--grassroots-space-xl) var(--grassroots-space-lg);
-  }
-}
-
-/* Dark Theme Support */
-.dark-theme .player-card {
-  --background: var(--grassroots-surface-elevated);
-  border-color: var(--grassroots-surface-variant);
-}
-
-.dark-theme .player-card:hover {
-  border-color: var(--ion-color-indigo-tint);
-}
-
-.dark-theme .player-name,
-.dark-theme .section-title {
-  color: var(--grassroots-text-primary);
-}
-
-.dark-theme .player-position {
-  color: var(--theme-primary, var(--ion-color-indigo-tint));
-}
-
-.dark-theme .player-menu-button {
-  --color: var(--grassroots-text-secondary);
-}
-
-/* High Contrast Mode */
-@media (prefers-contrast: high) {
-  .player-card {
-    border-width: 2px;
-    border-color: var(--grassroots-text-primary);
-  }
-  
-  .player-jersey-number {
-    border: 2px solid var(--grassroots-text-on-dark);
-  }
-  
-  .stat-chip,
-  .player-team-chip {
-    border: 1px solid var(--grassroots-text-secondary);
-  }
-}
-
-/* Reduced Motion */
-@media (prefers-reduced-motion: reduce) {
-  .player-card {
-    transition: none;
-  }
-  
-  .player-card:hover {
-    transform: none;
-  }
+  margin-right: 4px;
 }
 
 /* Filter Chips */
 .filter-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--grassroots-space-xs);
-  margin-top: var(--grassroots-space-sm);
-  padding: 0 var(--grassroots-space-xs);
+  gap: 6px;
+  margin-top: 10px;
+  padding: 0;
 }
 
 .filter-chips ion-chip {
-  --background: var(--ion-color-primary-tint);
-  --color: var(--ion-color-primary);
-  --border-color: var(--ion-color-primary);
-  --border-width: 1px;
-  --border-style: solid;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  --background: var(--touchline-soft, #edf3ee);
+  --color: var(--touchline-ink, #14231d);
+  border: 1px solid var(--touchline-line, #dce4de);
+  border-radius: 999px;
   font-weight: 500;
+  min-height: 36px;
 }
 
 .filter-chips ion-chip:hover {
-  --background: var(--ion-color-primary);
-  --color: white;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(var(--ion-color-primary-rgb), 0.3);
+  --background: var(--touchline-forest, #12392d);
+  --color: #ffffff;
 }
 
-.filter-chips ion-chip ion-icon {
-  margin-right: 4px;
-}
-
-.filter-chips ion-chip ion-icon:last-child {
-  margin-left: 4px;
-  margin-right: 0;
-  opacity: 0.7;
-}
-
-.filter-chips ion-chip:hover ion-icon:last-child {
-  opacity: 1;
-}
-
-/* Search Loading Indicator */
-.search-container {
-  position: relative;
-}
-
-.search-loading {
-  position: absolute;
-  right: 55px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 1000 !important;
-  pointer-events: none;
-  background: var(--ion-color-step-50, #f9f9f9);
-  border-radius: 50%;
-  padding: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 200ms ease-in-out;
-}
-
-.search-loading.visible {
-  opacity: 1;
-}
-
-.search-loading ion-spinner {
-  --color: var(--ion-color-medium);
-  width: 16px;
-  height: 16px;
-}
-
-/* Ensure search bar has enough padding for the spinner */
-.search-container ion-searchbar {
-  --padding-end: 48px;
-}
-/* Empty State Styles (match Seasons/Teams pages) */
+/* Empty State */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: var(--grassroots-space-2xl);
-  min-height: 400px;
+  padding: 48px 20px;
+  min-height: 360px;
 }
 
 .empty-icon {
-  font-size: 4rem;
-  color: var(--grassroots-text-tertiary);
-  margin-bottom: var(--grassroots-space-lg);
-  opacity: 0.6;
+  font-size: 3.5rem;
+  color: var(--touchline-muted, #56645d);
+  margin-bottom: 16px;
+  opacity: 0.5;
 }
 
 .empty-title {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 600;
-  letter-spacing: -0.025em;
-  color: var(--grassroots-text-primary);
-  margin: 0 0 var(--grassroots-space-sm) 0;
+  letter-spacing: -0.02em;
+  color: var(--touchline-ink, #14231d);
+  margin: 0 0 8px 0;
 }
 
 .empty-subtitle {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 1rem;
-  color: var(--grassroots-text-secondary);
-  margin: 0 0 var(--grassroots-space-lg) 0;
-  max-width: 400px;
+  font-size: 0.95rem;
+  color: var(--touchline-muted, #56645d);
+  margin: 0 0 20px 0;
+  max-width: 360px;
   line-height: 1.5;
 }
 
 .empty-action {
-  --border-radius: var(--grassroots-radius-md);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --border-radius: var(--touchline-radius, 14px);
+  --background: var(--touchline-forest, #12392d);
+  --color: #ffffff;
   font-weight: 600;
-  letter-spacing: -0.025em;
-  max-width: 280px;
+  min-height: 44px;
+  text-transform: none;
 }
 
+/* Responsive adjustments */
 @media (max-width: 768px) {
-  .empty-state {
-    padding: var(--grassroots-space-xl) var(--grassroots-space-md);
-    min-height: 300px;
+  .players-header {
+    padding: 16px 20px;
   }
-  .empty-icon { font-size: 3rem; }
-  .empty-title { font-size: 1.25rem; }
+
+  .players-main-title {
+    font-size: 1.5rem;
+  }
+
+  .players-content {
+    padding: 16px 20px;
+  }
+
+  .empty-state {
+    padding: 32px 16px;
+  }
+}
+
+/* Dark Theme Support */
+.dark-theme .players-header {
+  background: var(--touchline-bg, #111e19);
+  border-bottom-color: var(--touchline-line, #2a3e34);
+}
+
+.dark-theme .players-main-title {
+  color: var(--touchline-ink, #f4f6f4);
+}
+
+.dark-theme .players-subtitle {
+  color: var(--touchline-muted, #9ab0a4);
+}
+
+.dark-theme .players-count {
+  color: var(--touchline-ink, #f4f6f4);
+}
+
+.dark-theme .players-search {
+  --background: var(--touchline-surface, #1b2c24);
+  --color: var(--touchline-ink, #f4f6f4);
+  --placeholder-color: var(--touchline-muted, #9ab0a4);
+  border-color: var(--touchline-line, #2a3e34);
+}
+
+.dark-theme .player-card {
+  background: var(--touchline-surface, #1b2c24);
+  border-color: var(--touchline-line, #2a3e34);
+}
+
+.dark-theme .player-name {
+  color: var(--touchline-ink, #f4f6f4);
+}
+
+.dark-theme .player-position {
+  color: var(--touchline-muted, #9ab0a4);
+}
+
+.dark-theme .player-jersey-number {
+  background: var(--touchline-forest, #2e7d62);
+  color: #ffffff;
+}
+
+.dark-theme .position-section-header {
+  background: var(--touchline-surface, #1b2c24);
+  border-color: var(--touchline-line, #2a3e34);
+}
+
+.dark-theme .position-section-header:hover {
+  background: var(--touchline-soft, #182821);
+}
+
+.dark-theme .section-title {
+  color: var(--touchline-ink, #f4f6f4);
+}
+
+.dark-theme .section-icon,
+.dark-theme .section-chevron {
+  color: var(--touchline-muted, #9ab0a4);
+}
+
+.dark-theme .stat-chip,
+.dark-theme .player-team-chip {
+  --background: var(--touchline-soft, #182821);
+  --color: var(--touchline-muted, #9ab0a4);
+}
+
+.dark-theme .filter-chips ion-chip {
+  --background: var(--touchline-soft, #182821);
+  --color: var(--touchline-ink, #f4f6f4);
+  border-color: var(--touchline-line, #2a3e34);
+}
+
+.dark-theme .empty-title {
+  color: var(--touchline-ink, #f4f6f4);
+}
+
+.dark-theme .empty-subtitle {
+  color: var(--touchline-muted, #9ab0a4);
+}
+
+/* Accessibility */
+.player-card:focus-within {
+  outline: 2px solid var(--touchline-forest);
+  outline-offset: 2px;
+}
+
+.position-section-header:focus-visible {
+  outline: 2px solid var(--touchline-forest);
+  outline-offset: 2px;
 }

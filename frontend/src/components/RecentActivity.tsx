@@ -87,7 +87,12 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
         return () => window.removeEventListener('storage', handleStorage);
     }, []);
 
-    const { activities, loading, hasMore } = useLocalRecentActivity({ limit, days, filters });
+    const { activities, loading, hasMore, sessionKey, isCurrent } = useLocalRecentActivity({ limit, days, filters });
+
+    useEffect(() => {
+        setExpanded({});
+        setLimit(initialLimit);
+    }, [sessionKey, initialLimit]);
 
     const isGroup = (a: ActivityItem) => a.type === 'event' && a.action === 'period_summary' && !!(a.metadata as any)?.children?.length;
     const toggleExpand = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
@@ -151,7 +156,7 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
     };
 
     const handleActivityClick = (activity: ActivityItem) => {
-        if (!onNavigate) return;
+        if (!onNavigate || !isCurrent()) return;
         if (isGroup(activity)) { toggleExpand(activity.id); return; }
 
         switch (activity.type) {
@@ -296,7 +301,7 @@ const RecentActivity: React.FC<RecentActivityProps> = ({
                                         <IonItem
                                             key={child.id}
                                             button
-                                            onClick={() => onNavigate && (activity.metadata as any)?.matchId && onNavigate(`live/${(activity.metadata as any).matchId}`)}
+                                            onClick={() => isCurrent() && onNavigate && (activity.metadata as any)?.matchId && onNavigate(`live/${(activity.metadata as any).matchId}`)}
                                             className="activity-subitem"
                                         >
                                             <IonIcon slot="start" icon={getEventKindIcon(child.kind)} />

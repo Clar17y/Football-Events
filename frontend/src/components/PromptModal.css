@@ -1,41 +1,45 @@
 /* PromptModal.css - Shared styles for centered prompt modals */
 
-/* Make the modal appear as a centered card */
 .prompt-modal {
   --width: 90%;
   --max-width: 500px;
   --height: auto;
   --max-height: 90%;
-  --border-radius: 16px;
-  --box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  --border-radius: var(--touchline-radius, 14px);
+  --box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
 }
 
 .prompt-modal::part(content) {
-  border-radius: 16px;
+  border-radius: var(--touchline-radius, 14px);
   overflow: hidden;
+  border: 1px solid var(--touchline-line, #dce4de);
 }
 
 .prompt-container {
-  background: var(--ion-background-color, #fff);
+  background: var(--touchline-surface, #ffffff);
 }
 
 .prompt-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 8px 16px 20px;
-  background: var(--ion-color-primary, #3880ff);
-  color: white;
+  padding: 16px 12px 16px 20px;
+  background: var(--touchline-forest, #12392d);
+  color: #ffffff;
 }
 
 .prompt-title {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   font-weight: 600;
+  color: #ffffff;
 }
 
 .prompt-close {
-  --color: white;
+  --color: #ffffff;
+  color: #ffffff;
+  min-height: 44px;
+  min-width: 44px;
   margin: 0;
 }
 
@@ -44,15 +48,23 @@
 }
 
 .prompt-message {
-  margin: 0 0 24px 0;
-  font-size: 1rem;
-  line-height: 1.6;
+  margin: 0 0 20px 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--touchline-ink, #14231d);
 }
 
 .prompt-buttons {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+}
+
+.prompt-buttons ion-button {
+  min-height: 44px;
+  --border-radius: var(--touchline-radius, 14px);
+  font-weight: 600;
+  text-transform: none;
 }
 
 /* Progress indicator */
@@ -64,7 +76,7 @@
   display: block;
   margin-bottom: 8px;
   font-size: 0.9rem;
-  color: var(--grassroots-text-secondary);
+  color: var(--touchline-muted, #56645d);
 }
 
 /* Success/Info messages */
@@ -73,7 +85,9 @@
   margin-bottom: 16px;
   padding: 12px;
   border-radius: 8px;
-  background: var(--grassroots-surface-variant);
+  background: var(--touchline-soft, #edf3ee);
+  color: var(--touchline-ink, #14231d);
+  font-size: 14px;
 }
 
 .prompt-success {
@@ -82,37 +96,41 @@
   padding: 12px;
   border-radius: 8px;
   background: rgba(16, 185, 129, 0.1);
-  color: var(--ion-color-success);
+  color: var(--ion-color-success, #10b981);
+  font-size: 14px;
 }
 
 /* Dark Theme Support */
 .dark-theme .prompt-modal {
-  --box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  --box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+.dark-theme .prompt-modal::part(content) {
+  border-color: var(--touchline-line, #2a3e34);
 }
 
 .dark-theme .prompt-container {
-  background: var(--grassroots-surface);
+  background: var(--touchline-surface, #1b2c24);
 }
 
 .dark-theme .prompt-header {
-  background: var(--ion-color-primary);
+  background: var(--touchline-forest, #2e7d62);
 }
 
-.dark-theme .prompt-title {
-  color: white;
+.dark-theme .prompt-message {
+  color: var(--touchline-ink, #f4f6f4);
 }
 
-.dark-theme .prompt-message,
 .dark-theme .prompt-progress-text {
-  color: var(--grassroots-text-secondary);
+  color: var(--touchline-muted, #9ab0a4);
 }
 
 .dark-theme .prompt-info {
-  background: var(--grassroots-surface-variant);
-  color: var(--grassroots-text-primary);
+  background: var(--touchline-soft, #182821);
+  color: var(--touchline-ink, #f4f6f4);
 }
 
 .dark-theme .prompt-success {
   background: rgba(16, 185, 129, 0.15);
-  color: var(--ion-color-success-tint);
+  color: var(--ion-color-success-tint, #34d399);
 }

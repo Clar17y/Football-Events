@@ -1,88 +1,51 @@
-/* ===== THEME TOKENS ===== */
-/* Semantic color tokens that can be overridden per page/modal */
+/* ===== TOUCHLINE THEME TOKENS ===== */
+/* Unified open forest theme tokens across all pages and modals */
 
 :root {
-  /* Default theme tokens */
-  --theme-primary: var(--ion-color-primary);
-  --theme-primary-shade: var(--ion-color-primary-shade);
-  --theme-primary-tint: var(--ion-color-primary-tint);
-  --theme-primary-rgb: var(--ion-color-primary-rgb);
+  /* Default unified theme tokens */
+  --theme-primary: var(--touchline-forest, #12392d);
+  --theme-primary-shade: var(--ion-color-primary-shade, #103228);
+  --theme-primary-tint: var(--ion-color-primary-tint, #2a4d42);
+  --theme-primary-rgb: var(--ion-color-primary-rgb, 18, 57, 45);
   --theme-on-primary: #ffffff;
-  
-  --theme-surface: var(--grassroots-surface);
-  --theme-surface-variant: var(--grassroots-surface-variant);
-  --theme-on-surface: var(--grassroots-text-primary);
-  --theme-on-surface-variant: var(--grassroots-text-secondary);
-  
-  --theme-background: var(--grassroots-background);
+
+  --theme-surface: var(--touchline-surface, #ffffff);
+  --theme-surface-variant: var(--touchline-line, #dce4de);
+  --theme-on-surface: var(--touchline-ink, #14231d);
+  --theme-on-surface-variant: var(--touchline-muted, #56645d);
+
+  --theme-background: var(--touchline-bg, #f8faf7);
+  --theme-line: var(--touchline-line, #dce4de);
+  --theme-soft: var(--touchline-soft, #edf3ee);
+  --theme-radius: var(--touchline-radius, 14px);
 }
 
-/* Theme overrides for pages and modals */
-/* Team theme - Teal colors */
-ion-page[data-theme='team'],
-ion-modal[data-theme='team'],
-.page[data-theme='team'],
-.modal[data-theme='team'],
-[data-theme='team'],
-[data-theme='team'] * {
-  --theme-primary: var(--ion-color-teal);
-  --theme-primary-shade: var(--ion-color-teal-shade);
-  --theme-primary-tint: var(--ion-color-teal-tint);
-  --theme-primary-rgb: var(--ion-color-teal-rgb);
+/* Unified Touchline theme: replace per-page rainbow themes with open forest system */
+[data-theme] {
+  --theme-primary: var(--touchline-forest, #12392d);
+  --theme-primary-shade: var(--ion-color-primary-shade, #103228);
+  --theme-primary-tint: var(--ion-color-primary-tint, #2a4d42);
+  --theme-primary-rgb: var(--ion-color-primary-rgb, 18, 57, 45);
+  --theme-on-primary: #ffffff;
+  --theme-surface: var(--touchline-surface, #ffffff);
+  --theme-surface-variant: var(--touchline-line, #dce4de);
+  --theme-on-surface: var(--touchline-ink, #14231d);
+  --theme-on-surface-variant: var(--touchline-muted, #56645d);
+  --theme-background: var(--touchline-bg, #f8faf7);
 }
 
-/* Season theme - Blue colors */
-ion-page[data-theme='season'],
-ion-modal[data-theme='season'],
-.page[data-theme='season'],
-.modal[data-theme='season'],
-[data-theme='season'],
-[data-theme='season'] * {
-  --theme-primary: var(--ion-color-primary);
-  --theme-primary-shade: var(--ion-color-primary-shade);
-  --theme-primary-tint: var(--ion-color-primary-tint);
-  --theme-primary-rgb: var(--ion-color-primary-rgb);
-}
-
-/* Player theme - Indigo colors */
-ion-page[data-theme='player'],
-ion-modal[data-theme='player'],
-.page[data-theme='player'],
-.modal[data-theme='player'],
-[data-theme='player'],
-[data-theme='player'] * {
-  --theme-primary: var(--ion-color-indigo);
-  --theme-primary-shade: var(--ion-color-indigo-shade);
-  --theme-primary-tint: var(--ion-color-indigo-tint);
-  --theme-primary-rgb: var(--ion-color-indigo-rgb);
-}
-
-/* Match theme - Emerald colors */
-ion-page[data-theme='match'],
-ion-modal[data-theme='match'],
-.page[data-theme='match'],
-.modal[data-theme='match'],
-[data-theme='match'],
-[data-theme='match'] * {
-  --theme-primary: var(--ion-color-emerald);
-  --theme-primary-shade: var(--ion-color-emerald-shade);
-  --theme-primary-tint: var(--ion-color-emerald-tint);
-  --theme-primary-rgb: var(--ion-color-emerald-rgb);
-}
-
-/* Dark mode adjustments: align with colors.css tokens */
+/* Dark mode adjustments */
 .dark-theme,
-.dark-theme [data-theme='team'],
-.dark-theme [data-theme='season'],
-.dark-theme [data-theme='player'],
-.dark-theme [data-theme='match'],
-.dark-theme [data-theme='team'] *,
-.dark-theme [data-theme='season'] *,
-.dark-theme [data-theme='player'] *,
-.dark-theme [data-theme='match'] * {
-  --theme-background: var(--grassroots-background) !important;
-  --theme-surface: var(--grassroots-surface) !important;
-  --theme-surface-variant: var(--grassroots-surface-variant) !important;
-  --theme-on-surface: var(--grassroots-text-primary) !important;
-  --theme-on-surface-variant: var(--grassroots-text-secondary) !important;
+.dark-theme [data-theme] {
+  --theme-primary: var(--touchline-forest, #2e7d62);
+  --theme-primary-shade: #24654f;
+  --theme-primary-tint: #439678;
+  --theme-primary-rgb: 46, 125, 98;
+  --theme-background: var(--touchline-bg, #111e19);
+  --theme-surface: var(--touchline-surface, #1b2c24);
+  --theme-surface-variant: var(--touchline-line, #2a3e34);
+  --theme-on-surface: var(--touchline-ink, #f4f6f4);
+  --theme-on-surface-variant: var(--touchline-muted, #9ab0a4);
+  --theme-line: var(--touchline-line, #2a3e34);
+  --theme-soft: var(--touchline-soft, #182821);
 }

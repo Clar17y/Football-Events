@@ -54,18 +54,18 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                     <div className="hero-content">
                         <div className="hero-badge">
                             <IonIcon icon={cloudOffline} className="hero-badge-icon" />
-                            Works 100% Offline
+                            Record Offline
                         </div>
 
                         <h1 className="hero-title">
-                            Track Every Match.
+                            Your match day.
                             <br />
-                            <span className="hero-title-highlight">No WiFi Required.</span>
+                            <span className="hero-title-highlight">Every moment.</span>
                         </h1>
 
                         <p className="hero-subtitle">
-                            The only grassroots football tracker that works completely offline.
-                            Record goals, subs, and formations pitch-side — even with zero signal.
+                            Open the app online before heading to the pitch, then record goals,
+                            subs, and formations even with zero signal. Guest recordings stay on this device.
                         </p>
 
                         <div className="hero-cta-group">
@@ -73,28 +73,28 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                                 className="hero-cta-primary"
                                 onClick={() => navigate('dashboard')}
                             >
-                                Try as Guest — Free
+                                Start a match
                             </IonButton>
                             <IonButton
                                 className="hero-cta-secondary"
                                 onClick={() => navigate('register')}
                             >
-                                Sign Up Free
+                                Create a free account
                             </IonButton>
                         </div>
 
                         <div className="hero-stats-row">
                             <div className="hero-stat">
-                                <div className="hero-stat-value">100%</div>
-                                <div className="hero-stat-label">Offline Capable</div>
+                                <div className="hero-stat-value">Offline</div>
+                                <div className="hero-stat-label">Match Recording</div>
                             </div>
                             <div className="hero-stat">
                                 <div className="hero-stat-value">Free</div>
                                 <div className="hero-stat-label">To Get Started</div>
                             </div>
                             <div className="hero-stat">
-                                <div className="hero-stat-value">&lt;1min</div>
-                                <div className="hero-stat-label">Setup Time</div>
+                                <div className="hero-stat-value">Your device</div>
+                                <div className="hero-stat-label">Guest recordings stay here</div>
                             </div>
                         </div>
                     </div>
@@ -125,10 +125,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                             <div className="feature-card-icon offline">
                                 <IonIcon icon={cloudOffline} />
                             </div>
-                            <h3 className="feature-card-title">Works Completely Offline</h3>
+                            <h3 className="feature-card-title">Record Without Signal</h3>
                             <p className="feature-card-description">
-                                No internet at the pitch? No problem. Everything saves locally and syncs
-                                automatically when you're back online.
+                                Open the app online before the match. Recordings save on this device;
+                                signed-in recordings sync when a connection is available.
                             </p>
                         </div>
 
@@ -139,7 +139,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                             <h3 className="feature-card-title">Sync Across Devices</h3>
                             <p className="feature-card-description">
                                 Start on your phone at the match, review on your tablet at home.
-                                Your data stays in sync across all your devices.
+                                Sign in to upload recordings and access them on your other devices.
                             </p>
                         </div>
 
@@ -147,10 +147,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                             <div className="feature-card-icon stats">
                                 <IonIcon icon={statsChart} />
                             </div>
-                            <h3 className="feature-card-title">Player Statistics</h3>
+                            <h3 className="feature-card-title">Player Contributions</h3>
                             <p className="feature-card-description">
-                                Track individual player performance across the season.
-                                See who's improving and celebrate achievements.
+                                Attribute match events to your child and keep a record of their
+                                contributions alongside the team timeline.
                             </p>
                         </div>
                     </div>
@@ -163,8 +163,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                         Built for Real Football Fields
                     </h2>
                     <p className="offline-highlight-description">
-                        Most grassroots pitches have terrible signal. We built MatchMaster to work
-                        where other apps fail — no internet, no problem.
+                        Poor signal should not interrupt recording. Open MatchMaster online before
+                        the match so it is ready to use at the pitch.
                     </p>
                     <div className="offline-features-list">
                         <div className="offline-feature-item">
@@ -173,11 +173,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                         </div>
                         <div className="offline-feature-item">
                             <IonIcon icon={checkmarkCircle} className="offline-feature-icon" />
-                            Auto-sync when connected
+                            Signed-in recordings sync when connected
                         </div>
                         <div className="offline-feature-item">
                             <IonIcon icon={checkmarkCircle} className="offline-feature-icon" />
-                            No data loss, ever
+                            Guest recordings stay on this device
                         </div>
                     </div>
                 </section>
@@ -262,7 +262,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
 
                         {/* Premium Tier */}
                         <div className="pricing-card featured">
-                            <span className="pricing-badge">Most Popular</span>
+                            <span className="pricing-badge">Coming soon</span>
                             <h3 className="pricing-tier-name">{TIERS.premium.name}</h3>
                             <p className="pricing-tier-tagline">{TIERS.premium.tagline}</p>
                             <div className="pricing-price">
@@ -286,7 +286,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                                 className="pricing-cta"
                                 onClick={() => navigate('register')}
                             >
-                                Get Premium
+                                Create a free account
                             </IonButton>
                         </div>
                     </div>

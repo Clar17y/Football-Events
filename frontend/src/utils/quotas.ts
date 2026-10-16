@@ -144,6 +144,7 @@ const isScoring = (kind?: string) => kind === 'goal' || kind === 'own_goal';
 export async function canAddEvent(matchId: string, kind?: string): Promise<QuotaResult> {
   // Always allow goals/own goals
   if (isScoring(kind)) return { ok: true, remaining: Number.MAX_SAFE_INTEGER };
+  if (kind === 'formation_change') return canChangeFormation(matchId);
 
   const userId = getUserId();
   if (!userId) return { ok: true, remaining: Number.MAX_SAFE_INTEGER };
@@ -152,7 +153,7 @@ export async function canAddEvent(matchId: string, kind?: string): Promise<Quota
   const count = await db.events
     .where('matchId')
     .equals(matchId)
-    .and(e => e.createdByUserId === userId && !e.isDeleted && !isScoring(String(e.kind)))
+    .and(e => e.createdByUserId === userId && !e.isDeleted && !isScoring(String(e.kind)) && e.kind !== 'formation_change')
     .count();
 
   const limit = getLimit(GUEST_LIMITS.maxNonScoringEventsPerMatch, FREE_LIMITS.maxNonScoringEventsPerMatch);

@@ -18,6 +18,7 @@ import {
   matchShareSchema,
   matchFormationChangeSchema,
   matchStartSchema,
+  matchStateReplaySchema,
   matchPauseSchema,
   matchResumeSchema,
   matchCompleteSchema,
@@ -437,6 +438,16 @@ router.post('/:id/quick-event', authenticateToken, validateUUID(), validateReque
 
 // === MATCH STATE MANAGEMENT ENDPOINTS ===
 
+router.post('/:id/state/reconcile',
+  authenticateToken,
+  validateUUID(),
+  validateRequest(matchStateReplaySchema),
+  asyncHandler(async (req, res) => {
+    const state = await matchStateService.reconcileState(req.params['id']!, req.user!.id, req.user!.role, req.body);
+    return res.status(200).json({ success: true, data: state });
+  })
+);
+
 // POST /api/v1/matches/:id/start - Start a match
 // Note: Starting a match will also automatically create the first
 // regular period if no periods exist yet for the match.
@@ -481,7 +492,8 @@ router.post('/:id/pause',
     const matchState = await matchStateService.pauseMatch(
       req.params['id']!,
       req.user!.id,
-      req.user!.role
+      req.user!.role,
+      { totalElapsedSeconds: req.body.totalElapsedSeconds }
     );
     
     return res.status(200).json({
@@ -513,7 +525,8 @@ router.post('/:id/resume',
     const matchState = await matchStateService.resumeMatch(
       req.params['id']!,
       req.user!.id,
-      req.user!.role
+      req.user!.role,
+      { totalElapsedSeconds: req.body.totalElapsedSeconds }
     );
     
     return res.status(200).json({
@@ -545,7 +558,8 @@ router.post('/:id/complete',
     const matchState = await matchStateService.completeMatch(
       req.params['id']!,
       req.user!.id,
-      req.user!.role
+      req.user!.role,
+      { totalElapsedSeconds: req.body.totalElapsedSeconds }
     );
     
     return res.status(200).json({

@@ -1,19 +1,15 @@
-/* ===== UNIVERSAL CONTEXT MENU STYLES ===== */
-/* Reusable floating menu for all entity types */
+/* ===== UNIVERSAL CONTEXT MENU STYLES - TOUCHLINE SYSTEM ===== */
+/* Reusable floating menu with unified Touchline styling */
 
 .context-menu {
-  background: var(--ion-color-light, #ffffff);
+  background: var(--touchline-surface, #ffffff);
   border-radius: 12px;
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.12),
-    0 2px 8px rgba(0, 0, 0, 0.08);
-  border: 2px solid var(--theme-color, var(--ion-color-primary));
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--touchline-line, #dce4de);
   min-width: 200px;
   overflow: hidden;
-  /* Popper.js will handle positioning */
   position: absolute;
   z-index: 10000;
-  /* Start invisible but measurable until positioned */
   opacity: 0;
   pointer-events: none;
   transform: scale(0.98);
@@ -27,25 +23,24 @@
 
 /* Dark mode support */
 .dark-theme .context-menu {
-  background: #1e1e1e;
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.3),
-    0 2px 8px rgba(0, 0, 0, 0.2);
+  background: var(--touchline-surface, #1b2c24);
+  border-color: var(--touchline-line, #2a3e34);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
 }
 
 .context-menu-header {
   padding: 12px 16px 8px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--touchline-line, #dce4de);
 }
 
 .dark-theme .context-menu-header {
-  border-bottom-color: #2a2a2a;
+  border-bottom-color: var(--touchline-line, #2a3e34);
 }
 
 .context-menu-title {
   font-weight: 600;
   font-size: 0.9rem;
-  color: #000000;
+  color: var(--touchline-ink, #14231d);
   display: block;
   white-space: nowrap;
   overflow: hidden;
@@ -54,7 +49,7 @@
 }
 
 .dark-theme .context-menu-title {
-  color: #ffffff;
+  color: var(--touchline-ink, #f4f6f4);
 }
 
 .context-menu-items {
@@ -62,32 +57,33 @@
 }
 
 .context-menu-item {
-  --color: #000000;
+  --color: var(--touchline-ink, #14231d);
   --background: transparent;
-  --background-hover: #f8f8f8;
-  --background-activated: #e8e8e8;
+  --background-hover: var(--touchline-soft, #edf3ee);
+  --background-activated: var(--touchline-line, #dce4de);
   --border-radius: 0;
   --padding-start: 16px;
   --padding-end: 16px;
-  --padding-top: 12px;
-  --padding-bottom: 12px;
+  --padding-top: 10px;
+  --padding-bottom: 10px;
+  min-height: 44px;
   margin: 0;
   font-size: 0.9rem;
   font-weight: 500;
   text-align: left;
   justify-content: flex-start;
-  transition: all 0.2s ease;
+  transition: background-color 0.15s ease;
 }
 
 .dark-theme .context-menu-item {
-  --color: #ffffff;
-  --background-hover: #2a2a2a;
-  --background-activated: #1a1a1a;
+  --color: var(--touchline-ink, #f4f6f4);
+  --background-hover: var(--touchline-soft, #182821);
+  --background-activated: var(--touchline-line, #2a3e34);
 }
 
 .context-menu-item ion-icon {
   margin-right: 12px;
-  font-size: 1.1rem;
+  font-size: 1.15rem;
 }
 
 .context-menu-item span {
@@ -97,70 +93,61 @@
 
 /* Color variants */
 .context-menu-item.primary {
-  --color: var(--theme-color, var(--ion-color-primary));
+  --color: var(--touchline-forest, #12392d);
+}
+
+.dark-theme .context-menu-item.primary {
+  --color: var(--touchline-forest, #2e7d62);
 }
 
 .context-menu-item.medium {
-  --color: var(--ion-color-medium, #92949c);
+  --color: var(--touchline-muted, #56645d);
+}
+
+.dark-theme .context-menu-item.medium {
+  --color: var(--touchline-muted, #9ab0a4);
 }
 
 .context-menu-item.danger {
-  --color: var(--ion-color-danger, #eb445a);
+  --color: var(--ion-color-danger, #dc2626);
 }
 
 .context-menu-item.danger:hover {
-  --background-hover: rgba(235, 68, 90, 0.1);
+  --background-hover: rgba(220, 38, 38, 0.08);
 }
 
 .dark-theme .context-menu-item.danger:hover {
-  --background-hover: rgba(235, 68, 90, 0.2);
+  --background-hover: rgba(220, 38, 38, 0.15);
 }
 
-/* Theme-specific classes */
-.context-menu.team-theme {
-  border-color: var(--theme-color, var(--ion-color-teal));
-}
-
-.context-menu.team-theme .context-menu-item.primary {
-  --color: var(--theme-color, var(--ion-color-teal));
-}
-
-.context-menu.season-theme {
-  border-color: var(--ion-color-primary);
-}
-
-.context-menu.season-theme .context-menu-item.primary {
-  --color: var(--ion-color-primary);
-}
-
+/* Theme-specific unified classes (all map to open forest) */
+.context-menu.team-theme,
+.context-menu.season-theme,
 .context-menu.player-theme {
-  border-color: var(--ion-color-indigo);
+  border-color: var(--touchline-line, #dce4de);
 }
 
+.context-menu.team-theme .context-menu-item.primary,
+.context-menu.season-theme .context-menu-item.primary,
 .context-menu.player-theme .context-menu-item.primary {
-  --color: var(--ion-color-indigo);
+  --color: var(--touchline-forest, #12392d);
 }
 
-/* Animation */
-@keyframes contextMenuSlideIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
+.dark-theme .context-menu.team-theme,
+.dark-theme .context-menu.season-theme,
+.dark-theme .context-menu.player-theme {
+  border-color: var(--touchline-line, #2a3e34);
+}
+
+.dark-theme .context-menu.team-theme .context-menu-item.primary,
+.dark-theme .context-menu.season-theme .context-menu-item.primary,
+.dark-theme .context-menu.player-theme .context-menu-item.primary {
+  --color: var(--touchline-forest, #2e7d62);
 }
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .context-menu {
     min-width: 180px;
-  }
-  
-  .context-menu-item {
-    --padding-top: 14px;
-    --padding-bottom: 14px;
   }
 }

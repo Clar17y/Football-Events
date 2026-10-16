@@ -38,7 +38,6 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import 'dayjs/locale/en-gb';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { TextField } from '@mui/material';
 import dayjs, { Dayjs } from 'dayjs';
 import type { Season } from '@shared/types';
@@ -78,15 +77,6 @@ const CreateSeasonModal: React.FC<CreateSeasonModalProps> = ({
     startDate: dayjs(),
     endDate: dayjs().add(3, 'month'), // 3 months from now
     isActive: true
-  });
-
-  // Create MUI theme with primary color
-  const muiTheme = createTheme({
-    palette: {
-      primary: {
-        main: '#3880ff', // ion-color-primary
-      },
-    },
   });
 
   // Initialize form data when editing
@@ -212,82 +202,38 @@ const CreateSeasonModal: React.FC<CreateSeasonModalProps> = ({
 
   const renderDatePicker = (label: string, field: 'startDate' | 'endDate') => (
     <div className={`${styles.datePickerWrapper} ${errors[field] && touched[field] ? styles.error : ''}`}>
-      <ThemeProvider theme={muiTheme}>
-        <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="en-gb">
-          <DatePicker
-            label={label}
-            value={formData[field]}
-            onChange={(newValue) => handleInputChange(field, newValue)}
-            minDate={field === 'endDate' ? (formData.startDate ?? undefined) : undefined}
-            enableAccessibleFieldDOMStructure={false}
-            slots={{
-              textField: TextField,
-            }}
-            slotProps={{
-              textField: {
-                fullWidth: true,
-                variant: 'outlined',
-                onBlur: () => handleInputBlur(field),
-                sx: {
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: '12px',
-                    backgroundColor: 'var(--grassroots-surface)',
-                    '& fieldset': {
-                      borderColor: errors[field] && touched[field] ? 'var(--ion-color-danger)' : 'transparent',
-                    },
-                    '&:hover fieldset': {
-                      borderColor: errors[field] && touched[field] ? 'var(--ion-color-danger)' : 'transparent',
-                    },
-                    '&.Mui-focused fieldset': {
-                      borderColor: 'var(--ion-color-primary)',
-                    },
+      <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="en-gb">
+        <DatePicker
+          label={label}
+          value={formData[field]}
+          onChange={(newValue) => handleInputChange(field, newValue)}
+          minDate={field === 'endDate' ? (formData.startDate ?? undefined) : undefined}
+          enableAccessibleFieldDOMStructure={false}
+          slots={{
+            textField: TextField,
+          }}
+          slotProps={{
+            textField: {
+              fullWidth: true,
+              variant: 'outlined',
+              onBlur: () => handleInputBlur(field),
+              sx: {
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: 'var(--touchline-surface)',
+                  '& fieldset': {
+                    borderColor: errors[field] && touched[field]
+                      ? 'var(--ion-color-danger)'
+                      : 'var(--touchline-line)',
                   },
-                  '& .MuiInputLabel-root': {
-                    color: 'var(--grassroots-text-secondary)',
-                    fontWeight: 600,
-                    '&.Mui-focused': {
-                      color: 'var(--ion-color-primary)',
-                    },
-                  },
-                  '& .MuiInputBase-input': {
-                    color: 'var(--grassroots-text-primary)',
-                    fontWeight: 500,
-                  },
-                  '& .MuiSvgIcon-root': {
-                    color: 'var(--grassroots-text-primary)',
-                  },
-                  '.dark-theme &': {
-                    '& .MuiOutlinedInput-root': {
-                      backgroundColor: '#2a2a2a',
-                      '& fieldset': {
-                        borderColor: errors[field] && touched[field] ? 'var(--ion-color-danger)' : 'transparent',
-                      },
-                      '&:hover fieldset': {
-                        borderColor: errors[field] && touched[field] ? 'var(--ion-color-danger)' : 'transparent',
-                      },
-                      '&.Mui-focused fieldset': {
-                        borderColor: 'var(--ion-color-primary)',
-                      },
-                    },
-                    '& .MuiInputLabel-root': {
-                      color: '#888888',
-                      '&.Mui-focused': {
-                        color: 'var(--ion-color-primary)',
-                      },
-                    },
-                    '& .MuiInputBase-input': {
-                      color: '#ffffff',
-                    },
-                    '& .MuiSvgIcon-root': {
-                      color: '#ffffff',
-                    },
+                  '&.Mui-focused fieldset': {
+                    borderColor: 'var(--ion-color-primary)',
                   },
                 },
               },
-            }}
-          />
-        </LocalizationProvider>
-      </ThemeProvider>
+            },
+          }}
+        />
+      </LocalizationProvider>
     </div>
   );
 

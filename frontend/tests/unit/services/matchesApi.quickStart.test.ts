@@ -395,6 +395,47 @@ describe('matchesApi.quickStart - Local-First Architecture', () => {
   });
 
   describe('Team Handling', () => {
+    it('keeps same-named signed-in managed and opponent sides distinct, excluding guest/previous-account opponents', async () => {
+      const { matchesApi } = await import('../../../src/services/api/matchesApi');
+      mockTeams.push(
+        { id: 'our-club', name: 'United', createdByUserId: 'test-user-id', isOpponent: false },
+        { id: 'guest-club', name: 'United', createdByUserId: 'guest-one', isOpponent: true },
+        { id: 'previous-club', name: 'United', createdByUserId: 'previous-account', isOpponent: true },
+      );
+      const match = await matchesApi.quickStart({ myTeamId: 'our-club', opponentName: 'United', isHome: true, periodFormat: 'whole' });
+      expect(match.homeTeamId).toBe('our-club');
+      expect(match.awayTeamId).not.toBe('our-club');
+      expect(match.awayTeamId).not.toBe('guest-club');
+      expect(match.awayTeamId).not.toBe('previous-club');
+      expect(match.awayTeam).toMatchObject({ name: 'United', isOpponent: true, createdByUserId: 'test-user-id' });
+      expect(match.periodFormat).toBe('whole');
+    });
+
+    it.each([
+      { id: 'bad-team', createdByUserId: 'guest-one' },
+      { id: 'bad-team', createdByUserId: 'previous-account' },
+      { id: 'bad-team', createdByUserId: 'test-user-id', isDeleted: true },
+      { id: 'bad-team', createdByUserId: 'test-user-id', isOpponent: true },
+      { id: 'bad-team', createdByUserId: 'previous-account', created_by_user_id: 'test-user-id' },
+    ])('rejects a supplied unavailable team before creating dependencies: %j', async team => {
+      const { matchesApi } = await import('../../../src/services/api/matchesApi');
+      mockTeams.push({ name: 'Old Club', ...team });
+      await expect(matchesApi.quickStart({ myTeamId: team.id, opponentName: 'Opponent', isHome: true })).rejects.toThrow('choose your team again');
+      expect(mockSeasonsDataLayerCreate).not.toHaveBeenCalled();
+      expect(mockTeamsDataLayerCreate).not.toHaveBeenCalled();
+      expect(mockMatchesDataLayerCreate).not.toHaveBeenCalled();
+    });
+
+    it('accepts explicit matching legacy team creator proof while excluding foreign default seasons', async () => {
+      const { matchesApi } = await import('../../../src/services/api/matchesApi');
+      mockTeams.push({ id: 'legacy-team', name: 'Our Club', created_by_user_id: 'test-user-id', isOpponent: false });
+      mockSeasons.push({ id: 'foreign-season', isCurrent: true, createdByUserId: 'previous-account', isDeleted: false });
+      const match = await matchesApi.quickStart({ myTeamId: 'legacy-team', opponentName: 'Opponent', isHome: true });
+      expect(match.homeTeamId).toBe('legacy-team');
+      expect(match.seasonId).not.toBe('foreign-season');
+      expect(mockSeasonsDataLayerCreate).toHaveBeenCalledTimes(1);
+    });
+
     it('should use provided myTeamId', async () => {
       const { matchesApi } = await import('../../../src/services/api/matchesApi');
       
@@ -657,6 +698,61 @@ describe('matchesApi.quickStart - Local-First Architecture', () => {
 
       expect(result.durationMinutes).toBe(90);
       expect(result.periodFormat).toBe('half');
+    });
+
+    it('should preserve whole periodFormat instead of coercing to quarter', async () => {
+      const { matchesApi } = await import('../../../src/services/api/matchesApi');
+
+      mockTeams.push({
+        id: 'my-team-id',
+        name: 'My Team',
+        isDeleted: false,
+        isOpponent: false,
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'test-user-id'
+      });
+
+      const payload: QuickStartPayload = {
+        myTeamId: 'my-team-id',
+        opponentName: 'Opponent FC',
+        isHome: true,
+        durationMinutes: 40,
+        periodFormat: 'whole'
+      };
+
+      const result = await matchesApi.quickStart(payload);
+
+      expect(result.durationMinutes).toBe(40);
+      expect(result.periodFormat).toBe('whole');
+    });
+
+    it('should resolve blank opponent to Unknown Opponent', async () => {
+      const { matchesApi } = await import('../../../src/services/api/matchesApi');
+
+      mockTeams.push({
+        id: 'my-team-id',
+        name: 'My Team',
+        isDeleted: false,
+        isOpponent: false,
+        createdAt: new Date().toISOString(),
+        createdByUserId: 'test-user-id'
+      });
+
+      const payload: QuickStartPayload = {
+        myTeamId: 'my-team-id',
+        opponentName: '   ',
+        isHome: true
+      };
+
+      const result = await matchesApi.quickStart(payload);
+
+      expect(result.awayTeam?.name).toBe('Unknown Opponent');
+      expect(mockTeamsDataLayerCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Unknown Opponent',
+          isOpponent: true
+        })
+      );
     });
 
     it('should use default values when not provided', async () => {

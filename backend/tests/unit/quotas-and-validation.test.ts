@@ -170,7 +170,9 @@ describe('QuotaService (unit)', () => {
       'penalty',
       'foul',
       'free_kick',
-      'ball_out',
+      'assist',
+      'yellow_card',
+      'red_card',
     ]);
     expect(qs.getAllowedEventKinds('premium')).toContain('assist');
 
@@ -214,7 +216,7 @@ describe('QuotaService (unit)', () => {
         userId: UUID_1,
         userRole: 'USER',
         matchId: UUID_2,
-        kind: 'assist',
+        kind: 'key_pass',
       });
       throw new Error('expected feature locked error');
     } catch (err: any) {
@@ -222,7 +224,7 @@ describe('QuotaService (unit)', () => {
       expect(err.code).toBe('FEATURE_LOCKED');
       expect(err.details).toMatchObject({
         entity: 'eventKind',
-        kind: 'assist',
+        kind: 'key_pass',
         planType: 'free',
       });
     }

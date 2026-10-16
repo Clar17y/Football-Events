@@ -15,6 +15,9 @@
 
 import { db } from '../db/indexedDB';
 import { apiClient } from './api/baseApi';
+import { getAuthUserId } from '../utils/network';
+import { captureSyncSession, assertSyncSession, isSyncSessionCurrent, provenOwnedSeason, seasonRemoteId, type SyncSession } from './seasonIdentity';
+import { isCurrentOwnedMatch, reclaimLegacyRecordings } from './dataLayer';
 import {
   serverTeamToDb,
   serverPlayerToDb,
@@ -47,7 +50,8 @@ const DEFAULT_PAGE_LIMIT = 100;
 async function fetchAllPages<T = any>(
   endpoint: string,
   extraParams: Record<string, string> = {},
-  entityName: string = 'records'
+  entityName: string = 'records',
+  session?: SyncSession
 ): Promise<T[]> {
   let page = 1;
   const limit = DEFAULT_PAGE_LIMIT;
@@ -62,7 +66,9 @@ async function fetchAllPages<T = any>(
     });
 
     console.log(`[CacheService] Fetching ${entityName} page ${page} from server...`);
+    if (session) assertSyncSession(session);
     const response = await apiClient.get(`${endpoint}?${queryParams.toString()}`);
+    if (session) assertSyncSession(session);
     const data = response.data as any;
     const records = data.data || data;
 
@@ -258,13 +264,20 @@ async function refreshPlayers(): Promise<void> {
  */
 async function refreshSeasons(): Promise<void> {
   try {
+    const ownerId = getAuthUserId();
+    if (!ownerId) return;
+    const session = captureSyncSession(ownerId);
     // Fetch all seasons directly from server (paginated, get all pages)
-    const serverSeasons = await fetchAllPages('/seasons', {}, 'seasons');
+    const serverSeasons = (await fetchAllPages('/seasons', {}, 'seasons', session))
+      .filter(row => provenOwnedSeason(row, ownerId));
+
+    await db.transaction('rw', db.seasons, db.matches, async () => {
+    assertSyncSession(session);
 
     // Get local unsynced seasons to preserve
-    const localSeasons = await db.seasons.toArray();
+    const localSeasons = (await db.seasons.toArray()).filter(row => row.createdByUserId === ownerId);
     const unsyncedSeasons = localSeasons.filter(s => s.synced === false);
-    const unsyncedIds = new Set(unsyncedSeasons.map(s => s.seasonId));
+    const unsyncedIds = new Set(unsyncedSeasons.map(seasonRemoteId));
 
     // Build a map of server seasons by ID
     const serverSeasonMap = new Map(serverSeasons.map(s => [s.id || s.seasonId, s]));
@@ -272,7 +285,8 @@ async function refreshSeasons(): Promise<void> {
     // Delete synced local seasons that are not in server response
     for (const localSeason of localSeasons) {
       const localId = localSeason.seasonId;
-      if (localSeason.synced && !serverSeasonMap.has(localId) && !unsyncedIds.has(localId)) {
+      const references = await db.matches.where('seasonId').equals(localId).count();
+      if (!references && localSeason.synced && !serverSeasonMap.has(seasonRemoteId(localSeason)) && !unsyncedIds.has(seasonRemoteId(localSeason))) {
         await db.seasons.delete(localId);
       }
     }
@@ -280,16 +294,26 @@ async function refreshSeasons(): Promise<void> {
     // Upsert server seasons, but skip if there's an unsynced local version
     for (const serverSeason of serverSeasons) {
       const seasonId = serverSeason.id || serverSeason.seasonId;
+      const aliases = localSeasons.filter(row => seasonRemoteId(row) === seasonId);
+      if (aliases.length > 1) continue;
+      const alias = aliases[0];
+      const conflict = await db.seasons.get(seasonId);
+      if (conflict && conflict.createdByUserId !== ownerId) continue;
       if (unsyncedIds.has(seasonId)) {
         // Preserve unsynced local version
         continue;
       }
 
       // Use centralized transform: Server API → IndexedDB
-      await db.seasons.put(serverSeasonToDb(serverSeason) as any);
+      assertSyncSession(session);
+      await db.seasons.put({ ...serverSeasonToDb(serverSeason),
+        ...(alias ? { id: alias.id, seasonId: alias.seasonId, remoteSeasonId: alias.remoteSeasonId } : {}),
+      });
     }
 
     console.log(`[CacheService] Refreshed ${serverSeasons.length} seasons, preserved ${unsyncedSeasons.length} unsynced`);
+    assertSyncSession(session);
+    });
   } catch (err) {
     console.error('[CacheService] Failed to refresh seasons:', err);
     throw err;
@@ -533,27 +557,27 @@ export async function cleanupOldTemporalData(): Promise<number> {
  */
 export async function cacheRecentMatches(): Promise<number> {
   try {
+    const authUserId = getAuthUserId();
+    if (!authUserId || !apiClient.isAuthenticated()) return 0;
+    const session = captureSyncSession(authUserId);
+    await reclaimLegacyRecordings(authUserId);
     // Fetch first page immediately (recent matches first from server)
     const limit = DEFAULT_PAGE_LIMIT;
+    const scoreRevisions = await captureMatchScoreRevisions(authUserId);
+    assertSyncSession(session);
     const firstPageResponse = await apiClient.get(`/matches?page=1&limit=${limit}`);
     const firstPageData = firstPageResponse.data as any;
     const firstPageMatches = firstPageData.data || firstPageData;
     const hasMore = firstPageData.hasMore ?? (Array.isArray(firstPageMatches) && firstPageMatches.length === limit);
 
-    // Get local unsynced matches to preserve
-    const localMatches = await db.matches.toArray();
-    const unsyncedIds = new Set(
-      localMatches.filter(m => m.synced === false).map(m => m.id)
-    );
-
     // Cache first page immediately
-    let cachedCount = await cacheMatchBatch(firstPageMatches, unsyncedIds);
+    const cachedCount = await cacheMatchBatch(firstPageMatches, authUserId, scoreRevisions, session);
     console.log(`[CacheService] Cached ${cachedCount} matches from first page`);
 
     // Start background loading of remaining pages if there are more
-    if (hasMore) {
+    if (hasMore && getAuthUserId() === authUserId) {
       // Don't await - let it run in background
-      loadRemainingMatchesInBackground(2, limit, unsyncedIds).catch(err => {
+      loadRemainingMatchesInBackground(2, limit, authUserId, session).catch(err => {
         console.error('[CacheService] Background match loading failed:', err);
       });
     }
@@ -569,21 +593,63 @@ export async function cacheRecentMatches(): Promise<number> {
  * Cache a batch of matches to IndexedDB.
  * @returns Number of matches cached
  */
-async function cacheMatchBatch(serverMatches: any[], unsyncedIds: Set<string>): Promise<number> {
+type ScoreRequest = { revision?: string; pendingAtStart: boolean };
+async function captureMatchScoreRevisions(ownerId: string): Promise<ReadonlyMap<string, ScoreRequest>> {
+  return db.transaction('r', db.matches, db.events, async () => {
+    const matches = await db.matches.toArray();
+    const events = await db.events.toArray();
+    return new Map(matches.map(match => [match.id, {
+      revision: match.scoreRevision,
+      pendingAtStart: events.some(event => event.matchId === match.id && event.createdByUserId === ownerId &&
+        event.synced === false && event.scoreProjectionPending !== false),
+    }] as const));
+  });
+}
+
+async function cacheMatchBatch(
+  serverMatches: any[],
+  authUserId: string,
+  requestedScoreRevisions: ReadonlyMap<string, ScoreRequest>,
+  session: SyncSession
+): Promise<number> {
   if (!Array.isArray(serverMatches)) return 0;
 
   let cachedCount = 0;
 
   for (const serverMatch of serverMatches) {
-    if (unsyncedIds.has(serverMatch.id)) {
-      // Preserve unsynced local version
-      continue;
-    }
-
-    // Use centralized transform: Server API → IndexedDB
-    await db.matches.put(serverMatchToDb(serverMatch) as any);
-
-    cachedCount++;
+    const serverOwner = serverMatch.createdByUserId ?? serverMatch.created_by_user_id;
+    if (serverOwner !== authUserId || (serverMatch.createdByUserId && serverMatch.created_by_user_id &&
+        serverMatch.createdByUserId !== serverMatch.created_by_user_id)) continue;
+    const written = await db.transaction('rw', db.matches, db.events, db.seasons, async () => {
+      if (!isSyncSessionCurrent(session) || !apiClient.isAuthenticated()) return false;
+      const local = await db.matches.get(serverMatch.id);
+      if (local && (!isCurrentOwnedMatch(local, authUserId) || local.synced === false)) return false;
+      const pendingScore = await db.events.where('matchId').equals(serverMatch.id)
+        .filter(event => event.createdByUserId === authUserId && event.synced === false && event.scoreProjectionPending !== false)
+        .count();
+      const requested = requestedScoreRevisions.get(serverMatch.id);
+      const scoreChangedDuringRequest = !!local && local.scoreRevision !== requested?.revision;
+      const preserveScore = !!local && (pendingScore > 0 || requested?.pendingAtStart || scoreChangedDuringRequest);
+      if (preserveScore && (serverMatch.isDeleted || serverMatch.is_deleted)) return false;
+      const cached = serverMatchToDb({ ...serverMatch, createdByUserId: serverOwner });
+      const aliases = await db.seasons.filter(season => season.createdByUserId === authUserId &&
+        !season.isDeleted && seasonRemoteId(season) === cached.seasonId).toArray();
+      if (aliases.length > 1) return false;
+      if (aliases[0]) cached.seasonId = aliases[0].seasonId;
+      if (local?.scoreRevision) cached.scoreRevision = local.scoreRevision;
+      if (local) cached.recordingRevision = local.recordingRevision ?? 0;
+      if (local && preserveScore) {
+        cached.homeScore = local.homeScore;
+        cached.awayScore = local.awayScore;
+        cached.homeTeamId = local.homeTeamId;
+        cached.awayTeamId = local.awayTeamId;
+      }
+      if (!isSyncSessionCurrent(session)) return false;
+      await db.matches.put(cached);
+      assertSyncSession(session);
+      return true;
+    });
+    if (written) cachedCount++;
   }
 
   return cachedCount;
@@ -596,7 +662,8 @@ async function cacheMatchBatch(serverMatches: any[], unsyncedIds: Set<string>): 
 async function loadRemainingMatchesInBackground(
   startPage: number,
   limit: number,
-  unsyncedIds: Set<string>
+  authUserId: string,
+  session: SyncSession
 ): Promise<void> {
   let page = startPage;
   let hasMore = true;
@@ -612,6 +679,9 @@ async function loadRemainingMatchesInBackground(
     }
 
     try {
+      if (getAuthUserId() !== authUserId || !apiClient.isAuthenticated()) break;
+      const scoreRevisions = await captureMatchScoreRevisions(authUserId);
+      assertSyncSession(session);
       const response = await apiClient.get(`/matches?page=${page}&limit=${limit}`);
       const data = response.data as any;
       const matches = data.data || data;
@@ -621,7 +691,7 @@ async function loadRemainingMatchesInBackground(
         break;
       }
 
-      const cached = await cacheMatchBatch(matches, unsyncedIds);
+      const cached = await cacheMatchBatch(matches, authUserId, scoreRevisions, session);
       totalCached += cached;
 
       hasMore = data.hasMore ?? (matches.length === limit);

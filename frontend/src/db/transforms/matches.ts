@@ -55,7 +55,7 @@ export interface MatchWriteInput {
   competition?: string;
   venue?: string;
   durationMinutes?: number;
-  periodFormat?: 'half' | 'quarter';
+  periodFormat?: 'half' | 'quarter' | 'third' | 'whole';
   homeScore?: number;
   awayScore?: number;
   notes?: string;
@@ -135,7 +135,7 @@ export interface ServerMatchResponse {
   competition?: string;
   venue?: string;
   durationMinutes?: number;
-  periodFormat?: 'half' | 'quarter';
+  periodFormat?: 'half' | 'quarter' | 'third' | 'whole';
   homeScore?: number;
   awayScore?: number;
   notes?: string;

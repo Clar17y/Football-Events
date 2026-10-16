@@ -5,6 +5,8 @@
 
 import type { ApiResponse, PaginatedResponse } from '@shared/types';
 import { buildApiBaseUrl } from '../../utils/protocol';
+import { AuthSessionChangedError, isAuthRejection } from './authFailure';
+import { clearConfirmedProfile, readTokenClaims } from './authOfflineIdentity';
 
 export interface ApiError {
   message: string;
@@ -34,10 +36,17 @@ export class ApiRequestError extends Error {
   }
 }
 
+interface SessionTokens {
+  access_token: string;
+  refresh_token: string;
+}
+
 export class ApiClient {
   private baseURL: string;
   private token: string | null = null;
   private reqSeq: number = 0;
+  private sessionGeneration = 0;
+  private refreshInFlight: { generation: number; promise: Promise<ApiResponse<SessionTokens>> } | null = null;
 
   constructor(baseURL: string = buildApiBaseUrl()) {
     this.baseURL = baseURL;
@@ -59,7 +68,11 @@ export class ApiClient {
   /**
    * Set authentication token
    */
-  setToken(token: string | null): void {
+  setToken(token: string | null, preserveSession = false): void {
+    if (!preserveSession) this.sessionGeneration++;
+    if (!token || readTokenClaims(token).subject !== readTokenClaims(this.token).subject) {
+      clearConfirmedProfile();
+    }
     this.token = token;
     if (token) {
       try {
@@ -120,20 +133,13 @@ export class ApiClient {
         throw new Error('Response body already consumed');
       }
       const respForParsing = response.clone();
-      data = isJson ? await respForParsing.json() : await respForParsing.text();
+      data = await this.withTimeout(isJson ? respForParsing.json() : respForParsing.text());
     } catch (error) {
-      throw new Error(`Failed to parse response: ${error}`);
+      if (error instanceof ApiRequestError) throw error;
+      throw new Error('Failed to parse API response.');
     }
 
-    // Debug parsed response
-    try {
-      const debug = (typeof localStorage !== 'undefined' && localStorage.getItem('DEBUG_API') === '1') || (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV);
-      if (debug) {
-        const preview = typeof data === 'string' ? data.slice(0, 512) : data;
-        // eslint-disable-next-line no-console
-        console.debug('[api] Response parsed', { status: response.status, ok: response.ok, url: response.url, data: preview });
-      }
-    } catch { }
+    this.debug('Response parsed', { status: response.status, ok: response.ok });
 
     if (!response.ok) {
       const retryAfterHeader = response.headers.get('Retry-After');
@@ -154,22 +160,6 @@ export class ApiClient {
         code: data?.code,
       };
 
-      // Handle specific error cases
-      if (response.status === 401) {
-        // Token expired or invalid - clear it
-        this.setToken(null);
-        apiError.message = 'Authentication required. Please log in again.';
-        // Only show session-expired toast if user has a refresh token (i.e., was actually logged in)
-        try {
-          const hasRefresh = (() => { try { return !!localStorage.getItem('refresh_token'); } catch { return false; } })();
-          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-          if (hasRefresh) {
-            const toast = (window as any).__toastApi?.current;
-            toast?.showError?.('Your session expired. Please sign in again.');
-          }
-        } catch { }
-      }
-
       throw new ApiRequestError(apiError.message, apiError.status, apiError.code, data, retryAfterMs);
     }
 
@@ -185,161 +175,156 @@ export class ApiClient {
     };
   }
 
-  /**
-   * Make a generic HTTP request
-   */
-  async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<ApiResponse<T>> {
-    const url = `${this.baseURL}${endpoint}`;
+  getSessionGeneration(): number {
+    return this.sessionGeneration;
+  }
 
-    const buildConfig = (opts: RequestInit = {}): RequestInit => ({
-      ...opts,
-      headers: this.createHeaders(opts.headers as Record<string, string>),
-    });
+  assertSession(generation: number): void {
+    if (generation !== this.sessionGeneration) throw new AuthSessionChangedError();
+  }
 
-    const decodeExpMs = (): number | null => {
-      try {
-        const t = this.getToken();
-        if (!t) return null;
-        const parts = t.split('.');
-        if (parts.length < 2) return null;
-        const payloadJson = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
-        const payload = JSON.parse(payloadJson);
-        return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
-      } catch { return null; }
-    };
+  clearSession(notify = false): void {
+    const hadSession = !!this.token || !!this.getRefreshToken();
+    this.setToken(null);
+    try { localStorage.removeItem('refresh_token'); } catch { /* storage unavailable */ }
+    if (notify && hadSession) {
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    }
+  }
 
-    const proactiveRefreshIfNeeded = async (): Promise<void> => {
-      const expMs = decodeExpMs();
-      if (!expMs) return;
-      const now = Date.now();
-      const timeLeft = expMs - now;
-      const hasRefresh = (() => { try { return !!localStorage.getItem('refresh_token'); } catch { return false; } })();
-      if (hasRefresh && timeLeft <= 60_000) {
-        try {
-          const refreshToken = localStorage.getItem('refresh_token') as string;
-          const refreshResp = await fetch(`${this.baseURL}/auth/refresh`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refresh_token: refreshToken })
-          });
-          if (refreshResp.ok) {
-            const data = await refreshResp.json();
-            if (data?.access_token) {
-              this.setToken(data.access_token);
-              try { if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token); } catch { }
-              try { window.dispatchEvent(new CustomEvent('auth:refreshed')); } catch { }
-            }
-          }
-        } catch {
-          // ignore preflight refresh errors; the request may still succeed
-        }
-      }
-    };
+  private getRefreshToken(): string | null {
+    try { return localStorage.getItem('refresh_token'); } catch { return null; }
+  }
 
-    const attemptRefreshAndRetry = async (originalResponse: Response): Promise<ApiResponse<T>> => {
-      try {
-        // Try to parse error to check if token expired
-        const hasRefresh = (() => {
-          try {
-            return !!localStorage.getItem('refresh_token');
-          } catch {
-            return false;
-          }
-        })();
-
-        if (!hasRefresh) {
-          // No refresh token available, clear and return original error silently for guests
-          this.setToken(null);
-          try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch { }
-          return await this.handleResponse<T>(originalResponse);
-        }
-
-        // Attempt to refresh token
-        const refreshToken = localStorage.getItem('refresh_token') as string;
-        const refreshResp = await fetch(`${this.baseURL}/auth/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: refreshToken })
-        });
-
-        if (!refreshResp.ok) {
-          // Refresh failed
-          this.setToken(null);
-          try { localStorage.removeItem('refresh_token'); } catch { }
-          try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch { }
-          // Return original error
-          return await this.handleResponse<T>(originalResponse);
-        }
-
-        const refreshData = await refreshResp.json();
-        if (refreshData?.access_token) {
-          this.setToken(refreshData.access_token);
-          try { if (refreshData.refresh_token) localStorage.setItem('refresh_token', refreshData.refresh_token); } catch { }
-          try { window.dispatchEvent(new CustomEvent('auth:refreshed')); } catch { }
-
-          // Retry original request with new token
-          const retryResp = await fetch(url, buildConfig(options));
-          return await this.handleResponse<T>(retryResp);
-        }
-
-        // If no access token in response, treat as failure
-        this.setToken(null);
-        try { localStorage.removeItem('refresh_token'); } catch { }
-        try {
-          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
-          const toast = (window as any).__toastApi?.current;
-          toast?.showError?.('Your session expired. Please sign in again.');
-        } catch { }
-        return await this.handleResponse<T>(originalResponse);
-      } catch (err) {
-        // Any error during refresh -> clear and propagate
-        this.setToken(null);
-        try { localStorage.removeItem('refresh_token'); } catch { }
-        try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch { }
-        // Fallback to original error handling
-        return await this.handleResponse<T>(originalResponse);
-      }
-    };
-
+  private debug(event: string, details: Record<string, unknown>): void {
     try {
-      // Proactive refresh to implement sliding session
-      await proactiveRefreshIfNeeded();
-
-      // Debug outbound request
-      try {
-        const debug = (typeof localStorage !== 'undefined' && localStorage.getItem('DEBUG_API') === '1') || (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV);
-        if (debug) {
-          const id = ++this.reqSeq;
-          const bodyPreview = typeof (options.body as any) === 'string' ? (options.body as string).slice(0, 512) : options.body;
-          // eslint-disable-next-line no-console
-          console.debug('[api] Request', { id, method: options.method || 'GET', url, body: bodyPreview });
-        }
-      } catch { }
-
-      const response = await fetch(url, buildConfig(options));
-      try {
-        const debug = (typeof localStorage !== 'undefined' && localStorage.getItem('DEBUG_API') === '1') || (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV);
-        if (debug) {
-          // eslint-disable-next-line no-console
-          console.debug('[api] Fetch completed', { url, status: response.status, ok: response.ok });
-        }
-      } catch { }
-      if (response.status === 401) {
-        // Try refresh logic and retry once
-        const result = await attemptRefreshAndRetry(response);
-        return result;
+      if (localStorage.getItem('DEBUG_API') === '1' || import.meta.env.DEV) {
+        // Only call with request metadata; never log bodies, headers or response payloads.
+        console.debug(`[api] ${event}`, details);
       }
-      return await this.handleResponse<T>(response);
+    } catch { /* diagnostics must not affect requests */ }
+  }
+
+  private async withTimeout<T>(pending: Promise<T>, onTimeout?: () => void): Promise<T> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        pending,
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => {
+            onTimeout?.();
+            reject(new ApiRequestError('Connection timed out. Please try again when connected.', 0, 'TIMEOUT'));
+          }, 10_000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private async fetchWithTimeout(url: string, config: RequestInit): Promise<Response> {
+    const controller = new AbortController();
+    const relayAbort = () => controller.abort();
+    if (config.signal?.aborted) controller.abort();
+    config.signal?.addEventListener('abort', relayAbort, { once: true });
+    try {
+      return await this.withTimeout(fetch(url, { ...config, signal: controller.signal }), relayAbort);
     } catch (error) {
-      // Network or other errors
-      if (error instanceof Error && error.name === 'TypeError') {
-        throw new Error('Network error. Please check your connection.');
+      if (error instanceof TypeError) {
+        throw new ApiRequestError('Network error. Please check your connection.', 0, 'NETWORK_ERROR');
       }
       throw error;
+    } finally {
+      config.signal?.removeEventListener('abort', relayAbort);
     }
+  }
+
+  /** Share refresh work within one session, and never publish a stale result. */
+  async refreshSession(): Promise<ApiResponse<SessionTokens>> {
+    const generation = this.sessionGeneration;
+    if (this.refreshInFlight?.generation === generation) return this.refreshInFlight.promise;
+    const refreshToken = this.getRefreshToken();
+    if (!refreshToken) throw new Error('No refresh token available');
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new ApiRequestError('Offline. Your session will be checked when connected.', 0, 'OFFLINE');
+    }
+    const subject = readTokenClaims(this.token).subject;
+    const promise = (async () => {
+      try {
+        const response = await this.fetchWithTimeout(`${this.baseURL}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        this.assertSession(generation);
+        if (response.status === 401 || response.status === 403) this.clearSession(true);
+        const result = await this.handleResponse<SessionTokens>(response);
+        this.assertSession(generation);
+        const tokens = result.data;
+        if (!result.success || !tokens?.access_token || !tokens.refresh_token ||
+          (subject && readTokenClaims(tokens.access_token).subject !== subject)) {
+          throw new ApiRequestError('Invalid refresh response. Please try again when connected.', 0, 'INVALID_REFRESH_RESPONSE');
+        }
+        this.setToken(tokens.access_token, true);
+        try { localStorage.setItem('refresh_token', tokens.refresh_token); } catch { /* storage unavailable */ }
+        window.dispatchEvent(new CustomEvent('auth:refreshed'));
+        return result;
+      } catch (error) {
+        // A rejection already invalidated this generation; retain its error status.
+        if (!isAuthRejection(error)) this.assertSession(generation);
+        throw error;
+      }
+    })();
+    this.refreshInFlight = { generation, promise };
+    try {
+      return await promise;
+    } finally {
+      if (this.refreshInFlight?.promise === promise) this.refreshInFlight = null;
+    }
+  }
+
+  /** Make a request; a transient refresh failure must not become unauthorized. */
+  async request<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
+    const generation = this.sessionGeneration;
+    const path = endpoint.split('?')[0];
+    const sessionRequest = !['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'].includes(path);
+    const url = `${this.baseURL}${endpoint}`;
+    const buildConfig = (): RequestInit => ({
+      ...options,
+      headers: sessionRequest ? this.createHeaders(options.headers as Record<string, string>) : {
+        'Content-Type': 'application/json',
+        ...options.headers,
+        ...(path === '/auth/logout' && this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+      },
+    });
+    const fetchRequest = async () => {
+      this.assertSession(generation);
+      // Exclude query strings from diagnostics as they may contain sensitive values.
+      this.debug('Request', { id: ++this.reqSeq, method: options.method || 'GET', path });
+      const response = await this.fetchWithTimeout(url, buildConfig());
+      this.assertSession(generation);
+      this.debug('Fetch completed', { path, status: response.status, ok: response.ok });
+      return response;
+    };
+
+    if (sessionRequest) {
+      const expiry = readTokenClaims(this.token).expiryMs;
+      if (expiry !== null && expiry - Date.now() <= 60_000 && this.getRefreshToken()) {
+        await this.refreshSession();
+        this.assertSession(generation);
+      }
+    }
+    let response = await fetchRequest();
+    if (sessionRequest && response.status === 401 && this.getRefreshToken()) {
+      await this.refreshSession();
+      response = await fetchRequest();
+    }
+    const definitiveRejection = sessionRequest && (response.status === 401 ||
+      (response.status === 403 && ['/auth/profile', '/auth/me'].includes(path)));
+    if (definitiveRejection) this.clearSession(true);
+    const result = await this.handleResponse<T>(response);
+    this.assertSession(generation);
+    return result;
   }
 
   /**

@@ -1,3 +1,5 @@
+import { ALL_EVENT_KINDS, CORE_EVENT_KINDS } from '@shared/types/limits';
+
 /**
  * Tier definitions for Guest, Free, and Premium plans.
  * Keep in sync with backend/src/services/QuotaService.ts
@@ -24,7 +26,7 @@ export const TIERS = {
         highlights: [
             'Track 1 full match',
             'Record goals, subs & formations',
-            'Works completely offline',
+            'Record offline after opening the app online',
             'No account needed',
         ],
         limitations: [
@@ -82,8 +84,8 @@ export const TIERS = {
         highlights: [
             'Manage up to 5 teams',
             'Unlimited matches & seasons',
-            'Advanced event tracking (12 types)',
-            'Analytics dashboard',
+            'Expanded event tracking',
+            'Analytics dashboard (coming soon)',
             'Export data to CSV',
             'Unlimited share links',
         ],
@@ -104,7 +106,7 @@ export const FEATURE_COMPARISON = [
     { label: 'Seasons', guest: '—', free: '5', premium: 'Unlimited' },
     { label: 'Sync across devices', guest: false, free: true, premium: true },
     { label: 'Share live match', guest: false, free: true, premium: true },
-    { label: 'Analytics dashboard', guest: false, free: false, premium: true },
+    { label: 'Analytics dashboard (coming soon)', guest: false, free: false, premium: true },
     { label: 'Export to CSV', guest: false, free: false, premium: true },
-    { label: 'Event types', guest: 'Core (6)', free: 'Core (6)', premium: 'All (12)' },
+    { label: 'Event types', guest: `Core (${CORE_EVENT_KINDS.length})`, free: `Core (${CORE_EVENT_KINDS.length})`, premium: `All (${ALL_EVENT_KINDS.length})` },
 ] as const;

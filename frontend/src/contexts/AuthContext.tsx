@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { authApi } from '../services/api/authApi';
+import { AuthSessionChangedError, CONNECTED_RECOVERY_MESSAGE, isAuthRejection } from '../services/api/authFailure';
 import { db } from '../db/indexedDB';
 import type { UserProfile } from '../services/api/authApi';
 
@@ -7,6 +8,7 @@ interface AuthContextType {
   user: UserProfile | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  recoveryMessage: string | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (data: RegisterData) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -24,326 +26,206 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
+interface AuthProviderProps { children: ReactNode; }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [tokenExpiryMs, setTokenExpiryMs] = useState<number | null>(null);
-
+  const [initialProfile] = useState(() => authApi.getCachedProfile());
+  const [user, setUser] = useState<UserProfile | null>(initialProfile);
+  const [isLoading, setIsLoading] = useState(() => !initialProfile && authApi.isAuthenticated() && navigator.onLine);
+  const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
+  const [tokenExpiryMs, setTokenExpiryMs] = useState(() => authApi.getAccessTokenExpiryMs());
+  const mounted = useRef(false);
+  const operation = useRef(0);
+  const localReset = useRef<Promise<unknown> | null>(null);
+  const sessionGeneration = authApi.getSessionGeneration();
   const isAuthenticated = authApi.isAuthenticated() && user !== null;
 
-  // Helper: decode JWT exp (seconds) -> ms
-  const getAccessTokenExpiryMs = (): number | null => {
-    try {
-      const token = authApi.getAccessToken();
-      if (!token) return null;
-      const [, payloadB64] = token.split('.');
-      if (!payloadB64) return null;
-      const payloadJson = atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'));
-      const payload = JSON.parse(payloadJson);
-      if (payload && typeof payload.exp === 'number') {
-        return payload.exp * 1000;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  };
+  const isCurrent = useCallback((pendingOperation: number, session: number) =>
+    mounted.current && operation.current === pendingOperation && authApi.getSessionGeneration() === session, []);
 
-  // Initialize auth state on app load
-  useEffect(() => {
-    const initializeAuth = async () => {
-      console.log('AuthContext: Starting initialization...');
-      try {
-        if (authApi.isAuthenticated()) {
-          console.log('AuthContext: User appears authenticated, getting profile...');
-          // Try to get user profile
-          const response = await authApi.getProfile();
-          if (response.success && response.data) {
-            console.log('AuthContext: Profile loaded successfully');
-            setUser(response.data);
-            setTokenExpiryMs(getAccessTokenExpiryMs());
-            try { window.dispatchEvent(new CustomEvent('auth:loggedin')); } catch {}
-            try {
-              if (navigator.onLine) {
-                const { fetchAndCacheMeLimits } = await import('../services/limitsService');
-                void fetchAndCacheMeLimits();
-              }
-            } catch {}
-          } else {
-            console.log('AuthContext: Profile failed, trying refresh...');
-            // Token might be expired, try to refresh
-            const refreshSuccess = await authApi.attemptTokenRefresh();
-              if (refreshSuccess) {
-                console.log('AuthContext: Refresh successful, retrying profile...');
-                const retryResponse = await authApi.getProfile();
-                if (retryResponse.success && retryResponse.data) {
-                  console.log('AuthContext: Profile loaded after refresh');
-                  setUser(retryResponse.data);
-                  setTokenExpiryMs(getAccessTokenExpiryMs());
-                  try { window.dispatchEvent(new CustomEvent('auth:loggedin')); } catch {}
-                  try {
-                    if (navigator.onLine) {
-                      const { fetchAndCacheMeLimits } = await import('../services/limitsService');
-                      void fetchAndCacheMeLimits();
-                    }
-                  } catch {}
-                }
-            } else {
-              console.log('AuthContext: Refresh failed, clearing tokens...');
-              // Clear invalid tokens
-              await authApi.logout();
-              setUser(null);
-              setTokenExpiryMs(null);
-            }
-          }
-        } else {
-          console.log('AuthContext: User not authenticated');
-        }
-      } catch (error) {
-        console.warn('AuthContext: Failed to initialize auth:', error);
-        // Clear potentially invalid tokens
-        await authApi.logout();
-        setUser(null);
-        setTokenExpiryMs(null);
-      } finally {
-        console.log('AuthContext: Setting isLoading = false');
-        setIsLoading(false);
-      }
-    };
-
-    initializeAuth();
+  const explainRecovery = useCallback(() => {
+    if (authApi.getCachedProfile()) return;
+    setRecoveryMessage(CONNECTED_RECOVERY_MESSAGE);
+    try { (window as any).__toastApi?.current?.showError?.(CONNECTED_RECOVERY_MESSAGE); } catch { /* optional toast */ }
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const publishProfile = useCallback((profile: UserProfile) => {
+    setUser(profile);
+    setRecoveryMessage(null);
+    setTokenExpiryMs(authApi.getAccessTokenExpiryMs());
+    window.dispatchEvent(new CustomEvent('auth:loggedin'));
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    if (!authApi.isAuthenticated()) return;
+    const pendingOperation = operation.current;
+    const session = authApi.getSessionGeneration();
+    if (!navigator.onLine) {
+      explainRecovery();
+      setIsLoading(false);
+      return;
+    }
     try {
-      setIsLoading(true);
-      const response = await authApi.login({ email, password });
-      
-      if (response.success && response.data) {
-        // Get user profile after successful login
-        const profileResponse = await authApi.getProfile();
-        if (profileResponse.success && profileResponse.data) {
-          setUser(profileResponse.data);
-          setTokenExpiryMs(getAccessTokenExpiryMs());
-          try { window.dispatchEvent(new CustomEvent('auth:loggedin')); } catch {}
-          try {
-            if (navigator.onLine) {
-              const { fetchAndCacheMeLimits } = await import('../services/limitsService');
-              void fetchAndCacheMeLimits();
-            }
-          } catch {}
-          return { success: true };
-        } else {
-          return { success: false, error: 'Failed to get user profile' };
-        }
+      const response = await authApi.getProfile();
+      if (!isCurrent(pendingOperation, session)) return;
+      if (response.success && response.data) publishProfile(response.data);
+      else explainRecovery();
+    } catch (error) {
+      if (!isCurrent(pendingOperation, session) || error instanceof AuthSessionChangedError) return;
+      if (isAuthRejection(error)) {
+        authApi.clearToken();
+        window.dispatchEvent(new CustomEvent('auth:unauthorized'));
       } else {
-        return { 
-          success: false, 
-          error: response.message || 'Login failed' 
-        };
+        explainRecovery();
       }
-    } catch (error) {
-      console.error('Login error:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Login failed' 
-      };
     } finally {
-      setIsLoading(false);
+      if (isCurrent(pendingOperation, session)) setIsLoading(false);
     }
-  };
-
-  const register = async (data: RegisterData) => {
-    try {
-      setIsLoading(true);
-      const response = await authApi.register(data);
-      
-      if (response.success) {
-        // Auto-login after successful registration
-        const loginResult = await login(data.email, data.password);
-        return loginResult;
-      } else {
-        return { 
-          success: false, 
-          error: response.message || 'Registration failed' 
-        };
-      }
-    } catch (error) {
-      console.error('Registration error:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Registration failed' 
-      };
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const logout = async () => {
-    try {
-      setIsLoading(true);
-      await authApi.logout();
-      setUser(null);
-      setTokenExpiryMs(null);
-      try {
-        await db.clearAllData();
-      } catch (clearErr) {
-        console.warn('Failed to clear local data on logout:', clearErr);
-      }
-      // Broadcast logout to interested listeners
-      try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
-    } catch (error) {
-      console.error('Logout error:', error);
-      // Clear user state even if logout request fails
-      setUser(null);
-      setTokenExpiryMs(null);
-      try {
-        await db.clearAllData();
-      } catch (clearErr) {
-        console.warn('Failed to clear local data on logout:', clearErr);
-      }
-      try { window.dispatchEvent(new CustomEvent('auth:unauthorized')); } catch {}
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const refreshUser = async () => {
-    try {
-      if (authApi.isAuthenticated()) {
-        const response = await authApi.getProfile();
-        if (response.success && response.data) {
-          setUser(response.data);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to refresh user:', error);
-    }
-  };
+  }, [explainRecovery, isCurrent, publishProfile]);
 
   useEffect(() => {
-    // Listen for global auth events from apiClient
+    mounted.current = true;
     const onUnauthorized = () => {
-      // Force logout flow and redirect handled by AppRoutes depending on isAuthenticated
+      operation.current++;
+      authApi.clearToken();
       setUser(null);
       setTokenExpiryMs(null);
-      try {
-        void db.clearAllData();
-      } catch (clearErr) {
-        console.warn('Failed to clear local data on auth reset:', clearErr);
-      }
+      setRecoveryMessage(null);
+      setIsLoading(false);
+      localReset.current = db.clearAllData().catch(() => console.warn('Failed to clear local data on auth reset.'));
     };
-    const onRefreshed = () => {
-      setTokenExpiryMs(getAccessTokenExpiryMs());
-      // Optionally refresh profile to keep user data fresh
-      refreshUser();
-    };
-
-    window.addEventListener('auth:unauthorized', onUnauthorized as EventListener);
-    window.addEventListener('auth:refreshed', onRefreshed as EventListener);
-
-    return () => {
-      window.removeEventListener('auth:unauthorized', onUnauthorized as EventListener);
-      window.removeEventListener('auth:refreshed', onRefreshed as EventListener);
-    };
-  }, []);
-
-  // Periodically refresh cached limits while authenticated and online
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    let intervalId: number | undefined;
-    const refresh = async () => {
-      try {
-        if (!navigator.onLine) return;
-        const { fetchAndCacheMeLimits } = await import('../services/limitsService');
-        await fetchAndCacheMeLimits();
-      } catch {}
-    };
-
-    refresh();
-    intervalId = window.setInterval(refresh, 10 * 60 * 1000);
-    const onOnline = () => { void refresh(); };
+    const onRefreshed = () => setTokenExpiryMs(authApi.getAccessTokenExpiryMs());
+    const onOnline = () => { void refreshUser(); };
+    window.addEventListener('auth:unauthorized', onUnauthorized);
+    window.addEventListener('auth:refreshed', onRefreshed);
     window.addEventListener('online', onOnline);
-
+    void refreshUser();
     return () => {
-      if (intervalId) window.clearInterval(intervalId);
+      mounted.current = false;
+      operation.current++;
+      window.removeEventListener('auth:unauthorized', onUnauthorized);
+      window.removeEventListener('auth:refreshed', onRefreshed);
       window.removeEventListener('online', onOnline);
     };
-  }, [isAuthenticated]);
+  }, [refreshUser]);
 
-  // Sliding session: refresh token on user activity
-  useEffect(() => {
-    let activityTimeout: number | undefined;
-
-    const scheduleProactiveRefresh = () => {
-      // If we know expiry, refresh 60s before; else skip
-      const expiry = tokenExpiryMs;
-      if (!expiry) return;
-      const now = Date.now();
-      const msUntilRefresh = Math.max(expiry - now - 60_000, 0);
-      window.clearTimeout(activityTimeout);
-      activityTimeout = window.setTimeout(async () => {
-        try {
-          const ok = await authApi.attemptTokenRefresh();
-          if (ok) {
-            setTokenExpiryMs(getAccessTokenExpiryMs());
-          } else {
-            setUser(null);
-            setTokenExpiryMs(null);
-          }
-        } catch {
-          setUser(null);
-          setTokenExpiryMs(null);
-        }
-      }, msUntilRefresh);
-    };
-
-    const bumpOnActivity = () => {
-      // Any activity triggers a check/schedule
-      scheduleProactiveRefresh();
-    };
-
-    // Attach common activity events
-    const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart', 'visibilitychange'];
-    events.forEach(evt => window.addEventListener(evt, bumpOnActivity, { passive: true } as any));
-
-    // Initial schedule
-    scheduleProactiveRefresh();
-
-    return () => {
-      window.clearTimeout(activityTimeout);
-      events.forEach(evt => window.removeEventListener(evt, bumpOnActivity as any));
-    };
-  }, [tokenExpiryMs]);
-
-  const value: AuthContextType = {
-    user,
-    isAuthenticated,
-    isLoading,
-    login,
-    register,
-    logout,
-    refreshUser,
+  const authenticate = async (request: () => ReturnType<typeof authApi.login>) => {
+    const pendingOperation = ++operation.current;
+    setIsLoading(true);
+    setUser(null);
+    setTokenExpiryMs(null);
+    setRecoveryMessage(null);
+    let session: number;
+    try {
+      const pending = request();
+      session = authApi.getSessionGeneration();
+      const response = await pending;
+      if (!isCurrent(pendingOperation, session)) return { success: false, error: 'Authentication session changed.' };
+      if (!response.success || !response.data) return { success: false, error: response.message || 'Sign in failed' };
+      const profile = await authApi.getProfile();
+      if (!isCurrent(pendingOperation, session)) return { success: false, error: 'Authentication session changed.' };
+      if (profile.success && profile.data) {
+        publishProfile(profile.data);
+        return { success: true };
+      }
+      explainRecovery();
+      return { success: false, error: CONNECTED_RECOVERY_MESSAGE };
+    } catch (error) {
+      if (mounted.current && operation.current === pendingOperation && !(error instanceof AuthSessionChangedError)) {
+        if (authApi.isAuthenticated()) explainRecovery();
+        return { success: false, error: error instanceof Error ? error.message : 'Sign in failed' };
+      }
+      return { success: false, error: 'Authentication session changed.' };
+    } finally {
+      if (mounted.current && operation.current === pendingOperation) {
+        setIsLoading(false);
+        // Even without a cached profile, retry the retained session on expiry/online recovery.
+        setTokenExpiryMs(authApi.getAccessTokenExpiryMs());
+      }
+    }
   };
 
-  console.log('AuthContext: Rendering with isLoading =', isLoading, 'isAuthenticated =', isAuthenticated);
+  const login = (email: string, password: string) => authenticate(() => authApi.login({ email, password }));
+  const register = (data: RegisterData) => authenticate(() => authApi.register(data));
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const logout = async () => {
+    operation.current++;
+    setUser(null);
+    setTokenExpiryMs(null);
+    setRecoveryMessage(null);
+    setIsLoading(false);
+    const pending = authApi.logout();
+    await Promise.all([pending, localReset.current]);
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const refreshLimits = async () => {
+      if (!navigator.onLine) return;
+      const session = authApi.getSessionGeneration();
+      try {
+        const { fetchAndCacheMeLimits } = await import('../services/limitsService');
+        if (mounted.current && authApi.getSessionGeneration() === session) await fetchAndCacheMeLimits();
+      } catch { /* limits recovery is independent of local identity */ }
+    };
+    void refreshLimits();
+    const timer = window.setInterval(() => { void refreshLimits(); }, 10 * 60 * 1000);
+    window.addEventListener('online', refreshLimits);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('online', refreshLimits);
+    };
+  }, [isAuthenticated, sessionGeneration]);
+
+  useEffect(() => {
+    if (tokenExpiryMs === null) return;
+    let stopped = false;
+    let pending = false;
+    let timer: number | undefined;
+    const pendingOperation = operation.current;
+    const session = authApi.getSessionGeneration();
+    const current = () => !stopped && isCurrent(pendingOperation, session);
+    const schedule = () => {
+      window.clearTimeout(timer);
+      if (!current()) return;
+      const expiry = authApi.getAccessTokenExpiryMs();
+      // Expired/offline/short-lived credentials get a bounded retry, never a zero-delay loop.
+      const delay = Math.max((expiry ?? Date.now()) - Date.now() - 60_000, 30_000);
+      timer = window.setTimeout(() => { void refresh(); }, Math.min(delay, 2_147_483_647));
+    };
+    const refresh = async () => {
+      if (!current() || pending) return;
+      window.clearTimeout(timer);
+      if (!navigator.onLine) { schedule(); return; }
+      pending = true;
+      try {
+        const ok = await authApi.attemptTokenRefresh();
+        if (current() && ok) {
+          setTokenExpiryMs(authApi.getAccessTokenExpiryMs());
+          await refreshUser();
+        }
+      } finally {
+        pending = false;
+        schedule();
+      }
+    };
+    const onOnline = () => { void refresh(); };
+    schedule();
+    window.addEventListener('online', onOnline);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+      window.removeEventListener('online', onOnline);
+    };
+  }, [tokenExpiryMs, sessionGeneration, isCurrent, refreshUser]);
+
+  return <AuthContext.Provider value={{ user, isAuthenticated, isLoading, recoveryMessage, login, register, logout, refreshUser }}>
+    {children}
+  </AuthContext.Provider>;
 };
 
 export default AuthProvider;

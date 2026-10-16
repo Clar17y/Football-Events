@@ -4,6 +4,7 @@
  */
 
 import { apiClient } from './baseApi';
+import { cacheConfirmedProfile, readConfirmedProfile, readTokenClaims } from './authOfflineIdentity';
 import type { ApiResponse } from '@shared/types';
 
 // Auth-specific types (these should eventually be added to shared types)
@@ -83,19 +84,20 @@ export class AuthApi {
    * Register a new user
    */
   async register(data: RegisterRequest): Promise<ApiResponse<AuthResponse>> {
+    // Invalidate pending work before beginning a replacement account attempt.
+    this.clearTokens();
+    const generation = apiClient.getSessionGeneration();
     const response = await apiClient.post<AuthResponse>('/auth/register', {
       email: data.email,
       password: data.password,
       first_name: data.firstName,
       last_name: data.lastName,
     });
-
-    // Store tokens after successful registration
+    apiClient.assertSession(generation);
     if (response.success && response.data) {
-      apiClient.setToken(response.data.access_token);
+      apiClient.setToken(response.data.access_token, true);
       this.storeRefreshToken(response.data.refresh_token);
     }
-
     return response;
   }
 
@@ -103,14 +105,15 @@ export class AuthApi {
    * Login user
    */
   async login(data: LoginRequest): Promise<ApiResponse<AuthResponse>> {
+    // Invalidate pending work before beginning a replacement account attempt.
+    this.clearTokens();
+    const generation = apiClient.getSessionGeneration();
     const response = await apiClient.post<AuthResponse>('/auth/login', data);
-
-    // Store tokens after successful login
+    apiClient.assertSession(generation);
     if (response.success && response.data) {
-      apiClient.setToken(response.data.access_token);
+      apiClient.setToken(response.data.access_token, true);
       this.storeRefreshToken(response.data.refresh_token);
     }
-
     return response;
   }
 
@@ -118,12 +121,12 @@ export class AuthApi {
    * Logout user
    */
   async logout(): Promise<ApiResponse<{ message: string }>> {
-    try {
-      const response = await apiClient.post<{ message: string }>('/auth/logout');
-      return response;
-    } finally {
-      // Always clear tokens, even if logout request fails
-      this.clearTokens();
+    // Start the remote logout with the old credentials, then end local access immediately.
+    const request = apiClient.post<{ message: string }>('/auth/logout');
+    apiClient.clearSession();
+    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    try { return await request; } catch {
+      return { success: true, data: { message: 'Signed out on this device.' } };
     }
   }
 
@@ -131,47 +134,34 @@ export class AuthApi {
    * Refresh access token
    */
   async refreshToken(): Promise<ApiResponse<TokenResponse>> {
-    const refreshToken = this.getRefreshToken();
-    if (!refreshToken) {
-      throw new Error('No refresh token available');
-    }
-
-    const response = await apiClient.post<TokenResponse>('/auth/refresh', {
-      refresh_token: refreshToken,
-    });
-
-    // Update stored tokens
-    if (response.success && response.data) {
-      apiClient.setToken(response.data.access_token);
-      this.storeRefreshToken(response.data.refresh_token);
-    }
-
-    return response;
+    return apiClient.refreshSession();
   }
 
   /**
    * Get current user profile
    */
   async getProfile(): Promise<ApiResponse<UserProfile>> {
-    return apiClient.get<UserProfile>('/auth/profile');
+    return this.confirmProfile(() => apiClient.get<UserProfile>('/auth/profile'));
   }
 
   /**
    * Update user profile
    */
   async updateProfile(data: UpdateProfileRequest): Promise<ApiResponse<UserProfile>> {
-    return apiClient.put<UserProfile>('/auth/profile', {
+    return this.confirmProfile(() => apiClient.put<UserProfile>('/auth/profile', {
       email: data.email,
       first_name: data.firstName,
       last_name: data.lastName,
-    });
+    }));
   }
 
   /**
    * Delete user account
    */
   async deleteAccount(): Promise<ApiResponse<{ message: string }>> {
+    const generation = this.getSessionGeneration();
     const response = await apiClient.delete<{ message: string }>('/auth/profile');
+    apiClient.assertSession(generation);
 
     // Clear tokens after account deletion
     if (response.success) {
@@ -185,7 +175,7 @@ export class AuthApi {
    * Get current user info (alternative endpoint)
    */
   async getCurrentUser(): Promise<ApiResponse<UserProfile>> {
-    return apiClient.get<UserProfile>('/auth/me');
+    return this.confirmProfile(() => apiClient.get<UserProfile>('/auth/me'));
   }
 
   /**
@@ -213,41 +203,41 @@ export class AuthApi {
     }
   }
 
-  /**
-   * Get stored refresh token
-   */
-  private getRefreshToken(): string | null {
-    try {
-      return localStorage.getItem('refresh_token');
-    } catch (error) {
-      console.warn('Failed to get refresh token:', error);
-      return null;
-    }
+  getSessionGeneration(): number {
+    return apiClient.getSessionGeneration();
   }
 
-  /**
-   * Clear all stored tokens
-   */
+  getCachedProfile(): UserProfile | null {
+    return readConfirmedProfile(this.getAccessToken());
+  }
+
+  getAccessTokenExpiryMs(): number | null {
+    return readTokenClaims(this.getAccessToken()).expiryMs;
+  }
+
+  private async confirmProfile(request: () => Promise<ApiResponse<UserProfile>>): Promise<ApiResponse<UserProfile>> {
+    const generation = this.getSessionGeneration();
+    const subject = readTokenClaims(this.getAccessToken()).subject;
+    const response = await request();
+    apiClient.assertSession(generation);
+    if (response.success && response.data) {
+      if (response.data.id !== subject || !cacheConfirmedProfile(this.getAccessToken(), response.data)) {
+        throw new Error('Server profile does not match the current account. Connect again to confirm it.');
+      }
+    }
+    return response;
+  }
+
   private clearTokens(): void {
-    apiClient.setToken(null);
-    try {
-      localStorage.removeItem('refresh_token');
-    } catch (error) {
-      console.warn('Failed to clear refresh token:', error);
-    }
+    apiClient.clearSession();
   }
 
-  /**
-   * Attempt to refresh token automatically
-   * Returns true if successful, false if refresh failed
-   */
+  /** False is recoverable unless the API received a definitive server rejection. */
   async attemptTokenRefresh(): Promise<boolean> {
     try {
-      await this.refreshToken();
-      return true;
-    } catch (error) {
-      console.warn('Token refresh failed:', error);
-      this.clearTokens();
+      const response = await this.refreshToken();
+      return response.success;
+    } catch {
       return false;
     }
   }

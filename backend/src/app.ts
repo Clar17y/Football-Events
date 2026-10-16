@@ -130,29 +130,11 @@ io.on('connection', (socket) => {
     console.log(`Client ${socket.id} left match ${matchId}`);
   });
   
-  // Handle real-time match events
-  socket.on('match_event', async (event, callback) => {
-    try {
-      console.log('📡 Received real-time event:', event.id);
-      
-      // Broadcast to all clients in the match room (except sender)
-      socket.to(`match-${event.match_id}`).emit('live_event', event);
-      
-      // Acknowledge successful receipt
-      if (callback) {
-        callback({ success: true });
-      }
-      
-      // Confirm event was processed
-      socket.emit('match_event_confirmed', event.id);
-      
-      console.log(`✅ Event ${event.id} broadcasted to match-${event.match_id}`);
-    } catch (error) {
-      console.error('❌ Error handling real-time event:', error);
-      
-      if (callback) {
-        callback({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
-      }
+  // Older cached clients must retain local work until authenticated HTTP saves it.
+  // This socket message never persisted events, so receipt cannot confirm a save.
+  socket.on('match_event', (_event, callback) => {
+    if (typeof callback === 'function') {
+      callback({ success: false, error: 'Save match events through the authenticated match API.' });
     }
   });
   

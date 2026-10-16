@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
@@ -10,6 +10,8 @@ export default defineConfig({
     globals: true,
     testTimeout: 20000,
     include: ['tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // Cloud replay checks need a running backend; run them with `npm run test:cloud`.
+    exclude: [...configDefaults.exclude, 'tests/cloud/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

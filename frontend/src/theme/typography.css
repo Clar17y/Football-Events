@@ -1,12 +1,15 @@
 /* ===== MATCHMASTER TYPOGRAPHY SYSTEM ===== */
+/* Inter foundation with comfortable reading line-height and touchline proportions */
 
-/* Inter font is imported and applied globally in index.css */
-
-/* Improve text rendering */
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--touchline-ink, #14231d);
+  background-color: var(--touchline-bg, #f8faf7);
 }
 
 /* Ionic component typography overrides */
@@ -14,42 +17,93 @@ ion-title {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-weight: 700;
   letter-spacing: -0.025em;
+  /* Coloured toolbars supply their own contrast foreground. */
+  color: inherit;
 }
 
 ion-card-title {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-weight: 600;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
+  color: var(--touchline-ink, #14231d);
 }
 
 ion-card-content {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--touchline-muted, #56645d);
 }
 
+/* Controls: Sentence-case and minimum 44px touch targets */
 ion-button {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-weight: 600;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.01em;
+  text-transform: none !important; /* Sentence-case controls */
+  --min-height: 44px;
+  min-height: 44px;
+}
+
+button {
+  text-transform: none;
+}
+
+/* Ionic uses the colour base for clear/outline text as well as solid fills.
+   Remap only forest/default foreground buttons; toolbar contrast and semantic
+   danger, warning, kit and position colours retain their existing mappings. */
+.dark-theme ion-button:is([fill="clear"], [fill="outline"]):not(.in-toolbar):not([color]),
+.dark-theme ion-button:is([fill="clear"], [fill="outline"]):not(.in-toolbar):is([color="primary"], [color="secondary"], [color="tertiary"], [color="teal"], [color="indigo"], [color="emerald"], [color="sky"], [color="purple"], [color="rose"]) {
+  --color: var(--touchline-accent-ink);
+  --color-hover: var(--touchline-accent-ink);
+  --color-focused: var(--touchline-accent-ink);
+  --color-activated: var(--touchline-accent-ink);
+  --border-color: var(--touchline-accent-ink);
+  --ion-color-base: var(--touchline-accent-ink);
+  --ion-color-base-rgb: var(--touchline-accent-ink-rgb);
 }
 
 ion-chip {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-weight: 500;
+  font-size: 13px;
+}
+
+/* Tabular numbers for clocks, timers, scores and jersey numbers */
+.tabular-numbers,
+.match-clock,
+.scoreboard-score,
+.player-jersey-number,
+.stat-value,
+[data-tabular="true"] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 /* Form label styling */
 .grassroots-form-label {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-weight: 600 !important;
-  font-size: 1.1rem !important;
-  color: var(--ion-color-dark) !important;
+  font-size: 14px !important;
+  color: var(--touchline-ink, #14231d) !important;
+  margin-bottom: 6px;
 }
 
 /* Form error text styling */
 .grassroots-form-error {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   font-weight: 500 !important;
-  font-size: 0.9rem !important;
-  color: var(--ion-color-danger) !important;
-  margin-top: 0.25rem !important;
+  font-size: 13px !important;
+  color: var(--ion-color-danger, #dc2626) !important;
+  margin-top: 4px !important;
+}
+
+/* Accessible focus styling */
+:focus-visible {
+  outline: 2px solid var(--touchline-accent-ink, #12392d);
+  outline-offset: 2px;
+}
+
+.dark-theme :focus-visible {
+  outline-color: var(--touchline-accent-ink, #9cdebf);
 }
