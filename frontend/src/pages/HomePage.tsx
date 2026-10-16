@@ -223,68 +223,52 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 
   const navigationCards = [
     {
-      title: 'Live Match',
-      subtitle: 'Manage your match day',
-      icon: play,
-      color: 'amber',
-      route: '/live',
-      description: 'Live match console for event tracking'
-    },
-    {
       title: 'Matches',
       subtitle: 'Schedule & results',
       icon: trophy,
-      color: 'secondary',
-      route: '/matches',
-      description: 'Schedule matches and track results'
-    },
-    {
-      title: 'Lineup Management',
-      subtitle: 'Create team formations',
-      icon: football,
-      color: 'sky',
-      route: '/lineup-management',
-      description: 'Create and manage default team lineups with visual pitch interface'
-    },
-    {
-      title: 'Players',
-      subtitle: 'Player profiles',
-      icon: person,
-      color: 'indigo',
-      route: '/players',
-      description: 'Track individual player progress'
+      route: '/matches'
     },
     {
       title: 'Teams',
       subtitle: 'Team management',
       icon: people,
-      color: 'teal',
-      route: '/teams',
-      description: 'Manage your teams and rosters'
+      route: '/teams'
     },
     {
-      title: 'Awards',
-      subtitle: 'Recognition system',
-      icon: ribbon,
-      color: 'rose',
-      route: '/awards',
-      description: 'Celebrate achievements and milestones'
+      title: 'Players',
+      subtitle: 'Player profiles',
+      icon: person,
+      route: '/players'
+    },
+    {
+      title: 'Live Match',
+      subtitle: 'Manage your match day',
+      icon: play,
+      route: '/live'
+    },
+    {
+      title: 'Lineup Management',
+      subtitle: 'Create team formations',
+      icon: football,
+      route: '/lineup-management'
     },
     {
       title: 'Seasons',
       subtitle: 'Manage your seasons',
       icon: calendar,
-      color: 'primary',
-      route: '/seasons',
-      description: 'Create and organize your football seasons'
+      route: '/seasons'
+    },
+    {
+      title: 'Awards',
+      subtitle: 'Recognition system',
+      icon: ribbon,
+      route: '/awards'
     },
     {
       title: 'Statistics',
       subtitle: 'Performance insights',
       icon: statsChart,
-      color: 'purple',
-      route: '/statistics',
-      description: 'Coming soon - detailed analytics'
+      route: '/statistics'
     }
   ];
 
@@ -337,33 +321,41 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
       </IonHeader>
 
       <IonContent className="home-content">
-        <GuestBanner />
+        <div className="home-matchday-heading">
+          <h1>Match day</h1>
+          <p>
+            {!isAuthenticated && !accountRecoveryRequired
+              ? 'Guest mode · Recordings stay on this device. Limits apply.'
+              : 'Start a new match or pick up where you left off.'}
+          </p>
+        </div>
+
         {/* Live Matches Direct Resume Section */}
         {liveMatchesToResume.length > 0 && (
-          <div className="home-live-matches-section" style={{ padding: '0 var(--grassroots-space-md)', marginTop: '0.75rem' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <IonIcon icon={play} color="danger" />
+          <div className="home-live-matches-section">
+            <h3 className="home-section-heading">
+              <IonIcon icon={play} className="home-forest-icon" />
               <span>In-Progress Matches</span>
             </h3>
-            <div style={{ display: 'grid', gap: '0.5rem' }}>
+            <div className="home-live-matches-grid">
               {liveMatchesToResume.map(match => {
                 const homeName = allLocalTeams.find(t => t.id === match.homeTeamId)?.name || 'Home';
                 const awayName = allLocalTeams.find(t => t.id === match.awayTeamId)?.name || 'Away';
                 return (
                   <IonCard key={match.id} className="home-live-match-card" style={{ margin: 0 }}>
-                    <IonCardContent style={{ padding: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <IonCardContent className="home-live-match-content">
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: '1rem' }}>
+                        <div className="home-live-match-teams">
                           {homeName} vs {awayName}
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--grassroots-text-secondary)', marginTop: '2px' }}>
-                          Status: <span style={{ fontWeight: 700, color: match.status === 'LIVE' ? 'var(--ion-color-danger)' : 'var(--ion-color-warning)' }}>{match.status}</span>
+                        <div className="home-live-match-meta">
+                          Status: <span style={{ fontWeight: 700, color: match.status === 'LIVE' ? 'var(--touchline-forest, #12392d)' : 'var(--touchline-muted, #56645d)' }}>{match.status}</span>
                           {match.competition ? ` • ${match.competition}` : ''}
                         </div>
                       </div>
                       <IonButton
                         size="small"
-                        color="danger"
+                        className="home-resume-btn"
                         onClick={() => { if (discovery.canAccessMatch(match.id)) navigate(`/live/${match.id}`); }}
                         style={{ minHeight: '44px' }}
                       >
@@ -378,14 +370,16 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
         )}
 
         {/* Quick Start Card - Top Priority for Fast Recording */}
-        <div style={{ padding: '0 var(--grassroots-space-md)', marginTop: '0.75rem', marginBottom: '1rem' }}>
-          <IonCard className="nav-card nav-card-amber" style={{ margin: 0 }}>
-            <IonCardContent className="nav-card-content" style={{ padding: '1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                <IonIcon icon={play} className="nav-card-icon" color="amber" style={{ fontSize: '1.75rem' }} />
-                <div>
-                  <h2 className="nav-card-title" style={{ margin: 0, fontSize: '1.25rem' }}>Quick Match Start</h2>
-                  <p className="nav-card-subtitle" style={{ margin: 0, fontSize: '0.85rem' }}>Start recording your child's football match immediately</p>
+        <div className="home-quickstart-container">
+          <IonCard className="nav-card home-quickstart-card" style={{ margin: 0 }}>
+            <IonCardContent className="nav-card-content">
+              <div className="home-card-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem', marginBottom: '0.75rem' }}>
+                  <IonIcon icon={play} className="nav-card-icon home-forest-icon" style={{ fontSize: '1.75rem' }} />
+                  <div>
+                    <h2 className="nav-card-title" style={{ margin: 0, fontSize: '1.25rem' }}>Quick Match Start</h2>
+                    <p className="nav-card-subtitle" style={{ margin: 0, fontSize: '0.85rem' }}>Start recording your child's football match immediately</p>
+                  </div>
                 </div>
               </div>
 
@@ -569,7 +563,8 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                   <IonButton
                     color="primary"
-                    className="quickstart-start-btn"
+                    className={`quickstart-start-btn${liveMatchesToResume.length > 0 ? ' quickstart-start-btn-secondary' : ''}`}
+                    fill={liveMatchesToResume.length > 0 ? 'outline' : 'solid'}
                     disabled={accountRecoveryRequired || submitting || teamsLoading || !currentTeams.some(team => team.id === myTeamId)}
                     onClick={async () => {
                       if (accountRecoveryRequired || !discovery.isCurrent() || !currentTeams.some(team => team.id === myTeamId)) return;
@@ -665,20 +660,17 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
           </IonCard>
         </div>
 
-        {/* Hero Section */}
-        <div className="hero-section">
+        {/* A quiet greeting and honest community totals for remembered accounts. */}
+        {user && <div className="hero-section">
           <div className="hero-content">
-            <h1 className="hero-title">
-              {user ? `Welcome back, ${displayName || user.first_name || 'Coach'}!` : 'Welcome to MatchMaster!'}
-            </h1>
+            <h2 className="hero-title">
+              {`Welcome back, ${displayName || user.first_name || 'Coach'}!`}
+            </h2>
             <p className="hero-subtitle">
-              {user
-                ? 'Manage your teams, track player progress, and create memorable moments'
-                : 'The ultimate grassroots football management platform.'
-              }
+              Manage your teams, track player progress, and create memorable moments
             </p>
           </div>
-          {isAuthenticated && <p className="hero-subtitle">Across the MatchMaster community</p>}
+          {isAuthenticated && <p className="hero-subtitle community-label">Across the MatchMaster community</p>}
           {isAuthenticated && <div className="hero-stats">
             {quickStats.map((stat, index) => (
               <IonChip key={index} color={stat.color} className="stat-chip">
@@ -701,17 +693,18 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               Using offline data
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Navigation Grid */}
-        <div className="navigation-section">
+        <nav className="navigation-section home-navigation" aria-label="Your football">
+          <h2 className="home-section-heading">Your football</h2>
           <IonGrid className="navigation-grid">
             <IonRow>
               {navigationCards.map((card, index) => (
                 <IonCol size="12" sizeMd="6" sizeLg="4" key={index}>
                   <div className="nav-card-wrapper">
                     <IonCard
-                      className={`nav-card nav-card-${card.color}`}
+                      className="nav-card"
                       button={card.route !== '#'}
                       onClick={() => {
                         if (card.route === '#') return;
@@ -735,14 +728,12 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                           <IonIcon
                             icon={card.icon}
                             className="nav-card-icon"
-                            color={card.color}
                           />
                           <div className="nav-card-text">
                             <h3 className="nav-card-title">{card.title}</h3>
                             <p className="nav-card-subtitle">{card.subtitle}</p>
                           </div>
                         </div>
-                        <p className="nav-card-description">{card.description}</p>
                         {(card.title === 'Statistics') && (
                           <IonChip color="medium" className="coming-soon-chip">
                             <IonLabel>Coming Soon</IonLabel>
@@ -760,11 +751,16 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               ))}
             </IonRow>
           </IonGrid>
-        </div>
+        </nav>
 
         {/* Recent Activity Section */}
         <div className="activity-section">
           <RecentActivity onNavigate={navigate} limit={20} days={30} />
+        </div>
+
+        {/* Upgrade / Account Access (quiet secondary area) */}
+        <div className="home-guest-account-section">
+          <GuestBanner />
         </div>
       </IonContent>
     </IonPage>

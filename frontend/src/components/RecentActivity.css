@@ -1,201 +1,229 @@
+/* ===== RECENT ACTIVITY STYLES — TOUCHLINE FOREST ===== */
+
 .activity-card {
   margin: 1rem 0;
-  background: var(--grassroots-surface);
-  border: 1px solid var(--grassroots-surface-variant);
+  background: var(--touchline-surface, #ffffff);
+  border: 1px solid var(--touchline-line, #dce4de);
+  border-radius: var(--touchline-radius, 14px);
+  box-shadow: none;
 }
 
 .activity-card ion-card-content {
-  --background: var(--grassroots-surface);
-  background: var(--grassroots-surface);
+  --background: var(--touchline-surface, #ffffff);
+  background: var(--touchline-surface, #ffffff);
+  padding: var(--grassroots-space-md);
 }
 
 .activity-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: var(--grassroots-space-sm);
 }
 
 .activity-header .section-title {
   margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--grassroots-text-primary);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--touchline-ink, #14231d);
+  letter-spacing: -0.015em;
 }
 
 .activity-list {
   margin: 0;
   padding: 0;
-  --background: var(--grassroots-surface);
-  background: var(--grassroots-surface);
+  --background: var(--touchline-surface, #ffffff);
+  background: var(--touchline-surface, #ffffff);
 }
 
 .activity-item {
-  --padding-start: 0;
-  --padding-end: 0;
-  --inner-padding-end: 0;
-  --background: var(--grassroots-surface);
-  --color: var(--grassroots-text-primary);
-  margin-bottom: 0;
+  --padding-start: 0.5rem;
+  --padding-end: 0.5rem;
+  --inner-padding-end: 0.5rem;
+  --background: var(--touchline-surface, #ffffff);
+  --color: var(--touchline-ink, #14231d);
+  min-height: 44px;
+  margin-bottom: 2px;
   border-radius: 8px;
-  transition: background-color 0.2s ease;
+  transition: background-color 0.15s ease;
 }
 
 .activity-item:hover {
-  --background: var(--grassroots-surface-elevated);
+  --background: var(--touchline-soft, #edf3ee);
 }
 
 .activity-item-icon {
-  margin-right: 1rem;
-  font-size: 1.5rem;
+  margin-right: 0.75rem;
+  font-size: 1.25rem;
+  color: var(--touchline-forest, #12392d);
 }
 
 .activity-description {
-  margin: 0 0 0.5rem 0;
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: var(--grassroots-text-primary);
-  line-height: 1.4;
+  margin: 0 0 4px 0;
+  font-size: 0.9125rem;
+  font-weight: 600;
+  color: var(--touchline-ink, #14231d);
+  line-height: 1.35;
 }
 
 .activity-meta {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   flex-wrap: wrap;
 }
 
 .activity-type-chip {
-  --background: var(--ion-color-primary-tint);
-  --color: var(--ion-color-primary-shade);
-  font-size: 0.75rem;
-  height: 1.5rem;
-  text-transform: capitalize;
+  --background: var(--touchline-soft, #edf3ee);
+  --color: var(--touchline-forest, #12392d);
+  font-size: 0.7rem;
+  font-weight: 600;
+  height: 22px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 4px;
 }
 
 .activity-time {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
+  color: var(--touchline-muted, #56645d);
 }
 
 .activity-time ion-icon {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+}
+
+.activity-sublist {
+  padding-left: 1.5rem;
+  background: var(--touchline-soft, #edf3ee);
+  border-radius: 8px;
+  margin: 4px 0 8px;
+}
+
+.activity-subitem {
+  --background: transparent;
+  min-height: 40px;
+}
+
+.activity-time-chip {
+  --background: var(--touchline-surface, #ffffff);
+  --color: var(--touchline-muted, #56645d);
+  font-size: 0.7rem;
+  height: 20px;
 }
 
 .activity-placeholder {
   text-align: center;
-  padding: 2rem 1rem;
+  padding: var(--grassroots-space-xl) var(--grassroots-space-md);
 }
 
 .activity-placeholder .activity-icon {
-  font-size: 3rem;
-  color: var(--ion-color-medium);
-  margin-bottom: 1rem;
+  font-size: 2.5rem;
+  color: var(--touchline-muted, #56645d);
+  margin-bottom: var(--grassroots-space-sm);
 }
 
 .activity-placeholder h3 {
-  margin: 0 0 0.5rem 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--grassroots-text-primary);
+  margin: 0 0 4px 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--touchline-ink, #14231d);
 }
 
 .activity-placeholder p {
-  margin: 0 0 1.5rem 0;
-  color: var(--ion-color-medium);
-  font-size: 0.9rem;
+  margin: 0 0 var(--grassroots-space-md) 0;
+  color: var(--touchline-muted, #56645d);
+  font-size: 0.85rem;
   line-height: 1.4;
+}
+
+.activity-placeholder ion-button {
+  --border-color: var(--touchline-forest, #12392d);
+  --color: var(--touchline-forest, #12392d);
+  --border-radius: 8px;
+  min-height: 44px;
+  font-weight: 600;
+  text-transform: none;
 }
 
 .activity-error {
   text-align: center;
-  padding: 2rem 1rem;
+  padding: var(--grassroots-space-xl) var(--grassroots-space-md);
 }
 
 .activity-error .activity-icon {
-  font-size: 3rem;
-  color: var(--ion-color-danger);
-  margin-bottom: 1rem;
+  font-size: 2.5rem;
+  color: var(--ion-color-danger, #ef4444);
+  margin-bottom: var(--grassroots-space-sm);
 }
 
 .activity-error h3 {
-  margin: 0 0 0.5rem 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--ion-color-danger);
+  margin: 0 0 4px 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ion-color-danger, #ef4444);
 }
 
 .activity-error p {
-  margin: 0 0 1.5rem 0;
-  color: var(--ion-color-medium);
-  font-size: 0.9rem;
-}
-
-.activity-footer {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--ion-color-light);
-}
-
-.activity-pagination-info {
-  text-align: center;
-  margin-bottom: 0.75rem;
-}
-
-.activity-pagination-info ion-note {
-  font-size: 0.8rem;
-}
-
-.activity-pagination-controls {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.activity-pagination-controls ion-button {
-  --padding-start: 0.75rem;
-  --padding-end: 0.75rem;
+  margin: 0 0 var(--grassroots-space-md) 0;
+  color: var(--touchline-muted, #56645d);
   font-size: 0.85rem;
 }
 
 .activity-load-more {
-  margin-top: 0.5rem;
+  margin-top: var(--grassroots-space-sm);
   text-align: center;
 }
 
 .activity-load-more ion-button {
-  --color: var(--ion-color-primary);
-  font-size: 0.9rem;
+  --color: var(--touchline-forest, #12392d);
+  min-height: 44px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: none;
 }
 
 /* Dark theme adjustments */
 .dark-theme .activity-card {
-  background: var(--grassroots-surface);
-  border: 1px solid var(--grassroots-surface-variant);
+  background: var(--touchline-surface, #17241e);
+  border-color: var(--touchline-line, #263830);
+}
+
+.dark-theme .activity-card ion-card-content {
+  --background: var(--touchline-surface, #17241e);
+  background: var(--touchline-surface, #17241e);
+}
+
+.dark-theme .activity-list {
+  --background: var(--touchline-surface, #17241e);
+  background: var(--touchline-surface, #17241e);
 }
 
 .dark-theme .activity-item {
-  --background: var(--grassroots-surface);
-  --color: var(--grassroots-text-primary);
+  --background: var(--touchline-surface, #17241e);
+  --color: var(--touchline-ink, #f0f5f1);
 }
 
 .dark-theme .activity-item:hover {
-  --background: var(--grassroots-surface-elevated);
+  --background: var(--touchline-soft, #1d2e26);
 }
 
 .dark-theme .activity-description {
-  color: var(--grassroots-text-primary);
+  color: var(--touchline-ink, #f0f5f1);
 }
 
 .dark-theme .activity-header .section-title {
-  color: var(--grassroots-text-primary);
+  color: var(--touchline-ink, #f0f5f1);
 }
 
 .dark-theme .activity-placeholder h3,
 .dark-theme .activity-error h3 {
-  color: var(--grassroots-text-primary);
+  color: var(--touchline-ink, #f0f5f1);
+}
+
+.dark-theme .activity-sublist {
+  background: var(--touchline-soft, #1d2e26);
 }

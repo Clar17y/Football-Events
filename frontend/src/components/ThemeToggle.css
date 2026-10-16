@@ -1,31 +1,51 @@
-/* ===== THEME TOGGLE STYLES ===== */
+/* ===== THEME TOGGLE STYLES - TOUCHLINE SYSTEM ===== */
 
 .theme-toggle {
-  --color: var(--grassroots-text-on-dark);
+  --color: var(--touchline-ink, #14231d);
   --background: transparent;
-  --background-hover: rgba(255, 255, 255, 0.1);
-  --background-activated: rgba(255, 255, 255, 0.2);
+  --background-hover: var(--touchline-soft, rgba(0, 0, 0, 0.05));
+  --background-activated: var(--touchline-line, rgba(0, 0, 0, 0.1));
   --border-radius: 8px;
-  --padding-start: 8px;
-  --padding-end: 8px;
+  --padding-start: 6px;
+  --padding-end: 6px;
+  min-height: 44px;
+  min-width: 44px;
   margin: 0;
 }
 
 .theme-toggle-icon {
   font-size: 1.25rem;
-  transition: transform 0.3s ease;
+  color: var(--touchline-ink, #14231d);
+  transition: transform 0.2s ease;
 }
 
 .theme-toggle:hover .theme-toggle-icon {
   transform: scale(1.1);
 }
 
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--touchline-forest, #12392d);
+  outline-offset: 2px;
+}
+
 /* Dark theme adjustments */
 .dark-theme .theme-toggle {
-  --color: var(--grassroots-text-on-dark);
+  --color: var(--touchline-ink, #f4f6f4);
+}
+
+.dark-theme .theme-toggle-icon {
+  color: var(--touchline-ink, #f4f6f4);
+}
+
+.dark-theme .theme-toggle:focus-visible {
+  outline-color: var(--touchline-forest, #2e7d62);
 }
 
 /* Light theme adjustments */
 body:not(.dark-theme) .theme-toggle {
-  --color: var(--grassroots-text-on-dark);
+  --color: var(--touchline-ink, #14231d);
+}
+
+body:not(.dark-theme) .theme-toggle-icon {
+  color: var(--touchline-ink, #14231d);
 }

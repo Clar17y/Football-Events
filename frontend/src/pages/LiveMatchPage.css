@@ -1,104 +1,908 @@
-/* Live Match Page styles */
-
-.event-section {
-  margin-top: 12px;
+.live-match-page {
+  --background: var(--touchline-bg);
+  background-color: var(--touchline-bg);
+  color: var(--touchline-ink);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: -0.01em;
 }
 
-.event-grid {
+.live-match-page ion-content {
+  --background: var(--touchline-bg);
+  --color: var(--touchline-ink);
+}
+
+.touchline-container {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 20px 32px;
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .touchline-container {
+    max-width: 720px;
+    padding: 0 32px 48px;
+  }
+}
+
+.touchline-viewer-status {
+  color: var(--touchline-muted);
+  font-size: 14px;
+  margin: 12px 0 0;
+}
+
+/* Open Scoreboard */
+.live-header.touchline-scoreboard {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0 16px;
+  gap: 12px;
 }
 
-.event-btn {
-  --border-radius: 10px;
-  --padding-start: 12px;
-  --padding-end: 12px;
-  font-weight: 600;
-}
-
-.event-btn--rose {
-  --background: var(--position-forward, var(--ion-color-rose));
-  --background-hover: var(--position-forward, var(--ion-color-rose));
-  --background-activated: var(--position-forward, var(--ion-color-rose));
-  --color: #000;
-}
-
-.event-btn--indigo {
-  --background: var(--position-defender, var(--ion-color-indigo));
-  --background-hover: var(--position-defender, var(--ion-color-indigo));
-  --background-activated: var(--position-defender, var(--ion-color-indigo));
-  --color: #fff;
-}
-
-.event-btn--emerald {
-  --background: var(--position-goalkeeper, var(--ion-color-emerald));
-  --background-hover: var(--position-goalkeeper, var(--ion-color-emerald));
-  --background-activated: var(--position-goalkeeper, var(--ion-color-emerald));
-  --color: #000;
-}
-
-.event-btn--amber {
-  --background: var(--position-midfielder, var(--ion-color-amber));
-  --background-hover: var(--position-midfielder, var(--ion-color-amber));
-  --background-activated: var(--position-midfielder, var(--ion-color-amber));
-  --color: #000;
-}
-
-.team-toggle {
+.touchline-team-btn {
+  background: none;
+  border: none;
+  padding: 6px 4px;
+  margin: 0;
+  cursor: pointer;
+  text-align: left;
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 44px;
+  justify-content: center;
+  color: inherit;
+  font-family: inherit;
+}
+
+.touchline-team-btn:last-child {
+  text-align: right;
+  align-items: flex-end;
+}
+
+.touchline-team-name {
+  font-size: clamp(16px, 4.65vw, 20px);
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--touchline-ink);
+  overflow-wrap: break-word;
+  word-break: normal;
+  max-width: 100%;
+}
+
+.touchline-team-indicator {
+  display: block;
+  height: 4px;
+  width: 60px;
+  border-radius: 2px;
+  margin-top: 6px;
+  background-color: var(--touchline-line);
+  transition: background-color 0.2s ease;
+}
+
+.touchline-team-active .touchline-team-indicator {
+  background-color: var(--touchline-forest);
+}
+
+.live-header-score.touchline-score {
+  font-size: clamp(42px, 12.8vw, 56px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding: 0;
+  color: var(--touchline-ink);
+}
+
+/* Open Clock & Status Row */
+.touchline-clock-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0 20px;
+  gap: 12px;
+}
+
+.touchline-clock-main {
+  font-size: clamp(44px, 14.35vw, 60px);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  color: var(--touchline-ink);
+  line-height: 1;
+}
+
+.touchline-clock-divider {
+  width: 1px;
+  height: 44px;
+  background-color: var(--touchline-line);
+}
+
+.touchline-clock-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.touchline-period-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--touchline-ink);
+  line-height: 1.1;
+}
+
+.touchline-live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--touchline-muted);
+}
+
+.touchline-live-tag.touchline-tag-live {
+  color: var(--touchline-accent-ink);
+}
+
+.touchline-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--touchline-muted);
+}
+
+.touchline-status-dot.touchline-dot-live {
+  background-color: var(--touchline-accent-ink);
+}
+
+.touchline-status-dot.touchline-dot-paused {
+  background-color: #d97706;
+}
+
+.touchline-clock-action {
+  display: flex;
+  align-items: center;
   justify-content: center;
 }
 
-.team-btn {
-  --padding-start: 16px;
-  --padding-end: 16px;
-  font-size: 1rem;
+.touchline-circle-action {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--touchline-soft);
+  border: 1px solid var(--touchline-line);
+  color: var(--touchline-accent-ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s ease, background 0.15s ease;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.touchline-circle-action:active {
+  transform: scale(0.95);
+}
+
+.touchline-circle-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.touchline-circle-action ion-icon {
+  font-size: 22px;
+}
+
+.touchline-circle-label {
+  position: absolute;
+  top: calc(100% + 4px);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Clean Divider */
+.touchline-divider {
+  height: 1px;
+  background-color: var(--touchline-line);
+  margin: 12px 0 16px;
+  border: none;
+}
+
+/* Tracked Player Row */
+.touchline-tracked-player-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0 16px;
+  gap: 12px;
+}
+
+.touchline-tracked-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.touchline-shirt-badge {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: var(--touchline-soft);
+  border: 1px solid var(--touchline-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--touchline-accent-ink);
+  flex-shrink: 0;
+}
+
+.touchline-shirt-badge ion-icon {
+  font-size: 26px;
+}
+
+.touchline-shirt-num {
+  position: absolute;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--touchline-accent-ink);
+  line-height: 1;
+}
+
+.touchline-tracked-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.touchline-tracked-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--touchline-ink);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.touchline-tracked-subtitle {
+  font-size: 13px;
+  color: var(--touchline-muted);
+}
+
+.touchline-change-player-pill {
+  background: var(--touchline-soft);
+  border: 1px solid var(--touchline-line);
+  border-radius: 20px;
+  padding: 8px 14px;
+  font-size: 13px;
   font-weight: 700;
+  color: var(--touchline-accent-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 44px;
+  font-family: inherit;
 }
 
-.live-header { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; }
-.live-header-main { flex: 1; min-width: 0; text-align: center; }
-.live-header-scoreboard { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; }
-.live-header-team { font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
-.live-header-score { font-size: 22px; font-weight: 800; white-space: nowrap; }
-.live-header-nav { flex: 0 0 44px; width: 44px; min-height: 44px; margin: 0; --padding-start: 0; --padding-end: 0; }
-.live-match-page .event-btn { min-height: 52px; height: auto; white-space: normal; margin: 0; --padding-start: 8px; --padding-end: 8px; }
-.live-match-page .event-btn ion-icon { flex-shrink: 0; font-size: 18px; margin-inline-end: 6px; }
-.event-btn-label { display: flex; flex: 1; flex-direction: column; align-items: center; gap: 3px; min-width: 0; max-width: 100%; padding-block: 5px; }
-.event-btn-name { max-width: 100%; white-space: normal; overflow-wrap: anywhere; hyphens: auto; line-height: 1.2; }
-.event-btn-premium { max-width: 100%; padding: 2px 4px; border-radius: 4px; background: rgba(255, 255, 255, 0.2); font-size: 11px; line-height: 1.2; white-space: nowrap; }
-.live-match-page .team-btn { flex: 1; min-width: 0; min-height: 48px; height: auto; white-space: normal; overflow-wrap: anywhere; --padding-start: 8px; --padding-end: 8px; }
-.live-guest-status { padding: 8px 16px; color: var(--grassroots-text-secondary, var(--ion-color-medium)); font-size: 13px; }
-.live-match-page ion-grid { box-sizing: border-box; width: 100%; max-width: 100%; --ion-grid-padding: 0; }
-.live-match-page ion-col { box-sizing: border-box; min-width: 0; max-width: 100%; --ion-grid-column-padding: 0; }
-.live-match-page ion-card { margin: 4px 8px; }
-.live-match-page ion-card-content { padding: 8px 10px; }
-.live-match-page ion-button { min-height: 44px; }
-.live-recording-actions { padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; }
-.live-match-page .event-section { margin-top: 0; }
-.live-error { padding: 12px 16px; color: var(--ion-color-danger); overflow-wrap: anywhere; }
-.live-player-picker { padding: 16px; overflow-y: auto; }
-.live-player-picker h3 { margin: 0 0 8px; overflow-wrap: anywhere; }
-.live-player-picker input[type="search"], .live-player-picker select { display: block; width: 100%; box-sizing: border-box; min-height: 48px; margin: 6px 0 12px; padding: 8px; border: 1px solid var(--grassroots-surface-variant, var(--ion-color-medium)); border-radius: 8px; background: var(--grassroots-surface, var(--ion-background-color)); color: var(--grassroots-text-primary, var(--ion-text-color)); }
-.live-roster-list { max-height: 30vh; overflow-y: auto; }
-.live-roster-list ion-button { min-height: 48px; height: auto; white-space: normal; }
-.live-roster-row { display: flex; gap: 8px; align-items: center; }
-.live-roster-row > ion-button:first-child { flex: 1; min-width: 0; margin: 4px 0; }
-.live-roster-pitch { flex-shrink: 0; min-width: 88px; }
-.live-track-player { display: flex; gap: 8px; align-items: center; min-height: 48px; }
-.live-track-player input { width: 22px; height: 22px; }
-.live-picker-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.live-event-feedback { max-width: calc(100% - 24px); box-sizing: border-box; background: var(--grassroots-surface, var(--ion-color-dark)); color: var(--grassroots-text-primary, var(--ion-color-light)); border: 1px solid var(--ion-color-medium); border-radius: 12px; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-@media (max-width: 480px) {
-  .live-match-page .event-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .live-match-page .event-btn { min-height: 48px; font-size: 14px; }
-  .live-header-team { font-size: 16px; }
-  .live-match-page ion-card { margin-inline: 8px; }
+.touchline-change-player-pill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-/* Dark Theme Support */
-.dark-theme .event-section {
-  color: var(--grassroots-text-primary);
+/* Current Team Select Dropdown */
+.touchline-current-team-wrap {
+  margin-bottom: 20px;
+}
+
+.touchline-field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--touchline-muted);
+  margin-bottom: 6px;
+}
+
+.touchline-team-dropdown-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--touchline-surface);
+  border: 1px solid var(--touchline-line);
+  border-radius: var(--touchline-radius);
+  height: 48px;
+  padding: 0 14px;
+  gap: 10px;
+}
+
+.touchline-team-dropdown-icon {
+  font-size: 20px;
+  color: var(--touchline-accent-ink);
+  flex-shrink: 0;
+}
+
+.touchline-team-dropdown-select {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--touchline-ink);
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 20px;
+}
+
+.touchline-team-dropdown-arrow {
+  position: absolute;
+  right: 14px;
+  pointer-events: none;
+  font-size: 18px;
+  color: var(--touchline-muted);
+}
+
+/* Main Action - Large Goal Button */
+.touchline-btn-goal {
+  width: 100%;
+  height: 110px;
+  background-color: var(--touchline-forest);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--touchline-radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.1s ease, filter 0.15s ease;
+  font-family: inherit;
+  margin-bottom: 12px;
+}
+
+.touchline-btn-goal:active {
+  transform: scale(0.98);
+}
+
+.touchline-btn-goal:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.touchline-btn-goal-icon {
+  font-size: 34px;
+}
+
+.touchline-btn-goal-text {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+/* Secondary Action Pairs */
+.touchline-action-pairs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.touchline-action-pair-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.touchline-action-btn {
+  height: 56px;
+  background: var(--touchline-surface);
+  border: 1px solid var(--touchline-line);
+  border-radius: var(--touchline-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--touchline-ink);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 12px;
+  transition: background 0.15s ease, transform 0.1s ease;
+  font-family: inherit;
+  min-height: 44px;
+}
+
+.touchline-action-btn:active {
+  transform: scale(0.98);
+}
+
+.touchline-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.touchline-action-btn ion-icon {
+  font-size: 22px;
+}
+
+.touchline-card-yellow {
+  color: #eab308;
+}
+
+.touchline-card-red {
+  color: #dc2626;
+}
+
+/* More Events Disclosure */
+.touchline-more-toggle {
+  width: 100%;
+  height: 58px;
+  background: var(--touchline-surface);
+  border: 1px solid var(--touchline-line);
+  border-radius: var(--touchline-radius);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  cursor: pointer;
+  color: var(--touchline-ink);
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  font-family: inherit;
+  min-height: 44px;
+}
+
+.touchline-more-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.touchline-more-icon-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--touchline-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--touchline-accent-ink);
+}
+
+.touchline-more-icon-badge ion-icon {
+  font-size: 18px;
+}
+
+.touchline-more-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 10px 0 16px;
+}
+
+.touchline-more-item-btn {
+  min-height: 48px;
+  background: var(--touchline-surface);
+  border: 1px solid var(--touchline-line);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  color: var(--touchline-ink);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.touchline-more-item-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.touchline-premium-tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Latest Moment Section */
+.touchline-latest-moment-section {
+  margin: 16px 0 20px;
+}
+
+.touchline-latest-moment-card {
+  background: var(--touchline-soft);
+  border-radius: var(--touchline-radius);
+  border: 1px solid var(--touchline-line);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.touchline-moment-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.touchline-moment-icon-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--touchline-surface);
+  border: 1px solid var(--touchline-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--touchline-accent-ink);
+  flex-shrink: 0;
+}
+
+.touchline-moment-icon-circle ion-icon {
+  font-size: 20px;
+}
+
+.touchline-moment-time {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--touchline-muted);
+}
+
+.touchline-moment-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.touchline-moment-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--touchline-ink);
+  line-height: 1.2;
+}
+
+.touchline-moment-subtitle {
+  font-size: 13px;
+  color: var(--touchline-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.touchline-moment-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.touchline-undo-btn {
+  background: none;
+  border: none;
+  color: var(--touchline-accent-ink);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-family: inherit;
+  min-height: 44px;
+}
+
+.touchline-undo-btn:hover {
+  background: rgba(18, 57, 45, 0.08);
+}
+
+.touchline-undo-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Secondary Match Controls & Timeline Disclosures */
+.touchline-secondary-disclosure,
+.touchline-timeline-disclosure {
+  background: var(--touchline-surface);
+  border: 1px solid var(--touchline-line);
+  border-radius: var(--touchline-radius);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.touchline-secondary-summary,
+.touchline-timeline-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--touchline-ink);
+  cursor: pointer;
+  list-style: none;
+  min-height: 44px;
+  user-select: none;
+}
+
+.touchline-secondary-summary::-webkit-details-marker,
+.touchline-timeline-summary::-webkit-details-marker {
+  display: none;
+}
+
+.touchline-secondary-content {
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--touchline-line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.touchline-secondary-btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.touchline-timeline-content {
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--touchline-line);
+}
+
+/* Compact Picker & Change Player Sheet */
+.touchline-sheet-content {
+  padding: 20px;
+  max-height: 85vh;
+  box-sizing: border-box;
+  overflow-y: auto;
+  color: var(--touchline-ink);
+  background: var(--touchline-surface);
+}
+
+.touchline-picker-modal {
+  --height: auto;
+  --width: min(100%, 560px);
+  --max-height: 90dvh;
+  --border-radius: 20px 20px 0 0;
+  align-items: flex-end;
+}
+
+@media (min-width: 768px) {
+  .touchline-picker-modal {
+    --border-radius: 20px;
+    align-items: center;
+  }
+}
+
+.touchline-sheet-header {
+  margin-bottom: 16px;
+}
+
+.touchline-sheet-title {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 4px;
+  color: var(--touchline-ink);
+}
+
+.touchline-sheet-meta {
+  font-size: 14px;
+  color: var(--touchline-muted);
+  margin: 0;
+}
+
+.touchline-sheet-search {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  margin: 6px 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--touchline-line);
+  border-radius: 10px;
+  background: var(--touchline-surface);
+  color: var(--touchline-ink);
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.touchline-sheet-roster-list {
+  max-height: 35vh;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.touchline-roster-item-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.touchline-roster-item-row > ion-button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.touchline-rating-details > summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  color: var(--touchline-muted);
+  font-size: 14px;
+}
+
+.touchline-pitch-toggle-btn {
+  min-height: 48px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--touchline-line);
+  background: var(--touchline-surface);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--touchline-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.touchline-pitch-toggle-btn.on-pitch {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #86efac;
+}
+
+.touchline-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* Error and Status Alerts */
+.live-error {
+  padding: 12px 16px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  border-radius: 10px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.live-guest-status {
+  color: var(--touchline-muted);
+  font-size: 14px;
+}
+
+.live-player-picker {
+  padding: 20px;
+}
+
+.live-roster-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.live-roster-pitch {
+  flex-shrink: 0;
+  min-width: 88px;
+}
+
+.live-track-player {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  margin: 8px 0;
+  font-size: 14px;
+  color: var(--touchline-ink);
+}
+
+.live-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.live-event-feedback {
+  max-width: calc(100% - 24px);
+  box-sizing: border-box;
+  background: var(--touchline-surface);
+  color: var(--touchline-ink);
+  border: 1px solid var(--touchline-line);
+  border-radius: var(--touchline-radius);
+  padding: 8px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Keep the recorder and latest moment together on narrow screens. */
+@media (max-width: 767px) {
+  .live-header.touchline-scoreboard {
+    padding-bottom: 12px;
+  }
+
+  .touchline-clock-row {
+    padding-top: 4px;
+  }
+
+  .touchline-divider {
+    margin: 8px 0 12px;
+  }
+
+  .touchline-tracked-player-row {
+    padding-bottom: 12px;
+  }
+
+  .touchline-current-team-wrap {
+    margin-bottom: 16px;
+  }
+
+  .touchline-btn-goal {
+    margin-bottom: 8px;
+  }
+
+  .touchline-action-pairs {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .touchline-more-toggle {
+    margin-bottom: 8px;
+  }
+
+  .touchline-latest-moment-section {
+    margin-top: 12px;
+  }
+}
+
+.touchline-container :is(button, select, input, summary):focus-visible,
+.touchline-sheet-content :is(button, select, input, summary):focus-visible {
+  outline: 2px solid var(--touchline-accent-ink);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .touchline-container * {
+    transition: none !important;
+  }
 }

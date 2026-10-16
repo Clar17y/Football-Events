@@ -1,14 +1,11 @@
 @import './SelectionModalBase.css';
 
-/* ===== TEAM SELECTION MODAL STYLES ===== */
-/* Mobile-first design optimized for iPhone UX */
+/* ===== TEAM SELECTION MODAL STYLES - TOUCHLINE SYSTEM ===== */
 
 .team-selection-modal {
-  --border-radius: 12px;
-  --box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --border-radius: var(--touchline-radius, 14px);
+  --box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
 }
-
-/* Search styles moved to SelectionModalBase.css */
 
 /* Loading State */
 .loading-container {
@@ -21,25 +18,22 @@
 }
 
 .loading-container ion-spinner {
-  --color: var(--ion-color-indigo);
+  --color: var(--touchline-forest, #12392d);
   transform: scale(1.2);
 }
 
-/* Team list styles moved to base */
-
-/* Team item styles moved to base */
-
 /* Team Avatar */
 .team-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 16px;
+  margin-right: 14px;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: none;
+  border: 1px solid var(--touchline-line, #dce4de);
   overflow: hidden;
   position: relative;
 }
@@ -51,31 +45,31 @@
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 1.2rem;
-  border-radius: 12px;
+  font-size: 1.15rem;
+  border-radius: 10px;
+  background: var(--touchline-soft, #edf3ee);
+  color: var(--touchline-ink, #14231d);
 }
 
 .team-logo-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .no-team-avatar {
-  background: var(--ion-color-medium, var(--grassroots-text-secondary)) !important;
-  color: var(--grassroots-text-on-accent) !important;
+  background: var(--touchline-soft, #edf3ee) !important;
+  color: var(--touchline-muted, #56645d) !important;
 }
 
 .no-team-avatar ion-icon {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
 }
 
-/* Team label styles largely covered by base; keep unique cases below */
-
 .team-description {
-  font-size: 0.875rem;
-  color: var(--ion-color-medium, var(--grassroots-text-secondary));
+  font-size: 0.85rem;
+  color: var(--touchline-muted, #56645d);
   margin: 0;
   line-height: 1.3;
   overflow: hidden;
@@ -84,30 +78,30 @@
 }
 
 .dark-theme .team-description {
-  color: var(--grassroots-text-tertiary);
+  color: var(--touchline-muted, #9ab0a4);
 }
 
 .empty-state h3 {
   font-weight: 600;
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   margin: 0 0 8px 0;
-  color: var(--ion-color-medium, var(--grassroots-text-secondary));
+  color: var(--touchline-ink, #14231d);
 }
 
 .empty-state p {
-  font-size: 1rem;
+  font-size: 0.95rem;
   margin: 0;
-  color: var(--ion-color-medium, var(--grassroots-text-secondary));
+  color: var(--touchline-muted, #56645d);
 }
 
-/* No Team Item Specific Styles */
+/* No Team Item */
 .no-team-item {
-  border-top: 1px solid var(--ion-color-light-shade, var(--grassroots-surface-variant));
+  border-top: 1px solid var(--touchline-line, #dce4de);
   margin-bottom: 8px;
 }
 
 .dark-theme .no-team-item {
-  border-top-color: var(--grassroots-surface-variant);
+  border-top-color: var(--touchline-line, #2a3e34);
 }
 
 /* Responsive Adjustments */
@@ -125,49 +119,23 @@
   }
   
   .team-avatar {
-    width: 52px;
-    height: 52px;
-    margin-right: 14px;
+    width: 44px;
+    height: 44px;
+    margin-right: 12px;
   }
   
   .team-name {
-    font-size: 1.05rem;
+    font-size: 1rem;
   }
-  
-  .team-description {
-    font-size: 0.9rem;
-  }
-}
-
-/* Animation for modal entrance */
-@keyframes slideUpIn {
-  from {
-    transform: translateY(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.team-selection-modal.modal-entering {
-  animation: slideUpIn 0.3s ease-out;
-}
-
-/* Haptic feedback simulation */
-.team-item:active {
-  transform: scale(0.98);
-  transition: transform 0.1s ease;
 }
 
 /* Team Selection Modal Color Stripes */
 .team-selection-modal .team-color-stripes {
   position: absolute;
-  right: 40px;
+  right: 36px;
   top: 0;
   bottom: 0;
-  width: 18px;
+  width: 16px;
   display: flex;
   flex-direction: column;
   z-index: 1;
@@ -179,15 +147,13 @@
 }
 
 .team-selection-modal .team-color-stripes .stripe-primary {
-  background-color: var(--team-primary, var(--ion-color-teal));
+  background-color: var(--team-primary, var(--touchline-forest));
 }
 
 .team-selection-modal .team-color-stripes .stripe-secondary {
-  background-color: var(--team-secondary, var(--ion-color-teal-tint));
+  background-color: var(--team-secondary, var(--touchline-soft));
 }
 
-
-/* Safe area adjustments for iPhone */
 @supports (padding: max(0px)) {
   .team-selection-content {
     --padding-bottom: max(20px, env(safe-area-inset-bottom));

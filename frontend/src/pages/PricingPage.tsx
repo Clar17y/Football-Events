@@ -31,13 +31,13 @@ const PricingPage: React.FC<PricingPageProps> = ({ onNavigate }) => {
     };
 
     return (
-        <IonPage>
+        <IonPage className="pricing-page">
             <IonHeader>
-                <IonToolbar>
+                <IonToolbar style={{ '--background': 'var(--touchline-bg, #f8faf7)', '--color': 'var(--touchline-ink, #14231d)' }}>
                     <IonButtons slot="start">
                         <IonBackButton defaultHref="/dashboard" text="Back" />
                     </IonButtons>
-                    <IonTitle>Pricing Plans</IonTitle>
+                    <IonTitle style={{ fontWeight: 700 }}>Pricing plans</IonTitle>
                     <IonButtons slot="end">
                         <ThemeToggle />
                     </IonButtons>
@@ -51,7 +51,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onNavigate }) => {
                         Simple, Fair Pricing
                     </h2>
                     <p className="landing-section-subtitle">
-                        {user ? 'Upgrade your plan to unlock more features.' : 'Start free, upgrade when you need more.'}
+                        Start free. Premium upgrades are coming soon.
                     </p>
 
                     <div className="pricing-cards">
@@ -133,7 +133,7 @@ const PricingPage: React.FC<PricingPageProps> = ({ onNavigate }) => {
 
                         {/* Premium Tier */}
                         <div className="pricing-card featured">
-                            <span className="pricing-badge">Best Value</span>
+                            <span className="pricing-badge">Coming soon</span>
                             <h3 className="pricing-tier-name">{TIERS.premium.name}</h3>
                             <p className="pricing-tier-tagline">{TIERS.premium.tagline}</p>
                             <div className="pricing-price">
@@ -157,10 +157,10 @@ const PricingPage: React.FC<PricingPageProps> = ({ onNavigate }) => {
                                 className="pricing-cta"
                                 onClick={() => {
                                     // TODO: Implement Stripe checkout or upgrade flow
-                                    alert('Premium upgrade coming soon! We\'ll notify you when it\'s available.');
+                                    alert('Premium upgrades are coming soon.');
                                 }}
                             >
-                                Upgrade to Premium
+                                Premium coming soon
                             </IonButton>
                         </div>
                     </div>

@@ -1,72 +1,76 @@
-/* ===== SEASONS PAGE STYLES ===== */
-/* Beautiful, modern season management interface following the grassroots design system */
+/* ===== SEASONS PAGE STYLES - TOUCHLINE SYSTEM ===== */
+/* Modern season management interface following the open forest system */
+
+@import '../styles/brand-headers.css';
 
 /* Seasons Header Section */
 .seasons-header {
-  padding: var(--grassroots-space-lg) var(--grassroots-space-md) var(--grassroots-space-md);
-  background: linear-gradient(135deg, var(--grassroots-surface) 0%, var(--grassroots-surface-elevated) 100%);
-  border-bottom: 1px solid var(--grassroots-surface-variant);
+  padding: 20px;
+  background: var(--touchline-bg, #f8faf7);
+  border-bottom: 1px solid var(--touchline-line, #dce4de);
 }
 
 .seasons-title-section {
-  margin-bottom: var(--grassroots-space-md);
+  margin-bottom: var(--grassroots-space-sm, 8px);
 }
 
 .seasons-main-title {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 700;
   font-size: 1.75rem;
-  color: white;
+  color: var(--touchline-ink, #14231d);
   margin: 0;
   line-height: 1.2;
   letter-spacing: -0.025em;
-  padding: var(--grassroots-space-sm) var(--grassroots-space-md);
-  border-radius: var(--grassroots-radius-sm);
+  padding: 0;
 }
 
 .seasons-subtitle {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 0.95rem;
-  color: var(--grassroots-text-secondary);
-  margin: var(--grassroots-space-xs) 0 0 0;
-  font-weight: 500;
+  color: var(--touchline-muted, #56645d);
+  margin: 4px 0 0 0;
+  font-weight: 400;
 }
 
 .seasons-search {
-  --background: var(--grassroots-surface);
-  --border-radius: var(--grassroots-radius-md);
-  --box-shadow: var(--grassroots-shadow-sm);
-  --color: var(--grassroots-text-primary);
-  --placeholder-color: var(--grassroots-text-secondary);
-  margin-top: var(--grassroots-space-sm);
+  --background: var(--touchline-surface, #ffffff);
+  --border-radius: var(--touchline-radius, 14px);
+  --box-shadow: none;
+  --color: var(--touchline-ink, #14231d);
+  --placeholder-color: var(--touchline-muted, #56645d);
+  border: 1px solid var(--touchline-line, #dce4de);
+  border-radius: var(--touchline-radius, 14px);
+  margin-top: 12px;
 }
 
 /* Seasons Content */
 .seasons-content {
-  padding: var(--grassroots-space-md);
+  padding: 20px;
 }
 
 /* Season Cards */
 .season-card {
   position: relative;
-  margin-bottom: var(--grassroots-space-md);
-  border-radius: var(--grassroots-radius-md);
-  box-shadow: var(--grassroots-shadow-sm);
-  border: 1px solid var(--grassroots-surface-variant);
+  margin-bottom: 16px;
+  border-radius: var(--touchline-radius, 14px);
+  box-shadow: none;
+  border: 1px solid var(--touchline-line, #dce4de);
+  background: var(--touchline-surface, #ffffff);
   overflow: hidden;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, transform 0.2s ease;
 }
 
 .season-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--grassroots-shadow-md);
+  transform: translateY(-1px);
 }
 
 .season-card-active {
-  border-left: 4px solid var(--ion-color-primary);
+  border-left: 4px solid var(--touchline-forest, #12392d);
 }
 
 .season-card-inactive {
-  border-left: 4px solid var(--ion-color-medium);
+  border-left: 4px solid var(--touchline-line, #dce4de);
 }
 
 /* Season Status Bar */
@@ -80,11 +84,11 @@
 }
 
 .season-status-bar.active {
-  background: linear-gradient(90deg, var(--ion-color-primary) 0%, var(--ion-color-primary-tint) 100%);
+  background: var(--touchline-forest, #12392d);
 }
 
 .season-status-bar.inactive {
-  background: linear-gradient(90deg, var(--ion-color-medium) 0%, var(--ion-color-medium-tint) 100%);
+  background: var(--touchline-line, #dce4de);
 }
 
 /* Season Card Header */
@@ -92,7 +96,8 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: var(--grassroots-space-sm);
+  gap: 12px;
+  padding: 16px;
 }
 
 .season-info {
@@ -103,9 +108,9 @@
 .season-name {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 600;
-  font-size: 1.1rem;
-  color: var(--grassroots-text-primary);
-  margin: 0 0 var(--grassroots-space-xs) 0;
+  font-size: 1.15rem;
+  color: var(--touchline-ink, #14231d);
+  margin: 0 0 6px 0;
   line-height: 1.3;
   word-wrap: break-word;
 }
@@ -113,55 +118,57 @@
 .season-dates {
   display: flex;
   align-items: center;
-  gap: var(--grassroots-space-xs);
+  gap: 6px;
   font-size: 0.85rem;
-  color: var(--grassroots-text-secondary);
+  color: var(--touchline-muted, #56645d);
   font-weight: 500;
 }
 
 .season-dates ion-icon {
   font-size: 1rem;
-  color: var(--ion-color-primary);
+  color: var(--touchline-forest, #12392d);
 }
 
-/* Season ellipses button styling */
+/* Season ellipses button */
 .season-ellipses-button {
-  color: black;
-  --padding-start: 8px;
-  --padding-end: 8px;
-  --padding-top: 8px;
-  --padding-bottom: 8px;
+  color: var(--touchline-ink, #14231d);
+  min-height: 44px;
+  min-width: 44px;
 }
 
 .dark-theme .season-ellipses-button {
-  color: white;
+  color: var(--touchline-ink, #f4f6f4);
 }
 
 /* Season Stats */
 .season-stats {
   display: flex;
-  gap: var(--grassroots-space-xs);
+  gap: 8px;
   flex-wrap: wrap;
-  margin-top: var(--grassroots-space-sm);
+  padding: 0 16px 16px 16px;
 }
 
 .status-chip {
-  --background: var(--ion-color-success-tint);
-  --color: var(--ion-color-success-shade);
+  --background: var(--touchline-soft, #edf3ee);
+  --color: var(--touchline-forest, #12392d);
   font-weight: 600;
   font-size: 0.8rem;
+  border-radius: 8px;
+  height: 26px;
 }
 
 .stat-chip {
-  --background: var(--ion-color-medium-tint);
-  --color: var(--ion-color-medium-shade);
+  --background: var(--touchline-soft, #edf3ee);
+  --color: var(--touchline-muted, #56645d);
   font-weight: 500;
   font-size: 0.8rem;
+  border-radius: 8px;
+  height: 26px;
 }
 
 .status-chip ion-icon,
 .stat-chip ion-icon {
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   margin-right: 4px;
 }
 
@@ -172,165 +179,123 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: var(--grassroots-space-xl) var(--grassroots-space-md);
-  min-height: 400px;
+  padding: 48px 20px;
+  min-height: 360px;
 }
 
 .empty-icon {
-  font-size: 4rem;
-  color: var(--ion-color-primary);
-  margin-bottom: var(--grassroots-space-md);
-  opacity: 0.7;
+  font-size: 3.5rem;
+  color: var(--touchline-forest, #12392d);
+  margin-bottom: 16px;
+  opacity: 0.6;
 }
 
 .empty-title {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 600;
   font-size: 1.25rem;
-  color: var(--grassroots-text-primary);
-  margin: 0 0 var(--grassroots-space-sm) 0;
+  color: var(--touchline-ink, #14231d);
+  margin: 0 0 8px 0;
 }
 
 .empty-subtitle {
   font-size: 0.95rem;
-  color: var(--grassroots-text-secondary);
-  margin: 0 0 var(--grassroots-space-lg) 0;
-  max-width: 300px;
-  line-height: 1.4;
+  color: var(--touchline-muted, #56645d);
+  margin: 0 0 20px 0;
+  max-width: 320px;
+  line-height: 1.5;
 }
 
 .empty-action {
-  --border-radius: var(--grassroots-radius-md);
+  --border-radius: var(--touchline-radius, 14px);
+  --background: var(--touchline-forest, #12392d);
+  --color: #ffffff;
   font-weight: 600;
-  max-width: 250px;
-}
-
-/* Dark mode support */
-.dark-theme .seasons-header {
-  background: linear-gradient(135deg, var(--grassroots-surface-dark) 0%, var(--grassroots-surface-elevated-dark) 100%);
-  border-bottom-color: var(--grassroots-surface-variant-dark);
-}
-
-.dark-theme .seasons-subtitle {
-  color: var(--grassroots-text-secondary-dark);
-}
-
-.dark-theme .seasons-search {
-  --background: var(--grassroots-surface-dark);
-  --color: var(--grassroots-text-primary-dark);
-  --placeholder-color: var(--grassroots-text-secondary-dark);
-}
-
-.dark-theme .season-card {
-  background: var(--grassroots-surface-dark);
-  border-color: var(--grassroots-surface-variant-dark);
-}
-
-.dark-theme .season-name {
-  color: var(--grassroots-text-primary-dark);
-}
-
-.dark-theme .season-dates {
-  color: var(--grassroots-text-secondary-dark);
-}
-
-.dark-theme .empty-title {
-  color: var(--grassroots-text-primary-dark);
-}
-
-.dark-theme .empty-subtitle {
-  color: var(--grassroots-text-secondary-dark);
+  min-height: 44px;
+  text-transform: none;
 }
 
 /* Responsive Design */
 @media (max-width: 768px) {
   .seasons-header {
-    padding: var(--grassroots-space-md) var(--grassroots-space-sm) var(--grassroots-space-sm);
+    padding: 16px 20px;
   }
-  
+
   .seasons-main-title {
     font-size: 1.5rem;
-    padding: var(--grassroots-space-xs) var(--grassroots-space-sm);
   }
-  
+
   .seasons-content {
-    padding: var(--grassroots-space-sm);
+    padding: 16px 20px;
   }
-  
-  .season-card-header {
-    align-items: center;
-  }
-  
-  .season-name {
-    font-size: 1rem;
-  }
-  
-  .season-dates {
-    font-size: 0.8rem;
-  }
-  
+
   .empty-state {
-    padding: var(--grassroots-space-lg) var(--grassroots-space-sm);
-    min-height: 300px;
-  }
-  
-  .empty-icon {
-    font-size: 3rem;
-  }
-  
-  .empty-title {
-    font-size: 1.1rem;
-  }
-  
-  .empty-subtitle {
-    font-size: 0.9rem;
+    padding: 32px 16px;
   }
 }
 
-@media (max-width: 480px) {
-  .season-stats {
-    justify-content: center;
-  }
-  
-  .status-chip,
-  .stat-chip {
-    font-size: 0.75rem;
-  }
+/* Dark mode support */
+.dark-theme .seasons-header {
+  background: var(--touchline-bg, #111e19);
+  border-bottom-color: var(--touchline-line, #2a3e34);
 }
 
-/* Search Loading Indicator */
-.search-container {
-  position: relative;
+.dark-theme .seasons-main-title {
+  color: var(--touchline-ink, #f4f6f4);
 }
 
-.search-loading {
-  position: absolute;
-  right: 55px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 1000 !important;
-  pointer-events: none;
-  background: var(--ion-color-step-50, #f9f9f9);
-  border-radius: 50%;
-  padding: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 200ms ease-in-out;
+.dark-theme .seasons-subtitle {
+  color: var(--touchline-muted, #9ab0a4);
 }
 
-.search-loading.visible {
-  opacity: 1;
+.dark-theme .seasons-search {
+  --background: var(--touchline-surface, #1b2c24);
+  --color: var(--touchline-ink, #f4f6f4);
+  --placeholder-color: var(--touchline-muted, #9ab0a4);
+  border-color: var(--touchline-line, #2a3e34);
 }
 
-.search-loading ion-spinner {
-  --color: var(--ion-color-medium);
-  width: 16px;
-  height: 16px;
+.dark-theme .season-card {
+  background: var(--touchline-surface, #1b2c24);
+  border-color: var(--touchline-line, #2a3e34);
 }
 
-/* Ensure search bar has enough padding for the spinner */
-.search-container ion-searchbar {
-  --padding-end: 48px;
+.dark-theme .season-card-active {
+  border-left-color: var(--touchline-forest, #2e7d62);
+}
+
+.dark-theme .season-name {
+  color: var(--touchline-ink, #f4f6f4);
+}
+
+.dark-theme .season-dates {
+  color: var(--touchline-muted, #9ab0a4);
+}
+
+.dark-theme .season-dates ion-icon {
+  color: var(--touchline-forest, #2e7d62);
+}
+
+.dark-theme .status-chip {
+  --background: var(--touchline-soft, #182821);
+  --color: var(--touchline-forest, #389e7c);
+}
+
+.dark-theme .stat-chip {
+  --background: var(--touchline-soft, #182821);
+  --color: var(--touchline-muted, #9ab0a4);
+}
+
+.dark-theme .empty-title {
+  color: var(--touchline-ink, #f4f6f4);
+}
+
+.dark-theme .empty-subtitle {
+  color: var(--touchline-muted, #9ab0a4);
+}
+
+/* Accessibility */
+.season-card:focus-within {
+  outline: 2px solid var(--touchline-forest);
+  outline-offset: 2px;
 }

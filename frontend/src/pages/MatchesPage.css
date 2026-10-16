@@ -1,72 +1,74 @@
-/* ===== MATCHES PAGE STYLES ===== */
+/* ===== MATCHES PAGE STYLES — TOUCHLINE FOREST ===== */
 
 /* Import shared page styles */
 @import './PageStyles.css';
 
 /* Matches Page Theme */
 .page[data-theme="match"] {
-  --theme-primary: var(--ion-color-secondary);
-  --theme-primary-tint: var(--ion-color-secondary-tint);
-  --theme-primary-shade: var(--ion-color-secondary-shade);
+  --theme-primary: var(--touchline-forest, #12392d);
+  --theme-primary-tint: #edf3ee;
+  --theme-primary-shade: #0c271e;
   --theme-on-primary: white;
 }
 
 /* Header Section */
 .matches-header {
-  padding: var(--grassroots-space-lg) var(--grassroots-space-md) var(--grassroots-space-md);
-  background: linear-gradient(135deg, var(--grassroots-surface) 0%, var(--grassroots-surface-elevated) 100%);
-  border-bottom: 1px solid var(--grassroots-surface-variant);
+  padding: var(--grassroots-space-md) var(--grassroots-space-md) var(--grassroots-space-sm);
+  background: var(--touchline-bg, #f8faf7);
+  border-bottom: 1px solid var(--touchline-line, #dce4de);
 }
 
 .matches-title-section {
-  margin-bottom: var(--grassroots-space-md);
+  margin-bottom: var(--grassroots-space-xs);
 }
 
 .matches-main-title {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 700;
-  letter-spacing: -0.025em;
-  color: var(--grassroots-text-primary);
+  letter-spacing: -0.02em;
+  color: var(--touchline-ink, #14231d);
   margin: 0;
 }
 
 .matches-subtitle {
-  color: var(--grassroots-text-secondary);
+  color: var(--touchline-muted, #56645d);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 1rem;
-  margin: var(--grassroots-space-sm) 0 0 0;
-  line-height: 1.5;
+  font-size: 0.875rem;
+  margin: 4px 0 0 0;
+  line-height: 1.4;
 }
 
 /* Content Sections */
 .matches-content {
+  background: var(--touchline-bg, #f8faf7);
   padding: var(--grassroots-space-md);
+  min-height: 100%;
 }
 
 /* Error Message */
 .error-message {
-  background: var(--grassroots-surface);
-  border: 1px solid var(--ion-color-danger);
-  border-radius: var(--grassroots-radius-lg);
+  background: var(--touchline-surface, #ffffff);
+  border: 1px solid var(--ion-color-danger, #ef4444);
+  border-radius: var(--touchline-radius, 14px);
   padding: var(--grassroots-space-md);
   margin-bottom: var(--grassroots-space-lg);
   text-align: center;
 }
 
 .error-message p {
-  color: var(--ion-color-danger);
+  color: var(--ion-color-danger, #ef4444);
   margin: 0 0 var(--grassroots-space-sm) 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .section-title {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--grassroots-text-primary);
-  margin: var(--grassroots-space-lg) 0 var(--grassroots-space-md) 0;
-  letter-spacing: -0.025em;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--touchline-ink, #14231d);
+  margin: var(--grassroots-space-md) 0 var(--grassroots-space-sm) 0;
+  letter-spacing: -0.015em;
 }
 
 .section-title:first-child {
@@ -75,56 +77,58 @@
 
 /* Calendar Section */
 .matches-calendar-section {
-  margin-bottom: var(--grassroots-space-xl);
+  margin-bottom: var(--grassroots-space-lg);
 }
 
 .calendar-placeholder {
-  background: var(--grassroots-surface);
-  border: 1px solid var(--grassroots-surface-variant);
-  border-radius: var(--grassroots-radius-lg);
+  background: var(--touchline-surface, #ffffff);
+  border: 1px solid var(--touchline-line, #dce4de);
+  border-radius: var(--touchline-radius, 14px);
   padding: var(--grassroots-space-xl);
   text-align: center;
-  color: var(--grassroots-text-secondary);
+  color: var(--touchline-muted, #56645d);
   font-style: italic;
 }
 
 /* Upcoming Matches Section */
 .matches-live-section {
-  margin-bottom: var(--grassroots-space-xl);
+  margin-bottom: var(--grassroots-space-lg);
 }
 
 .matches-upcoming-section,
 .matches-past-section {
-  margin-bottom: var(--grassroots-space-xl);
+  margin-bottom: var(--grassroots-space-lg);
 }
 
 .matches-past-section > p {
-  color: var(--grassroots-text-secondary);
-  line-height: 1.5;
+  color: var(--touchline-muted, #56645d);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  margin: 0 0 var(--grassroots-space-sm) 0;
 }
 
 .upcoming-matches-placeholder {
-  background: var(--grassroots-surface);
-  border: 1px solid var(--grassroots-surface-variant);
-  border-radius: var(--grassroots-radius-lg);
+  background: var(--touchline-surface, #ffffff);
+  border: 1px solid var(--touchline-line, #dce4de);
+  border-radius: var(--touchline-radius, 14px);
   padding: var(--grassroots-space-xl);
   text-align: center;
-  color: var(--grassroots-text-secondary);
+  color: var(--touchline-muted, #56645d);
   font-style: italic;
 }
 
 /* Completed Matches Section */
 .matches-completed-section {
-  margin-bottom: var(--grassroots-space-xl);
+  margin-bottom: var(--grassroots-space-lg);
 }
 
 .completed-matches-placeholder {
-  background: var(--grassroots-surface);
-  border: 1px solid var(--grassroots-surface-variant);
-  border-radius: var(--grassroots-radius-lg);
+  background: var(--touchline-surface, #ffffff);
+  border: 1px solid var(--touchline-line, #dce4de);
+  border-radius: var(--touchline-radius, 14px);
   padding: var(--grassroots-space-xl);
   text-align: center;
-  color: var(--grassroots-text-secondary);
+  color: var(--touchline-muted, #56645d);
   font-style: italic;
 }
 
@@ -136,37 +140,45 @@
   justify-content: center;
   padding: var(--grassroots-space-xl);
   text-align: center;
-  min-height: 300px;
+  min-height: 260px;
+  background: var(--touchline-surface, #ffffff);
+  border: 1px solid var(--touchline-line, #dce4de);
+  border-radius: var(--touchline-radius, 14px);
 }
 
 .empty-icon {
-  font-size: 4rem;
-  color: var(--grassroots-text-tertiary);
-  margin-bottom: var(--grassroots-space-lg);
+  font-size: 3rem;
+  color: var(--touchline-muted, #56645d);
+  margin-bottom: var(--grassroots-space-md);
 }
 
 .empty-title {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--grassroots-text-primary);
-  margin: 0 0 var(--grassroots-space-sm) 0;
-  letter-spacing: -0.025em;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--touchline-ink, #14231d);
+  margin: 0 0 var(--grassroots-space-xs) 0;
+  letter-spacing: -0.015em;
 }
 
 .empty-subtitle {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: var(--grassroots-text-secondary);
-  margin: 0 0 var(--grassroots-space-lg) 0;
-  line-height: 1.5;
-  max-width: 400px;
+  color: var(--touchline-muted, #56645d);
+  margin: 0 0 var(--grassroots-space-md) 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  max-width: 380px;
 }
 
 .empty-action {
-  --background: var(--theme-primary);
-  --background-activated: var(--theme-primary-shade);
-  --color: var(--theme-on-primary);
-  margin-top: var(--grassroots-space-md);
+  --background: var(--touchline-forest, #12392d);
+  --background-activated: #0c271e;
+  --color: #ffffff;
+  --border-radius: var(--touchline-radius, 14px);
+  min-height: 44px;
+  font-weight: 600;
+  text-transform: none;
+  margin-top: var(--grassroots-space-xs);
 }
 
 /* Responsive Design */
@@ -176,21 +188,21 @@
   }
   
   .matches-main-title {
-    font-size: 1.75rem;
+    font-size: 1.35rem;
   }
   
   .matches-content {
-    padding: var(--grassroots-space-sm);
+    padding: 20px;
   }
   
   .section-title {
-    font-size: 1.125rem;
+    font-size: 1.1rem;
   }
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 900px) {
   .matches-content {
-    max-width: 1200px;
+    max-width: 1040px;
     margin: 0 auto;
     padding: var(--grassroots-space-lg);
   }
@@ -198,14 +210,19 @@
 
 /* Dark Theme Support */
 .dark-theme .matches-header {
-  background: linear-gradient(135deg, var(--grassroots-surface) 0%, var(--grassroots-surface-elevated) 100%);
-  border-color: var(--grassroots-surface-variant);
+  background: var(--touchline-bg, #0f1814);
+  border-color: var(--touchline-line, #263830);
 }
 
 .dark-theme .matches-main-title {
-  color: var(--grassroots-text-primary);
+  color: var(--touchline-ink, #f0f5f1);
 }
 
 .dark-theme .section-title {
-  color: var(--grassroots-text-primary);
+  color: var(--touchline-ink, #f0f5f1);
+}
+
+.dark-theme .empty-state {
+  background: var(--touchline-surface, #17241e);
+  border-color: var(--touchline-line, #263830);
 }

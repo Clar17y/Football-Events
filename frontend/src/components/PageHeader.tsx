@@ -1,18 +1,17 @@
 /**
  * Reusable Page Header Component
- * Provides consistent MatchMaster branding across all pages
+ * Provides consistent MatchMaster branding and honest save status across all pages
  */
 
-import React from 'react';
+import React, { useId, useState } from 'react';
 import {
   IonHeader,
   IonToolbar,
-  IonTitle,
   IonButton,
   IonIcon,
-  IonButtons
+  IonPopover
 } from '@ionic/react';
-import { arrowBackOutline, football } from 'ionicons/icons';
+import { arrowBackOutline, ellipsisHorizontal } from 'ionicons/icons';
 import ThemeToggle from './ThemeToggle';
 import OfflineSyncIndicator from './OfflineSyncIndicator';
 import ImportGuestDataButton from './ImportGuestDataButton';
@@ -32,6 +31,10 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   showThemeToggle = true,
   additionalButtons
 }) => {
+  const [menuEvent, setMenuEvent] = useState<Event>();
+  // Ionic interpolates this ID into selectors without CSS escaping.
+  const menuId = `page-options-${useId().replace(/:/g, '')}`;
+
   const handleBack = () => {
     // Use browser history if available, otherwise fall back to destination
     if (window.history.length > 1) {
@@ -42,30 +45,63 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   };
 
   return (
-    <IonHeader>
+    <IonHeader className="page-header">
       <IonToolbar className="home-toolbar">
-        {showBackButton && (
-          <IonButtons slot="start">
-            <IonButton fill="clear" onClick={handleBack}>
-              <IonIcon icon={arrowBackOutline} />
+        <div className={`page-header-layout${showBackButton ? '' : ' without-back'}`}>
+          {showBackButton && (
+            <IonButton
+              fill="clear"
+              onClick={handleBack}
+              aria-label="Go back"
+              className="header-back-button"
+            >
+              <IonIcon icon={arrowBackOutline} aria-hidden="true" />
             </IonButton>
-          </IonButtons>
-        )}
-        
-        <IonTitle className="home-title">
-          <div className="title-container" onClick={() => onNavigate?.('home')} style={{ cursor: 'pointer' }}>
-            <IonIcon icon={football} className="title-icon" />
-            <span>MatchMaster</span>
+          )}
+          <button
+            type="button"
+            className="page-header-brand"
+            onClick={() => onNavigate?.('home')}
+            aria-label="MatchMaster, go to home"
+          >
+            MatchMaster
+          </button>
+          <div className="page-header-status" role="status" aria-live="polite" aria-atomic="true">
+            <OfflineSyncIndicator />
           </div>
-        </IonTitle>
-        
-        <IonButtons slot="end" style={{ gap: 8 }}>
-          <OfflineSyncIndicator />
-          <ImportGuestDataButton />
-          {additionalButtons}
-          {showThemeToggle && <ThemeToggle />}
-        </IonButtons>
+          <IonButton
+            fill="clear"
+            className="header-more-button"
+            aria-label="More options"
+            aria-haspopup="dialog"
+            aria-expanded={Boolean(menuEvent)}
+            aria-controls={menuId}
+            onClick={event => setMenuEvent(event.nativeEvent)}
+          >
+            <IonIcon icon={ellipsisHorizontal} aria-hidden="true" />
+          </IonButton>
+        </div>
       </IonToolbar>
+      <ImportGuestDataButton />
+      <IonPopover
+        id={menuId}
+        className="page-header-options"
+        isOpen={Boolean(menuEvent)}
+        event={menuEvent}
+        onDidDismiss={() => setMenuEvent(undefined)}
+        keepContentsMounted
+        htmlAttributes={{ 'aria-label': 'Page options' }}
+      >
+        <div className="page-header-options-content" onClick={() => setMenuEvent(undefined)}>
+          {showThemeToggle && (
+            <div className="page-header-theme-option">
+              <span>Appearance</span>
+              <ThemeToggle />
+            </div>
+          )}
+          {additionalButtons}
+        </div>
+      </IonPopover>
     </IonHeader>
   );
 };

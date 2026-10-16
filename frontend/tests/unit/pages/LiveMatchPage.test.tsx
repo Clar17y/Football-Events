@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as Ionic from '@ionic/react';
 import LiveMatchPage from '../../../src/pages/LiveMatchPage';
 import eventsApi from '../../../src/services/api/eventsApi';
 import teamsApi from '../../../src/services/api/teamsApi';
 import matchesApi from '../../../src/services/api/matchesApi';
+import viewerApi from '../../../src/services/api/viewerApi';
 import { matchPeriodsDataLayer, matchStateDataLayer } from '../../../src/services/dataLayer';
 import { getGuestId } from '../../../src/utils/guest';
 import { db } from '../../../src/db/indexedDB';
@@ -12,6 +14,7 @@ import { authApi } from '../../../src/services/api/authApi';
 import { ApiRequestError, apiClient } from '../../../src/services/api/baseApi';
 import { OFFLINE_IDENTITY_KEY } from '../../../src/services/api/authOfflineIdentity';
 import { defaultLineupsApi } from '../../../src/services/api/defaultLineupsApi';
+import { trackedPlayer } from '../../../src/utils/liveRecordingPreferences';
 vi.mock('ionicons/icons', async () => await vi.importActual('ionicons/icons'));
 
 const fixture = vi.hoisted(() => ({
@@ -21,6 +24,8 @@ const fixture = vi.hoisted(() => ({
   empty: [] as any[], cachedStates: new Map<string, any>(), cachedPeriods: new Map<string, any>(), cachedEvents: new Map<string, any>(),
   cachedMatches: new Map<string, any>(),
   realAuth: false, recoveryMessage: null as string | null,
+  stateError: null as string | null, periodsError: null as string | null, snapshotLoading: false,
+  timelineDeleteHandler: undefined as undefined | ((item: any) => void),
 }));
 vi.mock('../../../src/contexts/AuthContext', async () => {
   const actual = await vi.importActual<typeof import('../../../src/contexts/AuthContext')>('../../../src/contexts/AuthContext');
@@ -33,20 +38,24 @@ vi.mock('../../../src/hooks/useLocalData', async () => {
   const actual = await vi.importActual<typeof import('../../../src/hooks/useLocalData')>('../../../src/hooks/useLocalData');
   return {
     useLocalMatch: (id: string) => ({ match: fixture.matches[id] }),
-    useLocalMatchState: (id: string, version: number) => fixture.deferredQueries ? actual.useLocalMatchState(id, version) : ({ matchState: fixture.states[id], loading: false, loadedMatchId: id }),
-    useLocalMatchPeriods: (id: string, version: number) => fixture.deferredQueries ? actual.useLocalMatchPeriods(id, version) : ({ periods: fixture.periods[id] || fixture.empty, loading: false, loadedMatchId: id }),
+    useLocalMatchState: (id: string, version: number) => fixture.deferredQueries ? actual.useLocalMatchState(id, version) : ({ matchState: fixture.states[id], loading: fixture.snapshotLoading, loadedMatchId: id, error: fixture.stateError }),
+    useLocalMatchPeriods: (id: string, version: number) => fixture.deferredQueries ? actual.useLocalMatchPeriods(id, version) : ({ periods: fixture.periods[id] || fixture.empty, loading: fixture.snapshotLoading, loadedMatchId: id, error: fixture.periodsError }),
     useLocalEvents: (id: string) => ({ events: fixture.events[id] || fixture.empty }),
   };
 });
 vi.mock('../../../src/services/guestQuickMatch', () => ({ getLocalMatch: vi.fn(async (id: string) => fixture.matches[id]) }));
 vi.mock('../../../src/components/PageHeader', () => ({ default: () => <div /> }));
 vi.mock('../../../src/components/lineup/LineupManagementModal', () => ({ default: ({ isOpen }: any) => isOpen ? <div data-testid="team-changes-dialog" /> : null }));
-vi.mock('../../../src/components/live/LiveTimeline', () => ({ default: ({ feed, showDelete, deleteDisabled, onDelete }: any) => <div>{feed.filter((item: any) => item.kind === 'event').map((item: any) => <div key={item.id} data-testid="timeline-event" data-period-type={item.periodType}>{item.label} {item.sentiment}{showDelete && <button disabled={deleteDisabled} onClick={() => onDelete(item)}>Delete event</button>}</div>)}</div> }));
+vi.mock('../../../src/components/live/LiveTimeline', () => ({ default: ({ feed, showDelete, deleteDisabled, onDelete }: any) => {
+  fixture.timelineDeleteHandler = onDelete;
+  return <div>{feed.filter((item: any) => item.kind === 'event').map((item: any) => <div key={item.id} data-testid="timeline-event" data-period-type={item.periodType}>{item.label} {item.sentiment}{showDelete && <button disabled={deleteDisabled} onClick={() => onDelete(item)}>Delete event</button>}</div>)}</div>;
+} }));
 vi.mock('../../../src/services/api/defaultLineupsApi', () => ({ defaultLineupsApi: { getDefaultLineup: vi.fn() } }));
 vi.mock('../../../src/services/api/formationsApi', () => ({ default: { prefetch: vi.fn(async () => {}) } }));
 vi.mock('../../../src/services/api/teamsApi', () => ({ default: { getTeamPlayers: vi.fn() } }));
 vi.mock('../../../src/services/api/eventsApi', () => ({ default: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), getByMatch: vi.fn(async () => []) } }));
 vi.mock('../../../src/services/api/matchesApi', () => ({ default: { getUpcoming: vi.fn(), getRecent: vi.fn(async () => []), getMatchState: vi.fn(), getMatchPeriods: vi.fn(), getActiveViewerLinks: vi.fn(async () => []) } }));
+vi.mock('../../../src/services/api/viewerApi', () => ({ default: { getSummary: vi.fn(), openEventSource: vi.fn(), checkToken: vi.fn() } }));
 vi.mock('../../../src/services/dataLayer', async () => {
   const actual = await vi.importActual<typeof import('../../../src/services/dataLayer')>('../../../src/services/dataLayer');
   return { isCurrentOwnedMatch: actual.isCurrentOwnedMatch, isReplayableMatchStatus: actual.isReplayableMatchStatus, reclaimLegacyRecordings: vi.fn(async () => {}), matchStateDataLayer: { upsert: vi.fn() }, matchPeriodsDataLayer: { create: vi.fn(), endPeriod: vi.fn(), getByMatch: vi.fn() } };
@@ -97,6 +106,7 @@ beforeEach(() => {
   vi.clearAllMocks(); localStorage.clear(); localStorage.setItem('guest_id', 'guest-parent');
   apiClient.clearSession();
   fixture.realAuth = false; fixture.recoveryMessage = null;
+  fixture.stateError = null; fixture.periodsError = null; fixture.snapshotLoading = false; fixture.timelineDeleteHandler = undefined;
   window.history.replaceState({}, '', '/live/m');
   fixture.authenticated = false; fixture.userId = 'parent'; fixture.now = 1_000_000;
   fixture.states = {}; fixture.periods = {}; fixture.events = {};
@@ -551,9 +561,14 @@ describe('resolved local recording snapshots', () => {
     fixture.now += 300_000;
     const state = deferred<any>(), periods = deferred<any[]>();
     fixture.cachedStates.set('m', state.promise); fixture.periodReads.set('m', periods.promise);
+    fixture.events.m = [{ id: 'saved-event', matchId: 'm', teamId: 'home', kind: 'goal', createdAt: fixture.now }];
     render(<LiveMatchPage matchId="m" />);
     const early = await screen.findByRole('button', { name: 'Kick Off' });
     expect(early).toBeDisabled(); fireEvent.click(early); fireEvent.click(early);
+    const undo = await screen.findByRole('button', { name: 'Undo' });
+    expect(undo).toBeDisabled();
+    await act(async () => fixture.timelineDeleteHandler!({ kind: 'event', id: 'saved-event' }));
+    expect(eventsApi.delete).not.toHaveBeenCalled();
     if (order === 'state-first') await act(async () => state.resolve(pausedState));
     else await act(async () => periods.resolve(fixture.periods.m));
     expect(screen.getByRole('button', { name: 'Kick Off' })).toBeDisabled();
@@ -561,10 +576,14 @@ describe('resolved local recording snapshots', () => {
     expect(matchPeriodsDataLayer.create).not.toHaveBeenCalled();
     expect(matchStateDataLayer.upsert).not.toHaveBeenCalled();
     expect(matchPeriodsDataLayer.endPeriod).not.toHaveBeenCalled();
+    expect(undo).toBeDisabled();
+    await act(async () => fixture.timelineDeleteHandler!({ kind: 'event', id: 'saved-event' }));
+    expect(eventsApi.delete).not.toHaveBeenCalled();
     if (order === 'state-first') await act(async () => periods.resolve(fixture.periods.m));
     else await act(async () => state.resolve(pausedState));
     const resume = await screen.findByRole('button', { name: 'Resume' });
     await waitFor(() => expect(resume).toBeEnabled());
+    expect(undo).toBeEnabled();
     expect(screen.getByRole('timer')).toHaveTextContent('10:00');
     fireEvent.click(resume);
     await waitFor(() => expect(matchStateDataLayer.upsert).toHaveBeenCalledWith('m', expect.objectContaining({ status: 'LIVE', timerMs: 600_000, totalElapsedSeconds: 600 })));
@@ -931,5 +950,533 @@ describe('persisted score baseline', () => {
     fixture.events.m = fixture.events.m.filter(event => event.id !== 'new-goal');
     view.rerender(<LiveMatchPage matchId="m" />);
     await waitFor(() => expect(document.querySelector('.live-header')).toHaveTextContent('2 - 1'));
+  });
+});
+
+describe('Touchline option1 UI interactions and critical coverage map', () => {
+  it('Change player updates preference only without recording an event or overwriting draft', async () => {
+    render(<LiveMatchPage matchId="m" />);
+    const changePlayerBtn = await screen.findByRole('button', { name: /change player/i });
+    fireEvent.click(changePlayerBtn);
+
+    const playerOption = await screen.findByRole('button', { name: /9 · Alex/i });
+    fireEvent.click(playerOption);
+
+    expect(eventsApi.create).not.toHaveBeenCalled();
+    expect(screen.getByText('Alex')).toBeInTheDocument();
+
+    const goalBtn = screen.getByRole('button', { name: 'goal' });
+    fireEvent.click(goalBtn);
+    const modal = await screen.findByTestId('ion-modal');
+    expect(screen.getByRole('button', { name: /change player/i })).toBeDisabled();
+    expect(within(modal).getByRole('button', { name: '9 · Alex' })).toHaveAttribute('data-fill', 'solid');
+
+    fireEvent.click(within(modal).getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: /change player/i }));
+    const clearBtn = await screen.findByRole('button', { name: /clear tracked player/i });
+    fireEvent.click(clearBtn);
+    expect(eventsApi.create).not.toHaveBeenCalled();
+    expect(screen.getByText('Choose a player')).toBeInTheDocument();
+  });
+
+  it('More events disclosure respects entitlements and captures correct draft', async () => {
+    render(<LiveMatchPage matchId="m" />);
+    const moreToggle = await screen.findByRole('button', { name: /more events/i });
+    expect(moreToggle).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(moreToggle);
+    expect(moreToggle).toHaveAttribute('aria-expanded', 'true');
+
+    const saveBtn = screen.getByRole('button', { name: 'save' });
+    expect(saveBtn).toBeEnabled();
+
+    const penaltyBtn = screen.getByRole('button', { name: /penalty premium/i });
+    expect(penaltyBtn).toBeDisabled();
+
+    fireEvent.click(saveBtn);
+    const modal = await screen.findByTestId('ion-modal');
+    expect(within(modal).getByText(/Save · Long Home Football Club/i)).toBeInTheDocument();
+    fireEvent.click(within(modal).getByRole('button', { name: 'Save without player' }));
+    await waitFor(() => expect(eventsApi.create).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'save',
+      matchId: 'm',
+      teamId: 'home',
+    })));
+  });
+
+  it('Primary click captures correct team and time', async () => {
+    render(<LiveMatchPage matchId="m" />);
+    const awayBtn = await screen.findByRole('button', { name: 'Long Away Football Club' });
+    fireEvent.click(awayBtn);
+    const goalBtn = await screen.findByRole('button', { name: 'goal' });
+    fireEvent.click(goalBtn);
+    const modal = await screen.findByTestId('ion-modal');
+    expect(within(modal).getByText(/Goal · Long Away Football Club/i)).toBeInTheDocument();
+    fireEvent.click(within(modal).getByRole('button', { name: 'Save without player' }));
+    await waitFor(() => expect(eventsApi.create).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'goal',
+      matchId: 'm',
+      teamId: 'away',
+      clockMs: 600000,
+    })));
+  });
+
+  it('Delayed context invalidates tracked player preference and active team', async () => {
+    const view = render(<LiveMatchPage matchId="m" />);
+    const changePlayerBtn = await screen.findByRole('button', { name: /change player/i });
+    fireEvent.click(changePlayerBtn);
+    expect(await screen.findByRole('button', { name: /9 · Alex/i })).toBeInTheDocument();
+
+    signInFixture();
+    view.rerender(<LiveMatchPage matchId="m" />);
+    await waitFor(() => expect(screen.queryByText(/choose a player to track/i)).not.toBeInTheDocument());
+  });
+
+  it('Blocks event recording when paused or read-only', async () => {
+    fixture.states.m = { ...fixture.states.m, status: 'PAUSED' };
+    render(<LiveMatchPage matchId="m" />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'goal' })).toBeDisabled());
+    expect(screen.getByText('Events are available only during live play.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'goal' }));
+    expect(eventsApi.create).not.toHaveBeenCalled();
+  });
+
+  it('Latest moment row Undo persists through existing events writer', async () => {
+    render(<LiveMatchPage matchId="m" />);
+    const goalBtn = await screen.findByRole('button', { name: 'goal' });
+    fireEvent.click(goalBtn);
+    const modal = await screen.findByTestId('ion-modal');
+    fireEvent.click(within(modal).getByRole('button', { name: 'Save without player' }));
+    await waitFor(() => expect(eventsApi.create).toHaveBeenCalledTimes(1));
+
+    const undoBtn = screen.getByRole('button', { name: 'Undo' });
+    expect(undoBtn).toBeEnabled();
+    fireEvent.click(undoBtn);
+    await waitFor(() => expect(eventsApi.delete).toHaveBeenCalledWith('event-0'));
+  });
+
+  it('closes a preference sheet on team change and rejects the old delayed roster', async () => {
+    const oldRoster = deferred<any>();
+    vi.mocked(teamsApi.getTeamPlayers).mockImplementation(async teamId => teamId === 'home'
+      ? oldRoster.promise
+      : { data: [{ id: 'away-child', name: 'Away child', squadNumber: 7 }] } as any);
+    render(<LiveMatchPage matchId="m" />);
+    fireEvent.click(await screen.findByRole('button', { name: /change player/i }));
+    expect(await screen.findByText('Loading roster…')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Select current team' }), { target: { value: 'away' } });
+    await waitFor(() => expect(screen.queryByTestId('ion-modal')).not.toBeInTheDocument());
+    await act(async () => oldRoster.resolve({ data: [{ id: 'stale-child', name: 'Old home child', squadNumber: 9 }] }));
+    fireEvent.click(screen.getByRole('button', { name: /change player/i }));
+    const modal = await screen.findByTestId('ion-modal');
+    fireEvent.click(await within(modal).findByRole('button', { name: '7 · Away child' }));
+    expect(screen.queryByText('Old home child')).not.toBeInTheDocument();
+    expect(screen.getByText('Away child')).toBeInTheDocument();
+    expect(eventsApi.create).not.toHaveBeenCalled();
+  });
+
+  it('cancels an event draft on current-team change and captures a fresh away draft', async () => {
+    render(<LiveMatchPage matchId="m" />);
+    const oldModal = await open();
+    const staleSave = within(oldModal).getByRole('button', { name: 'Save without player' });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Select current team' }), { target: { value: 'away' } });
+    await waitFor(() => expect(screen.queryByTestId('ion-modal')).not.toBeInTheDocument());
+    fireEvent.click(staleSave);
+    expect(eventsApi.create).not.toHaveBeenCalled();
+    fixture.now += 30_000;
+    const newModal = await open();
+    fireEvent.click(within(newModal).getByRole('button', { name: 'Save without player' }));
+    await waitFor(() => expect(eventsApi.create).toHaveBeenCalledWith(expect.objectContaining({ teamId: 'away', clockMs: 630_000 })));
+  });
+
+  it('undoes the latest saved moment after reload and retains the durable failure/retry path', async () => {
+    fixture.events.m = [
+      { id: 'older', matchId: 'm', teamId: 'home', kind: 'goal', clockMs: 400_000, createdAt: fixture.now - 100, createdByUserId: 'guest-parent' },
+      { id: 'latest', matchId: 'm', teamId: 'away', kind: 'assist', clockMs: 500_000, createdAt: fixture.now, createdByUserId: 'guest-parent' },
+    ];
+    vi.mocked(eventsApi.delete).mockRejectedValueOnce(new Error('Storage unavailable'));
+    render(<LiveMatchPage matchId="m" />);
+    const undo = await screen.findByRole('button', { name: 'Undo' });
+    fireEvent.click(undo);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Storage unavailable');
+    expect(eventsApi.delete).toHaveBeenLastCalledWith('latest');
+    expect(undo).toBeEnabled();
+    fireEvent.click(undo);
+    await waitFor(() => expect(eventsApi.delete).toHaveBeenCalledTimes(2));
+    expect(eventsApi.delete).toHaveBeenLastCalledWith('latest');
+    await waitFor(() => expect(fixture.events.m.map(event => event.id)).toEqual(['older']));
+  });
+
+  it.each(['PAUSED', 'COMPLETED', 'CANCELLED', 'POSTPONED'])('shows honest %s clock context without a scheduled fallback', async status => {
+    fixture.states.m = { ...fixture.states.m, status };
+    render(<LiveMatchPage matchId="m" />);
+    await screen.findByRole('timer');
+    if (status === 'PAUSED') {
+      expect(await screen.findByText('1st Half')).toBeInTheDocument();
+      expect(screen.getAllByText('Paused')).toHaveLength(1);
+    } else if (status === 'COMPLETED') {
+      expect(await screen.findByText('FT')).toBeInTheDocument();
+      expect(screen.getByText('Completed')).toBeInTheDocument();
+    } else {
+      expect(await screen.findByText(status === 'CANCELLED' ? 'Cancelled' : 'Postponed')).toBeInTheDocument();
+    }
+    expect(screen.queryByText('Scheduled')).not.toBeInTheDocument();
+  });
+
+  it('shows distinct public team names and a latest moment without owner-only controls', async () => {
+    window.history.replaceState({}, '', '/live/m?view=public-token');
+    const summary = { matchId: 'm', status: 'LIVE', periodFormat: 'quarter', currentPeriod: 2, durationMinutes: 60,
+      homeTeam: { id: 'home', name: 'Public Home' }, awayTeam: { id: 'away', name: 'Riverside Juniors' } };
+    const listeners = new Map<string, (event: { data: string }) => void>();
+    vi.mocked(viewerApi.getSummary).mockResolvedValue(summary as any);
+    vi.mocked(viewerApi.openEventSource).mockReturnValue({ close: vi.fn(), addEventListener: (name: string, listener: any) => listeners.set(name, listener) } as any);
+    render(<LiveMatchPage matchId="m" />);
+    await waitFor(() => expect(listeners.has('snapshot')).toBe(true));
+    await act(async () => listeners.get('snapshot')!({ data: JSON.stringify({ summary,
+      periods: [{ id: 'public-period', matchId: 'm', periodNumber: 2, periodType: 'REGULAR', startedAt: new Date(fixture.now - 60_000).toISOString() }],
+      events: [{ id: 'public-goal', matchId: 'm', teamId: 'home', kind: 'goal', clockMs: 20_000, createdAt: fixture.now }],
+    }) }));
+    expect(screen.getByRole('button', { name: 'Public Home' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Riverside Juniors' })).toBeInTheDocument();
+    expect(screen.getByText('Q2')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'goal' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Complete' })).not.toBeInTheDocument();
+    expect(eventsApi.create).not.toHaveBeenCalled();
+    expect(eventsApi.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('integrated review behavior repairs', () => {
+  const roster = [{ id: 'child' }, { id: 'other-player' }];
+  const preference = () => trackedPlayer('guest-parent', 'home', roster);
+  const seedSavedEvent = () => {
+    fixture.events.m = [{ id: 'saved-event', matchId: 'm', teamId: 'home', kind: 'goal', clockMs: 600_000,
+      createdAt: fixture.now, createdByUserId: fixture.authenticated ? fixture.userId : 'guest-parent' }];
+  };
+  const chooseTrackedPlayer = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: /change player/i }));
+    const modal = await screen.findByTestId('ion-modal');
+    fireEvent.click(await within(modal).findByRole('button', { name: '9 · Alex' }));
+    await waitFor(() => expect(screen.queryByTestId('ion-modal')).not.toBeInTheDocument());
+    expect(preference()).toBe('child');
+  };
+  // Capture callbacks at a component boundary to exercise stale handlers and
+  // mutation guards independently of the current button's disabled presentation.
+  const captureIonicActions = () => {
+    const actions = new Map<string, () => void>();
+    const OriginalButton = Ionic.IonButton;
+    vi.spyOn(Ionic, 'IonButton').mockImplementation((props: any) => {
+      const children = Array.isArray(props.children) ? props.children : [props.children];
+      const label = children.filter((child: any) => typeof child === 'string' || typeof child === 'number').join('');
+      if (props.onClick) actions.set(label, props.onClick);
+      return <OriginalButton {...props} />;
+    });
+    return actions;
+  };
+
+  it.each([
+    { type: 'REGULAR', label: 'Kick Off', format: 'third', regularCount: 3, cycles: 1 },
+    { type: 'EXTRA_TIME', label: 'Extra Time', format: 'half', regularCount: 2, cycles: 2 },
+    { type: 'PENALTY_SHOOTOUT', label: 'Penalty Shootout', format: 'half', regularCount: 2, cycles: 1 },
+  ])('rejects an old $type start after its final period and uses current numbering', async ({ type, label, format, regularCount, cycles }) => {
+    const actions = captureIonicActions();
+    fixture.matches.m = { ...fixture.matches.m, periodFormat: format };
+    fixture.states.m = { ...fixture.states.m, status: 'PAUSED', currentPeriodId: undefined };
+    const phases = type === 'REGULAR' ? Array(regularCount - 1).fill('REGULAR')
+      : type === 'EXTRA_TIME' ? ['REGULAR', 'REGULAR'] : ['REGULAR', 'REGULAR', 'EXTRA_TIME', 'EXTRA_TIME'];
+    fixture.periods.m = phases.map((periodType, index) => ({ id: `ended-${index}`, matchId: 'm', periodType,
+      periodNumber: periodType === 'REGULAR' ? index + 1 : index - 1,
+      startedAt: fixture.now - (phases.length - index) * 300_000,
+      endedAt: fixture.now - (phases.length - index - 1) * 300_000, durationSeconds: 300, createdAt: fixture.now }));
+    render(<LiveMatchPage matchId="m" />);
+    const button = await screen.findByRole('button', { name: label });
+    await waitFor(() => expect(button).toBeEnabled());
+    // The primary control is native HTML. Capture its actual React callback so
+    // the test exercises a saved handler even after its DOM node is removed.
+    const propsKey = Object.keys(button).find(key => key.startsWith('__reactProps$'));
+    const staleStart = type === 'REGULAR' ? (button as any)[propsKey!]?.onClick : actions.get(label);
+    expect(staleStart).toBeTypeOf('function');
+    for (let cycle = 1; cycle <= cycles; cycle++) {
+      await act(async () => staleStart!());
+      await waitFor(() => expect(screen.getByRole('button', { name: 'goal' })).toBeEnabled());
+      expect(matchPeriodsDataLayer.create).toHaveBeenLastCalledWith(expect.objectContaining({
+        periodType: type, periodNumber: type === 'REGULAR' ? regularCount : cycle,
+      }));
+      fireEvent.click(screen.getByRole('button', { name: 'End Period' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Complete' })).toBeEnabled());
+      expect(fixture.states.m.status).toBe('PAUSED');
+      expect(fixture.periods.m.every(period => period.endedAt != null)).toBe(true);
+    }
+    if (type === 'REGULAR') expect(screen.getByRole('button', { name: 'Extra Time' })).toBeEnabled();
+    if (type === 'EXTRA_TIME') expect(screen.getByRole('button', { name: 'Penalty Shootout' })).toBeEnabled();
+    if (type === 'PENALTY_SHOOTOUT') expect(screen.queryByRole('button', { name: 'Penalty Shootout' })).not.toBeInTheDocument();
+    vi.mocked(matchPeriodsDataLayer.create).mockClear();
+    vi.mocked(matchStateDataLayer.upsert).mockClear();
+    await act(async () => { staleStart!(); staleStart!(); });
+    expect(matchPeriodsDataLayer.create).not.toHaveBeenCalled();
+    expect(matchStateDataLayer.upsert).not.toHaveBeenCalled();
+  });
+
+  it.each(['REGULAR', 'EXTRA_TIME', 'PENALTY_SHOOTOUT'])('recovers an existing final %s period despite the new-period cap', async periodType => {
+    const periodNumber = periodType === 'PENALTY_SHOOTOUT' ? 1 : 2;
+    fixture.states.m = { ...fixture.states.m, status: 'SCHEDULED', currentPeriodId: undefined };
+    fixture.periods.m = [{ ...fixture.periods.m[0], id: 'partial-final', periodType, periodNumber,
+      startedAt: fixture.now - 30_000, createdAt: fixture.now - 30_000 }];
+    render(<LiveMatchPage matchId="m" />);
+    const kickoff = await screen.findByRole('button', { name: 'Kick Off' });
+    await waitFor(() => expect(kickoff).toBeEnabled());
+    fireEvent.click(kickoff);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'goal' })).toBeEnabled());
+    expect(matchPeriodsDataLayer.create).toHaveBeenCalledTimes(1);
+    expect(matchPeriodsDataLayer.create).toHaveBeenCalledWith(expect.objectContaining({
+      periodType, periodNumber, startedAt: fixture.now - 30_000,
+    }));
+    expect(matchStateDataLayer.upsert).toHaveBeenLastCalledWith('m', expect.objectContaining({
+      status: 'LIVE', currentPeriodId: 'partial-final',
+    }));
+    expect(fixture.periods.m).toHaveLength(1);
+  });
+
+  it('finishes a reloaded LIVE period before offering or starting the next regular period', async () => {
+    fixture.periods.m[0] = { ...fixture.periods.m[0], endedAt: fixture.now, durationSeconds: 720 };
+    fixture.now += 300_000;
+    render(<LiveMatchPage matchId="m" />);
+    const finish = await screen.findByRole('button', { name: 'Finish period update' });
+    await waitFor(() => expect(finish).toBeEnabled());
+    expect(screen.queryByRole('button', { name: 'Kick Off' })).not.toBeInTheDocument();
+    expect(matchPeriodsDataLayer.create).not.toHaveBeenCalled();
+    fireEvent.click(finish);
+    await waitFor(() => expect(matchStateDataLayer.upsert).toHaveBeenCalledWith('m', expect.objectContaining({
+      status: 'PAUSED', timerMs: 720_000, totalElapsedSeconds: 720, currentPeriodId: undefined,
+    })));
+    const next = await screen.findByRole('button', { name: 'Kick Off' });
+    await waitFor(() => expect(next).toBeEnabled());
+    fireEvent.click(next);
+    await waitFor(() => expect(matchPeriodsDataLayer.create).toHaveBeenCalledWith(expect.objectContaining({
+      periodType: 'REGULAR', periodNumber: 2,
+    })));
+    expect(matchPeriodsDataLayer.create).toHaveBeenCalledTimes(1);
+    expect(matchPeriodsDataLayer.endPeriod).not.toHaveBeenCalled();
+  });
+
+  it.each(['Extra Time', 'Penalty Shootout'])('rejects a stale secondary %s start until LIVE finish recovery succeeds', async label => {
+    const actions = captureIonicActions();
+    fixture.states.m = { ...fixture.states.m, status: 'PAUSED', currentPeriodId: undefined };
+    const phases = label === 'Extra Time' ? ['REGULAR', 'REGULAR'] : ['REGULAR', 'REGULAR', 'EXTRA_TIME', 'EXTRA_TIME'];
+    fixture.periods.m = phases.map((periodType, index) => ({ id: `ended-${index}`, matchId: 'm', periodType,
+      periodNumber: index % 2 + 1, startedAt: fixture.now - (phases.length - index) * 300_000,
+      endedAt: fixture.now - (phases.length - index - 1) * 300_000, durationSeconds: 300, createdAt: fixture.now }));
+    const view = render(<LiveMatchPage matchId="m" />);
+    await waitFor(() => expect(screen.getByRole('button', { name: label })).toBeEnabled());
+    const staleStart = actions.get(label)!;
+    fixture.states.m = { ...fixture.states.m, status: 'LIVE' };
+    view.rerender(<LiveMatchPage matchId="m" />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Finish period update' })).toBeEnabled());
+    expect(screen.queryByRole('button', { name: 'Kick Off' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
+    await act(async () => staleStart());
+    expect(matchPeriodsDataLayer.create).not.toHaveBeenCalled();
+    expect(matchStateDataLayer.upsert).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Finish period update' }));
+    await waitFor(() => expect(matchStateDataLayer.upsert).toHaveBeenCalledWith('m', expect.objectContaining({
+      status: 'PAUSED', totalElapsedSeconds: phases.length * 300,
+    })));
+    const start = await screen.findByRole('button', { name: label });
+    await waitFor(() => expect(start).toBeEnabled());
+    fireEvent.click(start);
+    await waitFor(() => expect(matchPeriodsDataLayer.create).toHaveBeenCalledWith(expect.objectContaining({
+      periodType: label === 'Extra Time' ? 'EXTRA_TIME' : 'PENALTY_SHOOTOUT', periodNumber: 1,
+    })));
+    expect(matchPeriodsDataLayer.create).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['other-player', 'without-player', 'failed-retry'])('preserves the tracked child through %s, rating, Undo and reload', async save => {
+    const view = render(<LiveMatchPage matchId="m" />);
+    await chooseTrackedPlayer();
+    const modal = await open();
+    if (save !== 'without-player') fireEvent.click(await within(modal).findByRole('button', { name: '4 · Sam' }));
+    if (save === 'failed-retry') vi.mocked(eventsApi.create).mockRejectedValueOnce(new Error('Storage unavailable'));
+    fireEvent.click(within(modal).getByRole('button', { name: save === 'without-player' ? 'Save without player' : 'Save with player' }));
+    if (save === 'failed-retry') {
+      await within(modal).findByRole('alert');
+      expect(preference()).toBe('child');
+      fireEvent.click(within(modal).getByRole('button', { name: 'Retry save' }));
+    }
+    await waitFor(() => expect(screen.queryByTestId('ion-modal')).not.toBeInTheDocument());
+    expect(preference()).toBe('child');
+    expect(screen.getByText('Alex')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '+' }));
+    await waitFor(() => expect(eventsApi.update).toHaveBeenCalledWith('event-0', { sentiment: 1 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(eventsApi.delete).toHaveBeenCalledWith('event-0'));
+    expect(preference()).toBe('child');
+    view.unmount();
+    render(<LiveMatchPage matchId="m" />);
+    const reopened = await open();
+    await waitFor(() => expect(within(reopened).getByRole('button', { name: '9 · Alex' })).toHaveAttribute('data-fill', 'solid'));
+    expect(preference()).toBe('child');
+  });
+
+  it('replaces a tracked child only after successful opt-in and clears only through Clear', async () => {
+    render(<LiveMatchPage matchId="m" />);
+    await chooseTrackedPlayer();
+    const modal = await open();
+    fireEvent.click(await within(modal).findByRole('button', { name: '4 · Sam' }));
+    fireEvent.click(within(modal).getByRole('checkbox'));
+    vi.mocked(eventsApi.create).mockRejectedValueOnce(new Error('Save failed'));
+    fireEvent.click(within(modal).getByRole('button', { name: 'Save with player' }));
+    await within(modal).findByRole('alert');
+    expect(preference()).toBe('child');
+    fireEvent.click(within(modal).getByRole('button', { name: 'Retry save' }));
+    await waitFor(() => expect(screen.queryByTestId('ion-modal')).not.toBeInTheDocument());
+    expect(preference()).toBe('other-player');
+    expect(screen.getByText('Sam')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /change player/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear tracked player' }));
+    expect(preference()).toBeNull();
+    expect(eventsApi.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a stale tracked-player selection after account replacement and return', async () => {
+    const actions = captureIonicActions();
+    const view = render(<LiveMatchPage matchId="m" />);
+    await chooseTrackedPlayer();
+    fireEvent.click(screen.getByRole('button', { name: /change player/i }));
+    await screen.findByRole('button', { name: '4 · Sam' });
+    const staleSelection = actions.get('4 · Sam')!;
+    signInFixture(); view.rerender(<LiveMatchPage matchId="m" />);
+    await waitFor(() => expect(screen.queryByTestId('ion-modal')).not.toBeInTheDocument());
+    fixture.authenticated = false; fixture.matches.m = { ...fixture.matches.m, createdByUserId: 'guest-parent' };
+    view.rerender(<LiveMatchPage matchId="m" />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'goal' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: /change player/i }));
+    await screen.findByRole('button', { name: '4 · Sam' });
+    await act(async () => staleSelection());
+    expect(preference()).toBe('child');
+    expect(eventsApi.create).not.toHaveBeenCalled();
+  });
+
+  it.each(['CANCELLED', 'POSTPONED', 'UNKNOWN', 'restore', 'state-error', 'period-error', 'loading'])('blocks UI and direct timeline correction in %s', async state => {
+    seedSavedEvent();
+    if (state === 'restore') fixture.states.m = undefined;
+    else if (state === 'state-error') fixture.stateError = 'State read failed';
+    else if (state === 'period-error') fixture.periodsError = 'Periods read failed';
+    else if (state === 'loading') fixture.snapshotLoading = true;
+    else fixture.states.m = { ...fixture.states.m, status: state };
+    render(<LiveMatchPage matchId="m" />);
+    const undo = await screen.findByRole('button', { name: 'Undo' });
+    expect(undo).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Delete event' })).toBeDisabled();
+    fireEvent.click(undo);
+    await act(async () => fixture.timelineDeleteHandler!({ kind: 'event', id: 'saved-event' }));
+    expect(eventsApi.delete).not.toHaveBeenCalled();
+    expect(eventsApi.update).not.toHaveBeenCalled();
+  });
+
+  it.each(['PAUSED', 'COMPLETED'])('allows durable reloaded Undo and timeline delete in ready %s', async status => {
+    seedSavedEvent(); fixture.states.m = { ...fixture.states.m, status };
+    const view = render(<LiveMatchPage matchId="m" />);
+    const undo = await screen.findByRole('button', { name: 'Undo' });
+    await waitFor(() => expect(undo).toBeEnabled());
+    expect(screen.getByRole('button', { name: 'Delete event' })).toBeEnabled();
+    fireEvent.click(undo);
+    await waitFor(() => expect(eventsApi.delete).toHaveBeenCalledWith('saved-event'));
+    seedSavedEvent(); view.rerender(<LiveMatchPage matchId="m" />);
+    const remove = await screen.findByRole('button', { name: 'Delete event' });
+    await waitFor(() => expect(remove).toBeEnabled());
+    fireEvent.click(remove);
+    await waitFor(() => expect(eventsApi.delete).toHaveBeenCalledTimes(2));
+  });
+
+  it.each(['PAUSED', 'COMPLETED', 'CANCELLED', 'POSTPONED'])('shares current %s readiness with stale sentiment handlers', async status => {
+    const actions = captureIonicActions();
+    const view = render(<LiveMatchPage matchId="m" />);
+    const modal = await open();
+    fireEvent.click(within(modal).getByRole('button', { name: 'Save without player' }));
+    await waitFor(() => expect(screen.queryByTestId('ion-modal')).not.toBeInTheDocument());
+    const oldRate = actions.get('+')!;
+    fixture.states.m = { ...fixture.states.m, status };
+    view.rerender(<LiveMatchPage matchId="m" />);
+    const writable = status === 'PAUSED' || status === 'COMPLETED';
+    await waitFor(() => writable ? expect(screen.getByRole('button', { name: '+' })).toBeEnabled() : expect(screen.getByRole('button', { name: '+' })).toBeDisabled());
+    await act(async () => oldRate());
+    if (writable) await waitFor(() => expect(eventsApi.update).toHaveBeenCalledWith('event-0', { sentiment: 1 }));
+    else expect(eventsApi.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks corrections during an event save and enables them after its terminal success', async () => {
+    seedSavedEvent(); render(<LiveMatchPage matchId="m" />);
+    const modal = await open();
+    const pending = deferred<any>(); vi.mocked(eventsApi.create).mockReturnValueOnce(pending.promise);
+    fireEvent.click(within(modal).getByRole('button', { name: 'Save without player' }));
+    await waitFor(() => expect(eventsApi.create).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    await act(async () => fixture.timelineDeleteHandler!({ kind: 'event', id: 'saved-event' }));
+    expect(eventsApi.delete).not.toHaveBeenCalled();
+    await act(async () => pending.resolve({ id: 'saved-new', ...vi.mocked(eventsApi.create).mock.calls[0][0], createdAt: fixture.now + 1 }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
+  });
+
+  it('keeps corrections blocked through a failed lifecycle update until its retry succeeds', async () => {
+    seedSavedEvent(); render(<LiveMatchPage matchId="m" />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
+    const pending = deferred<any>(); vi.mocked(matchStateDataLayer.upsert).mockReturnValueOnce(pending.promise);
+    fireEvent.click(screen.getByRole('button', { name: 'End Period' }));
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    await act(async () => fixture.timelineDeleteHandler!({ kind: 'event', id: 'saved-event' }));
+    expect(eventsApi.delete).not.toHaveBeenCalled();
+    await act(async () => pending.reject(new Error('Period update failed')));
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+    await act(async () => fixture.timelineDeleteHandler!({ kind: 'event', id: 'saved-event' }));
+    expect(eventsApi.delete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry match update' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(eventsApi.delete).toHaveBeenCalledWith('saved-event'));
+  });
+
+  it('blocks repeated correction and conflicting stale event/lifecycle handlers, preserving retry', async () => {
+    const actions = captureIonicActions();
+    seedSavedEvent(); render(<LiveMatchPage matchId="m" />);
+    const modal = await open();
+    const staleSave = actions.get('Save without player')!;
+    const staleComplete = actions.get('Complete')!;
+    const staleDelete = fixture.timelineDeleteHandler!;
+    const pending = deferred<void>(); vi.mocked(eventsApi.delete).mockReturnValueOnce(pending.promise);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    await act(async () => { staleSave(); staleComplete(); staleDelete({ kind: 'event', id: 'saved-event' }); });
+    expect(eventsApi.create).not.toHaveBeenCalled();
+    expect(matchStateDataLayer.upsert).not.toHaveBeenCalled();
+    expect(matchPeriodsDataLayer.endPeriod).not.toHaveBeenCalled();
+    expect(eventsApi.delete).toHaveBeenCalledTimes(1);
+    expect(within(modal).getByRole('button', { name: 'Save without player' })).toBeDisabled();
+    await act(async () => pending.reject(new Error('Delete failed')));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Delete failed');
+    expect(within(modal).getByRole('button', { name: 'Save without player' })).toBeEnabled();
+    fireEvent.click(within(modal).getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(eventsApi.delete).toHaveBeenCalledTimes(2));
+  });
+
+  it.each(['removed', 'deleted', 'account-return', 'match'])('rejects a stale timeline target after %s replacement', async replacement => {
+    signInFixture(); seedSavedEvent();
+    const view = render(<LiveMatchPage matchId="m" />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled());
+    const staleDelete = fixture.timelineDeleteHandler!;
+    if (replacement === 'removed') fixture.events.m = [];
+    else if (replacement === 'deleted') fixture.events.m = [{ ...fixture.events.m[0], isDeleted: true }];
+    else if (replacement === 'account-return') {
+      fixture.userId = 'other-parent'; fixture.matches.m = { ...fixture.matches.m, createdByUserId: fixture.userId };
+      view.rerender(<LiveMatchPage matchId="m" />);
+      await waitFor(() => expect(screen.getByRole('button', { name: 'goal' })).toBeEnabled());
+      fixture.userId = 'parent'; fixture.matches.m = { ...fixture.matches.m, createdByUserId: fixture.userId };
+    } else {
+      live('other'); fixture.events.other = [{ ...fixture.events.m[0], matchId: 'other' }];
+    }
+    view.rerender(<LiveMatchPage matchId={replacement === 'match' ? 'other' : 'm'} />);
+    if (replacement === 'removed') await waitFor(() => expect(screen.queryByTestId('timeline-event')).not.toBeInTheDocument());
+    else await waitFor(() => expect(screen.getByRole('button', { name: 'goal' })).toBeEnabled());
+    await act(async () => staleDelete({ kind: 'event', id: 'saved-event' }));
+    expect(eventsApi.delete).not.toHaveBeenCalled();
   });
 });

@@ -1,185 +1,197 @@
-/* ===== GRASSROOTS SPORTS APP COLOR SYSTEM ===== */
-/* Inspired by top sports betting apps: DraftKings, FanDuel, ESPN */
-
-/* Import this file in main.tsx or index.css to use across the entire app */
+/* ===== TOUCHLINE DESIGN SYSTEM - COLOR TOKENS ===== */
+/* Refined daylight-readable sports utility foundation */
 
 :root {
-  /* ===== PRIMARY BRAND COLORS ===== */
-  --grassroots-primary: #1a202c;          /* Deep navy - professional, trustworthy */
-  --grassroots-primary-light: #2d3748;    /* Lighter navy for gradients */
-  --grassroots-accent: #3182ce;           /* Electric blue - action, energy */
-  --grassroots-accent-light: #4299e1;     /* Lighter blue for hover states */
-  
-  /* ===== SUCCESS & ACTION COLORS ===== */
-  --grassroots-success: #10b981;          /* Vibrant emerald green - wins, positive actions */
-  --grassroots-success-light: #34d399;    /* Bright light green for backgrounds */
-  --grassroots-warning: #ed8936;          /* Orange - alerts, live events */
-  --grassroots-danger: #e53e3e;           /* Red - losses, critical actions */
-  
-  /* ===== SURFACE & BACKGROUND COLORS ===== */
-  --grassroots-surface: #ffffff;          /* Pure white backgrounds */
-  --grassroots-surface-elevated: #f7fafc; /* Slightly elevated surfaces */
-  --grassroots-surface-variant: #edf2f7;  /* Card backgrounds, dividers */
-  --grassroots-background: #f7fafc;       /* Main background */
-  
-  /* ===== TEXT COLORS - HIGH CONTRAST ===== */
-  --grassroots-text-primary: #1a202c;     /* Primary text - dark navy */
-  --grassroots-text-secondary: #4a5568;   /* Secondary text - readable gray */
-  --grassroots-text-tertiary: #718096;    /* Tertiary text - subtle gray */
-  --grassroots-text-on-dark: #ffffff;     /* White text on dark backgrounds */
-  --grassroots-text-on-accent: #ffffff;   /* White text on accent colors */
-  
+  /* ===== TOUCHLINE SHARED PALETTE CONTRACT ===== */
+  --touchline-bg: #f8faf7;
+  --touchline-surface: #ffffff;
+  --touchline-ink: #14231d;
+  --touchline-forest: #12392d;
+  --touchline-accent-ink: #12392d;
+  --touchline-accent-ink-rgb: 18, 57, 45;
+  --touchline-muted: #56645d;
+  --touchline-line: #dce4de;
+  --touchline-soft: #edf3ee;
+  --touchline-radius: 14px;
+
+  /* ===== BACKWARD-COMPATIBLE GRASSROOTS BRAND MAPPINGS ===== */
+  --grassroots-primary: var(--touchline-forest);
+  --grassroots-primary-light: #1d5242;
+  --grassroots-accent: var(--touchline-forest);
+  --grassroots-accent-light: #225a49;
+
+  /* ===== SUCCESS, WARNING, DANGER (SEMANTIC) ===== */
+  --grassroots-success: #26734d;
+  --grassroots-success-light: #d1fae5;
+  --grassroots-warning: #f59e0b;
+  --grassroots-danger: #dc2626;
+
+  /* ===== SURFACE & BACKGROUND ===== */
+  --grassroots-surface: var(--touchline-surface);
+  --grassroots-surface-elevated: var(--touchline-soft);
+  --grassroots-surface-variant: var(--touchline-line);
+  --grassroots-background: var(--touchline-bg);
+
+  /* ===== TEXT COLORS ===== */
+  --grassroots-text-primary: var(--touchline-ink);
+  --grassroots-text-secondary: var(--touchline-muted);
+  --grassroots-text-tertiary: #75837b;
+  --grassroots-text-on-dark: #ffffff;
+  --grassroots-text-on-accent: #ffffff;
+
   /* ===== INTERACTIVE COLORS ===== */
-  --grassroots-interactive: #3182ce;      /* Links, buttons */
-  --grassroots-interactive-hover: #2c5282; /* Hover states */
-  --grassroots-interactive-pressed: #2a4365; /* Pressed states */
-  
-  /* ===== SHADOWS & EFFECTS ===== */
-  --grassroots-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
-  --grassroots-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-  --grassroots-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
-  --grassroots-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
-  
+  --grassroots-interactive: var(--touchline-forest);
+  --grassroots-interactive-hover: #0c261e;
+  --grassroots-interactive-pressed: #081a14;
+
+  /* ===== RESTRAINED SHADOWS (NO HEAVY CARDS/GRADIENTS) ===== */
+  --grassroots-shadow-sm: 0 1px 2px rgba(18, 57, 45, 0.04);
+  --grassroots-shadow-md: 0 1px 3px rgba(18, 57, 45, 0.06);
+  --grassroots-shadow-lg: 0 4px 12px rgba(18, 57, 45, 0.08);
+  --grassroots-shadow-xl: 0 8px 24px rgba(18, 57, 45, 0.12);
+
   /* ===== BORDER RADIUS ===== */
   --grassroots-radius-sm: 8px;
-  --grassroots-radius-md: 12px;
-  --grassroots-radius-lg: 16px;
-  --grassroots-radius-xl: 24px;
-  
+  --grassroots-radius-md: 10px;
+  --grassroots-radius-lg: var(--touchline-radius);
+  --grassroots-radius-xl: 20px;
+
   /* ===== SPACING SYSTEM ===== */
   --grassroots-space-xs: 4px;
   --grassroots-space-sm: 8px;
   --grassroots-space-md: 16px;
-  --grassroots-space-lg: 24px;
+  --grassroots-space-lg: 20px; /* Aligned 20px gutters */
   --grassroots-space-xl: 32px;
   --grassroots-space-2xl: 48px;
-  
+
   /* ===== IONIC COLOR OVERRIDES ===== */
-  /* Override Ionic's default colors with our sports app palette */
-  --ion-color-primary: var(--grassroots-accent);
-  --ion-color-primary-rgb: 49, 130, 206;
-  --ion-color-primary-contrast: var(--grassroots-text-on-accent);
+  --ion-color-primary: var(--touchline-forest);
+  --ion-color-primary-rgb: 18, 57, 45;
+  --ion-color-primary-contrast: #ffffff;
   --ion-color-primary-contrast-rgb: 255, 255, 255;
-  --ion-color-primary-shade: var(--grassroots-interactive-hover);
-  --ion-color-primary-tint: var(--grassroots-accent-light);
-  
-  --ion-color-secondary: var(--grassroots-success);
-  --ion-color-secondary-rgb: 56, 161, 105;
-  --ion-color-secondary-contrast: var(--grassroots-text-on-accent);
+  --ion-color-primary-shade: #103228;
+  --ion-color-primary-tint: #2a4d42;
+
+  --ion-color-secondary: #245b49;
+  --ion-color-secondary-rgb: 36, 91, 73;
+  --ion-color-secondary-contrast: #ffffff;
   --ion-color-secondary-contrast-rgb: 255, 255, 255;
-  --ion-color-secondary-shade: #2f855a;
-  --ion-color-secondary-tint: var(--grassroots-success-light);
-  
-  --ion-color-tertiary: var(--grassroots-interactive);
-  --ion-color-tertiary-rgb: 49, 130, 206;
-  --ion-color-tertiary-contrast: var(--grassroots-text-on-accent);
+  --ion-color-secondary-shade: #1f4f40;
+  --ion-color-secondary-tint: #3a6b5a;
+
+  --ion-color-tertiary: var(--touchline-forest);
+  --ion-color-tertiary-rgb: 18, 57, 45;
+  --ion-color-tertiary-contrast: #ffffff;
   --ion-color-tertiary-contrast-rgb: 255, 255, 255;
-  --ion-color-tertiary-shade: var(--grassroots-interactive-hover);
-  --ion-color-tertiary-tint: var(--grassroots-accent-light);
-  
+  --ion-color-tertiary-shade: #103228;
+  --ion-color-tertiary-tint: #2a4d42;
+
   --ion-color-success: var(--grassroots-success);
-  --ion-color-success-rgb: 56, 161, 105;
-  --ion-color-success-contrast: var(--grassroots-text-on-accent);
+  --ion-color-success-rgb: 38, 115, 77;
+  --ion-color-success-contrast: #ffffff;
   --ion-color-success-contrast-rgb: 255, 255, 255;
-  --ion-color-success-shade: #2f855a;
-  --ion-color-success-tint: var(--grassroots-success-light);
-  
+  --ion-color-success-shade: #216544;
+  --ion-color-success-tint: #3c815f;
+
   --ion-color-warning: var(--grassroots-warning);
-  --ion-color-warning-rgb: 237, 137, 54;
-  --ion-color-warning-contrast: var(--grassroots-text-on-accent);
-  --ion-color-warning-contrast-rgb: 255, 255, 255;
-  --ion-color-warning-shade: #d69e2e;
-  --ion-color-warning-tint: #f6ad55;
-  
+  --ion-color-warning-rgb: 245, 158, 11;
+  --ion-color-warning-contrast: #14231d;
+  --ion-color-warning-contrast-rgb: 20, 35, 29;
+  --ion-color-warning-shade: #d97706;
+  --ion-color-warning-tint: #fbbf24;
+
   --ion-color-danger: var(--grassroots-danger);
-  --ion-color-danger-rgb: 229, 62, 62;
-  --ion-color-danger-contrast: var(--grassroots-text-on-accent);
+  --ion-color-danger-rgb: 220, 38, 38;
+  --ion-color-danger-contrast: #ffffff;
   --ion-color-danger-contrast-rgb: 255, 255, 255;
-  --ion-color-danger-shade: #c53030;
-  --ion-color-danger-tint: #fc8181;
-  
-  --ion-color-medium: var(--grassroots-text-secondary);
-  --ion-color-medium-rgb: 74, 85, 104;
-  --ion-color-medium-contrast: var(--grassroots-text-on-accent);
+  --ion-color-danger-shade: #b91c1c;
+  --ion-color-danger-tint: #ef4444;
+
+  --ion-color-medium: var(--touchline-muted);
+  --ion-color-medium-rgb: 86, 100, 93;
+  --ion-color-medium-contrast: #ffffff;
   --ion-color-medium-contrast-rgb: 255, 255, 255;
-  --ion-color-medium-shade: var(--grassroots-text-tertiary);
-  --ion-color-medium-tint: #a0aec0;
+  --ion-color-medium-shade: #45524b;
+  --ion-color-medium-tint: #6e7d75;
 
-  /* ===== CUSTOM PAGE COLORS ===== */
-  /* Additional colors for page headers - all work with white text */
-  
-  /* Purple - for sophisticated sections like Statistics */
-  --ion-color-purple: #7c3aed;
-  --ion-color-purple-rgb: 124, 58, 237;
-  --ion-color-purple-contrast: #ffffff;
-  --ion-color-purple-contrast-rgb: 255, 255, 255;
-  --ion-color-purple-shade: #6d28d9;
-  --ion-color-purple-tint: #8b5cf6;
+  --ion-background-color: var(--touchline-bg);
+  --ion-text-color: var(--touchline-ink);
+  --ion-card-background: var(--touchline-surface);
+  --ion-item-background: var(--touchline-surface);
+  --ion-toolbar-background: var(--touchline-bg);
+  --ion-border-color: var(--touchline-line);
+  --ion-placeholder-color: var(--touchline-muted);
 
-  /* Indigo - for professional sections like Players */
-  --ion-color-indigo: #4f46e5;
-  --ion-color-indigo-rgb: 79, 70, 229;
-  --ion-color-indigo-contrast: #ffffff;
-  --ion-color-indigo-contrast-rgb: 255, 255, 255;
-  --ion-color-indigo-shade: #4338ca;
-  --ion-color-indigo-tint: #6366f1;
+  --ion-color-light: var(--touchline-soft);
+  --ion-color-light-rgb: 237, 243, 238;
+  --ion-color-light-contrast: var(--touchline-ink);
+  --ion-color-light-contrast-rgb: 20, 35, 29;
+  --ion-color-light-shade: var(--touchline-line);
+  --ion-color-light-tint: var(--touchline-surface);
+  --ion-color-dark: var(--touchline-ink);
+  --ion-color-dark-rgb: 20, 35, 29;
+  --ion-color-dark-contrast: #ffffff;
+  --ion-color-dark-contrast-rgb: 255, 255, 255;
+  --ion-color-dark-shade: #101c17;
+  --ion-color-dark-tint: #2c3933;
 
-  /* Teal - for fresh sections like Teams */
-  --ion-color-teal: #0d9488;
-  --ion-color-teal-rgb: 13, 148, 136;
+  /* ===== SEMANTIC ROLE / PITCH POSITION COLORS ===== */
+  /* Preserved semantic colors for positions across the app */
+  --position-goalkeeper: #059669; /* Emerald */
+  --position-defender: #4f46e5;   /* Indigo */
+  --position-midfielder: #d97706; /* Amber */
+  --position-forward: #dc2626;    /* Rose/Red */
+
+  /* Legacy per-page color variables unified to open forest system */
+  --ion-color-teal: var(--touchline-forest);
+  --ion-color-teal-rgb: 18, 57, 45;
   --ion-color-teal-contrast: #ffffff;
-  --ion-color-teal-contrast-rgb: 255, 255, 255;
-  --ion-color-teal-shade: #0f766e;
-  --ion-color-teal-tint: #14b8a6;
+  --ion-color-teal-shade: #103228;
+  --ion-color-teal-tint: #2a4d42;
 
-  /* Rose - for awards and achievements (coral-red) */
-  --ion-color-rose: #ed4e4e;
-  --ion-color-rose-rgb: 237, 78, 78;
+  --ion-color-indigo: var(--touchline-forest);
+  --ion-color-indigo-rgb: 18, 57, 45;
+  --ion-color-indigo-contrast: #ffffff;
+  --ion-color-indigo-shade: #103228;
+  --ion-color-indigo-tint: #2a4d42;
+
+  --ion-color-emerald: var(--touchline-forest);
+  --ion-color-emerald-rgb: 18, 57, 45;
+  --ion-color-emerald-contrast: #ffffff;
+  --ion-color-emerald-shade: #103228;
+  --ion-color-emerald-tint: #2a4d42;
+
+  --ion-color-sky: var(--touchline-forest);
+  --ion-color-sky-rgb: 18, 57, 45;
+  --ion-color-sky-contrast: #ffffff;
+  --ion-color-sky-shade: #103228;
+  --ion-color-sky-tint: #2a4d42;
+
+  --ion-color-purple: var(--touchline-forest);
+  --ion-color-purple-rgb: 18, 57, 45;
+  --ion-color-purple-contrast: #ffffff;
+  --ion-color-purple-shade: #103228;
+  --ion-color-purple-tint: #2a4d42;
+
+  --ion-color-rose: var(--touchline-forest);
+  --ion-color-rose-rgb: 18, 57, 45;
   --ion-color-rose-contrast: #ffffff;
-  --ion-color-rose-contrast-rgb: 255, 255, 255;
-  --ion-color-rose-shade: #dc2626;
-  --ion-color-rose-tint: #f87171;
+  --ion-color-rose-shade: #103228;
+  --ion-color-rose-tint: #2a4d42;
 
-  /* Amber - for live/active sections */
   --ion-color-amber: #d97706;
   --ion-color-amber-rgb: 217, 119, 6;
   --ion-color-amber-contrast: #ffffff;
-  --ion-color-amber-contrast-rgb: 255, 255, 255;
   --ion-color-amber-shade: #b45309;
   --ion-color-amber-tint: #f59e0b;
-
-  /* Emerald - alternative green */
-  --ion-color-emerald: #059669;
-  --ion-color-emerald-rgb: 5, 150, 105;
-  --ion-color-emerald-contrast: #ffffff;
-  --ion-color-emerald-contrast-rgb: 255, 255, 255;
-  --ion-color-emerald-shade: #047857;
-  --ion-color-emerald-tint: #10b981;
-
-  /* Sky - fresh blue-cyan for lineup page */
-  --ion-color-sky: #0ea5e9;
-  --ion-color-sky-rgb: 14, 165, 233;
-  --ion-color-sky-contrast: #ffffff;
-  --ion-color-sky-contrast-rgb: 255, 255, 255;
-  --ion-color-sky-shade: #0284c7;
-  --ion-color-sky-tint: #38bdf8;
-
-  /* ===== SEMANTIC ROLE COLORS ===== */
-  /* Player position colors (used in cards/stripes/badges) */
-  --position-goalkeeper: var(--ion-color-emerald); /* green */
-  --position-defender: var(--ion-color-indigo);    /* blue/purple */
-  --position-midfielder: var(--ion-color-amber);   /* orange */
-  --position-forward: var(--ion-color-rose);       /* red */
 }
 
-/* ===== IONIC CUSTOM COLOR CLASSES ===== */
-/* Define custom color classes for Ionic components */
-
+/* Ionic custom colour names need their component class mappings as well as tokens. */
 .ion-color-teal {
   --ion-color-base: var(--ion-color-teal);
   --ion-color-base-rgb: var(--ion-color-teal-rgb);
   --ion-color-contrast: var(--ion-color-teal-contrast);
-  --ion-color-contrast-rgb: var(--ion-color-teal-contrast-rgb);
+  --ion-color-contrast-rgb: 255, 255, 255;
   --ion-color-shade: var(--ion-color-teal-shade);
   --ion-color-tint: var(--ion-color-teal-tint);
 }
@@ -188,43 +200,16 @@
   --ion-color-base: var(--ion-color-indigo);
   --ion-color-base-rgb: var(--ion-color-indigo-rgb);
   --ion-color-contrast: var(--ion-color-indigo-contrast);
-  --ion-color-contrast-rgb: var(--ion-color-indigo-contrast-rgb);
+  --ion-color-contrast-rgb: 255, 255, 255;
   --ion-color-shade: var(--ion-color-indigo-shade);
   --ion-color-tint: var(--ion-color-indigo-tint);
-}
-
-.ion-color-rose {
-  --ion-color-base: var(--ion-color-rose);
-  --ion-color-base-rgb: var(--ion-color-rose-rgb);
-  --ion-color-contrast: var(--ion-color-rose-contrast);
-  --ion-color-contrast-rgb: var(--ion-color-rose-contrast-rgb);
-  --ion-color-shade: var(--ion-color-rose-shade);
-  --ion-color-tint: var(--ion-color-rose-tint);
-}
-
-.ion-color-amber {
-  --ion-color-base: var(--ion-color-amber);
-  --ion-color-base-rgb: var(--ion-color-amber-rgb);
-  --ion-color-contrast: var(--ion-color-amber-contrast);
-  --ion-color-contrast-rgb: var(--ion-color-amber-contrast-rgb);
-  --ion-color-shade: var(--ion-color-amber-shade);
-  --ion-color-tint: var(--ion-color-amber-tint);
-}
-
-.ion-color-purple {
-  --ion-color-base: var(--ion-color-purple);
-  --ion-color-base-rgb: var(--ion-color-purple-rgb);
-  --ion-color-contrast: var(--ion-color-purple-contrast);
-  --ion-color-contrast-rgb: var(--ion-color-purple-contrast-rgb);
-  --ion-color-shade: var(--ion-color-purple-shade);
-  --ion-color-tint: var(--ion-color-purple-tint);
 }
 
 .ion-color-emerald {
   --ion-color-base: var(--ion-color-emerald);
   --ion-color-base-rgb: var(--ion-color-emerald-rgb);
   --ion-color-contrast: var(--ion-color-emerald-contrast);
-  --ion-color-contrast-rgb: var(--ion-color-emerald-contrast-rgb);
+  --ion-color-contrast-rgb: 255, 255, 255;
   --ion-color-shade: var(--ion-color-emerald-shade);
   --ion-color-tint: var(--ion-color-emerald-tint);
 }
@@ -233,25 +218,100 @@
   --ion-color-base: var(--ion-color-sky);
   --ion-color-base-rgb: var(--ion-color-sky-rgb);
   --ion-color-contrast: var(--ion-color-sky-contrast);
-  --ion-color-contrast-rgb: var(--ion-color-sky-contrast-rgb);
+  --ion-color-contrast-rgb: 255, 255, 255;
   --ion-color-shade: var(--ion-color-sky-shade);
   --ion-color-tint: var(--ion-color-sky-tint);
 }
 
-/* ===== DARK MODE SUPPORT ===== */
-/* Dark mode is opt-in via .dark-theme class for better pitch-side visibility */
-.dark-theme {
-  --grassroots-surface: #1a202c;
-  --grassroots-surface-elevated: #2d3748;
-  --grassroots-surface-variant: #4a5568;
-  --grassroots-background: #1a202c;
-  --grassroots-text-primary: #f7fafc;
-  --grassroots-text-secondary: #e2e8f0;
-  --grassroots-text-tertiary: #cbd5e1;
-  --grassroots-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --grassroots-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
-  --grassroots-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.3);
-  --grassroots-shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.4);
+.ion-color-purple {
+  --ion-color-base: var(--ion-color-purple);
+  --ion-color-base-rgb: var(--ion-color-purple-rgb);
+  --ion-color-contrast: var(--ion-color-purple-contrast);
+  --ion-color-contrast-rgb: 255, 255, 255;
+  --ion-color-shade: var(--ion-color-purple-shade);
+  --ion-color-tint: var(--ion-color-purple-tint);
 }
 
-/* Utility classes removed to reduce bundle size; use component/page CSS */
+.ion-color-rose {
+  --ion-color-base: var(--ion-color-rose);
+  --ion-color-base-rgb: var(--ion-color-rose-rgb);
+  --ion-color-contrast: var(--ion-color-rose-contrast);
+  --ion-color-contrast-rgb: 255, 255, 255;
+  --ion-color-shade: var(--ion-color-rose-shade);
+  --ion-color-tint: var(--ion-color-rose-tint);
+}
+
+.ion-color-amber {
+  --ion-color-base: var(--ion-color-amber);
+  --ion-color-base-rgb: var(--ion-color-amber-rgb);
+  --ion-color-contrast: #14231d;
+  --ion-color-contrast-rgb: 20, 35, 29;
+  --ion-color-shade: var(--ion-color-amber-shade);
+  --ion-color-tint: var(--ion-color-amber-tint);
+}
+
+/* Keep the existing pitch markers distinct from the forest page controls. */
+.visual-pitch-interface {
+  --ion-color-indigo: #4f46e5;
+  --ion-color-indigo-shade: #4338ca;
+  --ion-color-indigo-tint: #6366f1;
+}
+
+/* ===== DARK MODE SUPPORT ===== */
+.dark-theme {
+  --touchline-bg: #111e19;
+  --touchline-surface: #1b2c24;
+  --touchline-ink: #f4f6f4;
+  --touchline-forest: #2e7d62;
+  /* Foregrounds need more contrast than white-labelled green fills. */
+  --touchline-accent-ink: #9cdebf;
+  --touchline-accent-ink-rgb: 156, 222, 191;
+  --touchline-muted: #9ab0a4;
+  --touchline-line: #2a3e34;
+  --touchline-soft: #182821;
+  --touchline-radius: 14px;
+
+  --grassroots-primary: var(--touchline-forest);
+  --grassroots-primary-light: #389e7c;
+  --grassroots-accent: var(--touchline-forest);
+  --grassroots-accent-light: #389e7c;
+
+  --grassroots-surface: var(--touchline-surface);
+  --grassroots-surface-elevated: #21352c;
+  --grassroots-surface-variant: var(--touchline-line);
+  --grassroots-background: var(--touchline-bg);
+
+  --grassroots-text-primary: var(--touchline-ink);
+  --grassroots-text-secondary: var(--touchline-muted);
+  --grassroots-text-tertiary: #7d9488;
+
+  --ion-color-primary: var(--touchline-forest);
+  --ion-color-primary-rgb: 46, 125, 98;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #24654f;
+  --ion-color-primary-tint: #439678;
+
+  --ion-background-color: var(--touchline-bg);
+  --ion-text-color: var(--touchline-ink);
+  --ion-card-background: var(--touchline-surface);
+  --ion-color-light-rgb: 24, 40, 33;
+  --ion-color-light-contrast-rgb: 244, 246, 244;
+  --ion-color-dark-rgb: 244, 246, 244;
+  --ion-color-dark-contrast: #111e19;
+  --ion-color-dark-contrast-rgb: 17, 30, 25;
+  --ion-color-dark-shade: #d7d9d7;
+  --ion-color-dark-tint: #f5f7f5;
+  --ion-color-tertiary-rgb: 46, 125, 98;
+  --ion-color-teal-rgb: 46, 125, 98;
+  --ion-color-indigo-rgb: 46, 125, 98;
+  --ion-color-emerald-rgb: 46, 125, 98;
+  --ion-color-sky-rgb: 46, 125, 98;
+  --ion-color-purple-rgb: 46, 125, 98;
+  --ion-color-rose-rgb: 46, 125, 98;
+
+  --grassroots-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --grassroots-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.25);
+  --grassroots-shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --grassroots-shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.45);
+}

@@ -199,9 +199,9 @@ const OfflineSyncIndicator: React.FC = () => {
 
   if (!isAuthenticated) {
     return (
-      <IonChip color="medium" style={{ height: 22 }} title="Guest recordings stay on this device. Sign in to sync across devices.">
-        <IonIcon icon={cloudOffline} />
-        <IonLabel style={{ fontSize: 12 }}>On this device</IonLabel>
+      <IonChip className="offline-sync-indicator guest" title="Guest recordings stay on this device. Sign in to sync across devices.">
+        <IonIcon icon={cloudOffline} aria-hidden="true" />
+        <IonLabel>On this device</IonLabel>
       </IonChip>
     );
   }
@@ -210,18 +210,18 @@ const OfflineSyncIndicator: React.FC = () => {
   // Requirements: 4.1 - Display visual indicator showing offline status
   if (!online) {
     return (
-      <IonChip color="warning" style={{ height: 22 }}>
-        <IonIcon icon={cloudOffline} />
-        <IonLabel style={{ fontSize: 12 }}>Offline</IonLabel>
+      <IonChip className="offline-sync-indicator offline">
+        <IonIcon icon={cloudOffline} aria-hidden="true" />
+        <IonLabel>Offline</IonLabel>
       </IonChip>
     );
   }
 
   if (!statusKnown) {
     return (
-      <IonChip color="medium" style={{ height: 22 }}>
-        <IonIcon icon={timeOutline} />
-        <IonLabel style={{ fontSize: 12 }}>{statusError ? 'Sync status unavailable' : 'Checking sync'}</IonLabel>
+      <IonChip className="offline-sync-indicator checking">
+        <IonIcon icon={timeOutline} aria-hidden="true" />
+        <IonLabel>{statusError ? 'Sync status unavailable' : 'Checking sync'}</IonLabel>
       </IonChip>
     );
   }
@@ -229,12 +229,17 @@ const OfflineSyncIndicator: React.FC = () => {
   // Quarantined/permanent failures
   if (blocked > 0) {
     return (
-      <IonChip color="danger" style={{ height: 22, cursor: 'pointer' }} onClick={goToSyncIssues}>
-        <IonIcon icon={alertCircle} />
-        <IonLabel style={{ fontSize: 12 }}>
+      <button
+        type="button"
+        className="offline-sync-indicator actionable issues"
+        aria-label={`View ${blocked} sync issue${blocked === 1 ? '' : 's'}`}
+        onClick={goToSyncIssues}
+      >
+        <IonIcon icon={alertCircle} aria-hidden="true" />
+        <IonLabel>
           Issues {blocked}
         </IonLabel>
-      </IonChip>
+      </button>
     );
   }
 
@@ -253,16 +258,16 @@ const OfflineSyncIndicator: React.FC = () => {
         return `Retry in ${hours}h`;
       })();
       return (
-        <IonChip color="medium" style={{ height: 22 }}>
-          <IonIcon icon={timeOutline} />
-          <IonLabel style={{ fontSize: 12 }}>{label}</IonLabel>
+        <IonChip className="offline-sync-indicator waiting">
+          <IonIcon icon={timeOutline} aria-hidden="true" />
+          <IonLabel>{label}</IonLabel>
         </IonChip>
       );
     }
     return (
-      <IonChip color="tertiary" style={{ height: 22 }}>
-        <IonIcon icon={cloudUpload} />
-        <IonLabel style={{ fontSize: 12 }}>
+      <IonChip className="offline-sync-indicator syncing">
+        <IonIcon icon={cloudUpload} aria-hidden="true" />
+        <IonLabel>
           {pending > 0 ? `Syncing ${pending}` : 'Syncing...'}
         </IonLabel>
       </IonChip>
@@ -272,9 +277,9 @@ const OfflineSyncIndicator: React.FC = () => {
   // All synced state
   // Requirements: 4.4 - Show confirmation that data has been synced
   return (
-    <IonChip color="success" style={{ height: 22 }}>
-      <IonIcon icon={checkmarkCircle} />
-      <IonLabel style={{ fontSize: 12 }}>All synced</IonLabel>
+    <IonChip className="offline-sync-indicator synced">
+      <IonIcon icon={checkmarkCircle} aria-hidden="true" />
+      <IonLabel>All synced</IonLabel>
     </IonChip>
   );
 };

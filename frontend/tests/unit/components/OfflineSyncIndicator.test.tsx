@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import OfflineSyncIndicator from '../../../src/components/OfflineSyncIndicator';
 
@@ -70,5 +70,19 @@ describe('OfflineSyncIndicator', () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
     act(() => window.dispatchEvent(new Event('offline')));
     expect(screen.getByText('Offline')).toBeInTheDocument();
+  });
+
+  it('keeps blocked changes actionable without claiming sync success', async () => {
+    mocks.getPendingCounts.mockResolvedValue({ ...progress, total: 2, blocked: 2 });
+    const navigate = vi.spyOn(window.history, 'pushState').mockImplementation(() => {});
+    try {
+      render(<OfflineSyncIndicator />);
+      const issues = await screen.findByRole('button', { name: 'View 2 sync issues' });
+      expect(screen.queryByText('All synced')).not.toBeInTheDocument();
+      fireEvent.click(issues);
+      expect(navigate).toHaveBeenCalledWith({}, '', '/sync-issues');
+    } finally {
+      navigate.mockRestore();
+    }
   });
 });

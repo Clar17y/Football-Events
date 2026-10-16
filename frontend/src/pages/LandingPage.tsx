@@ -58,9 +58,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                         </div>
 
                         <h1 className="hero-title">
-                            Track Every Match.
+                            Your match day.
                             <br />
-                            <span className="hero-title-highlight">No WiFi Required.</span>
+                            <span className="hero-title-highlight">Every moment.</span>
                         </h1>
 
                         <p className="hero-subtitle">
@@ -73,13 +73,13 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                                 className="hero-cta-primary"
                                 onClick={() => navigate('dashboard')}
                             >
-                                Try as Guest — Free
+                                Start a match
                             </IonButton>
                             <IonButton
                                 className="hero-cta-secondary"
                                 onClick={() => navigate('register')}
                             >
-                                Sign Up Free
+                                Create a free account
                             </IonButton>
                         </div>
 
@@ -93,8 +93,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                                 <div className="hero-stat-label">To Get Started</div>
                             </div>
                             <div className="hero-stat">
-                                <div className="hero-stat-value">&lt;1min</div>
-                                <div className="hero-stat-label">Setup Time</div>
+                                <div className="hero-stat-value">Your device</div>
+                                <div className="hero-stat-label">Guest recordings stay here</div>
                             </div>
                         </div>
                     </div>
@@ -262,7 +262,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
 
                         {/* Premium Tier */}
                         <div className="pricing-card featured">
-                            <span className="pricing-badge">Most Popular</span>
+                            <span className="pricing-badge">Coming soon</span>
                             <h3 className="pricing-tier-name">{TIERS.premium.name}</h3>
                             <p className="pricing-tier-tagline">{TIERS.premium.tagline}</p>
                             <div className="pricing-price">
@@ -286,7 +286,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                                 className="pricing-cta"
                                 onClick={() => navigate('register')}
                             >
-                                Get Premium
+                                Create a free account
                             </IonButton>
                         </div>
                     </div>

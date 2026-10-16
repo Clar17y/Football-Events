@@ -1,16 +1,16 @@
-/* ===== SHARED FORM SECTION STYLES ===== */
-/* Structural layout and spacing - no colors hardcoded */
+/* ===== SHARED FORM SECTION STYLES - TOUCHLINE SYSTEM ===== */
+/* Structural layout, clean typography and accessible touch targets */
 
 .modal {
   --width: 100%;
   --max-width: 600px;
   --height: 100%;
   --max-height: 90vh;
-  --border-radius: var(--grassroots-radius-lg);
+  --border-radius: var(--touchline-radius, 14px);
 }
 
 .content {
-  --background: var(--theme-background, var(--grassroots-background));
+  --background: var(--theme-background, var(--touchline-bg, #f8faf7));
   --padding-top: 0;
   --padding-bottom: 0;
   --padding-start: 0;
@@ -18,61 +18,63 @@
 }
 
 .container {
-  padding: var(--grassroots-space-sm);
+  padding: 16px;
   max-width: 100%;
 }
 
 /* Form Sections */
 .sectionCard {
-  margin-bottom: var(--grassroots-space-sm);
-  border-radius: var(--grassroots-radius-md);
-  box-shadow: var(--grassroots-shadow-sm);
-  border: 1px solid var(--theme-surface-variant, var(--grassroots-surface-variant));
-  background: var(--theme-surface, var(--grassroots-surface));
+  margin-bottom: 16px;
+  border-radius: var(--touchline-radius, 14px);
+  box-shadow: none;
+  border: 1px solid var(--theme-surface-variant, var(--touchline-line, #dce4de));
+  background: var(--theme-surface, var(--touchline-surface, #ffffff));
+  overflow: hidden;
 }
 
 .sectionHeader {
-  background: var(--theme-primary, var(--ion-color-primary)) !important;
-  --color: var(--theme-on-primary, white);
-  border-radius: var(--grassroots-radius-md) var(--grassroots-radius-md) 0 0;
-  padding: var(--grassroots-space-md);
+  background: var(--touchline-soft, #edf3ee) !important;
+  color: var(--touchline-ink, #14231d) !important;
+  border-bottom: 1px solid var(--touchline-line, #dce4de);
+  border-radius: var(--touchline-radius, 14px) var(--touchline-radius, 14px) 0 0;
+  padding: 12px 16px;
 }
 
 .sectionTitle {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 600;
-  font-size: 1rem;
-  color: var(--theme-on-primary, white) !important;
+  font-size: 0.95rem;
+  color: var(--touchline-ink, #14231d) !important;
   display: flex;
   align-items: center;
-  gap: var(--grassroots-space-sm);
+  gap: 8px;
   margin: 0;
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .sectionIcon {
-  font-size: 1.2rem;
-  color: var(--theme-on-primary, white) !important;
+  font-size: 1.15rem;
+  color: var(--touchline-forest, #12392d) !important;
 }
 
 .sectionContent {
-  --background: var(--theme-surface, var(--grassroots-surface));
-  background: var(--theme-surface, var(--grassroots-surface)) !important;
-  padding: var(--grassroots-space-md);
+  --background: var(--theme-surface, var(--touchline-surface, #ffffff));
+  background: var(--theme-surface, var(--touchline-surface, #ffffff)) !important;
+  padding: 16px;
 }
 
 /* Form Items */
 .formItem {
   --background: transparent !important;
-  --border-radius: var(--grassroots-radius-sm);
-  --min-height: 36px;
+  --border-radius: 8px;
+  --min-height: 44px;
   --padding-start: 0;
   --padding-end: 0;
   --padding-top: 0;
   --padding-bottom: 0;
-  margin-bottom: var(--grassroots-space-sm);
+  margin-bottom: 12px;
   border: none;
-  border-radius: var(--grassroots-radius-sm);
+  border-radius: 8px;
   transition: all 0.2s ease;
   --border-width: 0;
   --inner-border-width: 0;
@@ -86,117 +88,115 @@
 }
 
 .formItem.error {
-  border-color: var(--ion-color-danger);
-  background: rgba(var(--ion-color-danger-rgb), 0.05);
+  border-color: var(--ion-color-danger, #dc2626);
+  background: rgba(220, 38, 38, 0.05);
 }
 
-/* Remove focus styling from the item container */
 .formItem:focus-within {
   border-color: transparent;
   box-shadow: none;
 }
 
 .formLabel {
-  --color: var(--theme-on-surface, var(--grassroots-text-primary));
-  color: var(--theme-on-surface, var(--grassroots-text-primary));
+  --color: var(--theme-on-surface, var(--touchline-ink, #14231d));
+  color: var(--theme-on-surface, var(--touchline-ink, #14231d));
   font-weight: 600;
-  font-size: 0.9rem;
-  margin-bottom: var(--grassroots-space-xs) !important;
-  margin-left: 6px !important;
+  font-size: 14px;
+  margin-bottom: 6px !important;
+  margin-left: 4px !important;
 }
 
-/* Ensure stacked IonLabel text color inside IonItem follows theme tokens */
 .formItem ion-label,
 ion-item .formLabel,
 ion-item .formLabel * {
-  color: var(--theme-on-surface, var(--grassroots-text-primary)) !important;
+  color: var(--theme-on-surface, var(--touchline-ink, #14231d)) !important;
 }
 
 .formInput {
-  --color: var(--theme-on-surface, var(--grassroots-text-primary));
-  --placeholder-color: var(--theme-on-surface-variant, var(--grassroots-text-secondary));
-  font-size: 0.95rem;
+  --color: var(--theme-on-surface, var(--touchline-ink, #14231d));
+  --placeholder-color: var(--theme-on-surface-variant, var(--touchline-muted, #56645d));
+  font-size: 15px;
   font-weight: 500;
   --background: transparent !important;
-  --border-style: solid;
-  --border-color: var(--theme-surface-variant, var(--grassroots-surface-variant));
-  --highlight-color-focused: var(--theme-primary, var(--ion-color-primary));
-  --highlight-height: 2px;
-  --border-radius: var(--grassroots-radius-sm);
-  --padding-start: var(--grassroots-space-sm);
-  --padding-end: var(--grassroots-space-sm);
-  --padding-top: 2px;
-  --padding-bottom: 2px;
-  margin-top: var(--grassroots-space-xs);
-  margin-left: 4px;
-  margin-right: 8px;
-  width: calc(100% - 12px);
-  border: 1px solid var(--theme-surface-variant, var(--grassroots-surface-variant));
-  border-radius: var(--grassroots-radius-sm);
   --border-style: none;
+  --highlight-color-focused: var(--touchline-forest, #12392d);
+  --highlight-height: 2px;
+  --border-radius: 8px;
+  --padding-start: 12px;
+  --padding-end: 12px;
+  --padding-top: 6px;
+  --padding-bottom: 6px;
+  margin-top: 4px;
+  margin-left: 2px;
+  margin-right: 2px;
+  width: calc(100% - 4px);
+  min-height: 44px;
+  border: 1px solid var(--touchline-line, #dce4de);
+  border-radius: 8px;
   --highlight-color-invalid: transparent;
 }
 
-/* Enhanced focus styling for inputs */
+/* Focus styling for inputs */
 .formInput:focus-within {
-  --highlight-color-focused: var(--theme-primary, var(--ion-color-primary)) !important;
-  --highlight-height: 2px !important;
-  border: 2px solid var(--theme-primary, var(--ion-color-primary)) !important;
-  box-shadow: 0 0 0 2px rgba(var(--theme-primary-rgb, var(--ion-color-primary-rgb)), 0.15) !important;
+  border: 2px solid var(--touchline-forest, #12392d) !important;
+  box-shadow: 0 0 0 2px rgba(18, 57, 45, 0.12) !important;
   transform: none;
-  transition: all 0.2s ease;
 }
 
 .formInput.error:focus-within {
-  --highlight-color-focused: var(--ion-color-danger) !important;
-  border: 2px solid var(--ion-color-danger) !important;
-  box-shadow: 0 0 0 2px rgba(var(--ion-color-danger-rgb), 0.15) !important;
+  border: 2px solid var(--ion-color-danger, #dc2626) !important;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.12) !important;
 }
 
 /* Date Picker Wrapper */
 .datePickerWrapper {
-  margin-top: var(--grassroots-space-md);
-  margin-bottom: var(--grassroots-space-sm);
+  margin-top: 16px;
+  margin-bottom: 12px;
 }
 
 .datePickerWrapper.error .MuiOutlinedInput-root fieldset {
-  border-color: var(--ion-color-danger) !important;
+  border-color: var(--ion-color-danger, #dc2626) !important;
 }
 
 /* Action Buttons */
 .formActions {
   display: flex;
-  gap: var(--grassroots-space-sm);
-  margin-top: var(--grassroots-space-xl);
-  padding: var(--grassroots-space-md) 0;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 12px 0;
 }
 
 .cancelButton {
-  --color: var(--theme-on-surface-variant, var(--grassroots-text-secondary));
-  --background: transparent;
-  --background-hover: var(--theme-surface-variant, var(--grassroots-surface-variant));
-  --border-radius: var(--grassroots-radius-md);
+  --color: var(--theme-on-surface-variant, var(--touchline-muted, #56645d));
+  --background: var(--touchline-soft, #edf3ee);
+  --background-hover: var(--touchline-line, #dce4de);
+  --border-radius: var(--touchline-radius, 14px);
   font-weight: 600;
+  min-height: 44px;
+  text-transform: none;
   flex: 1;
 }
 
 .submitButton {
-  --border-radius: var(--grassroots-radius-md);
+  --border-radius: var(--touchline-radius, 14px);
   font-weight: 600;
+  min-height: 44px;
+  text-transform: none;
   flex: 2;
-  --background: var(--theme-primary, var(--ion-color-primary));
-  --background-activated: var(--theme-primary-shade, var(--ion-color-primary-shade));
-  --background-hover: var(--theme-primary-tint, var(--ion-color-primary-tint));
-  --color: var(--theme-on-primary, white);
+  --background: var(--touchline-forest, #12392d);
+  --background-activated: #0c261e;
+  --background-hover: #1d5242;
+  --color: #ffffff;
   opacity: 1 !important;
 }
 
 /* Error Text */
 .errorText {
-  font-size: 0.8rem;
+  font-size: 13px;
   font-weight: 500;
-  margin-top: var(--grassroots-space-xs);
-  margin-left: var(--grassroots-space-sm);
+  color: var(--ion-color-danger, #dc2626);
+  margin-top: 4px;
+  margin-left: 6px;
   display: block;
 }
 
@@ -204,57 +204,56 @@ ion-item .formLabel * {
 .colorInputRow {
   display: flex;
   align-items: center;
-  gap: var(--grassroots-space-sm);
+  gap: 10px;
   width: 100%;
 }
 
-/* Color Preview */
 .colorPreview {
   display: flex;
   align-items: center;
-  gap: var(--grassroots-space-xs);
+  gap: 6px;
   cursor: pointer;
-  padding: var(--grassroots-space-xs);
-  border-radius: var(--grassroots-radius-sm);
+  padding: 6px;
+  border-radius: 8px;
   transition: background-color 0.2s ease;
 }
 
 .colorPreview:hover {
-  background-color: var(--theme-surface-variant, var(--grassroots-surface-variant));
+  background-color: var(--touchline-soft, #edf3ee);
 }
 
 .colorPreviewDot {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   cursor: pointer;
-  transition: all 0.2s ease;
+  border: 2px solid var(--touchline-line, #dce4de);
+  transition: transform 0.2s ease;
   flex-shrink: 0;
 }
 
 .colorPreviewDot:hover {
   transform: scale(1.1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .colorPreviewLabel {
-  font-size: 0.85rem;
+  font-size: 13px;
   font-weight: 500;
-  color: var(--theme-on-surface, var(--grassroots-text-primary));
+  color: var(--touchline-ink, #14231d);
   user-select: none;
 }
 
 /* Logo Preview */
 .logoPreview {
-  margin-top: var(--grassroots-space-sm);
+  margin-top: 10px;
   text-align: center;
 }
 
 .logoPreview img {
-  max-width: 100px;
-  max-height: 100px;
-  border-radius: var(--grassroots-radius-sm);
-  box-shadow: var(--grassroots-shadow-sm);
+  max-width: 90px;
+  max-height: 90px;
+  border-radius: 8px;
+  border: 1px solid var(--touchline-line, #dce4de);
 }
 
 /* Team Input Row */
@@ -263,21 +262,20 @@ ion-item .formLabel * {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: var(--grassroots-space-sm) 0;
+  padding: 8px 0;
 }
 
 .teamInputText {
-  font-size: 0.95rem;
+  font-size: 15px;
   font-weight: 500;
-  color: var(--theme-on-surface, var(--grassroots-text-primary));
+  color: var(--touchline-ink, #14231d);
   flex: 1;
 }
 
-/* Team Preview */
 .teamPreview {
   display: flex;
   align-items: center;
-  gap: var(--grassroots-space-xs);
+  gap: 6px;
   flex-shrink: 0;
 }
 
@@ -285,50 +283,40 @@ ion-item .formLabel * {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  border: 2px solid var(--theme-surface-variant, var(--grassroots-surface-variant));
-  background-color: var(--theme-surface-variant, var(--grassroots-surface-variant));
+  border: 2px solid var(--touchline-line, #dce4de);
+  background-color: var(--touchline-soft, #edf3ee);
   flex-shrink: 0;
 }
 
 .teamPreviewLabel {
-  font-size: 0.8rem;
+  font-size: 13px;
   font-weight: 500;
-  color: var(--theme-on-surface-variant, var(--grassroots-text-secondary));
+  color: var(--touchline-muted, #56645d);
   user-select: none;
 }
-
-/* Dark mode: rely on global theme tokens in styles/theme-tokens.css */
-
 
 /* Responsive Design */
 @media (max-width: 768px) {
   .container {
-    padding: var(--grassroots-space-xs);
+    padding: 12px;
   }
   
   .sectionHeader {
-    padding: var(--grassroots-space-sm);
+    padding: 10px 12px;
   }
   
   .sectionContent {
-    padding: var(--grassroots-space-sm);
-  }
-  
-  .sectionTitle {
-    font-size: 0.9rem;
-  }
-  
-  .sectionIcon {
-    font-size: 1.1rem;
+    padding: 12px;
   }
   
   .formActions {
     flex-direction: column;
-    gap: var(--grassroots-space-xs);
+    gap: 8px;
   }
   
   .cancelButton,
   .submitButton {
     flex: 1;
+    width: 100%;
   }
 }

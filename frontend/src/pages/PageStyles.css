@@ -3,102 +3,218 @@
 /* Import shared brand header styles for consistent branding */
 @import '../styles/brand-headers.css';
 
-/* MatchMaster Branding Styles */
-
-/* Page Header with Color Background */
+/* Page Header Section */
 .page-header-section {
-  padding: var(--grassroots-space-lg) var(--grassroots-space-md) var(--grassroots-space-md);
-  background: linear-gradient(135deg, var(--grassroots-surface) 0%, var(--grassroots-surface-elevated) 100%);
-  border-bottom: 1px solid var(--grassroots-surface-variant);
+  padding: var(--grassroots-space-lg, 20px);
+  background: var(--touchline-bg, #f8faf7);
+  border-bottom: 1px solid var(--touchline-line, #dce4de);
 }
 
 .page-header-with-color {
   display: inline-flex;
   align-items: center;
-  padding: var(--grassroots-space-sm) var(--grassroots-space-md);
-  border-radius: var(--grassroots-radius-md);
-  box-shadow: var(--grassroots-shadow-sm);
+  padding: 8px 14px;
+  border-radius: var(--touchline-radius, 14px);
+  /* Legacy page headings supply inline palette colours; neutralize this known hook. */
+  background: var(--touchline-soft, #edf3ee) !important;
+  border: 1px solid var(--touchline-line, #dce4de);
 }
-
 
 .page-main-title {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: 700;
   letter-spacing: -0.025em;
-  color: var(--grassroots-text-primary);
+  color: var(--touchline-ink, #14231d);
   margin: 0;
 }
 
-/* White text on colored backgrounds */
+/* White text on colored backgrounds if any legacy elements use it */
 .page-header-with-color .page-main-title,
 .page-header-with-color .teams-main-title,
 .page-header-with-color .seasons-main-title {
-  color: white !important;
+  color: var(--touchline-ink, #14231d) !important;
+}
+
+.dark-theme .page-header-section {
+  background: var(--touchline-bg, #111e19);
+  border-bottom-color: var(--touchline-line, #2a3e34);
+}
+
+.dark-theme .page-header-with-color {
+  background: var(--touchline-soft, #182821);
+  border-color: var(--touchline-line, #2a3e34);
+}
+
+.dark-theme .page-main-title {
+  color: var(--touchline-ink, #f4f6f4);
 }
 
 /* Apply theme-aware styles to all pages */
 ion-content {
-  --background: var(--grassroots-background);
-  --color: var(--grassroots-text-primary);
+  --background: var(--touchline-bg, #f8faf7);
+  --color: var(--touchline-ink, #14231d);
 }
 
 ion-card {
-  --background: var(--grassroots-surface);
-  --color: var(--grassroots-text-primary);
-  box-shadow: var(--grassroots-shadow-md);
-  border: 1px solid var(--grassroots-surface-variant);
+  --background: var(--touchline-surface, #ffffff);
+  --color: var(--touchline-ink, #14231d);
+  border-radius: var(--touchline-radius, 14px);
+  border: 1px solid var(--touchline-line, #dce4de);
+  box-shadow: none;
+  margin: 0 0 16px 0;
+}
+
+.dark-theme ion-card {
+  --background: var(--touchline-surface, #1b2c24);
+  --color: var(--touchline-ink, #f4f6f4);
+  border-color: var(--touchline-line, #2a3e34);
 }
 
 ion-card-header {
-  --color: var(--grassroots-text-primary);
+  --color: var(--touchline-ink, #14231d);
+  padding: 16px 20px;
 }
 
 ion-card-title {
-  color: var(--grassroots-text-primary) !important;
+  color: var(--touchline-ink, #14231d) !important;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 600;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
 }
 
 ion-card-content {
-  color: var(--grassroots-text-secondary) !important;
+  color: var(--touchline-muted, #56645d) !important;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 0 20px 20px 20px;
 }
 
-/* Removed unused page-color-bar and page-content selectors */
-
 .page-title {
-  color: var(--grassroots-text-primary) !important;
+  color: var(--touchline-ink, #14231d) !important;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 700;
   letter-spacing: -0.025em;
 }
 
 .page-subtitle {
-  color: var(--grassroots-text-secondary) !important;
+  color: var(--touchline-muted, #56645d) !important;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.95rem;
 }
 
 /* List styling */
 ul {
-  color: var(--grassroots-text-secondary);
+  color: var(--touchline-muted, #56645d);
 }
 
 li {
-  color: var(--grassroots-text-secondary);
+  color: var(--touchline-muted, #56645d);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 /* Icon styling */
 .page-icon {
-  color: var(--ion-color-medium);
+  color: var(--touchline-muted, #56645d);
 }
 
 /* Fab button theming */
 ion-fab-button {
-  --background: var(--grassroots-accent);
-  --background-activated: var(--grassroots-interactive-pressed);
-  --background-hover: var(--grassroots-interactive-hover);
-  --color: var(--grassroots-text-on-accent);
+  --background: var(--touchline-forest, #12392d);
+  --background-activated: #0c261e;
+  --background-hover: #1d5242;
+  --color: #ffffff;
+  box-shadow: 0 4px 12px rgba(18, 57, 45, 0.2);
+}
+
+.dark-theme ion-fab-button {
+  --background: var(--touchline-forest, #2e7d62);
+  --background-activated: #24654f;
+  --background-hover: #389e7c;
+  --color: #ffffff;
+}
+
+/* Guest context is a small note; existing counts remain available on demand. */
+.guest-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 8px;
+  margin: 0 20px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--touchline-line);
+  color: var(--touchline-muted);
+  font-size: 13px;
+}
+
+.guest-banner-summary {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.guest-banner-summary p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.guest-banner-summary span {
+  font-weight: 400;
+}
+
+.guest-banner-summary ion-button {
+  min-height: 44px;
+  margin: 0;
+  font-size: 13px;
+  --padding-start: 8px;
+  --padding-end: 8px;
+}
+
+.dark-theme .guest-banner-summary ion-button {
+  --color: var(--touchline-ink, #f4f6f4);
+}
+
+.guest-banner-limits summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--touchline-ink);
+}
+
+.guest-banner-limits summary::after {
+  content: '+';
+  margin-left: 6px;
+}
+
+.guest-banner-limits[open] {
+  flex-basis: 100%;
+}
+
+.guest-banner-limits[open] summary::after {
+  content: '−';
+}
+
+.guest-banner-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.guest-banner-counts ion-chip {
+  height: auto;
+  min-height: 28px;
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.guest-banner-limits p {
+  margin: 8px 0;
 }

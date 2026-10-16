@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { IonCard, IonCardContent, IonChip, IonLabel, IonText, IonButton } from '@ionic/react';
+import { IonChip, IonLabel, IonButton } from '@ionic/react';
 import { isGuest, getGuestId } from '../utils/guest';
 import { GUEST_LIMITS, canAddEvent, canChangeFormation } from '../utils/quotas';
 import SignupPromptModal from './SignupPromptModal';
@@ -69,8 +69,8 @@ const GuestBanner: React.FC<GuestBannerProps> = ({ teamId, matchId }) => {
   if (!isGuest()) return null;
 
   const chip = (label: string, value: string, color?: string) => (
-    <IonChip color={color as any} style={{ height: 22 }}>
-      <IonLabel style={{ fontSize: 12 }}>{label}: {value}</IonLabel>
+    <IonChip color={color as any}>
+      <IonLabel>{label}: {value}</IonLabel>
     </IonChip>
   );
 
@@ -81,21 +81,24 @@ const GuestBanner: React.FC<GuestBannerProps> = ({ teamId, matchId }) => {
   const formsLabel = counts.formations == null ? undefined : `${counts.formations}/${GUEST_LIMITS.maxFormationChangesPerMatch}`;
 
   return (
-    <IonCard style={{ margin: '8px 12px', border: '1px dashed var(--ion-color-medium)' }}>
-      <IonCardContent style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <IonText color="medium" style={{ fontWeight: 600 }}>Guest Mode</IonText>
-        {chip('Teams', teamsLabel, counts.teams >= GUEST_LIMITS.maxTeams ? 'warning' : 'medium')}
-        {chip('Matches', matchesLabel, counts.matches >= GUEST_LIMITS.maxMatches ? 'warning' : 'medium')}
-        {playersLabel && chip('Players', playersLabel, counts.players! >= GUEST_LIMITS.maxPlayersPerTeam ? 'warning' : 'medium')}
-        {eventsLabel && chip('Non‑scoring Events', eventsLabel, (counts.nonScoringEvents! >= GUEST_LIMITS.maxNonScoringEventsPerMatch ? 'warning' : 'medium'))}
-        {formsLabel && chip('Formation Changes', formsLabel, (counts.formations! >= GUEST_LIMITS.maxFormationChangesPerMatch ? 'warning' : 'medium'))}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <IonText color="medium" style={{ fontSize: 12 }}>Create a free account to remove limits</IonText>
-          <IonButton size="small" onClick={() => setShowSignup(true)}>Sign Up</IonButton>
+    <aside className="guest-banner" aria-label="Guest mode">
+      <div className="guest-banner-summary">
+        <p>Guest mode <span>· On this device</span></p>
+        <IonButton fill="clear" size="small" onClick={() => setShowSignup(true)}>Sign up</IonButton>
+      </div>
+      <details className="guest-banner-limits">
+        <summary>Limits</summary>
+        <div className="guest-banner-counts">
+          {chip('Teams', teamsLabel, counts.teams >= GUEST_LIMITS.maxTeams ? 'warning' : 'medium')}
+          {chip('Matches', matchesLabel, counts.matches >= GUEST_LIMITS.maxMatches ? 'warning' : 'medium')}
+          {playersLabel && chip('Players', playersLabel, counts.players! >= GUEST_LIMITS.maxPlayersPerTeam ? 'warning' : 'medium')}
+          {eventsLabel && chip('Non‑scoring Events', eventsLabel, (counts.nonScoringEvents! >= GUEST_LIMITS.maxNonScoringEventsPerMatch ? 'warning' : 'medium'))}
+          {formsLabel && chip('Formation Changes', formsLabel, (counts.formations! >= GUEST_LIMITS.maxFormationChangesPerMatch ? 'warning' : 'medium'))}
         </div>
-        <SignupPromptModal isOpen={showSignup} onClose={() => setShowSignup(false)} />
-      </IonCardContent>
-    </IonCard>
+        <p>Create a free account to remove limits.</p>
+      </details>
+      <SignupPromptModal isOpen={showSignup} onClose={() => setShowSignup(false)} />
+    </aside>
   );
 };
 

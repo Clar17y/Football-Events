@@ -17,7 +17,9 @@ import '@ionic/react/css/normalize.css';
 import '@ionic/react/css/structure.css';
 import '@ionic/react/css/typography.css';
 import './theme/colors.css';
+import './styles/theme-tokens.css';
 import './theme/typography.css';
+import './pages/PageStyles.css';
 import './index.css';
 
 registerSW();
