@@ -55,6 +55,11 @@ export interface MatchesListParams {
  * Matches API service
  */
 export const matchesApi = {
+  /** Remote-only parent read for guarded live snapshot reconciliation. Does not cache. */
+  async getRemoteMatchSnapshot(id: string): Promise<Match> {
+    const response = await apiClient.get<Match>(`/matches/${id}`);
+    return response.data;
+  },
   /**
    * Get a single match by ID
    * Local-first: always reads from IndexedDB

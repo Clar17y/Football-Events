@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import 'fake-indexeddb/auto';
-const session = vi.hoisted(() => ({ owner: 'user-123' }));
+const session = vi.hoisted(() => ({ owner: 'user-123', generation: 0 }));
 vi.mock('../../../src/utils/network', () => ({ getAuthUserId: () => session.owner, getCurrentUserId: () => session.owner }));
 vi.mock('../../../src/utils/guest', () => ({ isGuest: () => false, getGuestId: () => 'guest-test' }));
 vi.mock('../../../src/db/eventLinking', () => ({ autoLinkEvents: async () => {} }));
 vi.mock('../../../src/services/importService', () => ({ isGuestId: (id?: string) => id?.startsWith('guest-'), hasGuestData: async () => false }));
 vi.mock('../../../src/services/api/baseApi', () => {
-  const client = { isAuthenticated: vi.fn(() => true), get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() };
+  const client = { getSessionGeneration: () => session.generation, isAuthenticated: vi.fn(() => true), get: vi.fn(), put: vi.fn(), post: vi.fn(), delete: vi.fn() };
   return { apiClient: client, default: client };
 });
 import { db } from '../../../src/db/indexedDB';
@@ -20,6 +20,8 @@ const event = { matchId: 'match-1', kind: 'goal', teamId: 'home' };
 const period = () => ({ id: 'local-period', matchId: 'match-1', periodNumber: 1, periodType: 'REGULAR' as const,
   startedAt: nowMs, createdAt: now, createdByUserId: session.owner, synced: true, isDeleted: false });
 const snapshot = (events: any[] = [], status: 'LIVE' | 'PAUSED' = 'PAUSED'): LiveMatchHydrationSnapshot => ({
+  match: { id: 'match-1', homeTeamId: 'home', awayTeamId: 'away', homeScore: 5, awayScore: 2,
+    createdByUserId: session.owner, isDeleted: false } as LiveMatchHydrationSnapshot['match'],
   state: { id: 'state-1', matchId: 'match-1', status, totalElapsedSeconds: 12, createdAt: now, updatedAt: now,
     createdByUserId: session.owner, isDeleted: false },
   periods: [{ ...period(), id: 'server-period', startedAt: now }],
@@ -34,6 +36,7 @@ function deferred<T>() {
 
 beforeEach(async () => {
   session.owner = 'user-123';
+  session.generation = 0;
   vi.resetAllMocks();
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(now));
@@ -172,6 +175,142 @@ describe('durable request-start hydration guard', () => {
     await eventsDataLayer.create(event);
     expect(await applyLiveMatchHydration(token, server, clock)).toBe(false);
     expect(await db.matchPeriods.count()).toBe(0);
+  });
+});
+
+describe('authoritative event membership and saved score', () => {
+  const cleanEvent = (id: string, extra = {}) => ({ ...event, id, createdAt: now,
+    createdByUserId: session.owner, synced: true, isDeleted: false, ...extra } as any);
+  const savedData = async () => ({ matches: await db.matches.toArray(), states: await db.matchState.toArray(),
+    periods: await db.matchPeriods.toArray(), events: await db.events.toArray() });
+
+  it.each([0, 2])('removes a server-deleted goal and atomically replaces the baseline with %s–1', async homeScore => {
+    await db.events.bulkPut([cleanEvent('deleted-goal'), cleanEvent('retained', { kind: 'save' }),
+      cleanEvent('other-match', { matchId: 'other', createdByUserId: 'other-user' })]);
+    const token = (await captureLiveMatchHydration('match-1'))!;
+    const response = snapshot([cleanEvent('retained', { kind: 'save', sentiment: 3 })]);
+    response.match.homeScore = homeScore; response.match.awayScore = 1;
+    expect(await applyLiveMatchHydration(token, response, clock)).toBe(true);
+    expect(await db.events.get('deleted-goal')).toBeUndefined();
+    expect(await db.events.get('retained')).toMatchObject({ kind: 'save', sentiment: 3, synced: true });
+    expect(await db.events.get('other-match')).toMatchObject({ matchId: 'other', createdByUserId: 'other-user' });
+    const importedMatch = await db.matches.get('match-1');
+    expect(importedMatch).toMatchObject({ homeScore, awayScore: 1, synced: true,
+      scoreRevision: expect.any(String) });
+    expect(importedMatch?.recordingRevision ?? 0).toBe(token.recordingRevision);
+    // A partial timeline containing no goals must still preserve the full saved 2–1 baseline.
+    const settled = await savedData();
+    expect(await applyLiveMatchHydration((await captureLiveMatchHydration('match-1'))!, response, clock)).toBe(true);
+    const replayed = await savedData();
+    expect(replayed.matches).toEqual(settled.matches);
+    // Table hooks issue a new syncRevision on each write, including clean imports.
+    // Replaying must preserve every data field and clean status, not that write token.
+    const withoutWriteRevision = (rows: Array<{ syncRevision?: string }>) =>
+      rows.map(({ syncRevision, ...data }) => data);
+    for (const table of ['states', 'periods', 'events'] as const) {
+      expect(withoutWriteRevision(replayed[table])).toEqual(withoutWriteRevision(settled[table]));
+    }
+  });
+
+  it('clears only this match’s clean events for a complete empty snapshot and does not subtract twice', async () => {
+    await db.matches.update('match-1', { homeScore: 2, awayScore: 1 }); // Already refreshed by the parent cache.
+    await db.events.bulkPut([cleanEvent('old-goal'), cleanEvent('other-match', { matchId: 'other' })]);
+    const response = snapshot(); response.match.homeScore = 2; response.match.awayScore = 1;
+    expect(await applyLiveMatchHydration((await captureLiveMatchHydration('match-1'))!, response, clock)).toBe(true);
+    expect((await db.events.toArray()).map(row => row.id)).toEqual(['other-match']);
+    expect(await db.matches.get('match-1')).toMatchObject({ homeScore: 2, awayScore: 1 });
+  });
+
+  it('retains acknowledged tombstones even when an older snapshot contains the same event', async () => {
+    await db.events.put(cleanEvent('tombstone', { isDeleted: true }));
+    expect(await applyLiveMatchHydration((await captureLiveMatchHydration('match-1'))!,
+      snapshot([cleanEvent('tombstone')]), clock)).toBe(true);
+    expect(await db.events.get('tombstone')).toMatchObject({ isDeleted: true });
+  });
+
+  it.each(['parent', 'state', 'period', 'create', 'edit', 'delete'])('blocks reconciliation when %s is pending at capture, even after ACK', async kind => {
+    await db.events.put(cleanEvent('old-goal'));
+    if (kind === 'parent') await db.matches.update('match-1', { synced: false });
+    else if (kind === 'state') await db.matchState.put({ ...snapshot().state, synced: false } as any);
+    else if (kind === 'period') await db.matchPeriods.put({ ...period(), synced: false });
+    else await db.events.put(cleanEvent('dirty', { synced: false, isDeleted: kind === 'delete', kind: kind === 'edit' ? 'save' : 'goal' }));
+    const token = (await captureLiveMatchHydration('match-1'))!;
+    expect(token.pendingAtStart).toBe(true);
+    await db.matches.update('match-1', { synced: true });
+    await db.matchState.toCollection().modify({ synced: true });
+    await db.matchPeriods.toCollection().modify({ synced: true });
+    await db.events.toCollection().modify({ synced: true });
+    const before = await savedData();
+    expect(await applyLiveMatchHydration(token, snapshot(), clock)).toBe(false);
+    expect(await savedData()).toEqual(before);
+  });
+
+  it.each(['score-revision', 'owner-conflict', 'account-return', 'new-pending'])('rejects %s during the request without deleting or updating the baseline', async change => {
+    await db.events.put(cleanEvent('old-goal'));
+    const token = (await captureLiveMatchHydration('match-1'))!;
+    if (change === 'score-revision') await db.matches.update('match-1', { scoreRevision: 'newer', homeScore: 6 });
+    if (change === 'owner-conflict') await db.matches.update('match-1', { created_by_user_id: 'other-user' } as any);
+    if (change === 'account-return') {
+      session.owner = 'other-user'; session.generation++; session.owner = 'user-123'; session.generation++;
+    }
+    if (change === 'new-pending') await db.events.put(cleanEvent('new', { synced: false }));
+    const before = await savedData();
+    expect(await applyLiveMatchHydration(token, snapshot(), clock)).toBe(false);
+    expect(await savedData()).toEqual(before);
+  });
+
+  it.each(['missing-parent', 'wrong-parent', 'foreign-parent', 'parent-owner-conflict', 'deleted-parent',
+    'wrong-teams', 'missing-score', 'negative-score', 'invalid-score', 'partial-events', 'partial-periods',
+    'foreign-event', 'wrong-event-match', 'null-event', 'duplicate-event', 'missing-event-id', 'foreign-period',
+    'foreign-event-id', 'foreign-period-id'])('rejects invalid/incomplete %s responses before writes', async change => {
+    await db.events.put(cleanEvent('old-goal'));
+    const token = (await captureLiveMatchHydration('match-1'))!;
+    const response = snapshot([cleanEvent('remote')]) as any;
+    if (change === 'missing-parent') response.match = null;
+    if (change === 'wrong-parent') response.match.id = 'other';
+    if (change === 'foreign-parent') response.match.createdByUserId = 'other-user';
+    if (change === 'parent-owner-conflict') response.match.created_by_user_id = 'other-user';
+    if (change === 'deleted-parent') response.match.isDeleted = true;
+    if (change === 'wrong-teams') response.match.homeTeamId = 'other-team';
+    if (change === 'missing-score') delete response.match.homeScore;
+    if (change === 'negative-score') response.match.homeScore = -1;
+    if (change === 'invalid-score') response.match.awayScore = NaN;
+    if (change === 'partial-events') response.events = { events: [], pagination: { hasNext: true } };
+    if (change === 'partial-periods') response.periods = undefined;
+    if (change === 'foreign-event') response.events[0].createdByUserId = 'other-user';
+    if (change === 'wrong-event-match') response.events[0].matchId = 'other';
+    if (change === 'null-event') response.events = [null];
+    if (change === 'duplicate-event') response.events.push(response.events[0]);
+    if (change === 'missing-event-id') delete response.events[0].id;
+    if (change === 'foreign-period') response.periods[0].createdByUserId = 'other-user';
+    if (change === 'foreign-event-id') await db.events.put(cleanEvent('remote', { matchId: 'other' }));
+    if (change === 'foreign-period-id') await db.matchPeriods.put({ ...period(), id: 'server-period', matchId: 'other' });
+    const before = await savedData();
+    expect(await applyLiveMatchHydration(token, response, clock)).toBe(false);
+    expect(await savedData()).toEqual(before);
+  });
+
+  it.each(['deletion', 'upsert', 'score', 'state', 'final-context'])('rolls back all changes after %s has executed', async stage => {
+    await db.events.put(cleanEvent('old-goal'));
+    const token = (await captureLiveMatchHydration('match-1'))!;
+    const before = await savedData();
+    const response = snapshot([cleanEvent('new')]); response.match.homeScore = 0;
+    let current = true;
+    const failAfter = (target: any, method: string) => {
+      const original = target[method].bind(target);
+      vi.spyOn(target, method).mockImplementation(async (...args: any[]) => {
+        const result = await original(...args);
+        if (stage === 'final-context') { current = false; return result; }
+        throw new Error('Injected storage failure');
+      });
+    };
+    if (stage === 'deletion') failAfter(db.events, 'bulkDelete');
+    if (stage === 'upsert') failAfter(db.events, 'bulkPut');
+    if (stage === 'score') failAfter(db.matches, 'update');
+    if (stage === 'state' || stage === 'final-context') failAfter(db.matchState, 'put');
+    await expect(applyLiveMatchHydration(token, response, clock, () => current)).rejects.toThrow(
+      stage === 'final-context' ? 'context changed' : 'Injected storage failure');
+    expect(await savedData()).toEqual(before);
   });
 });
 

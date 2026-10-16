@@ -428,13 +428,14 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
       try {
         const token = await captureLiveMatchHydration(selectedId);
         if (!token || !hydrationIsCurrent()) return;
-        const [state, periods, events] = await Promise.all([
+        const [state, periods, events, remoteMatch] = await Promise.all([
           matchesApi.getMatchState(selectedId).catch(error => {
             if (error instanceof ApiRequestError && error.status === 404) return null;
             throw error;
           }),
           matchesApi.getMatchPeriods(selectedId),
           eventsApi.getByMatch(selectedId),
+          matchesApi.getRemoteMatchSnapshot(selectedId),
         ]);
         if (!hydrationIsCurrent()) return;
         if (!state && (periods.length || events.length)) return;
@@ -442,11 +443,11 @@ const LiveMatchPage: React.FC<LiveMatchPageProps> = ({ onNavigate, matchId }) =>
           matchId: selectedId, status: 'SCHEDULED', totalElapsedSeconds: 0,
           createdByUserId: token.ownerId, createdAt: new Date().toISOString(), isDeleted: false,
         } as MatchState;
-        const importSnapshot = () => applyLiveMatchHydration(token, { state: restoredState, periods, events }, (serverState, canonicalPeriods, match, now) => {
+        const importSnapshot = () => applyLiveMatchHydration(token, { match: remoteMatch, state: restoredState, periods, events }, (serverState, canonicalPeriods, match, now) => {
           if (!hydrationIsCurrent()) throw new Error('Match hydration context changed');
           const timerMs = reconstructClock(serverState, canonicalPeriods, match, now);
           return { timerMs, totalElapsedSeconds: actualPlayedSeconds(timerMs, match, canonicalPeriods) };
-        });
+        }, hydrationIsCurrent);
         if (state) await importSnapshot();
         else await db.transaction('rw', db.matches, db.matchState, db.matchPeriods, db.events, async () => {
           const parent = await db.matches.get(selectedId);

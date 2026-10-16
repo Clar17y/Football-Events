@@ -54,7 +54,7 @@ vi.mock('../../../src/services/api/defaultLineupsApi', () => ({ defaultLineupsAp
 vi.mock('../../../src/services/api/formationsApi', () => ({ default: { prefetch: vi.fn(async () => {}) } }));
 vi.mock('../../../src/services/api/teamsApi', () => ({ default: { getTeamPlayers: vi.fn() } }));
 vi.mock('../../../src/services/api/eventsApi', () => ({ default: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), getByMatch: vi.fn(async () => []) } }));
-vi.mock('../../../src/services/api/matchesApi', () => ({ default: { getUpcoming: vi.fn(), getRecent: vi.fn(async () => []), getMatchState: vi.fn(), getMatchPeriods: vi.fn(), getActiveViewerLinks: vi.fn(async () => []) } }));
+vi.mock('../../../src/services/api/matchesApi', () => ({ default: { getUpcoming: vi.fn(), getRecent: vi.fn(async () => []), getRemoteMatchSnapshot: vi.fn(), getMatchState: vi.fn(), getMatchPeriods: vi.fn(), getActiveViewerLinks: vi.fn(async () => []) } }));
 vi.mock('../../../src/services/api/viewerApi', () => ({ default: { getSummary: vi.fn(), openEventSource: vi.fn(), checkToken: vi.fn() } }));
 vi.mock('../../../src/services/dataLayer', async () => {
   const actual = await vi.importActual<typeof import('../../../src/services/dataLayer')>('../../../src/services/dataLayer');
@@ -64,6 +64,7 @@ vi.mock('../../../src/db/indexedDB', () => {
   const table = (map: Map<string, any>) => ({
     get: vi.fn(async (id: string) => map.get(id)),
     put: vi.fn(async (row: any) => map.set(row.matchId || row.id, row)),
+    update: vi.fn(async (id: string, patch: any) => { if (map.has(id)) map.set(id, { ...map.get(id), ...patch }); }),
     bulkPut: vi.fn(async (rows: any[]) => rows.forEach(row => map.set(row.id, row))),
     bulkDelete: vi.fn(async (ids: string[]) => ids.forEach(id => map.delete(id))),
     where: () => ({ equals: (id: string) => {
@@ -120,6 +121,7 @@ beforeEach(() => {
   live();
   vi.mocked(matchesApi.getUpcoming).mockResolvedValue([match('m'), match('other')]);
   vi.mocked(matchesApi.getMatchState).mockRejectedValue(new Error('Offline'));
+  vi.mocked(matchesApi.getRemoteMatchSnapshot).mockImplementation(async id => ({ ...fixture.matches[id] }));
   vi.mocked(matchesApi.getMatchPeriods).mockResolvedValue([]);
   vi.mocked(defaultLineupsApi.getDefaultLineup).mockResolvedValue({ id: 'lineup', teamId: 'home', formation: [] } as any);
   vi.mocked(teamsApi.getTeamPlayers).mockImplementation(async () => ({ data: [{ id: 'child', name: 'Alex', squadNumber: 9 }, { id: 'other-player', name: 'Sam', squadNumber: 4 }] }) as any);
@@ -749,6 +751,42 @@ describe('guest quota and third periods', () => {
 });
 
 describe('authenticated hydration', () => {
+  it('reconciles a deleted server goal with the remote saved score in the guarded import', async () => {
+    signInFixture();
+    fixture.cachedMatches.set('m', { ...fixture.cachedMatches.get('m'), homeScore: 3, awayScore: 1 });
+    fixture.cachedEvents.set('deleted-goal', { id: 'deleted-goal', matchId: 'm', kind: 'goal',
+      teamId: 'home', createdByUserId: 'parent', synced: true });
+    vi.mocked(matchesApi.getMatchState).mockResolvedValue({ matchId: 'm', status: 'PAUSED',
+      createdByUserId: 'parent', totalElapsedSeconds: 600 } as any);
+    vi.mocked(matchesApi.getMatchPeriods).mockResolvedValue([{ ...fixture.periods.m[0], createdByUserId: 'parent', synced: true }] as any);
+    vi.mocked(matchesApi.getRemoteMatchSnapshot).mockResolvedValue({ ...fixture.matches.m, homeScore: 2, awayScore: 1 });
+    render(<LiveMatchPage matchId="m" />);
+    await waitFor(() => expect(fixture.cachedStates.get('m')?.status).toBe('PAUSED'));
+    expect(matchesApi.getRemoteMatchSnapshot).toHaveBeenCalledWith('m');
+    expect(fixture.cachedEvents.has('deleted-goal')).toBe(false);
+    expect(fixture.cachedMatches.get('m')).toMatchObject({ homeScore: 2, awayScore: 1, synced: true });
+  });
+
+  it.each(['parent', 'events', 'invalid-events'])('keeps cached events and score after a failed/incomplete %s read', async failure => {
+    signInFixture();
+    const cachedMatch = { ...fixture.cachedMatches.get('m'), homeScore: 3, awayScore: 1 };
+    fixture.cachedMatches.set('m', cachedMatch);
+    const goal = { id: 'deleted-goal', matchId: 'm', kind: 'goal', createdByUserId: 'parent', synced: true };
+    fixture.cachedEvents.set(goal.id, goal);
+    vi.mocked(matchesApi.getMatchState).mockResolvedValue({ matchId: 'm', status: 'PAUSED',
+      createdByUserId: 'parent', totalElapsedSeconds: 600 } as any);
+    vi.mocked(matchesApi.getMatchPeriods).mockResolvedValue([]);
+    if (failure === 'parent') vi.mocked(matchesApi.getRemoteMatchSnapshot).mockRejectedValue(new Error('Offline'));
+    if (failure === 'events') vi.mocked(eventsApi.getByMatch).mockRejectedValueOnce(new Error('Offline'));
+    if (failure === 'invalid-events') vi.mocked(eventsApi.getByMatch).mockResolvedValueOnce({ events: [] } as any);
+    render(<LiveMatchPage matchId="m" />);
+    await waitFor(() => expect(matchesApi.getRemoteMatchSnapshot).toHaveBeenCalled());
+    await act(async () => { await Promise.resolve(); });
+    expect(fixture.cachedEvents.get(goal.id)).toEqual(goal);
+    expect(fixture.cachedMatches.get('m')).toEqual(cachedMatch);
+    expect(db.matchState.put).not.toHaveBeenCalled();
+  });
+
   it('keeps dirty local rows and canonical IDs when server logical periods have different IDs', async () => {
     signInFixture();
     const dirtyState = { ...fixture.states.m, createdByUserId: 'parent', updatedAt: new Date(fixture.now).toISOString(), createdAt: new Date(fixture.now).toISOString() };
@@ -1143,6 +1181,41 @@ describe('Touchline option1 UI interactions and critical coverage map', () => {
     expect(screen.queryByRole('button', { name: 'Complete' })).not.toBeInTheDocument();
     expect(eventsApi.create).not.toHaveBeenCalled();
     expect(eventsApi.delete).not.toHaveBeenCalled();
+  });
+
+  it('reconstructs initial and reconnect spectator snapshots from the latest resume anchor', async () => {
+    window.history.replaceState({}, '', '/live/m?view=public-token');
+    const startedAt = fixture.now - 17 * 60_000;
+    const summary = { matchId: 'm', status: 'LIVE', periodFormat: 'half', durationMinutes: 60,
+      totalElapsedSeconds: 600, activeSince: new Date(startedAt + 15 * 60_000).toISOString(),
+      updatedAt: new Date(fixture.now - 30_000).toISOString() };
+    const payload = { summary, periods: [{ id: 'p1', periodNumber: 1, periodType: 'REGULAR',
+      startedAt: new Date(startedAt).toISOString() }], events: [] };
+    const listeners = new Map<string, (event: { data: string }) => void>();
+    vi.mocked(viewerApi.getSummary).mockResolvedValue(summary as any);
+    vi.mocked(viewerApi.openEventSource).mockReturnValue({ close: vi.fn(), addEventListener:
+      (name: string, listener: any) => listeners.set(name, listener) } as any);
+    render(<LiveMatchPage matchId="m" />);
+    await waitFor(() => expect(listeners.has('snapshot')).toBe(true));
+    const snapshot = async () => act(async () => listeners.get('snapshot')!({ data: JSON.stringify(payload) }));
+    await snapshot();
+    expect(screen.getByRole('timer')).toHaveTextContent('12:00');
+    await snapshot();
+    expect(screen.getByRole('timer')).toHaveTextContent('12:00');
+    fixture.now += 60_000;
+    await snapshot();
+    expect(screen.getByRole('timer')).toHaveTextContent('13:00');
+    payload.summary = { ...summary, status: 'PAUSED', totalElapsedSeconds: 780, activeSince: null } as any;
+    await snapshot();
+    fixture.now += 5 * 60_000;
+    await snapshot();
+    expect(screen.getByRole('timer')).toHaveTextContent('13:00');
+    payload.summary = { ...payload.summary, status: 'COMPLETED' };
+    payload.periods = [{ ...payload.periods[0], endedAt: new Date(fixture.now).toISOString(), durationSeconds: 780 }] as any;
+    await snapshot();
+    fixture.now += 60_000;
+    await snapshot();
+    expect(screen.getByRole('timer')).toHaveTextContent('13:00');
   });
 });
 
